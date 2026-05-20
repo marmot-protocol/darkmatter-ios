@@ -19,10 +19,16 @@ final class MarmotClient {
     let marmot: Marmot
     let rootPath: String
 
-    init() {
+    convenience init() {
         let root = MarmotClient.applicationSupportRoot()
-        self.rootPath = root
-        self.marmot = Marmot(rootPath: root, relayUrls: MarmotClient.defaultRelays)
+        self.init(rootPath: root, relayUrls: MarmotClient.defaultRelays)
+    }
+
+    /// Test-friendly init that lets callers override the on-disk root and
+    /// relay set. Production code goes through the no-arg convenience init.
+    init(rootPath: String, relayUrls: [String]) {
+        self.rootPath = rootPath
+        self.marmot = Marmot(rootPath: rootPath, relayUrls: relayUrls)
     }
 
     private static func applicationSupportRoot() -> String {

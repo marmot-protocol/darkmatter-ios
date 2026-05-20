@@ -32,8 +32,13 @@ struct IdentityView: View {
                 }
 
                 Section {
+                    ShareLink(item: active.accountIdHex) {
+                        Label("Share account ID", systemImage: "square.and.arrow.up")
+                    }
                     Button {
                         UIPasteboard.general.string = active.accountIdHex
+                        Haptics.selection()
+                        appState.present(.success("Copied", message: "Account ID copied to clipboard."))
                     } label: {
                         Label("Copy account ID", systemImage: "doc.on.doc")
                     }

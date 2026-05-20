@@ -1,9 +1,11 @@
 import SwiftUI
 import MarmotKit
 
-/// One chat bubble. Aligned left or right depending on direction; uses
-/// `.glassEffect()` on iOS 26 for the Messages-app material.
+/// One chat bubble. Aligned left or right depending on direction; uses a
+/// gradient for outgoing messages and the system secondary background for
+/// incoming ones (matches Messages.app under Liquid Glass).
 struct MessageBubble: View {
+    @Environment(AppState.self) private var appState
     let record: AppMessageRecordFfi
     let isFromMe: Bool
 
@@ -18,7 +20,7 @@ struct MessageBubble: View {
 
             VStack(alignment: isFromMe ? .trailing : .leading, spacing: 4) {
                 if !isFromMe {
-                    Text(IdentityFormatter.short(record.sender))
+                    Text(appState.displayName(forAccountIdHex: record.sender))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.leading, 12)

@@ -105,8 +105,12 @@ struct RelaysView: View {
                 bootstrapRelays: appState.defaultRelays
             )
             publishedAt = Date()
+            Haptics.success()
+            appState.present(.success("Relay lists republished"))
         } catch {
+            Haptics.error()
             publishError = error.localizedDescription
+            appState.present(.error("Republish failed", message: error.localizedDescription))
         }
         isPublishing = false
     }

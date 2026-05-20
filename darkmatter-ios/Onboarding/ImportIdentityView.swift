@@ -69,9 +69,13 @@ struct ImportIdentityView: View {
         error = nil
         do {
             try await appState.importIdentity(trimmed)
+            Haptics.success()
+            appState.present(.success("Welcome back", message: "Identity imported."))
             dismiss()
         } catch {
+            Haptics.error()
             self.error = error.localizedDescription
+            appState.present(.error("Import failed", message: error.localizedDescription))
         }
         isImporting = false
     }

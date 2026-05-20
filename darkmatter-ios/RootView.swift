@@ -20,6 +20,7 @@ struct RootView: View {
             }
         }
         .animation(.smooth(duration: 0.25), value: appState.phase)
+        .toastHost()
     }
 }
 

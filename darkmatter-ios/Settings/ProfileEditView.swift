@@ -81,13 +81,6 @@ struct ProfileEditView: View {
                         .foregroundStyle(.red)
                 }
             }
-
-            if success {
-                Section {
-                    Label("Profile published", systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                }
-            }
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
@@ -117,8 +110,15 @@ struct ProfileEditView: View {
                 bootstrapRelays: appState.defaultRelays
             )
             success = true
+            Haptics.success()
+            appState.present(.success(
+                "Profile published",
+                message: "Your kind:0 metadata is live on \(appState.defaultRelays.count) relays."
+            ))
         } catch {
+            Haptics.error()
             self.error = error.localizedDescription
+            appState.present(.error("Couldn't publish profile", message: error.localizedDescription))
         }
         isPublishing = false
     }

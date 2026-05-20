@@ -82,8 +82,11 @@ struct CreateIdentityView: View {
         do {
             let summary = try await appState.createIdentity()
             created = summary
+            Haptics.success()
         } catch {
+            Haptics.error()
             self.error = error.localizedDescription
+            appState.present(.error("Identity creation failed", message: error.localizedDescription))
         }
         isCreating = false
     }
