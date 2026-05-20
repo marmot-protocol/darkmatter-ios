@@ -178,6 +178,10 @@ final class ConversationViewModel {
             )
         } catch {
             self.error = error.localizedDescription
+            await MainActor.run {
+                Haptics.error()
+                appState.present(.error("Send failed", message: error.localizedDescription))
+            }
         }
     }
 }

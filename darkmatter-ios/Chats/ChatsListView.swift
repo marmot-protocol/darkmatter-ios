@@ -122,9 +122,10 @@ struct ChatsListView: View {
                 accountRef: ref,
                 groupIdHex: chat.groupIdHex
             )
+            Haptics.warning()
         } catch {
-            // Errors surface via the subscription's reconciliation; no UI
-            // affordance for transient failures in v1.
+            Haptics.error()
+            appState.present(.error("Couldn't leave chat", message: error.localizedDescription))
         }
     }
 }

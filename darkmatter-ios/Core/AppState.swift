@@ -44,6 +44,19 @@ final class AppState {
 
     let client: MarmotClient
 
+    /// Cache of best-known display names keyed by account id hex. Populated
+    /// on demand via `displayName(forAccountIdHex:)` and updated when a
+    /// refresh succeeds. Read-only from view code.
+    private(set) var displayNames: [String: String] = [:]
+
+    /// Most recent transient banner. View code reads this via the
+    /// `.toastHost()` modifier on the root view.
+    private(set) var activeToast: Toast?
+    private var toastDismissTask: Task<Void, Never>?
+
+    /// Tracks in-flight directory fetches so we don't pile up duplicate work.
+    private var directoryFetchesInFlight: Set<String> = []
+
     private static let activeAccountKey = "marmot.activeAccountRef"
     private static let relaysKey = "marmot.defaultRelays"
 
@@ -120,5 +133,76 @@ final class AppState {
     var activeAccount: AccountSummaryFfi? {
         guard let ref = activeAccountRef else { return nil }
         return accounts.first { $0.label == ref }
+    }
+
+    // MARK: - Display names
+
+    /// Best-effort lookup. Returns the cached name if known, falls back to
+    /// the local-account label (when `accountIdHex` matches one of our own
+    /// accounts), then the short-hex form. Also schedules a background
+    /// refresh on first request for an unknown id so subsequent calls
+    /// hydrate naturally.
+    @MainActor
+    func displayName(forAccountIdHex accountIdHex: String) -> String {
+        if let cached = displayNames[accountIdHex] { return cached }
+        if let owned = accounts.first(where: { $0.accountIdHex == accountIdHex }) {
+            let name = owned.label.isEmpty
+                ? IdentityFormatter.short(accountIdHex)
+                : owned.label
+            displayNames[accountIdHex] = name
+            return name
+        }
+        Task { await self.refreshDisplayName(forAccountIdHex: accountIdHex) }
+        return IdentityFormatter.short(accountIdHex)
+    }
+
+    @MainActor
+    private func refreshDisplayName(forAccountIdHex accountIdHex: String) async {
+        guard !directoryFetchesInFlight.contains(accountIdHex) else { return }
+        directoryFetchesInFlight.insert(accountIdHex)
+        defer { directoryFetchesInFlight.remove(accountIdHex) }
+
+        // First try the cached projection — the runtime may already know it
+        // without needing a network hop.
+        if let cached = marmot.displayName(accountIdHex: accountIdHex), !cached.isEmpty {
+            displayNames[accountIdHex] = cached
+            return
+        }
+
+        // Otherwise ask the runtime to fetch a fresh directory record.
+        do {
+            try await marmot.refreshDirectory(
+                accountIdHex: accountIdHex,
+                bootstrapRelays: defaultRelays
+            )
+            if let resolved = marmot.displayName(accountIdHex: accountIdHex), !resolved.isEmpty {
+                displayNames[accountIdHex] = resolved
+            }
+        } catch {
+            // Silent on directory-fetch failures; the UI will keep showing
+            // the short-hex form.
+        }
+    }
+
+    // MARK: - Toasts
+
+    @MainActor
+    func present(_ toast: Toast) {
+        toastDismissTask?.cancel()
+        activeToast = toast
+        let id = toast.id
+        toastDismissTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(toast.duration * 1_000_000_000))
+            guard !Task.isCancelled,
+                  let self,
+                  self.activeToast?.id == id else { return }
+            self.activeToast = nil
+        }
+    }
+
+    @MainActor
+    func dismissToast() {
+        toastDismissTask?.cancel()
+        activeToast = nil
     }
 }

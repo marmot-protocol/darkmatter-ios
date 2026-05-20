@@ -2,6 +2,7 @@ import SwiftUI
 import MarmotKit
 
 struct GroupMemberRow: View {
+    @Environment(AppState.self) private var appState
     let member: AppGroupMemberRecordFfi
     let isAdmin: Bool
 
@@ -31,7 +32,7 @@ struct GroupMemberRow: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                Text(IdentityFormatter.short(member.memberIdHex))
+                Text(IdentityFormatter.short(member.account ?? member.memberIdHex))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
@@ -42,7 +43,7 @@ struct GroupMemberRow: View {
 
     private var displayName: String {
         if let account = member.account, !account.isEmpty {
-            return IdentityFormatter.short(account)
+            return appState.displayName(forAccountIdHex: account)
         }
         return IdentityFormatter.short(member.memberIdHex)
     }

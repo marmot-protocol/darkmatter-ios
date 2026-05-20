@@ -4,6 +4,7 @@ import MarmotKit
 /// One row in the chats list. Renders 2-member groups in "DM" style (other
 /// member's identity in place of group name) and N>2 groups by group name.
 struct ChatRow: View {
+    @Environment(AppState.self) private var appState
     let chat: AppGroupRecordFfi
 
     var body: some View {
@@ -28,6 +29,11 @@ struct ChatRow: View {
 
     private var title: String {
         if !chat.name.isEmpty { return chat.name }
+        // For a "DM" (no group name), prefer the first admin's display name
+        // when we have one cached — it'll usually be the other party.
+        if let firstAdmin = chat.admins.first {
+            return appState.displayName(forAccountIdHex: firstAdmin)
+        }
         return IdentityFormatter.short(chat.groupIdHex)
     }
 

@@ -115,8 +115,12 @@ struct GroupDetailsView: View {
                 groupIdHex: viewModel.group.groupIdHex,
                 memberRefs: refs
             )
+            Haptics.success()
+            appState.present(.success("Invited \(refs.count) member\(refs.count == 1 ? "" : "s")"))
         } catch {
+            Haptics.error()
             actionError = error.localizedDescription
+            appState.present(.error("Invite failed", message: error.localizedDescription))
         }
     }
 
@@ -129,8 +133,12 @@ struct GroupDetailsView: View {
                 groupIdHex: viewModel.group.groupIdHex,
                 memberRefs: [target]
             )
+            Haptics.success()
+            appState.present(.warning("Member removed"))
         } catch {
+            Haptics.error()
             actionError = error.localizedDescription
+            appState.present(.error("Couldn't remove member", message: error.localizedDescription))
         }
     }
 
@@ -141,9 +149,13 @@ struct GroupDetailsView: View {
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex
             )
+            Haptics.warning()
+            appState.present(.warning("You left the group"))
             dismiss()
         } catch {
+            Haptics.error()
             actionError = error.localizedDescription
+            appState.present(.error("Couldn't leave group", message: error.localizedDescription))
         }
     }
 }

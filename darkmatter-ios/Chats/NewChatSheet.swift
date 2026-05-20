@@ -103,9 +103,16 @@ struct NewChatSheet: View {
                 memberRefs: members,
                 description: description.isEmpty ? nil : description
             )
+            Haptics.success()
+            appState.present(.success(
+                "Chat created",
+                message: members.count == 1 ? "Started a 1-on-1 conversation." : "Invited \(members.count) members."
+            ))
             dismiss()
         } catch {
+            Haptics.error()
             self.error = error.localizedDescription
+            appState.present(.error("Couldn't create chat", message: error.localizedDescription))
         }
         isCreating = false
     }

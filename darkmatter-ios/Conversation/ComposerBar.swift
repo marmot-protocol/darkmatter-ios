@@ -40,6 +40,7 @@ struct ComposerBar: View {
 
     private func triggerSend() {
         guard canSend else { return }
+        Haptics.tap()
         onSend()
     }
 }
