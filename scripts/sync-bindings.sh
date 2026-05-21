@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Rebuild the MarmotKit bindings from the darkmatter Rust workspace and
+# re-vendor them into this iOS app. Run this whenever the Rust side
+# (crates/marmot-uniffi or any crate it depends on) changes.
+#
+# You do NOT need to run this for Swift-only changes — just build & run the
+# app in Xcode (Cmd+R). The xcframework is a prebuilt binary; Xcode links
+# it but never recompiles the Rust.
+#
+# Usage:
+#   ./scripts/sync-bindings.sh
+#   DARKMATTER_DIR=/path/to/darkmatter ./scripts/sync-bindings.sh
+#
+# Override DARKMATTER_DIR if the darkmatter repo isn't the sibling default.
+
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+DARKMATTER_DIR="${DARKMATTER_DIR:-$(cd "$IOS_DIR/../darkmatter" && pwd)}"
+
+VENDOR_DIR="$IOS_DIR/Vendored/MarmotKit"
+OUTPUT_DIR="$DARKMATTER_DIR/crates/marmot-uniffi/output"
+
+if [[ ! -d "$DARKMATTER_DIR/crates/marmot-uniffi" ]]; then
+    echo "error: can't find marmot-uniffi crate at $DARKMATTER_DIR/crates/marmot-uniffi" >&2
+    echo "       set DARKMATTER_DIR to point at the darkmatter repo." >&2
+    exit 1
+fi
+
+echo "==> Building MarmotKit.xcframework from $DARKMATTER_DIR"
+"$DARKMATTER_DIR/crates/marmot-uniffi/xcframework.sh"
+
+echo "==> Re-vendoring into $VENDOR_DIR"
+rsync -a --delete \
+    "$OUTPUT_DIR/MarmotKit.xcframework/" \
+    "$VENDOR_DIR/MarmotKit.xcframework/"
+cp "$OUTPUT_DIR/MarmotKit.swift" "$VENDOR_DIR/Sources/MarmotKit/MarmotKit.swift"
+
+echo "==> Stamping MARMOT_VERSION"
+DM_SHA="$(git -C "$DARKMATTER_DIR" rev-parse --short HEAD)"
+DM_BRANCH="$(git -C "$DARKMATTER_DIR" rev-parse --abbrev-ref HEAD)"
+DM_DIRTY=""
+if ! git -C "$DARKMATTER_DIR" diff --quiet || ! git -C "$DARKMATTER_DIR" diff --cached --quiet; then
+    DM_DIRTY="-dirty"
+fi
+BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+cat > "$VENDOR_DIR/MARMOT_VERSION" <<EOF
+darkmatter-sha: ${DM_SHA}${DM_DIRTY}
+darkmatter-branch: ${DM_BRANCH}
+built-at: ${BUILT_AT}
+uniffi-version: 0.28.3
+ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
+ios-deployment-target: 18.0
+
+Notes:
+- Regenerate with: darkmatter-ios/scripts/sync-bindings.sh
+- A "-dirty" suffix means the darkmatter working tree had uncommitted
+  changes when this bundle was built.
+EOF
+
+echo ""
+echo "Done. Vendored MarmotKit @ ${DM_SHA}${DM_DIRTY} (${DM_BRANCH})."
+echo "Next: build & run the app in Xcode (Cmd+R)."
+echo "If Xcode shows stale symbols, reset the package cache:"
+echo "  File > Packages > Reset Package Caches, then clean build (Shift+Cmd+K)."
