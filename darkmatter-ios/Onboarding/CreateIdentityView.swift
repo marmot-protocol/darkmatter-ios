@@ -17,12 +17,10 @@ struct CreateIdentityView: View {
     var body: some View {
         Form {
             Section {
-                Text("Generates a fresh Nostr identity and stores the secret key in your device's secure enclave.")
+                Text("Generates a fresh Nostr identity and stores the secret key securely in your device's Keychain.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-            }
 
-            Section {
                 Button {
                     Task { await runCreate() }
                 } label: {
