@@ -61,6 +61,15 @@ final class AppState {
     private(set) var activeToast: Toast?
     private var toastDismissTask: Task<Void, Never>?
 
+    /// A profile to present (set by a scanned QR or an opened deep link).
+    /// MainTabView binds a sheet to this.
+    private(set) var pendingProfile: ProfileLink?
+
+    struct ProfileLink: Identifiable, Equatable {
+        let npub: String
+        var id: String { npub }
+    }
+
     /// Tracks in-flight directory fetches so we don't pile up duplicate work.
     private var directoryFetchesInFlight: Set<String> = []
 
@@ -254,5 +263,25 @@ final class AppState {
     func dismissToast() {
         toastDismissTask?.cancel()
         activeToast = nil
+    }
+
+    // MARK: - Profile routing (QR scan / deep link)
+
+    @MainActor
+    func presentProfile(npub: String) {
+        pendingProfile = ProfileLink(npub: npub)
+    }
+
+    @MainActor
+    func clearPendingProfile() {
+        pendingProfile = nil
+    }
+
+    /// Route an inbound deep link (from `.onOpenURL`).
+    @MainActor
+    func handle(url: URL) {
+        if case let .profile(npub) = DeepLink.parse(url) {
+            presentProfile(npub: npub)
+        }
     }
 }

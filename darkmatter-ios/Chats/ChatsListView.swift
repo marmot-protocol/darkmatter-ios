@@ -5,6 +5,7 @@ struct ChatsListView: View {
     @Environment(AppState.self) private var appState
     @State private var viewModel: ChatsListViewModel?
     @State private var showNewChat = false
+    @State private var showSwitcher = false
 
     var body: some View {
         Group {
@@ -31,6 +32,9 @@ struct ChatsListView: View {
         }
         .sheet(isPresented: $showNewChat) {
             NewChatSheet()
+        }
+        .sheet(isPresented: $showSwitcher) {
+            AccountSwitcherSheet()
         }
         .task(id: appState.activeAccountRef) {
             await viewModel?.bind(accountRef: appState.activeAccountRef)
@@ -76,26 +80,8 @@ struct ChatsListView: View {
     }
 
     private var accountSwitcher: some View {
-        Menu {
-            ForEach(appState.accounts, id: \.label) { account in
-                Button {
-                    appState.activeAccountRef = account.label
-                    Haptics.selection()
-                } label: {
-                    Label(
-                        appState.displayName(forAccountIdHex: account.accountIdHex),
-                        systemImage: account.label == appState.activeAccountRef
-                            ? "checkmark.circle.fill"
-                            : "person.crop.circle"
-                    )
-                }
-            }
-            Divider()
-            NavigationLink {
-                AccountsView()
-            } label: {
-                Label("Manage Accounts", systemImage: "gearshape")
-            }
+        Button {
+            showSwitcher = true
         } label: {
             if let active = appState.activeAccount {
                 AvatarBubble(
@@ -108,6 +94,7 @@ struct ChatsListView: View {
                 Image(systemName: "person.crop.circle")
             }
         }
+        .accessibilityLabel("Accounts")
     }
 
     @MainActor
