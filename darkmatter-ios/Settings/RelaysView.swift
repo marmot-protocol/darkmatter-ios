@@ -87,6 +87,11 @@ struct RelaysView: View {
                       systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green).font(.callout)
             }
+        } header: {
+            Text("Announce")
+        } footer: {
+            Text("Publishes your three relay lists (NIP-65, inbox, and key package) to your default relays, so other people can discover where to reach you. Run this after changing your relays above. It contacts each relay, so it can fail if a relay is slow or unreachable — just try again.")
+                .font(.footnote)
         }
     }
 
