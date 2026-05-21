@@ -21,6 +21,7 @@ final class ChatsListViewModel {
     }
 
     private(set) var items: [Item] = []
+    private(set) var archivedItems: [Item] = []
     private(set) var isLoading: Bool = false
     private(set) var loadError: String?
 
@@ -57,9 +58,11 @@ final class ChatsListViewModel {
         guard let accountRef, let appState else { return }
         isLoading = true
         do {
+            // Include archived so we can surface them in a separate view; the
+            // main list filters them out in `recompute`.
             let chatsSub = try await appState.marmot.subscribeChats(
                 accountRef: accountRef,
-                includeArchived: false
+                includeArchived: true
             )
             groups = chatsSub.snapshot()
             isLoading = false
@@ -143,7 +146,7 @@ final class ChatsListViewModel {
     }
 
     private func recompute() {
-        items = groups.map { group in
+        let all = groups.map { group -> Item in
             let info = memberInfoByGroup[group.groupIdHex]
             return Item(
                 group: group,
@@ -152,7 +155,8 @@ final class ChatsListViewModel {
                 memberCount: info?.count ?? 0
             )
         }
-        .sorted(by: Self.sortRule)
+        items = all.filter { !$0.group.archived }.sorted(by: Self.sortRule)
+        archivedItems = all.filter { $0.group.archived }.sorted(by: Self.sortRule)
     }
 
     /// Newest activity first; groups with no messages fall back to name order.

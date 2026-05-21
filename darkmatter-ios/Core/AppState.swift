@@ -42,6 +42,14 @@ final class AppState {
         }
     }
 
+    /// Developer mode: surfaces extra debugging UI (e.g. MLS group internals
+    /// on the chat-details screen). Off by default; toggled in Settings.
+    var developerMode: Bool {
+        didSet {
+            UserDefaults.standard.set(developerMode, forKey: Self.developerModeKey)
+        }
+    }
+
     let client: MarmotClient
 
     /// Cache of best-known display names keyed by account id hex. Derived
@@ -75,6 +83,7 @@ final class AppState {
 
     private static let activeAccountKey = "marmot.activeAccountRef"
     private static let relaysKey = "marmot.defaultRelays"
+    private static let developerModeKey = "marmot.developerMode"
 
     init(client: MarmotClient) {
         self.client = client
@@ -83,6 +92,7 @@ final class AppState {
             ? (storedRelays ?? MarmotClient.defaultRelays)
             : MarmotClient.defaultRelays
         self.activeAccountRef = UserDefaults.standard.string(forKey: Self.activeAccountKey)
+        self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
     }
 
     /// Production entry point. Builds a keychain-backed client; if secure

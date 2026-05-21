@@ -39,6 +39,26 @@ final class ConversationViewModel {
         return "\(memberCount) \(suffix)"
     }
 
+    var myAccountId: String? { appState?.activeAccount?.accountIdHex }
+
+    /// Whether the active account is an admin of this group.
+    var isSelfAdmin: Bool {
+        guard let me = myAccountId else { return false }
+        return group.admins.contains(me)
+    }
+
+    /// True when we're the only admin — leaving would orphan the group, so the
+    /// UI must block it until another member is promoted.
+    var isLastAdmin: Bool {
+        isSelfAdmin && group.admins.count <= 1
+    }
+
+    func isAdmin(_ member: AppGroupMemberRecordFfi) -> Bool {
+        if group.admins.contains(member.memberIdHex) { return true }
+        if let account = member.account { return group.admins.contains(account) }
+        return false
+    }
+
     init(appState: AppState, group: AppGroupRecordFfi) {
         self.appState = appState
         self.group = group
