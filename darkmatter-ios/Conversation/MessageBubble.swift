@@ -95,19 +95,22 @@ struct MessageBubble: View {
 
     private func quoted(_ preview: (name: String, text: String)) -> some View {
         HStack(spacing: 6) {
-            Rectangle()
-                .fill(isFromMe ? Color.white.opacity(0.7) : Color.accentColor)
+            Capsule()
+                .fill(isFromMe ? Color.white.opacity(0.8) : Color.accentColor)
                 .frame(width: 3)
-                .clipShape(.capsule)
             VStack(alignment: .leading, spacing: 1) {
                 Text(preview.name)
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                 Text(preview.text)
-                    .font(.caption2)
-                    .lineLimit(2)
+                    .font(.caption)
+                    .lineLimit(1)
             }
             .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.secondary)
+            Spacer(minLength: 0)
         }
+        // Without this the width-only Capsule is greedy vertically and stretches
+        // the whole bubble; fixedSize pins the quote to its content height.
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.bottom, 1)
     }
 

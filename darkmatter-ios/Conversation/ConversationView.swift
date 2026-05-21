@@ -83,9 +83,29 @@ struct ConversationView: View {
                 onSend: send
             )
         }
-        // Blur the messages scrolling under the composer (and the reply box
-        // above it) so the controls stay legible.
-        .background(.ultraThinMaterial)
+        .background(alignment: .bottom) { composerBackdrop }
+    }
+
+    /// Translucent-black blur behind the composer + reply box: reads as black
+    /// over empty space, blurs content scrolling under it, and fades out at the
+    /// top so there's no hard edge.
+    private var composerBackdrop: some View {
+        Rectangle()
+            .fill(.ultraThinMaterial)
+            .overlay(Color.black.opacity(0.22))
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: 0.35),
+                        .init(color: .black, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
     }
 
     private func replyBar(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
