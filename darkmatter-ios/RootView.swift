@@ -27,24 +27,18 @@ struct RootView: View {
 private struct BootstrapSplash: View {
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [.indigo.opacity(0.25), .black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            // Solid background: white in light mode, black in dark mode.
+            Color(.systemBackground)
+                .ignoresSafeArea()
 
             VStack(spacing: 18) {
                 Image(systemName: "lock.shield.fill")
                     .font(.system(size: 56, weight: .light))
                     .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.tint)
                 Text("Dark Matter")
                     .font(.title.weight(.semibold))
-                    .foregroundStyle(.white)
-                ProgressView()
-                    .controlSize(.regular)
-                    .tint(.white)
+                    .foregroundStyle(.primary)
             }
         }
     }

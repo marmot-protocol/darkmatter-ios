@@ -17,14 +17,12 @@ struct RelaysView: View {
     @State private var publishedAt: Date?
 
     @State private var lists: AccountRelayListsFfi?
-    @State private var health: RelayHealthFfi?
 
     var body: some View {
         Form {
             defaultRelaysSection
             republishSection
             publishedListsSection
-            diagnosticsSection
         }
         .navigationTitle("Relays")
         .navigationBarTitleDisplayMode(.inline)
@@ -149,57 +147,6 @@ struct RelaysView: View {
     // MARK: - Diagnostics
 
     @ViewBuilder
-    private var diagnosticsSection: some View {
-        Section {
-            if let health {
-                diagnosticRow("Connected", "\(health.connected) / \(health.totalRelays)",
-                              tint: health.connected > 0 ? .green : .secondary)
-                if health.connecting > 0 {
-                    diagnosticRow("Connecting", "\(health.connecting)", tint: .orange)
-                }
-                diagnosticRow("Disconnected", "\(health.disconnected)",
-                              tint: health.disconnected > 0 ? .orange : .secondary)
-                if health.sleeping > 0 {
-                    diagnosticRow("Sleeping", "\(health.sleeping)", tint: .secondary)
-                }
-                if health.banned > 0 {
-                    diagnosticRow("Banned", "\(health.banned)", tint: .red)
-                }
-                diagnosticRow("Connection attempts",
-                              "\(health.connectionSuccesses)/\(health.connectionAttempts)",
-                              tint: .secondary)
-                diagnosticRow("Backend", health.sdkBacked ? "Nostr SDK" : "Directory only",
-                              tint: .secondary)
-            } else {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Reading relay health…").font(.callout).foregroundStyle(.secondary)
-                }
-            }
-        } header: {
-            HStack {
-                Text("Relay Diagnostics")
-                Spacer()
-                Button {
-                    Task { health = await appState.marmot.relayHealth() }
-                } label: {
-                    Image(systemName: "arrow.clockwise").font(.caption)
-                }
-            }
-        } footer: {
-            Text("Live connection state of the relay plane across all subscribed relays.")
-                .font(.footnote)
-        }
-    }
-
-    private func diagnosticRow(_ title: String, _ value: String, tint: Color) -> some View {
-        LabeledContent(title) {
-            Text(value)
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(tint)
-        }
-    }
-
     // MARK: - Actions
 
     private var canAdd: Bool {
@@ -219,7 +166,6 @@ struct RelaysView: View {
     private func reload() async {
         guard let ref = appState.activeAccountRef else { return }
         lists = try? appState.marmot.accountRelayLists(accountRef: ref)
-        health = await appState.marmot.relayHealth()
     }
 
     @MainActor

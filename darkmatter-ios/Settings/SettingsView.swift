@@ -5,31 +5,51 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var showDiagnostics = false
     @State private var showQR = false
+    @State private var showProfileEdit = false
 
     var body: some View {
         Form {
             Section("Account") {
                 if let active = appState.activeAccount {
-                    NavigationLink {
-                        ProfileEditView()
-                    } label: {
-                        HStack(spacing: 12) {
-                            AvatarBubble(
-                                seed: active.accountIdHex,
-                                title: appState.displayName(forAccountIdHex: active.accountIdHex),
-                                pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
-                            )
-                            .frame(width: 44, height: 44)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(appState.displayName(forAccountIdHex: active.accountIdHex))
-                                    .font(.headline)
-                                Text(appState.shortNpub(forAccountIdHex: active.accountIdHex))
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Button {
+                            showProfileEdit = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                AvatarBubble(
+                                    seed: active.accountIdHex,
+                                    title: appState.displayName(forAccountIdHex: active.accountIdHex),
+                                    pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
+                                )
+                                .frame(width: 44, height: 44)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(appState.displayName(forAccountIdHex: active.accountIdHex))
+                                        .font(.headline)
+                                    Text(appState.shortNpub(forAccountIdHex: active.accountIdHex))
+                                        .font(.caption.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
                             }
+                            .contentShape(.rect)
                         }
-                        .padding(.vertical, 2)
+                        .buttonStyle(.plain)
+
+                        Button {
+                            showQR = true
+                        } label: {
+                            Image(systemName: "qrcode")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("My QR code")
+
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    .padding(.vertical, 2)
                 }
 
                 NavigationLink {
@@ -43,13 +63,6 @@ struct SettingsView: View {
                 } label: {
                     Label("Identity & Keys", systemImage: "key.fill")
                 }
-
-                Button {
-                    showQR = true
-                } label: {
-                    Label("My QR Code", systemImage: "qrcode")
-                }
-                .disabled(appState.activeAccount == nil)
             }
 
             Section("Network") {
@@ -84,6 +97,9 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .navigationDestination(isPresented: $showProfileEdit) {
+            ProfileEditView()
+        }
         .sheet(isPresented: $showQR) {
             if let hex = appState.activeAccount?.accountIdHex {
                 ProfileQRView(accountIdHex: hex)
