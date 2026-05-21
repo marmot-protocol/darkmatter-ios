@@ -118,11 +118,16 @@ struct ChatsListView: View {
                     title: appState.displayName(forAccountIdHex: active.accountIdHex),
                     pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
                 )
-                .frame(width: 32, height: 32)
+                .frame(width: 34, height: 34)
+                .shadow(color: .black.opacity(0.18), radius: 2.5, y: 1)
             } else {
                 Image(systemName: "person.crop.circle")
             }
         }
+        // Plain style so the avatar fills the tap target edge-to-edge instead
+        // of sitting inside a glass capsule with padding; the shadow above
+        // preserves the raised, tappable affordance.
+        .buttonStyle(.plain)
         .accessibilityLabel("Accounts")
     }
 
