@@ -3,14 +3,22 @@ import MarmotKit
 
 /// One row in the chats list. Renders 2-member groups in "DM" style (other
 /// member's identity in place of group name) and N>2 groups by group name.
+/// The subtitle previews the latest message; the trailing label is its
+/// relative timestamp.
 struct ChatRow: View {
     @Environment(AppState.self) private var appState
-    let chat: AppGroupRecordFfi
+    let item: ChatsListViewModel.Item
+
+    private var chat: AppGroupRecordFfi { item.group }
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarBubble(seed: chat.groupIdHex, title: title, pictureURL: avatarURL)
-                .frame(width: 48, height: 48)
+            AvatarBubble(
+                seed: GroupDisplay.avatarSeed(group: chat, otherMember: item.otherMemberAccount),
+                title: title,
+                pictureURL: GroupDisplay.avatarURL(group: chat, otherMember: item.otherMemberAccount, appState: appState)
+            )
+            .frame(width: 48, height: 48)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -23,32 +31,36 @@ struct ChatRow: View {
             }
 
             Spacer(minLength: 8)
+
+            if let timestamp {
+                Text(timestamp)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
         .padding(.vertical, 4)
     }
 
     private var title: String {
-        // Group name is relay/peer-sourced — sanitize before display.
-        if let name = ProfileSanitizer.groupName(chat.name) { return name }
-        // For a "DM" (no group name), prefer the first admin's display name
-        // when we have one cached — it'll usually be the other party.
-        if let firstAdmin = chat.admins.first {
-            return appState.displayName(forAccountIdHex: firstAdmin)
-        }
-        return IdentityFormatter.short(chat.groupIdHex)
+        GroupDisplay.title(group: chat, otherMember: item.otherMemberAccount, appState: appState)
     }
 
+    /// Latest message preview. Sent messages are prefixed with "You:".
     private var subtitle: String {
-        if let desc = ProfileSanitizer.singleLine(chat.description, maxLength: 140) {
-            return desc
+        guard let latest = item.latest else {
+            return "No messages yet"
         }
-        return "\(chat.relays.count) relays · \(chat.admins.count) admin\(chat.admins.count == 1 ? "" : "s")"
+        let body = ProfileSanitizer.singleLine(latest.plaintext, maxLength: 140) ?? ""
+        if latest.direction == "sent" {
+            return body.isEmpty ? "You sent a message" : "You: \(body)"
+        }
+        return body.isEmpty ? "New message" : body
     }
 
-    /// For a DM (no group name), use the other party's avatar when known.
-    private var avatarURL: URL? {
-        guard chat.name.isEmpty, let firstAdmin = chat.admins.first else { return nil }
-        return appState.avatarURL(forAccountIdHex: firstAdmin)
+    private var timestamp: String? {
+        guard let latest = item.latest else { return nil }
+        return RelativeTime.short(Date(timeIntervalSince1970: TimeInterval(latest.recordedAt)))
     }
 }
 

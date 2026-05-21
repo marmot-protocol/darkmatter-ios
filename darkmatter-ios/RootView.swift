@@ -14,7 +14,7 @@ struct RootView: View {
             case .onboarding:
                 WelcomeView()
             case .ready:
-                MainTabView()
+                MainView()
             case .failed(let message):
                 BootstrapFailureView(message: message)
             }

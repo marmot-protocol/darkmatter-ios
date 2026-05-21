@@ -62,7 +62,7 @@ final class AppState {
     private var toastDismissTask: Task<Void, Never>?
 
     /// A profile to present (set by a scanned QR or an opened deep link).
-    /// MainTabView binds a sheet to this.
+    /// MainView binds a sheet to this.
     private(set) var pendingProfile: ProfileLink?
 
     struct ProfileLink: Identifiable, Equatable {

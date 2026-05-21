@@ -43,7 +43,7 @@ struct ChatsListView: View {
 
     @ViewBuilder
     private func content(viewModel: ChatsListViewModel) -> some View {
-        if viewModel.isLoading && viewModel.chats.isEmpty {
+        if viewModel.isLoading && viewModel.items.isEmpty {
             ProgressView()
         } else if let error = viewModel.loadError {
             ContentUnavailableView(
@@ -51,17 +51,22 @@ struct ChatsListView: View {
                 systemImage: "exclamationmark.triangle",
                 description: Text(error)
             )
-        } else if viewModel.chats.isEmpty {
+        } else if viewModel.items.isEmpty {
             EmptyChatsState(action: { showNewChat = true })
         } else {
             List {
-                ForEach(viewModel.chats, id: \.groupIdHex) { chat in
-                    NavigationLink(value: chat.groupIdHex) {
-                        ChatRow(chat: chat)
+                ForEach(viewModel.items) { item in
+                    // ZStack with a hidden NavigationLink keeps the whole row
+                    // tappable while suppressing the default disclosure chevron
+                    // (the trailing slot shows the message timestamp instead).
+                    ZStack {
+                        ChatRow(item: item)
+                        NavigationLink(value: item.group.groupIdHex) { EmptyView() }
+                            .opacity(0)
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            Task { await leave(chat: chat) }
+                            Task { await leave(group: item.group) }
                         } label: {
                             Label("Leave", systemImage: "person.crop.circle.badge.minus")
                         }
@@ -69,9 +74,10 @@ struct ChatsListView: View {
                 }
             }
             .listStyle(.plain)
+            .refreshable { await viewModel.refreshLatest() }
             .navigationDestination(for: String.self) { groupIdHex in
-                if let chat = viewModel.chats.first(where: { $0.groupIdHex == groupIdHex }) {
-                    ConversationView(chat: chat)
+                if let group = viewModel.items.first(where: { $0.group.groupIdHex == groupIdHex })?.group {
+                    ConversationView(chat: group)
                 } else {
                     ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
                 }
@@ -98,12 +104,12 @@ struct ChatsListView: View {
     }
 
     @MainActor
-    private func leave(chat: AppGroupRecordFfi) async {
+    private func leave(group: AppGroupRecordFfi) async {
         guard let ref = appState.activeAccountRef else { return }
         do {
             _ = try await appState.marmot.leaveGroup(
                 accountRef: ref,
-                groupIdHex: chat.groupIdHex
+                groupIdHex: group.groupIdHex
             )
             Haptics.warning()
         } catch {
