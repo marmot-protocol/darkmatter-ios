@@ -403,7 +403,7 @@ uint64_t uniffi_marmot_uniffi_fn_method_marmot_start(void*_Nonnull ptr
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_CHATS
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_CHATS
-void*_Nonnull uniffi_marmot_uniffi_fn_method_marmot_subscribe_chats(void*_Nonnull ptr, RustBuffer account_ref, int8_t include_archived, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_marmot_uniffi_fn_method_marmot_subscribe_chats(void*_Nonnull ptr, RustBuffer account_ref, int8_t include_archived
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_EVENTS
@@ -413,12 +413,12 @@ void*_Nonnull uniffi_marmot_uniffi_fn_method_marmot_subscribe_events(void*_Nonnu
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_GROUP_STATE
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_GROUP_STATE
-void*_Nonnull uniffi_marmot_uniffi_fn_method_marmot_subscribe_group_state(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_marmot_uniffi_fn_method_marmot_subscribe_group_state(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_MESSAGES
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_MESSAGES
-void*_Nonnull uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_UPDATE_GROUP_PROFILE

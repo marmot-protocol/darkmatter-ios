@@ -1014,8 +1014,14 @@ public protocol MarmotProtocol : AnyObject {
     
     /**
      * Per-account chats list. Emits whenever a group's projection changes.
+     *
+     * `async` is required even though the body is synchronous: marmot-app's
+     * `subscribe_chats` spawns a background filter task via `tokio::spawn`,
+     * which panics ("no reactor running") if invoked outside a tokio
+     * runtime. UniFFI only enters the tokio runtime for `async` exports, so
+     * the subscribe methods that spawn must be async.
      */
-    func subscribeChats(accountRef: String, includeArchived: Bool) throws  -> ChatsSubscription
+    func subscribeChats(accountRef: String, includeArchived: Bool) async throws  -> ChatsSubscription
     
     /**
      * Top-level event firehose. One subscription, every account, every event
@@ -1025,15 +1031,17 @@ public protocol MarmotProtocol : AnyObject {
     func subscribeEvents()  -> EventsSubscription
     
     /**
-     * Member/profile/roster changes for one group.
+     * Member/profile/roster changes for one group. Async for the same
+     * tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-    func subscribeGroupState(accountRef: String, groupIdHex: String) throws  -> GroupStateSubscription
+    func subscribeGroupState(accountRef: String, groupIdHex: String) async throws  -> GroupStateSubscription
     
     /**
      * Messages for a specific group (when `group_id_hex` is `Some`) or
-     * every message across the account (when `None`).
+     * every message across the account (when `None`). Async for the same
+     * tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-    func subscribeMessages(accountRef: String, groupIdHex: String?) throws  -> MessagesSubscription
+    func subscribeMessages(accountRef: String, groupIdHex: String?) async throws  -> MessagesSubscription
     
     func updateGroupProfile(accountRef: String, groupIdHex: String, name: String?, description: String?) async throws  -> SendSummaryFfi
     
@@ -1412,14 +1420,28 @@ open func start()async throws  {
     
     /**
      * Per-account chats list. Emits whenever a group's projection changes.
+     *
+     * `async` is required even though the body is synchronous: marmot-app's
+     * `subscribe_chats` spawns a background filter task via `tokio::spawn`,
+     * which panics ("no reactor running") if invoked outside a tokio
+     * runtime. UniFFI only enters the tokio runtime for `async` exports, so
+     * the subscribe methods that spawn must be async.
      */
-open func subscribeChats(accountRef: String, includeArchived: Bool)throws  -> ChatsSubscription {
-    return try  FfiConverterTypeChatsSubscription.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_subscribe_chats(self.uniffiClonePointer(),
-        FfiConverterString.lower(accountRef),
-        FfiConverterBool.lower(includeArchived),$0
-    )
-})
+open func subscribeChats(accountRef: String, includeArchived: Bool)async throws  -> ChatsSubscription {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_subscribe_chats(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterBool.lower(includeArchived)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_pointer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_pointer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeChatsSubscription.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
     
     /**
@@ -1435,28 +1457,46 @@ open func subscribeEvents() -> EventsSubscription {
 }
     
     /**
-     * Member/profile/roster changes for one group.
+     * Member/profile/roster changes for one group. Async for the same
+     * tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-open func subscribeGroupState(accountRef: String, groupIdHex: String)throws  -> GroupStateSubscription {
-    return try  FfiConverterTypeGroupStateSubscription.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_subscribe_group_state(self.uniffiClonePointer(),
-        FfiConverterString.lower(accountRef),
-        FfiConverterString.lower(groupIdHex),$0
-    )
-})
+open func subscribeGroupState(accountRef: String, groupIdHex: String)async throws  -> GroupStateSubscription {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_subscribe_group_state(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_pointer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_pointer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeGroupStateSubscription.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
     
     /**
      * Messages for a specific group (when `group_id_hex` is `Some`) or
-     * every message across the account (when `None`).
+     * every message across the account (when `None`). Async for the same
+     * tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-open func subscribeMessages(accountRef: String, groupIdHex: String?)throws  -> MessagesSubscription {
-    return try  FfiConverterTypeMessagesSubscription.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(self.uniffiClonePointer(),
-        FfiConverterString.lower(accountRef),
-        FfiConverterOptionString.lower(groupIdHex),$0
-    )
-})
+open func subscribeMessages(accountRef: String, groupIdHex: String?)async throws  -> MessagesSubscription {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterOptionString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_pointer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_pointer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeMessagesSubscription.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
     
 open func updateGroupProfile(accountRef: String, groupIdHex: String, name: String?, description: String?)async throws  -> SendSummaryFfi {
@@ -3082,16 +3122,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_start() != 20136) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_chats() != 43233) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_chats() != 47214) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_events() != 12024) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_group_state() != 2340) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_group_state() != 22651) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_messages() != 11905) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_messages() != 58466) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_update_group_profile() != 53035) {
