@@ -84,6 +84,19 @@ struct ProfileEditView: View {
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadExisting() }
+    }
+
+    @MainActor
+    private func loadExisting() async {
+        guard let id = appState.activeAccount?.accountIdHex else { return }
+        guard let profile = appState.profile(forAccountIdHex: id) else { return }
+        // Only seed empty fields so we don't clobber in-progress edits.
+        if displayName.isEmpty { displayName = profile.displayName ?? profile.name ?? "" }
+        if about.isEmpty { about = profile.about ?? "" }
+        if picture.isEmpty { picture = profile.picture ?? "" }
+        if nip05.isEmpty { nip05 = profile.nip05 ?? "" }
+        if lud16.isEmpty { lud16 = profile.lud16 ?? "" }
     }
 
     @MainActor
@@ -103,12 +116,15 @@ struct ProfileEditView: View {
         )
 
         do {
-            _ = try await appState.marmot.publishUserProfile(
+            let published = try await appState.marmot.publishUserProfile(
                 accountRef: accountRef,
                 profile: metadata,
                 defaultRelays: appState.defaultRelays,
                 bootstrapRelays: appState.defaultRelays
             )
+            if let id = appState.activeAccount?.accountIdHex {
+                appState.cacheProfile(published, for: id)
+            }
             success = true
             Haptics.success()
             appState.present(.success(

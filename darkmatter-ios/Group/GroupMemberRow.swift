@@ -8,7 +8,7 @@ struct GroupMemberRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarBubble(seed: member.memberIdHex, title: displayName)
+            AvatarBubble(seed: member.memberIdHex, title: displayName, pictureURL: avatarURL)
                 .frame(width: 36, height: 36)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -46,5 +46,10 @@ struct GroupMemberRow: View {
             return appState.displayName(forAccountIdHex: account)
         }
         return IdentityFormatter.short(member.memberIdHex)
+    }
+
+    private var avatarURL: URL? {
+        guard let account = member.account, !account.isEmpty else { return nil }
+        return appState.avatarURL(forAccountIdHex: account)
     }
 }

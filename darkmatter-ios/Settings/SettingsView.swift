@@ -15,18 +15,13 @@ struct SettingsView: View {
                         HStack(spacing: 12) {
                             AvatarBubble(
                                 seed: active.accountIdHex,
-                                title: IdentityFormatter.displayName(
-                                    label: active.label,
-                                    accountIdHex: active.accountIdHex
-                                )
+                                title: appState.displayName(forAccountIdHex: active.accountIdHex),
+                                pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
                             )
                             .frame(width: 44, height: 44)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(IdentityFormatter.displayName(
-                                    label: active.label,
-                                    accountIdHex: active.accountIdHex
-                                ))
-                                .font(.headline)
+                                Text(appState.displayName(forAccountIdHex: active.accountIdHex))
+                                    .font(.headline)
                                 Text(IdentityFormatter.short(active.accountIdHex))
                                     .font(.caption.monospaced())
                                     .foregroundStyle(.secondary)

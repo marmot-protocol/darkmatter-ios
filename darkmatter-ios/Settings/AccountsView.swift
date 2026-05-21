@@ -39,19 +39,14 @@ struct AccountsView: View {
         HStack(spacing: 12) {
             AvatarBubble(
                 seed: account.accountIdHex,
-                title: IdentityFormatter.displayName(
-                    label: account.label,
-                    accountIdHex: account.accountIdHex
-                )
+                title: appState.displayName(forAccountIdHex: account.accountIdHex),
+                pictureURL: appState.avatarURL(forAccountIdHex: account.accountIdHex)
             )
             .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(IdentityFormatter.displayName(
-                    label: account.label,
-                    accountIdHex: account.accountIdHex
-                ))
-                .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
+                Text(appState.displayName(forAccountIdHex: account.accountIdHex))
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
                 Text(IdentityFormatter.short(account.accountIdHex))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
