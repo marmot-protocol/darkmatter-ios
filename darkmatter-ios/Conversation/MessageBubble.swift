@@ -149,7 +149,9 @@ struct MessageBubble: View {
     private var metaLine: some View {
         HStack(spacing: 4) {
             Text(timeLabel)
-            if isFromMe, let statusLabel {
+            // Show the status caption for our own messages, and the live
+            // "streaming" indicator regardless of side.
+            if let statusLabel, isFromMe || status == .streaming {
                 Text("·")
                 Text(statusLabel)
             }
@@ -172,6 +174,7 @@ struct MessageBubble: View {
         case .sending: return "Sending…"
         case .sent: return "Sent"
         case .failed: return "Not delivered"
+        case .streaming: return "Streaming…"
         case .received: return nil
         }
     }
