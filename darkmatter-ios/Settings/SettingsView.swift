@@ -3,7 +3,6 @@ import MarmotKit
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
-    @State private var showDiagnostics = false
     @State private var showQR = false
     @State private var showProfileEdit = false
 
@@ -83,10 +82,20 @@ struct SettingsView: View {
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                Toggle("Show diagnostics", isOn: $showDiagnostics)
             }
 
-            if showDiagnostics {
+            Section {
+                Toggle("Developer mode", isOn: Binding(
+                    get: { appState.developerMode },
+                    set: { appState.developerMode = $0 }
+                ))
+            } header: {
+                Text("Developer")
+            } footer: {
+                Text("Adds debugging tools: MLS group internals on the chat-details screen and the diagnostics console.")
+            }
+
+            if appState.developerMode {
                 Section("Diagnostics") {
                     NavigationLink {
                         DiagnosticsView()

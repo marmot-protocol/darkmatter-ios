@@ -75,13 +75,31 @@ struct ChatsListView: View {
                         } label: {
                             Label("Leave", systemImage: "person.crop.circle.badge.minus")
                         }
+                        Button {
+                            Task { await setArchived(group: item.group, archived: true) }
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        .tint(.gray)
+                    }
+                }
+
+                if !viewModel.archivedItems.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ArchivedChatsView(viewModel: viewModel)
+                        } label: {
+                            Label("Archived", systemImage: "archivebox")
+                                .badge(viewModel.archivedItems.count)
+                        }
                     }
                 }
             }
             .listStyle(.plain)
             .refreshable { await viewModel.refreshLatest() }
             .navigationDestination(for: String.self) { groupIdHex in
-                if let group = viewModel.items.first(where: { $0.group.groupIdHex == groupIdHex })?.group {
+                if let group = (viewModel.items + viewModel.archivedItems)
+                    .first(where: { $0.group.groupIdHex == groupIdHex })?.group {
                     ConversationView(chat: group)
                 } else {
                     ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
@@ -120,6 +138,22 @@ struct ChatsListView: View {
         } catch {
             Haptics.error()
             appState.present(.error("Couldn't leave chat", message: error.localizedDescription))
+        }
+    }
+
+    @MainActor
+    private func setArchived(group: AppGroupRecordFfi, archived: Bool) async {
+        guard let ref = appState.activeAccountRef else { return }
+        do {
+            _ = try appState.marmot.setGroupArchived(
+                accountRef: ref,
+                groupIdHex: group.groupIdHex,
+                archived: archived
+            )
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            appState.present(.error("Couldn't archive chat", message: error.localizedDescription))
         }
     }
 }
