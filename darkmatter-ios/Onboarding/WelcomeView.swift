@@ -20,7 +20,7 @@ struct WelcomeView: View {
                     Text("Dark Matter")
                         .font(.largeTitle.weight(.semibold))
 
-                    Text("End-to-end encrypted group messaging on Nostr.")
+                    Text("End-to-end encrypted group messaging.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
