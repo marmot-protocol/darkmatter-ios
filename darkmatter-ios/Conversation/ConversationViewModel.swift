@@ -38,6 +38,13 @@ final class ConversationViewModel {
     private var messageById: [String: AppMessageRecordFfi] = [:]
     /// Reaction messages by their own id (incl. optimistic), re-aggregated on change.
     private var reactionRecords: [String: AppMessageRecordFfi] = [:]
+    /// Live agent-stream watch tasks, keyed by stream id.
+    private var streamWatchTasks: [String: Task<Void, Never>] = [:]
+    /// Accumulated text per live stream, keyed by stream id.
+    private var streamText: [String: String] = [:]
+
+    /// Agent-stream control envelopes are never chat bubbles.
+    private static let agentStreamMarker = "marmot.agent_text_stream.v1"
 
     var myAccountId: String? { appState?.activeAccount?.accountIdHex }
 
@@ -104,6 +111,7 @@ final class ConversationViewModel {
     deinit {
         messagesTask?.cancel()
         groupStateTask?.cancel()
+        for task in streamWatchTasks.values { task.cancel() }
     }
 
     func start() async {
@@ -151,13 +159,22 @@ final class ConversationViewModel {
 
     private func fold(_ update: MessageUpdateFfi) {
         switch update {
-        case .message(let m), .agentStreamStarted(let m), .agentStreamFinalized(let m):
+        case .message(let m):
             ingest(receivedToRecord(m))
+        case .agentStreamStarted(let m):
+            // Open a live bubble and watch the QUIC stream as it fills in.
+            let sender = m.message.sender
+            Task { [weak self] in await self?.startWatching(sender: sender) }
+        case .agentStreamFinalized:
+            // The watch's .finished update swaps in the final text.
+            break
         }
     }
 
     /// Route a message record to the timeline or the reactions index.
     private func ingest(_ record: AppMessageRecordFfi) {
+        // Agent-stream control envelopes (Start/Final) aren't chat bubbles.
+        if record.plaintext.contains(Self.agentStreamMarker) { return }
         if !record.messageIdHex.isEmpty {
             messageById[record.messageIdHex] = record
         }
@@ -402,6 +419,82 @@ final class ConversationViewModel {
             deletedMessageIds.remove(message.messageIdHex)
             Haptics.error()
             appState.present(.error("Couldn't delete message", message: error.localizedDescription))
+        }
+    }
+
+    // MARK: - Agent text streaming
+
+    /// Watch the latest live agent stream in this group: open a bubble that
+    /// fills in as chunks arrive over QUIC, then swap to the final transcript.
+    private func startWatching(sender: String) async {
+        guard let appState, let accountRef = appState.activeAccountRef else { return }
+        do {
+            let subscription = try await appState.marmot.watchAgentTextStream(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex,
+                streamIdHex: nil,
+                serverCertDer: nil,
+                // Developer mode points at a loopback broker (insecure); release
+                // builds use the platform TLS verifier against a real cert.
+                insecureLocal: appState.developerMode
+            )
+            let streamId = subscription.streamIdHex()
+            if streamWatchTasks[streamId] != nil { return }
+            streamText[streamId] = ""
+            upsertStreamBubble(streamId: streamId, sender: sender, status: .streaming)
+            let task = Task { [weak self] in
+                while !Task.isCancelled, let update = await subscription.next() {
+                    await self?.applyStreamUpdate(streamId: streamId, sender: sender, update: update)
+                }
+            }
+            streamWatchTasks[streamId] = task
+        } catch {
+            // No resolvable start payload yet, or the broker is unreachable.
+        }
+    }
+
+    private func applyStreamUpdate(streamId: String, sender: String, update: AgentStreamUpdateFfi) {
+        switch update {
+        case .chunk(_, let text):
+            streamText[streamId, default: ""].append(text)
+            upsertStreamBubble(streamId: streamId, sender: sender, status: .streaming)
+        case .finished(let text, _, _):
+            streamText[streamId] = text
+            upsertStreamBubble(streamId: streamId, sender: sender, status: .received)
+            streamWatchTasks[streamId] = nil
+        case .failed:
+            // Keep whatever streamed; just stop the live indicator.
+            upsertStreamBubble(streamId: streamId, sender: sender, status: .received)
+            streamWatchTasks[streamId] = nil
+        }
+    }
+
+    /// Create or update the synthetic bubble for a live stream (keyed by id).
+    private func upsertStreamBubble(streamId: String, sender: String, status: MessageStatus) {
+        let rowId = "msg:stream:\(streamId)"
+        let now = UInt64(Date().timeIntervalSince1970)
+        let record = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "received",
+            groupIdHex: group.groupIdHex,
+            sender: sender,
+            plaintext: streamText[streamId] ?? "",
+            appMessage: nil,
+            recordedAt: now,
+            receivedAt: now
+        )
+        if let idx = timeline.firstIndex(where: { $0.id == rowId }) {
+            let timestamp = timeline[idx].timestamp
+            timeline[idx] = TimelineItem(
+                id: rowId,
+                kind: .message(record: record, status: status),
+                timestamp: timestamp
+            )
+        } else {
+            timeline.append(
+                TimelineItem(id: rowId, kind: .message(record: record, status: status), timestamp: now)
+            )
+            timeline.sort { $0.timestamp < $1.timestamp }
         }
     }
 

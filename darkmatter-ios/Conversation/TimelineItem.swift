@@ -3,11 +3,13 @@ import MarmotKit
 
 /// Delivery state for a message bubble. Inbound messages are `.received`
 /// (no indicator shown); our own messages move .sending → .sent, or .failed.
+/// `.streaming` is a live agent-text-stream bubble still filling in.
 enum MessageStatus: Hashable {
     case received
     case sending
     case sent
     case failed
+    case streaming
 }
 
 /// One renderable row in a conversation. Either a message bubble or a
