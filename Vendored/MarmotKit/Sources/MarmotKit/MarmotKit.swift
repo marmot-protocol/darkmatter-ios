@@ -1045,6 +1045,15 @@ public protocol MarmotProtocol : AnyObject {
     
     func updateGroupProfile(accountRef: String, groupIdHex: String, name: String?, description: String?) async throws  -> SendSummaryFfi
     
+    /**
+     * Full cached Nostr kind:0 profile for an account id (name, display
+     * name, about, picture, nip05, lud16), if the runtime has one
+     * projected. The local account's own profile is cached immediately
+     * after `publish_user_profile`; other accounts' profiles populate via
+     * `refresh_directory`. Returns `None` when nothing is cached yet.
+     */
+    func userProfile(accountIdHex: String) throws  -> UserProfileMetadataFfi?
+    
 }
 
 open class Marmot:
@@ -1514,6 +1523,21 @@ open func updateGroupProfile(accountRef: String, groupIdHex: String, name: Strin
             liftFunc: FfiConverterTypeSendSummaryFfi.lift,
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
+}
+    
+    /**
+     * Full cached Nostr kind:0 profile for an account id (name, display
+     * name, about, picture, nip05, lud16), if the runtime has one
+     * projected. The local account's own profile is cached immediately
+     * after `publish_user_profile`; other accounts' profiles populate via
+     * `refresh_directory`. Returns `None` when nothing is cached yet.
+     */
+open func userProfile(accountIdHex: String)throws  -> UserProfileMetadataFfi? {
+    return try  FfiConverterOptionTypeUserProfileMetadataFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_marmot_user_profile(self.uniffiClonePointer(),
+        FfiConverterString.lower(accountIdHex),$0
+    )
+})
 }
     
 
@@ -2828,6 +2852,30 @@ fileprivate struct FfiConverterOptionTypeAppGroupRecordFfi: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeUserProfileMetadataFfi: FfiConverterRustBuffer {
+    typealias SwiftType = UserProfileMetadataFfi?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeUserProfileMetadataFfi.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeUserProfileMetadataFfi.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeMarmotEventFfi: FfiConverterRustBuffer {
     typealias SwiftType = MarmotEventFfi?
 
@@ -3135,6 +3183,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_update_group_profile() != 53035) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_user_profile() != 12217) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_messagessubscription_next() != 31202) {

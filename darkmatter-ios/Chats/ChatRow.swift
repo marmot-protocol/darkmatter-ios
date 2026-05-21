@@ -9,7 +9,7 @@ struct ChatRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarBubble(seed: chat.groupIdHex, title: title)
+            AvatarBubble(seed: chat.groupIdHex, title: title, pictureURL: avatarURL)
                 .frame(width: 48, height: 48)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -41,13 +41,21 @@ struct ChatRow: View {
         if !chat.description.isEmpty { return chat.description }
         return "\(chat.relays.count) relays · \(chat.admins.count) admin\(chat.admins.count == 1 ? "" : "s")"
     }
+
+    /// For a DM (no group name), use the other party's avatar when known.
+    private var avatarURL: URL? {
+        guard chat.name.isEmpty, let firstAdmin = chat.admins.first else { return nil }
+        return appState.avatarURL(forAccountIdHex: firstAdmin)
+    }
 }
 
-/// Circular avatar placeholder. Deterministic color from a seed string so a
-/// given group/person keeps the same color across launches.
+/// Circular avatar. Renders the profile picture when a URL is provided,
+/// otherwise falls back to initials over a deterministic color derived from
+/// the seed string (so a given group/person keeps the same color).
 struct AvatarBubble: View {
     let seed: String
     let title: String
+    var pictureURL: URL? = nil
 
     var body: some View {
         ZStack {
@@ -57,10 +65,29 @@ struct AvatarBubble: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 ))
-            Text(initials)
-                .font(.headline)
-                .foregroundStyle(.white)
+
+            if let pictureURL {
+                AsyncImage(url: pictureURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .empty, .failure:
+                        initialsView
+                    @unknown default:
+                        initialsView
+                    }
+                }
+            } else {
+                initialsView
+            }
         }
+        .clipShape(Circle())
+    }
+
+    private var initialsView: some View {
+        Text(initials)
+            .font(.headline)
+            .foregroundStyle(.white)
     }
 
     private var initials: String {

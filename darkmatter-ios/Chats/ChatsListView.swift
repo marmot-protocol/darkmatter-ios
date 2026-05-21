@@ -80,12 +80,10 @@ struct ChatsListView: View {
             ForEach(appState.accounts, id: \.label) { account in
                 Button {
                     appState.activeAccountRef = account.label
+                    Haptics.selection()
                 } label: {
                     Label(
-                        IdentityFormatter.displayName(
-                            label: account.label,
-                            accountIdHex: account.accountIdHex
-                        ),
+                        appState.displayName(forAccountIdHex: account.accountIdHex),
                         systemImage: account.label == appState.activeAccountRef
                             ? "checkmark.circle.fill"
                             : "person.crop.circle"
@@ -102,10 +100,8 @@ struct ChatsListView: View {
             if let active = appState.activeAccount {
                 AvatarBubble(
                     seed: active.accountIdHex,
-                    title: IdentityFormatter.displayName(
-                        label: active.label,
-                        accountIdHex: active.accountIdHex
-                    )
+                    title: appState.displayName(forAccountIdHex: active.accountIdHex),
+                    pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
                 )
                 .frame(width: 32, height: 32)
             } else {

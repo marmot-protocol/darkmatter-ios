@@ -44,10 +44,13 @@ final class AppState {
 
     let client: MarmotClient
 
-    /// Cache of best-known display names keyed by account id hex. Populated
-    /// on demand via `displayName(forAccountIdHex:)` and updated when a
-    /// refresh succeeds. Read-only from view code.
+    /// Cache of best-known display names keyed by account id hex. Derived
+    /// from `profiles` when available. Read-only from view code.
     private(set) var displayNames: [String: String] = [:]
+
+    /// Cache of full Nostr kind:0 profiles keyed by account id hex. Populated
+    /// on demand via `profile(forAccountIdHex:)`. Read-only from view code.
+    private(set) var profiles: [String: UserProfileMetadataFfi] = [:]
 
     /// Most recent transient banner. View code reads this via the
     /// `.toastHost()` modifier on the root view.
@@ -135,53 +138,81 @@ final class AppState {
         return accounts.first { $0.label == ref }
     }
 
-    // MARK: - Display names
+    // MARK: - Profiles & display names
 
-    /// Best-effort lookup. Returns the cached name if known, falls back to
-    /// the local-account label (when `accountIdHex` matches one of our own
-    /// accounts), then the short-hex form. Also schedules a background
-    /// refresh on first request for an unknown id so subsequent calls
-    /// hydrate naturally.
+    /// Full Nostr profile for an account id. Returns the cached value
+    /// immediately if known; otherwise does a fast synchronous read from the
+    /// runtime's directory cache, and on a miss schedules a background relay
+    /// fetch so a later call hydrates. `nil` until something is known.
     @MainActor
-    func displayName(forAccountIdHex accountIdHex: String) -> String {
-        if let cached = displayNames[accountIdHex] { return cached }
-        if let owned = accounts.first(where: { $0.accountIdHex == accountIdHex }) {
-            let name = owned.label.isEmpty
-                ? IdentityFormatter.short(accountIdHex)
-                : owned.label
-            displayNames[accountIdHex] = name
+    @discardableResult
+    func profile(forAccountIdHex id: String) -> UserProfileMetadataFfi? {
+        if let cached = profiles[id] { return cached }
+        if let local = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
+            cacheProfile(local, for: id)
+            return local
+        }
+        Task { await refreshProfile(forAccountIdHex: id) }
+        return nil
+    }
+
+    /// Best-effort display name. Prefers the projected kind:0 display_name /
+    /// name, then a local account's label, then short-hex.
+    @MainActor
+    func displayName(forAccountIdHex id: String) -> String {
+        if let p = profile(forAccountIdHex: id), let name = Self.name(from: p) {
             return name
         }
-        Task { await self.refreshDisplayName(forAccountIdHex: accountIdHex) }
-        return IdentityFormatter.short(accountIdHex)
+        if let cached = displayNames[id] { return cached }
+        if let owned = accounts.first(where: { $0.accountIdHex == id }) {
+            return owned.label.isEmpty ? IdentityFormatter.short(id) : owned.label
+        }
+        return IdentityFormatter.short(id)
+    }
+
+    /// Picture URL for an account id, if its profile has one.
+    @MainActor
+    func avatarURL(forAccountIdHex id: String) -> URL? {
+        guard let picture = profile(forAccountIdHex: id)?.picture,
+              !picture.isEmpty else { return nil }
+        return URL(string: picture)
+    }
+
+    /// Store a profile in the cache and derive its display name. Called after
+    /// a successful publish so the editor and chrome update immediately.
+    @MainActor
+    func cacheProfile(_ profile: UserProfileMetadataFfi, for id: String) {
+        profiles[id] = profile
+        if let name = Self.name(from: profile) {
+            displayNames[id] = name
+        }
     }
 
     @MainActor
-    private func refreshDisplayName(forAccountIdHex accountIdHex: String) async {
-        guard !directoryFetchesInFlight.contains(accountIdHex) else { return }
-        directoryFetchesInFlight.insert(accountIdHex)
-        defer { directoryFetchesInFlight.remove(accountIdHex) }
+    private func refreshProfile(forAccountIdHex id: String) async {
+        guard !directoryFetchesInFlight.contains(id) else { return }
+        directoryFetchesInFlight.insert(id)
+        defer { directoryFetchesInFlight.remove(id) }
 
-        // First try the cached projection — the runtime may already know it
-        // without needing a network hop.
-        if let cached = marmot.displayName(accountIdHex: accountIdHex), !cached.isEmpty {
-            displayNames[accountIdHex] = cached
+        if let local = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
+            cacheProfile(local, for: id)
             return
         }
 
-        // Otherwise ask the runtime to fetch a fresh directory record.
-        do {
-            try await marmot.refreshDirectory(
-                accountIdHex: accountIdHex,
-                bootstrapRelays: defaultRelays
-            )
-            if let resolved = marmot.displayName(accountIdHex: accountIdHex), !resolved.isEmpty {
-                displayNames[accountIdHex] = resolved
-            }
-        } catch {
-            // Silent on directory-fetch failures; the UI will keep showing
-            // the short-hex form.
+        try? await marmot.refreshDirectory(accountIdHex: id, bootstrapRelays: defaultRelays)
+
+        if let fetched = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
+            cacheProfile(fetched, for: id)
+        } else if let name = marmot.displayName(accountIdHex: id), !name.isEmpty {
+            displayNames[id] = name
         }
+    }
+
+    private static func name(from profile: UserProfileMetadataFfi) -> String? {
+        let candidate = (profile.displayName ?? profile.name)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let candidate, !candidate.isEmpty else { return nil }
+        return candidate
     }
 
     // MARK: - Toasts

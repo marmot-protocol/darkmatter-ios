@@ -426,6 +426,11 @@ uint64_t uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(void*_Nonnull 
 uint64_t uniffi_marmot_uniffi_fn_method_marmot_update_group_profile(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustBuffer name, RustBuffer description
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_USER_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_USER_PROFILE
+RustBuffer uniffi_marmot_uniffi_fn_method_marmot_user_profile(void*_Nonnull ptr, RustBuffer account_id_hex, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_CLONE_MESSAGESSUBSCRIPTION
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_CLONE_MESSAGESSUBSCRIPTION
 void*_Nonnull uniffi_marmot_uniffi_fn_clone_messagessubscription(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -879,6 +884,12 @@ uint16_t uniffi_marmot_uniffi_checksum_method_marmot_subscribe_messages(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_UPDATE_GROUP_PROFILE
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_UPDATE_GROUP_PROFILE
 uint16_t uniffi_marmot_uniffi_checksum_method_marmot_update_group_profile(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_USER_PROFILE
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_USER_PROFILE
+uint16_t uniffi_marmot_uniffi_checksum_method_marmot_user_profile(void
     
 );
 #endif
