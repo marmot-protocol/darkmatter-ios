@@ -1,15 +1,18 @@
 import SwiftUI
-import MarmotKit
 
-/// Generate a brand-new Nostr identity. The keypair is created and stored
-/// in the iOS Keychain inside marmot-app; we don't see the nsec in Swift.
+/// Generate a brand-new Nostr identity. The keypair is created and stored in
+/// the iOS Keychain inside marmot-app; we never see the nsec in Swift.
+///
+/// On success the parent routes automatically: during onboarding the app
+/// advances to the main UI; when adding an account, the Accounts sheet
+/// dismisses back to the accounts list. There's no intermediate "created"
+/// screen.
 struct CreateIdentityView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var isCreating = false
     @State private var error: String?
-    @State private var created: AccountSummaryFfi?
 
     var body: some View {
         Form {
@@ -19,47 +22,22 @@ struct CreateIdentityView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let created {
-                Section("Your new identity") {
-                    LabeledContent("Account") {
-                        Text(IdentityFormatter.short(created.accountIdHex))
-                            .font(.system(.callout, design: .monospaced))
-                    }
-                    LabeledContent("Local signing") {
-                        Image(systemName: created.localSigning ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(created.localSigning ? .green : .red)
-                    }
-                }
-
-                Section {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Continue")
+            Section {
+                Button {
+                    Task { await runCreate() }
+                } label: {
+                    HStack {
+                        if isCreating {
+                            ProgressView().controlSize(.small)
+                        }
+                        Text(isCreating ? "Creating…" : "Generate Identity")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 2)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                 }
-            } else {
-                Section {
-                    Button {
-                        Task { await runCreate() }
-                    } label: {
-                        HStack {
-                            if isCreating {
-                                ProgressView().controlSize(.small)
-                            }
-                            Text(isCreating ? "Creating…" : "Generate Identity")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 2)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .disabled(isCreating)
-                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isCreating)
             }
 
             if let error {
@@ -80,9 +58,10 @@ struct CreateIdentityView: View {
         isCreating = true
         error = nil
         do {
-            let summary = try await appState.createIdentity()
-            created = summary
+            try await appState.createIdentity()
             Haptics.success()
+            // Parent handles navigation (sheet dismiss / onboarding advance).
+            dismiss()
         } catch {
             Haptics.error()
             self.error = error.localizedDescription

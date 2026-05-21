@@ -33,6 +33,12 @@ struct AccountsView: View {
                 WelcomeView()
             }
         }
+        // Close the add-account sheet as soon as a new identity lands, so the
+        // user returns straight to the (updated) accounts list rather than
+        // being left on the creation flow.
+        .onChange(of: appState.accounts.count) { _, _ in
+            if showAdd { showAdd = false }
+        }
     }
 
     private func accountRow(_ account: AccountSummaryFfi) -> some View {
