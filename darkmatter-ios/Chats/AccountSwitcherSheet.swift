@@ -70,9 +70,9 @@ struct AccountSwitcherSheet: View {
 
                 Section {
                     NavigationLink {
-                        AccountsView()
+                        SettingsView()
                     } label: {
-                        Label("Manage Accounts", systemImage: "gearshape")
+                        Label("Settings", systemImage: "gearshape")
                     }
                 }
             }
