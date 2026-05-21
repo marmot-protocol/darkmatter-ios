@@ -50,6 +50,29 @@ final class AppState {
         }
     }
 
+    /// Recently-used reaction emojis, most-recent first. Drives the quick row
+    /// in the message actions overlay.
+    private(set) var recentReactions: [String]
+
+    static let defaultReactions = ["👍", "❤️", "😂", "🎉", "😮"]
+
+    /// The five emojis to show in the quick-reaction row: recents first,
+    /// topped up with defaults.
+    var quickReactions: [String] {
+        var result = recentReactions
+        for emoji in Self.defaultReactions where result.count < 5 {
+            if !result.contains(emoji) { result.append(emoji) }
+        }
+        return Array(result.prefix(5))
+    }
+
+    func addRecentReaction(_ emoji: String) {
+        var list = recentReactions.filter { $0 != emoji }
+        list.insert(emoji, at: 0)
+        recentReactions = Array(list.prefix(12))
+        UserDefaults.standard.set(recentReactions, forKey: Self.recentReactionsKey)
+    }
+
     let client: MarmotClient
 
     /// Cache of best-known display names keyed by account id hex. Derived
@@ -84,6 +107,7 @@ final class AppState {
     private static let activeAccountKey = "marmot.activeAccountRef"
     private static let relaysKey = "marmot.defaultRelays"
     private static let developerModeKey = "marmot.developerMode"
+    private static let recentReactionsKey = "marmot.recentReactions"
 
     init(client: MarmotClient) {
         self.client = client
@@ -93,6 +117,8 @@ final class AppState {
             : MarmotClient.defaultRelays
         self.activeAccountRef = UserDefaults.standard.string(forKey: Self.activeAccountKey)
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
+        self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
+            ?? Self.defaultReactions
     }
 
     /// Production entry point. Builds a keychain-backed client; if secure

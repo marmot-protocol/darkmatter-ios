@@ -8,8 +8,12 @@ struct ConversationView: View {
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
     @State private var showDetails = false
+    @State private var actionsTarget: ActionsTarget?
 
-    private static let quickReactions = ["👍", "❤️", "😂", "🎉", "😮", "😢"]
+    private struct ActionsTarget: Identifiable {
+        let record: AppMessageRecordFfi
+        let id = UUID()
+    }
 
     var body: some View {
         timeline
@@ -36,6 +40,27 @@ struct ConversationView: View {
                     }
                 }
             }
+            .sheet(item: $actionsTarget) { target in
+                if let viewModel {
+                    MessageActionsSheet(
+                        isMine: target.record.direction == "sent",
+                        quickReactions: appState.quickReactions,
+                        onReact: { emoji in
+                            Task { await viewModel.toggleReaction(emoji, on: target.record) }
+                            appState.addRecentReaction(emoji)
+                            actionsTarget = nil
+                        },
+                        onReply: {
+                            viewModel.replyingTo = target.record
+                            actionsTarget = nil
+                        },
+                        onDelete: {
+                            Task { await viewModel.deleteMessage(target.record) }
+                            actionsTarget = nil
+                        }
+                    )
+                }
+            }
             .task {
                 if viewModel == nil {
                     viewModel = ConversationViewModel(appState: appState, group: chat)
@@ -58,6 +83,9 @@ struct ConversationView: View {
                 onSend: send
             )
         }
+        // Blur the messages scrolling under the composer (and the reply box
+        // above it) so the controls stay legible.
+        .background(.ultraThinMaterial)
     }
 
     private func replyBar(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
@@ -151,37 +179,25 @@ struct ConversationView: View {
             MessageBubble(
                 record: record,
                 status: status,
+                isDeleted: viewModel.isDeleted(record.messageIdHex),
                 replyPreview: viewModel.replyPreview(for: record),
                 reactions: viewModel.reactions(for: record.messageIdHex),
                 onTapReaction: { emoji in
                     Task { await viewModel.toggleReaction(emoji, on: record) }
+                    appState.addRecentReaction(emoji)
                 }
             )
             .id(item.id)
-            .contextMenu { messageMenu(for: record, viewModel: viewModel) }
+            .onLongPressGesture {
+                guard !record.messageIdHex.isEmpty,
+                      !viewModel.isDeleted(record.messageIdHex) else { return }
+                Haptics.tap()
+                actionsTarget = ActionsTarget(record: record)
+            }
             .gesture(replySwipe(for: record, viewModel: viewModel))
         case .systemEvent(let event):
             SystemEventRow(event: event)
                 .id(item.id)
-        }
-    }
-
-    @ViewBuilder
-    private func messageMenu(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
-        // Reactions can only target a confirmed (server-assigned) message.
-        if !record.messageIdHex.isEmpty {
-            ControlGroup {
-                ForEach(Self.quickReactions, id: \.self) { emoji in
-                    Button(emoji) {
-                        Task { await viewModel.toggleReaction(emoji, on: record) }
-                    }
-                }
-            }
-        }
-        Button {
-            viewModel.replyingTo = record
-        } label: {
-            Label("Reply", systemImage: "arrowshape.turn.up.left")
         }
     }
 
