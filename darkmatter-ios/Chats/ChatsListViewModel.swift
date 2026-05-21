@@ -36,7 +36,7 @@ final class ChatsListViewModel {
         guard let accountRef, let appState else { return }
         isLoading = true
         do {
-            let sub = try appState.marmot.subscribeChats(
+            let sub = try await appState.marmot.subscribeChats(
                 accountRef: accountRef,
                 includeArchived: false
             )

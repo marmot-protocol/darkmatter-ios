@@ -47,7 +47,7 @@ final class ConversationViewModel {
         defer { isLoading = false }
 
         do {
-            let messagesSub = try appState.marmot.subscribeMessages(
+            let messagesSub = try await appState.marmot.subscribeMessages(
                 accountRef: accountRef,
                 groupIdHex: group.groupIdHex
             )
@@ -55,7 +55,7 @@ final class ConversationViewModel {
                 .map(TimelineItem.message)
                 .sorted { $0.timestamp < $1.timestamp }
 
-            let groupSub = try appState.marmot.subscribeGroupState(
+            let groupSub = try await appState.marmot.subscribeGroupState(
                 accountRef: accountRef,
                 groupIdHex: group.groupIdHex
             )
