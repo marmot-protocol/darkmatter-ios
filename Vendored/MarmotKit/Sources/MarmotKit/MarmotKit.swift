@@ -963,6 +963,13 @@ public protocol MarmotProtocol : AnyObject {
     func createIdentity(defaultRelays: [String], bootstrapRelays: [String]) async throws  -> AccountSummaryFfi
     
     /**
+     * Mark `target_message_id` deleted for the whole group. This is a
+     * tombstone — the original stays in everyone's store; clients render a
+     * "message deleted" placeholder.
+     */
+    func deleteMessage(accountRef: String, groupIdHex: String, targetMessageId: String) async throws  -> SendSummaryFfi
+    
+    /**
      * Revoke `member_ref`'s admin rights.
      */
     func demoteAdmin(accountRef: String, groupIdHex: String, memberRef: String) async throws  -> SendSummaryFfi
@@ -1270,6 +1277,28 @@ open func createIdentity(defaultRelays: [String], bootstrapRelays: [String])asyn
             completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeAccountSummaryFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+    
+    /**
+     * Mark `target_message_id` deleted for the whole group. This is a
+     * tombstone — the original stays in everyone's store; clients render a
+     * "message deleted" placeholder.
+     */
+open func deleteMessage(accountRef: String, groupIdHex: String, targetMessageId: String)async throws  -> SendSummaryFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_delete_message(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex),FfiConverterString.lower(targetMessageId)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSendSummaryFfi.lift,
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
 }
@@ -4016,6 +4045,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_create_identity() != 64408) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_delete_message() != 13951) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_demote_admin() != 42693) {

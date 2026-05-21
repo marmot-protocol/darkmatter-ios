@@ -341,6 +341,11 @@ uint64_t uniffi_marmot_uniffi_fn_method_marmot_create_group(void*_Nonnull ptr, R
 uint64_t uniffi_marmot_uniffi_fn_method_marmot_create_identity(void*_Nonnull ptr, RustBuffer default_relays, RustBuffer bootstrap_relays
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_DELETE_MESSAGE
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_DELETE_MESSAGE
+uint64_t uniffi_marmot_uniffi_fn_method_marmot_delete_message(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustBuffer target_message_id
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_DEMOTE_ADMIN
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_DEMOTE_ADMIN
 uint64_t uniffi_marmot_uniffi_fn_method_marmot_demote_admin(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustBuffer member_ref
@@ -842,6 +847,12 @@ uint16_t uniffi_marmot_uniffi_checksum_method_marmot_create_group(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_CREATE_IDENTITY
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_CREATE_IDENTITY
 uint16_t uniffi_marmot_uniffi_checksum_method_marmot_create_identity(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_DELETE_MESSAGE
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_DELETE_MESSAGE
+uint16_t uniffi_marmot_uniffi_checksum_method_marmot_delete_message(void
     
 );
 #endif
