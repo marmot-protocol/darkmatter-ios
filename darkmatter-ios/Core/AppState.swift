@@ -170,12 +170,11 @@ final class AppState {
         return IdentityFormatter.short(id)
     }
 
-    /// Picture URL for an account id, if its profile has one.
+    /// Picture URL for an account id, if its profile has a *safe* one.
+    /// Untrusted: only http(s) URLs with a host pass the sanitizer.
     @MainActor
     func avatarURL(forAccountIdHex id: String) -> URL? {
-        guard let picture = profile(forAccountIdHex: id)?.picture,
-              !picture.isEmpty else { return nil }
-        return URL(string: picture)
+        ProfileSanitizer.imageURL(profile(forAccountIdHex: id)?.picture)
     }
 
     /// Store a profile in the cache and derive its display name. Called after
@@ -209,10 +208,8 @@ final class AppState {
     }
 
     private static func name(from profile: UserProfileMetadataFfi) -> String? {
-        let candidate = (profile.displayName ?? profile.name)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let candidate, !candidate.isEmpty else { return nil }
-        return candidate
+        // Untrusted kind:0 content — sanitize before it's used as a name.
+        ProfileSanitizer.displayName(profile.displayName ?? profile.name)
     }
 
     // MARK: - Toasts
