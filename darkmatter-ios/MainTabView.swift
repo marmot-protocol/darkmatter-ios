@@ -3,6 +3,7 @@ import SwiftUI
 /// Main app shell once at least one identity exists. Two top-level
 /// destinations — Chats and Settings — matching Messages-app shape.
 struct MainTabView: View {
+    @Environment(AppState.self) private var appState
     @State private var selectedTab: Tab = .chats
 
     enum Tab: Hashable {
@@ -27,6 +28,12 @@ struct MainTabView: View {
                 Label("Settings", systemImage: "gearshape.fill")
             }
             .tag(Tab.settings)
+        }
+        .sheet(item: Binding(
+            get: { appState.pendingProfile },
+            set: { if $0 == nil { appState.clearPendingProfile() } }
+        )) { link in
+            ProfileView(npub: link.npub)
         }
     }
 }

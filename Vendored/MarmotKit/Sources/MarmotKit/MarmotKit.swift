@@ -922,6 +922,13 @@ public func FfiConverterTypeGroupStateSubscription_lower(_ value: GroupStateSubs
 public protocol MarmotProtocol : AnyObject {
     
     /**
+     * Normalize a public-key reference (npub or hex) to canonical hex.
+     * `None` if it isn't a valid public key. Used to resolve a scanned or
+     * deep-linked npub back to the account id the rest of the API expects.
+     */
+    func accountIdHex(reference: String)  -> String?
+    
+    /**
      * Per-account relay lists: the NIP-65, inbox, and key-package lists the
      * account has published, plus the configured default/bootstrap sets.
      */
@@ -1138,6 +1145,19 @@ public convenience init(rootPath: String, relayUrls: [String]) {
 
     
 
+    
+    /**
+     * Normalize a public-key reference (npub or hex) to canonical hex.
+     * `None` if it isn't a valid public key. Used to resolve a scanned or
+     * deep-linked npub back to the account id the rest of the API expects.
+     */
+open func accountIdHex(reference: String) -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_marmot_uniffi_fn_method_marmot_account_id_hex(self.uniffiClonePointer(),
+        FfiConverterString.lower(reference),$0
+    )
+})
+}
     
     /**
      * Per-account relay lists: the NIP-65, inbox, and key-package lists the
@@ -3505,6 +3525,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_groupstatesubscription_snapshot() != 50946) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_account_id_hex() != 53507) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_account_relay_lists() != 20645) {

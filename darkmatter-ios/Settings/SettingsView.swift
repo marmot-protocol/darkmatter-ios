@@ -4,6 +4,7 @@ import MarmotKit
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var showDiagnostics = false
+    @State private var showQR = false
 
     var body: some View {
         Form {
@@ -42,6 +43,13 @@ struct SettingsView: View {
                 } label: {
                     Label("Identity & Keys", systemImage: "key.fill")
                 }
+
+                Button {
+                    showQR = true
+                } label: {
+                    Label("My QR Code", systemImage: "qrcode")
+                }
+                .disabled(appState.activeAccount == nil)
             }
 
             Section("Network") {
@@ -76,6 +84,11 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented: $showQR) {
+            if let hex = appState.activeAccount?.accountIdHex {
+                ProfileQRView(accountIdHex: hex)
+            }
+        }
     }
 
     private var appVersion: String {

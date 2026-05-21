@@ -321,6 +321,11 @@ void uniffi_marmot_uniffi_fn_free_marmot(void*_Nonnull ptr, RustCallStatus *_Non
 void*_Nonnull uniffi_marmot_uniffi_fn_constructor_marmot_new(RustBuffer root_path, RustBuffer relay_urls, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_ACCOUNT_ID_HEX
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_ACCOUNT_ID_HEX
+RustBuffer uniffi_marmot_uniffi_fn_method_marmot_account_id_hex(void*_Nonnull ptr, RustBuffer reference, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_ACCOUNT_RELAY_LISTS
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_ACCOUNT_RELAY_LISTS
 RustBuffer uniffi_marmot_uniffi_fn_method_marmot_account_relay_lists(void*_Nonnull ptr, RustBuffer account_ref, RustCallStatus *_Nonnull out_status
@@ -773,6 +778,12 @@ uint16_t uniffi_marmot_uniffi_checksum_method_groupstatesubscription_next(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_GROUPSTATESUBSCRIPTION_SNAPSHOT
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_GROUPSTATESUBSCRIPTION_SNAPSHOT
 uint16_t uniffi_marmot_uniffi_checksum_method_groupstatesubscription_snapshot(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_ACCOUNT_ID_HEX
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_ACCOUNT_ID_HEX
+uint16_t uniffi_marmot_uniffi_checksum_method_marmot_account_id_hex(void
     
 );
 #endif

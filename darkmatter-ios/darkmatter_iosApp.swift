@@ -11,6 +11,9 @@ struct darkmatter_iosApp: App {
                 .task {
                     await appState.bootstrap()
                 }
+                .onOpenURL { url in
+                    appState.handle(url: url)
+                }
         }
     }
 }
