@@ -16,7 +16,9 @@ struct ChatsListView: View {
                     .task { viewModel = ChatsListViewModel(appState: appState) }
             }
         }
-        .navigationTitle("Chats")
+        // No large "Chats" header — just the toolbar icons, then the list.
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 accountSwitcher
