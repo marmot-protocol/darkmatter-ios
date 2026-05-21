@@ -28,7 +28,7 @@ struct AddMembersSheet: View {
                         }
                     }
                     HStack {
-                        TextField("npub1… or hex account id", text: $pending)
+                        TextField("npub1… or hex public key", text: $pending)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .font(.system(.body, design: .monospaced))

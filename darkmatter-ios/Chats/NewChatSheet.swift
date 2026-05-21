@@ -38,7 +38,7 @@ struct NewChatSheet: View {
                         }
                     }
                     HStack {
-                        TextField("npub1… or hex account id", text: $pendingMember)
+                        TextField("npub1… or hex public key", text: $pendingMember)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .font(.system(.body, design: .monospaced))
