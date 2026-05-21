@@ -1,6 +1,6 @@
-darkmatter-sha: c1779a1
-darkmatter-branch: feat/uniffi-chat-mgmt
-built-at: 2026-05-21T11:31:37Z
+darkmatter-sha: 11668c9
+darkmatter-branch: feat/uniffi-agent-stream-watch
+built-at: 2026-05-21T17:18:12Z
 uniffi-version: 0.28.3
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
 ios-deployment-target: 18.0

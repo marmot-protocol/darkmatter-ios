@@ -509,6 +509,180 @@ fileprivate struct FfiConverterString: FfiConverter {
     }
 }
 
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
+    }
+
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
+    }
+}
+
+
+
+
+/**
+ * A live agent-text-stream watch. Drive `next()` in a `while let` loop to fill
+ * a bubble; it yields `Chunk` deltas then a terminal `Finished`/`Failed`,
+ * after which it returns `None`.
+ */
+public protocol AgentStreamSubscriptionProtocol : AnyObject {
+    
+    func next() async  -> AgentStreamUpdateFfi?
+    
+    /**
+     * The resolved stream id this watch is following (hex).
+     */
+    func streamIdHex()  -> String
+    
+}
+
+/**
+ * A live agent-text-stream watch. Drive `next()` in a `while let` loop to fill
+ * a bubble; it yields `Chunk` deltas then a terminal `Finished`/`Failed`,
+ * after which it returns `None`.
+ */
+open class AgentStreamSubscription:
+    AgentStreamSubscriptionProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_marmot_uniffi_fn_clone_agentstreamsubscription(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_marmot_uniffi_fn_free_agentstreamsubscription(pointer, $0) }
+    }
+
+    
+
+    
+open func next()async  -> AgentStreamUpdateFfi? {
+    return
+        try!  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_agentstreamsubscription_next(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterOptionTypeAgentStreamUpdateFfi.lift,
+            errorHandler: nil
+            
+        )
+}
+    
+    /**
+     * The resolved stream id this watch is following (hex).
+     */
+open func streamIdHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_marmot_uniffi_fn_method_agentstreamsubscription_stream_id_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentStreamSubscription: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = AgentStreamSubscription
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> AgentStreamSubscription {
+        return AgentStreamSubscription(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: AgentStreamSubscription) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentStreamSubscription {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: AgentStreamSubscription, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamSubscription_lift(_ pointer: UnsafeMutableRawPointer) throws -> AgentStreamSubscription {
+    return try FfiConverterTypeAgentStreamSubscription.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamSubscription_lower(_ value: AgentStreamSubscription) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeAgentStreamSubscription.lower(value)
+}
+
 
 
 
@@ -1145,6 +1319,16 @@ public protocol MarmotProtocol : AnyObject {
      * `refresh_directory`. Returns `None` when nothing is cached yet.
      */
     func userProfile(accountIdHex: String) throws  -> UserProfileMetadataFfi?
+    
+    /**
+     * Watch a live agent text stream over the brokered QUIC channel. Pass
+     * `stream_id_hex = None` to follow the latest stream in the group (the
+     * common case when reacting to an AgentStreamStarted event). The returned
+     * subscription yields incremental `Chunk`s then a terminal `Finished` /
+     * `Failed`. `server_cert_der` pins a self-signed broker cert (else platform
+     * trust); `insecure_local` is loopback-only for testing.
+     */
+    func watchAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, serverCertDer: Data?, insecureLocal: Bool) async throws  -> AgentStreamSubscription
     
 }
 
@@ -1869,6 +2053,31 @@ open func userProfile(accountIdHex: String)throws  -> UserProfileMetadataFfi? {
         FfiConverterString.lower(accountIdHex),$0
     )
 })
+}
+    
+    /**
+     * Watch a live agent text stream over the brokered QUIC channel. Pass
+     * `stream_id_hex = None` to follow the latest stream in the group (the
+     * common case when reacting to an AgentStreamStarted event). The returned
+     * subscription yields incremental `Chunk`s then a terminal `Finished` /
+     * `Failed`. `server_cert_der` pins a self-signed broker cert (else platform
+     * trust); `insecure_local` is loopback-only for testing.
+     */
+open func watchAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, serverCertDer: Data?, insecureLocal: Bool)async throws  -> AgentStreamSubscription {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_watch_agent_text_stream(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex),FfiConverterOptionString.lower(streamIdHex),FfiConverterOptionData.lower(serverCertDer),FfiConverterBool.lower(insecureLocal)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_pointer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_pointer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeAgentStreamSubscription.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
     
 
@@ -3195,6 +3404,93 @@ public func FfiConverterTypeUserProfileMetadataFfi_lower(_ value: UserProfileMet
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * One update from a live agent-text-stream watch. `Chunk.text` is an
+ * incremental fragment; `Finished.text` is the complete transcript.
+ */
+
+public enum AgentStreamUpdateFfi {
+    
+    case chunk(seq: UInt64, text: String
+    )
+    case finished(text: String, transcriptHashHex: String, chunkCount: UInt64
+    )
+    case failed(message: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentStreamUpdateFfi: FfiConverterRustBuffer {
+    typealias SwiftType = AgentStreamUpdateFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentStreamUpdateFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .chunk(seq: try FfiConverterUInt64.read(from: &buf), text: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 2: return .finished(text: try FfiConverterString.read(from: &buf), transcriptHashHex: try FfiConverterString.read(from: &buf), chunkCount: try FfiConverterUInt64.read(from: &buf)
+        )
+        
+        case 3: return .failed(message: try FfiConverterString.read(from: &buf)
+        )
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AgentStreamUpdateFfi, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case let .chunk(seq,text):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(seq, into: &buf)
+            FfiConverterString.write(text, into: &buf)
+            
+        
+        case let .finished(text,transcriptHashHex,chunkCount):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(text, into: &buf)
+            FfiConverterString.write(transcriptHashHex, into: &buf)
+            FfiConverterUInt64.write(chunkCount, into: &buf)
+            
+        
+        case let .failed(message):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(message, into: &buf)
+            
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamUpdateFfi_lift(_ buf: RustBuffer) throws -> AgentStreamUpdateFfi {
+    return try FfiConverterTypeAgentStreamUpdateFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamUpdateFfi_lower(_ value: AgentStreamUpdateFfi) -> RustBuffer {
+    return FfiConverterTypeAgentStreamUpdateFfi.lower(value)
+}
+
+
+
+extension AgentStreamUpdateFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Structured chat payloads (reactions, replies, deletes, …) carried inside a
  * message. Flattened from `MarmotAppMessagePayloadV1` for the Swift side.
  */
@@ -3692,6 +3988,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeAppGroupRecordFfi: FfiConverterRustBuffer {
     typealias SwiftType = AppGroupRecordFfi?
 
@@ -3732,6 +4052,30 @@ fileprivate struct FfiConverterOptionTypeUserProfileMetadataFfi: FfiConverterRus
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeUserProfileMetadataFfi.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeAgentStreamUpdateFfi: FfiConverterRustBuffer {
+    typealias SwiftType = AgentStreamUpdateFfi?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeAgentStreamUpdateFfi.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeAgentStreamUpdateFfi.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4020,6 +4364,12 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_agentstreamsubscription_next() != 31162) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_agentstreamsubscription_stream_id_hex() != 57056) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_chatssubscription_next() != 16294) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4138,6 +4488,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_user_profile() != 12217) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_watch_agent_text_stream() != 57255) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_messagessubscription_next() != 31202) {
