@@ -51,6 +51,7 @@ struct ProfileQRView: View {
                         .buttonStyle(.plain)
 
                         qrCard
+                            .padding(.top, 12)
                     }
                     .padding(.top, 12)
                     .padding(.horizontal, 24)
