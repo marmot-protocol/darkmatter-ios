@@ -60,6 +60,49 @@ struct IdentityFormatterTests {
     }
 }
 
+struct ProfileSanitizerTests {
+
+    @Test func stripsBidiOverrideFromName() {
+        // Trojan-Source-style: an RLO (U+202E) can reverse rendering to spoof.
+        let spoofed = "alice\u{202E}evil"
+        let safe = ProfileSanitizer.displayName(spoofed)
+        #expect(safe == "aliceevil")
+        #expect(!(safe?.unicodeScalars.contains { $0.value == 0x202E } ?? false))
+    }
+
+    @Test func collapsesNewlinesInName() {
+        let multiline = "line one\nline two\t\tmore"
+        let safe = ProfileSanitizer.displayName(multiline)
+        #expect(safe == "line one line two more")
+    }
+
+    @Test func capsNameLength() {
+        let long = String(repeating: "a", count: 500)
+        let safe = ProfileSanitizer.displayName(long)
+        #expect((safe?.count ?? 0) <= ProfileSanitizer.maxNameLength)
+    }
+
+    @Test func emptyAfterStrippingReturnsNil() {
+        #expect(ProfileSanitizer.displayName("\u{202E}\u{200B}") == nil)
+        #expect(ProfileSanitizer.displayName("   ") == nil)
+        #expect(ProfileSanitizer.displayName(nil) == nil)
+    }
+
+    @Test func imageURLAllowsHttps() {
+        #expect(ProfileSanitizer.imageURL("https://example.com/a.png") != nil)
+        #expect(ProfileSanitizer.imageURL("http://example.com/a.png") != nil)
+    }
+
+    @Test func imageURLRejectsDangerousSchemes() {
+        #expect(ProfileSanitizer.imageURL("data:image/png;base64,AAAA") == nil)
+        #expect(ProfileSanitizer.imageURL("file:///etc/passwd") == nil)
+        #expect(ProfileSanitizer.imageURL("javascript:alert(1)") == nil)
+        #expect(ProfileSanitizer.imageURL("ftp://example.com/x") == nil)
+        #expect(ProfileSanitizer.imageURL("https://") == nil) // no host
+        #expect(ProfileSanitizer.imageURL("not a url") == nil)
+    }
+}
+
 // MARK: - Test scaffolding
 
 extension MarmotClient {
