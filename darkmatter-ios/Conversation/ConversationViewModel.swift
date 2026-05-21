@@ -21,6 +21,8 @@ final class ConversationViewModel {
     private(set) var members: [AppGroupMemberRecordFfi] = []
     /// targetMessageId → emoji tallies, derived from reaction messages.
     private(set) var reactions: [String: [ReactionTally]] = [:]
+    /// Message ids tombstoned by a delete payload (rendered as a placeholder).
+    private(set) var deletedMessageIds: Set<String> = []
     private(set) var isLoading = false
     private(set) var sendInFlight = false
     private(set) var error: String?
@@ -163,11 +165,19 @@ final class ConversationViewModel {
         case .reaction?:
             reactionRecords[reactionKey(record)] = record
             recomputeReactions()
-        case .delete?, .retry?:
-            break // not rendered as bubbles
+        case .delete?:
+            if case .delete(let target)? = record.appMessage {
+                deletedMessageIds.insert(target)
+            }
+        case .retry?:
+            break // internal, not rendered
         default:
             upsertBubble(record) // reply, media, or plain text
         }
+    }
+
+    func isDeleted(_ messageIdHex: String) -> Bool {
+        deletedMessageIds.contains(messageIdHex)
     }
 
     private func upsertBubble(_ record: AppMessageRecordFfi) {
@@ -374,6 +384,26 @@ final class ConversationViewModel {
     }
 
     // MARK: - Reactions
+
+    /// Tombstone our own message. Optimistically marks it deleted, then
+    /// publishes the delete payload (reverting on failure).
+    func deleteMessage(_ message: AppMessageRecordFfi) async {
+        guard let appState, let accountRef = appState.activeAccountRef,
+              !message.messageIdHex.isEmpty else { return }
+        deletedMessageIds.insert(message.messageIdHex)
+        do {
+            _ = try await appState.marmot.deleteMessage(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex,
+                targetMessageId: message.messageIdHex
+            )
+            Haptics.warning()
+        } catch {
+            deletedMessageIds.remove(message.messageIdHex)
+            Haptics.error()
+            appState.present(.error("Couldn't delete message", message: error.localizedDescription))
+        }
+    }
 
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {
         guard let appState, let accountRef = appState.activeAccountRef,

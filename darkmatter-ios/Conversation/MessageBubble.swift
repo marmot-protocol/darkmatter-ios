@@ -9,6 +9,7 @@ struct MessageBubble: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     let record: AppMessageRecordFfi
     let status: MessageStatus
+    var isDeleted: Bool = false
     var replyPreview: (name: String, text: String)? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
     var onTapReaction: (String) -> Void = { _ in }
@@ -43,23 +44,27 @@ struct MessageBubble: View {
                         .padding(.leading, 12)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    if let replyPreview {
-                        quoted(replyPreview)
+                if isDeleted {
+                    deletedBubble
+                } else {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let replyPreview {
+                            quoted(replyPreview)
+                        }
+                        Text(ProfileSanitizer.messageBody(bodyText))
+                            .foregroundStyle(isFromMe ? Color.white : Color.primary)
                     }
-                    Text(ProfileSanitizer.messageBody(bodyText))
-                        .foregroundStyle(isFromMe ? Color.white : Color.primary)
-                }
-                .font(.body)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(bubbleBackground)
-                .clipShape(.rect(cornerRadius: 18))
-                .textSelection(.enabled)
-                .opacity(status == .sending ? 0.7 : 1)
+                    .font(.body)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(bubbleBackground)
+                    .clipShape(.rect(cornerRadius: 18))
+                    .textSelection(.enabled)
+                    .opacity(status == .sending ? 0.7 : 1)
 
-                if !reactions.isEmpty {
-                    reactionChips
+                    if !reactions.isEmpty {
+                        reactionChips
+                    }
                 }
 
                 metaLine
@@ -70,6 +75,22 @@ struct MessageBubble: View {
             if !isFromMe { Spacer(minLength: oppositeInset) }
         }
         .padding(.horizontal, 12)
+    }
+
+    private var deletedBubble: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "trash")
+            Text("This message was deleted")
+        }
+        .font(.callout)
+        .italic()
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
+        )
     }
 
     private func quoted(_ preview: (name: String, text: String)) -> some View {

@@ -8,6 +8,8 @@ struct ComposerBar: View {
     let onSend: () -> Void
     @FocusState private var focused: Bool
 
+    private let controlHeight: CGFloat = 40
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("Message", text: $draft, axis: .vertical)
@@ -15,17 +17,29 @@ struct ComposerBar: View {
                 .lineLimit(1...5)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
+                .frame(minHeight: controlHeight)
                 .glassEffect(.regular, in: .rect(cornerRadius: 20))
                 .submitLabel(.send)
                 .onSubmit(triggerSend)
 
             Button(action: triggerSend) {
-                Image(systemName: isSending ? "ellipsis.circle.fill" : "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(canSend ? Color.accentColor : Color.secondary.opacity(0.4))
-                    .symbolEffect(.bounce, value: isSending)
+                Group {
+                    if isSending {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Color(.systemBackground))
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(Color(.systemBackground))
+                    }
+                }
+                .frame(width: controlHeight, height: controlHeight)
+                .background(Circle().fill(canSend ? Color.primary : Color.secondary.opacity(0.3)))
             }
+            .buttonStyle(.plain)
             .disabled(!canSend)
+            .animation(.easeInOut(duration: 0.15), value: canSend)
             .accessibilityLabel("Send")
         }
         .padding(.horizontal, 10)
