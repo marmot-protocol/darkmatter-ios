@@ -12,7 +12,6 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             timeline
-            Divider()
             ComposerBar(
                 draft: $draft,
                 isSending: viewModel?.sendInFlight ?? false,
