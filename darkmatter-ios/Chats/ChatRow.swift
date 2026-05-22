@@ -14,9 +14,9 @@ struct ChatRow: View {
     var body: some View {
         HStack(spacing: 12) {
             AvatarBubble(
-                seed: GroupDisplay.avatarSeed(group: chat, otherMember: item.otherMemberAccount),
+                seed: GroupDisplay.avatarSeed(group: chat, otherMember: item.otherMemberAccount, memberCount: item.memberCount),
                 title: title,
-                pictureURL: GroupDisplay.avatarURL(group: chat, otherMember: item.otherMemberAccount, appState: appState)
+                pictureURL: GroupDisplay.avatarURL(group: chat, otherMember: item.otherMemberAccount, memberCount: item.memberCount, appState: appState)
             )
             .frame(width: 48, height: 48)
 
@@ -43,7 +43,7 @@ struct ChatRow: View {
     }
 
     private var title: String {
-        GroupDisplay.title(group: chat, otherMember: item.otherMemberAccount, appState: appState)
+        GroupDisplay.title(group: chat, otherMember: item.otherMemberAccount, memberCount: item.memberCount, appState: appState)
     }
 
     /// Latest message preview. Sent messages are prefixed with "You:".

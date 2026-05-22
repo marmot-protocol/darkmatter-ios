@@ -2,27 +2,67 @@ import Foundation
 import MarmotKit
 
 /// Shared rules for how a group is titled and avatared across the chats list
-/// and the conversation header. A named group shows its (sanitized) name; an
-/// unnamed 2-member group renders as the other person; otherwise we fall back
-/// to a shortened group id.
+/// and the conversation header:
+///   1. a named group shows its (sanitized) name;
+///   2. an unnamed group with >2 members shows "<count> person group";
+///   3. an unnamed 2-member group renders as the other person — their known
+///      display name, or their npub when no profile name is known.
 enum GroupDisplay {
-    static func title(group: AppGroupRecordFfi, otherMember: String?, appState: AppState) -> String {
+    /// Account id for the peer in an unnamed 2-person group. `memberIdHex` is
+    /// the Nostr pubkey; `account` is only a local label for known accounts.
+    static func otherMemberAccount(
+        in members: [AppGroupMemberRecordFfi],
+        myAccountId: String?
+    ) -> String? {
+        if let myAccountId {
+            return members.first { $0.memberIdHex != myAccountId }?.memberIdHex
+        }
+        return members.first { !$0.local }?.memberIdHex ?? members.first?.memberIdHex
+    }
+
+    static func title(
+        group: AppGroupRecordFfi,
+        otherMember: String?,
+        memberCount: Int,
+        appState: AppState
+    ) -> String {
         if let name = ProfileSanitizer.groupName(group.name) { return name }
-        if let other = otherMember { return appState.displayName(forAccountIdHex: other) }
+        if memberCount > 2 { return "\(memberCount) person group" }
+        if memberCount == 2, let other = otherMember {
+            return appState.knownDisplayName(forAccountIdHex: other)
+                ?? appState.shortNpub(forAccountIdHex: other)
+        }
         return IdentityFormatter.short(group.groupIdHex)
     }
 
     /// Avatar picture for the row/header — the other member's picture for an
-    /// unnamed DM, otherwise none (the generated initials/color stand in).
-    static func avatarURL(group: AppGroupRecordFfi, otherMember: String?, appState: AppState) -> URL? {
-        guard ProfileSanitizer.groupName(group.name) == nil, let other = otherMember else { return nil }
+    /// unnamed 2-member DM, otherwise none (the generated initials/color stand in).
+    static func avatarURL(
+        group: AppGroupRecordFfi,
+        otherMember: String?,
+        memberCount: Int,
+        appState: AppState
+    ) -> URL? {
+        guard isDirectMessage(group: group, memberCount: memberCount),
+              let other = otherMember else { return nil }
         return appState.avatarURL(forAccountIdHex: other)
     }
 
     /// Deterministic color seed — keyed on the other member for an unnamed DM
-    /// so their color matches wherever else they appear.
-    static func avatarSeed(group: AppGroupRecordFfi, otherMember: String?) -> String {
-        if group.name.isEmpty, let other = otherMember { return other }
+    /// so their color matches wherever else they appear; otherwise the group.
+    static func avatarSeed(
+        group: AppGroupRecordFfi,
+        otherMember: String?,
+        memberCount: Int
+    ) -> String {
+        if isDirectMessage(group: group, memberCount: memberCount), let other = otherMember {
+            return other
+        }
         return group.groupIdHex
+    }
+
+    /// An unnamed group with exactly two members renders as a 1:1 DM.
+    private static func isDirectMessage(group: AppGroupRecordFfi, memberCount: Int) -> Bool {
+        ProfileSanitizer.groupName(group.name) == nil && memberCount == 2
     }
 }

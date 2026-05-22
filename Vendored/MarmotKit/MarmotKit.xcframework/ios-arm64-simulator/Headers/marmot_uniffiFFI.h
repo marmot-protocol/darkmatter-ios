@@ -481,6 +481,11 @@ uint64_t uniffi_marmot_uniffi_fn_method_marmot_shutdown(void*_Nonnull ptr
 uint64_t uniffi_marmot_uniffi_fn_method_marmot_start(void*_Nonnull ptr
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_START_AGENT_TEXT_STREAM
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_START_AGENT_TEXT_STREAM
+uint64_t uniffi_marmot_uniffi_fn_method_marmot_start_agent_text_stream(void*_Nonnull ptr, RustBuffer account_ref, RustBuffer group_id_hex, RustBuffer stream_id_hex, RustBuffer quic_candidates
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_CHATS
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_FN_METHOD_MARMOT_SUBSCRIBE_CHATS
 uint64_t uniffi_marmot_uniffi_fn_method_marmot_subscribe_chats(void*_Nonnull ptr, RustBuffer account_ref, int8_t include_archived
@@ -1028,6 +1033,12 @@ uint16_t uniffi_marmot_uniffi_checksum_method_marmot_shutdown(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_START
 #define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_START
 uint16_t uniffi_marmot_uniffi_checksum_method_marmot_start(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_START_AGENT_TEXT_STREAM
+#define UNIFFI_FFIDEF_UNIFFI_MARMOT_UNIFFI_CHECKSUM_METHOD_MARMOT_START_AGENT_TEXT_STREAM
+uint16_t uniffi_marmot_uniffi_checksum_method_marmot_start_agent_text_stream(void
     
 );
 #endif

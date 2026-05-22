@@ -48,9 +48,11 @@ final class ConversationViewModel {
 
     var myAccountId: String? { appState?.activeAccount?.accountIdHex }
 
+    /// The other participant's account id (pubkey hex) in a 1:1 chat: the first
+    /// member that isn't us. `memberIdHex` is the pubkey hex (same space as
+    /// `accountIdHex`); `member.account` is a local-only label, not comparable.
     var otherMember: String? {
-        let me = myAccountId
-        return members.first { $0.account != nil && $0.account != me }?.account
+        GroupDisplay.otherMemberAccount(in: members, myAccountId: myAccountId)
     }
 
     var displayTitle: String {
@@ -58,7 +60,12 @@ final class ConversationViewModel {
             if let name = ProfileSanitizer.groupName(group.name) { return name }
             return IdentityFormatter.short(group.groupIdHex)
         }
-        return GroupDisplay.title(group: group, otherMember: otherMember, appState: appState)
+        return GroupDisplay.title(
+            group: group,
+            otherMember: otherMember,
+            memberCount: members.count,
+            appState: appState
+        )
     }
 
     var displaySubtitle: String {
@@ -164,7 +171,8 @@ final class ConversationViewModel {
         case .agentStreamStarted(let m):
             // Open a live bubble and watch the QUIC stream as it fills in.
             let sender = m.message.sender
-            Task { [weak self] in await self?.startWatching(sender: sender) }
+            let streamIdHex = Self.agentStreamId(from: m.message.plaintext)
+            Task { [weak self] in await self?.startWatching(sender: sender, streamIdHex: streamIdHex) }
         case .agentStreamFinalized:
             // The watch's .finished update swaps in the final text.
             break
@@ -424,15 +432,37 @@ final class ConversationViewModel {
 
     // MARK: - Agent text streaming
 
-    /// Watch the latest live agent stream in this group: open a bubble that
-    /// fills in as chunks arrive over QUIC, then swap to the final transcript.
-    private func startWatching(sender: String) async {
+    struct AgentStreamEnvelope: Decodable {
+        let marmotPayload: String
+        let streamId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case marmotPayload = "marmot_payload"
+            case streamId = "stream_id"
+        }
+    }
+
+    static func agentStreamId(from plaintext: String) -> String? {
+        guard let data = plaintext.data(using: .utf8),
+              let envelope = try? JSONDecoder().decode(AgentStreamEnvelope.self, from: data),
+              envelope.marmotPayload == agentStreamMarker,
+              let streamId = envelope.streamId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !streamId.isEmpty,
+              streamId.range(of: #"^[0-9a-fA-F]+$"#, options: .regularExpression) != nil
+        else { return nil }
+        return streamId.lowercased()
+    }
+
+    /// Watch a concrete live agent stream when the start payload names one;
+    /// otherwise fall back to the latest live stream in this group.
+    private func startWatching(sender: String, streamIdHex: String?) async {
         guard let appState, let accountRef = appState.activeAccountRef else { return }
+        if let streamIdHex, streamWatchTasks[streamIdHex] != nil { return }
         do {
             let subscription = try await appState.marmot.watchAgentTextStream(
                 accountRef: accountRef,
                 groupIdHex: group.groupIdHex,
-                streamIdHex: nil,
+                streamIdHex: streamIdHex,
                 serverCertDer: nil,
                 // Developer mode points at a loopback broker (insecure); release
                 // builds use the platform TLS verifier against a real cert.

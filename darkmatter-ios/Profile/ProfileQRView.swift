@@ -149,7 +149,7 @@ struct ProfileQRView: View {
 
 /// Wraps the scanner in its own nav chrome with a Cancel button + error
 /// surface, so the camera view has a way out.
-private struct ScannerSheet: View {
+struct ScannerSheet: View {
     @Environment(\.dismiss) private var dismiss
     let onScan: (String) -> Void
     @State private var error: String?

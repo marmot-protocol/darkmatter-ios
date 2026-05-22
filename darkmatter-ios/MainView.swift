@@ -7,14 +7,14 @@ struct MainView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        NavigationStack {
-            ChatsListView()
-        }
-        .sheet(item: Binding(
-            get: { appState.pendingProfile },
-            set: { if $0 == nil { appState.clearPendingProfile() } }
-        )) { link in
-            ProfileView(npub: link.npub)
-        }
+        // ChatsListView owns its own NavigationStack so it can drive
+        // programmatic navigation (e.g. into a freshly created chat).
+        ChatsListView()
+            .sheet(item: Binding(
+                get: { appState.pendingProfile },
+                set: { if $0 == nil { appState.clearPendingProfile() } }
+            )) { link in
+                ProfileView(npub: link.npub)
+            }
     }
 }

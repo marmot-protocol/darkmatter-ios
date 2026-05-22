@@ -1263,7 +1263,7 @@ public protocol MarmotProtocol : AnyObject {
     /**
      * Tear the runtime down. Drops all subscriptions; long-lived
      * [`EventsSubscription`] / [`ChatsSubscription`] / etc. instances on the
-     * Swift side will see their `next()` return `None` shortly after.
+     * host side will see their `next()` return `None` shortly after.
      */
     func shutdown() async 
     
@@ -1272,6 +1272,14 @@ public protocol MarmotProtocol : AnyObject {
      * subscribe to transport events.
      */
     func start() async throws 
+    
+    /**
+     * Anchor a live agent text stream start in the encrypted group history.
+     * Host apps pass the broker candidate(s) they will publish to, such as
+     * `quic://quic-broker.ipf.dev:4450`; omit `stream_id_hex` to let Rust
+     * generate a 32-byte stream id.
+     */
+    func startAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, quicCandidates: [String]) async throws  -> AgentStreamStartFfi
     
     /**
      * Per-account chats list. Emits whenever a group's projection changes.
@@ -1327,6 +1335,11 @@ public protocol MarmotProtocol : AnyObject {
      * subscription yields incremental `Chunk`s then a terminal `Finished` /
      * `Failed`. `server_cert_der` pins a self-signed broker cert (else platform
      * trust); `insecure_local` is loopback-only for testing.
+     *
+     * `async` only so the underlying runtime call can spawn the QUIC
+     * subscriber task via `tokio::spawn` (which needs an active runtime); the
+     * method itself does not await. Mirrors `subscribe_chats` /
+     * `subscribe_messages`.
      */
     func watchAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, serverCertDer: Data?, insecureLocal: Bool) async throws  -> AgentStreamSubscription
     
@@ -1372,9 +1385,11 @@ open class Marmot:
     /**
      * Open the Marmot app at `root_path`, configured with the given default
      * relay URLs. Account secrets (Nostr private keys) are stored in the
-     * platform **Keychain** via the default keychain-backed account home —
-     * not in a plaintext file. Fallible because initializing the keychain
-     * store can fail. Call [`Marmot::start`] before subscribing to events.
+     * platform keyring (Keychain on Apple platforms, Android's native
+     * keyring on Android) via the default keychain-backed account home —
+     * not in a plaintext file. Fallible because initializing the platform
+     * secret store can fail. Call [`Marmot::start`] before subscribing to
+     * events.
      */
 public convenience init(rootPath: String, relayUrls: [String])throws  {
     let pointer =
@@ -1881,7 +1896,7 @@ open func setGroupArchived(accountRef: String, groupIdHex: String, archived: Boo
     /**
      * Tear the runtime down. Drops all subscriptions; long-lived
      * [`EventsSubscription`] / [`ChatsSubscription`] / etc. instances on the
-     * Swift side will see their `next()` return `None` shortly after.
+     * host side will see their `next()` return `None` shortly after.
      */
 open func shutdown()async  {
     return
@@ -1918,6 +1933,29 @@ open func start()async throws  {
             completeFunc: ffi_marmot_uniffi_rust_future_complete_void,
             freeFunc: ffi_marmot_uniffi_rust_future_free_void,
             liftFunc: { $0 },
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+    
+    /**
+     * Anchor a live agent text stream start in the encrypted group history.
+     * Host apps pass the broker candidate(s) they will publish to, such as
+     * `quic://quic-broker.ipf.dev:4450`; omit `stream_id_hex` to let Rust
+     * generate a 32-byte stream id.
+     */
+open func startAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, quicCandidates: [String])async throws  -> AgentStreamStartFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_start_agent_text_stream(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex),FfiConverterOptionString.lower(streamIdHex),FfiConverterSequenceString.lower(quicCandidates)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAgentStreamStartFfi.lift,
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
 }
@@ -2062,6 +2100,11 @@ open func userProfile(accountIdHex: String)throws  -> UserProfileMetadataFfi? {
      * subscription yields incremental `Chunk`s then a terminal `Finished` /
      * `Failed`. `server_cert_der` pins a self-signed broker cert (else platform
      * trust); `insecure_local` is loopback-only for testing.
+     *
+     * `async` only so the underlying runtime call can spawn the QUIC
+     * subscriber task via `tokio::spawn` (which needs an active runtime); the
+     * method itself does not await. Mirrors `subscribe_chats` /
+     * `subscribe_messages`.
      */
 open func watchAgentTextStream(accountRef: String, groupIdHex: String, streamIdHex: String?, serverCertDer: Data?, insecureLocal: Bool)async throws  -> AgentStreamSubscription {
     return
@@ -2460,6 +2503,80 @@ public func FfiConverterTypeAccountSummaryFfi_lift(_ buf: RustBuffer) throws -> 
 #endif
 public func FfiConverterTypeAccountSummaryFfi_lower(_ value: AccountSummaryFfi) -> RustBuffer {
     return FfiConverterTypeAccountSummaryFfi.lower(value)
+}
+
+
+public struct AgentStreamStartFfi {
+    public var streamIdHex: String
+    public var published: UInt32
+    public var messageIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(streamIdHex: String, published: UInt32, messageIds: [String]) {
+        self.streamIdHex = streamIdHex
+        self.published = published
+        self.messageIds = messageIds
+    }
+}
+
+
+
+extension AgentStreamStartFfi: Equatable, Hashable {
+    public static func ==(lhs: AgentStreamStartFfi, rhs: AgentStreamStartFfi) -> Bool {
+        if lhs.streamIdHex != rhs.streamIdHex {
+            return false
+        }
+        if lhs.published != rhs.published {
+            return false
+        }
+        if lhs.messageIds != rhs.messageIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(streamIdHex)
+        hasher.combine(published)
+        hasher.combine(messageIds)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAgentStreamStartFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AgentStreamStartFfi {
+        return
+            try AgentStreamStartFfi(
+                streamIdHex: FfiConverterString.read(from: &buf), 
+                published: FfiConverterUInt32.read(from: &buf), 
+                messageIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AgentStreamStartFfi, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.streamIdHex, into: &buf)
+        FfiConverterUInt32.write(value.published, into: &buf)
+        FfiConverterSequenceString.write(value.messageIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamStartFfi_lift(_ buf: RustBuffer) throws -> AgentStreamStartFfi {
+    return try FfiConverterTypeAgentStreamStartFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAgentStreamStartFfi_lower(_ value: AgentStreamStartFfi) -> RustBuffer {
+    return FfiConverterTypeAgentStreamStartFfi.lower(value)
 }
 
 
@@ -3492,7 +3609,7 @@ extension AgentStreamUpdateFfi: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Structured chat payloads (reactions, replies, deletes, …) carried inside a
- * message. Flattened from `MarmotAppMessagePayloadV1` for the Swift side.
+ * message. Flattened from `MarmotAppMessagePayloadV1` for host bindings.
  */
 
 public enum AppMessagePayloadFfi {
@@ -3602,8 +3719,8 @@ extension AppMessagePayloadFfi: Equatable, Hashable {}
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Top-level event firehose, FFI-shaped. Agent streams collapse to a single
- * "agent stream activity" variant — the iOS app doesn't differentiate them
- * at the surface level for v1.
+ * "agent stream activity" variant — host apps do not differentiate them at
+ * the surface level for v1.
  */
 
 public enum MarmotEventFfi {
@@ -3856,7 +3973,7 @@ extension MarmotKitError: Foundation.LocalizedError {
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * A unified update from a messages subscription. Each variant carries enough
- * context for the iOS side to update its in-memory timeline without holding
+ * context for host apps to update an in-memory timeline without holding
  * onto the underlying marmot-app types.
  */
 
@@ -4463,10 +4580,13 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_group_archived() != 3813) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown() != 4034) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown() != 57342) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_start() != 20136) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_start_agent_text_stream() != 35574) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_chats() != 47214) {
@@ -4490,7 +4610,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_user_profile() != 12217) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_watch_agent_text_stream() != 57255) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_watch_agent_text_stream() != 24253) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_messagessubscription_next() != 31202) {
@@ -4499,7 +4619,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_messagessubscription_snapshot() != 21328) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_constructor_marmot_new() != 45653) {
+    if (uniffi_marmot_uniffi_checksum_constructor_marmot_new() != 56105) {
         return InitializationResult.apiChecksumMismatch
     }
 

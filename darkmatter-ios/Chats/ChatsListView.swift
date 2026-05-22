@@ -6,46 +6,64 @@ struct ChatsListView: View {
     @State private var viewModel: ChatsListViewModel?
     @State private var showNewChat = false
     @State private var showSwitcher = false
+    @State private var path: [String] = []
 
     var body: some View {
-        Group {
-            if let viewModel {
-                content(viewModel: viewModel)
-            } else {
-                ProgressView()
-                    .task { viewModel = ChatsListViewModel(appState: appState) }
-            }
-        }
-        // No large "Chats" header — just the toolbar icons, then the list.
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                accountSwitcher
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showNewChat = true
-                } label: {
-                    Image(systemName: "square.and.pencil")
+        NavigationStack(path: $path) {
+            Group {
+                if let viewModel {
+                    content(viewModel: viewModel)
+                } else {
+                    ProgressView()
+                        .task { viewModel = ChatsListViewModel(appState: appState) }
                 }
-                .accessibilityLabel("New chat")
+            }
+            // No large "Chats" header — just the toolbar icons, then the list.
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    accountSwitcher
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showNewChat = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("New chat")
+                }
+            }
+            .sheet(isPresented: $showNewChat) {
+                NewChatSheet()
+            }
+            .sheet(isPresented: $showSwitcher) {
+                AccountSwitcherSheet()
+            }
+            .task(id: appState.activeAccountRef) {
+                await viewModel?.bind(accountRef: appState.activeAccountRef)
+            }
+            .onAppear {
+                // Reflect messages we sent from a conversation (which emit no
+                // event) when returning to the list.
+                Task { await viewModel?.refreshLatest() }
             }
         }
-        .sheet(isPresented: $showNewChat) {
-            NewChatSheet()
-        }
-        .sheet(isPresented: $showSwitcher) {
-            AccountSwitcherSheet()
-        }
-        .task(id: appState.activeAccountRef) {
-            await viewModel?.bind(accountRef: appState.activeAccountRef)
-        }
-        .onAppear {
-            // Reflect messages we sent from a conversation (which emit no
-            // event) when returning to the list.
-            Task { await viewModel?.refreshLatest() }
-        }
+        // Warm path: a chat created / deep-linked while the list is on screen.
+        .onChange(of: appState.pendingChatId) { _, _ in consumePendingChat() }
+        // Cold path: a deep link that set pendingChatId before this appeared.
+        .task { consumePendingChat() }
+    }
+
+    /// Navigate into a chat requested via `AppState.pendingChatId`, closing any
+    /// presenting sheets (composer, account switcher and its nested QR/profile
+    /// sheets) so the pushed conversation lands on top.
+    private func consumePendingChat() {
+        guard let newId = appState.pendingChatId else { return }
+        showNewChat = false
+        showSwitcher = false
+        path = [newId]
+        appState.clearPendingChat()
     }
 
     @ViewBuilder
@@ -105,12 +123,7 @@ struct ChatsListView: View {
             .listStyle(.plain)
             .refreshable { await viewModel.refreshLatest() }
             .navigationDestination(for: String.self) { groupIdHex in
-                if let group = (viewModel.items + viewModel.archivedItems)
-                    .first(where: { $0.group.groupIdHex == groupIdHex })?.group {
-                    ConversationView(chat: group)
-                } else {
-                    ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
-                }
+                ChatDestination(groupIdHex: groupIdHex, viewModel: viewModel)
             }
         }
     }
@@ -166,6 +179,36 @@ struct ChatsListView: View {
         } catch {
             Haptics.error()
             appState.present(.error("Couldn't archive chat", message: error.localizedDescription))
+        }
+    }
+}
+
+/// Resolves a group id to its conversation. A just-created or deep-linked
+/// chat may not be in the list yet, so show a spinner until the chats
+/// subscription delivers it — then fall back to an unavailable state if it
+/// never arrives (e.g. a link to a chat this account isn't a member of).
+private struct ChatDestination: View {
+    let groupIdHex: String
+    let viewModel: ChatsListViewModel
+    @State private var timedOut = false
+
+    private var group: AppGroupRecordFfi? {
+        (viewModel.items + viewModel.archivedItems)
+            .first(where: { $0.group.groupIdHex == groupIdHex })?.group
+    }
+
+    var body: some View {
+        if let group {
+            ConversationView(chat: group)
+        } else if timedOut {
+            ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    timedOut = true
+                }
         }
     }
 }
