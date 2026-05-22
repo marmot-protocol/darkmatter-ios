@@ -14,6 +14,7 @@ struct NewChatSheet: View {
     @State private var description: String = ""
     @State private var isCreating = false
     @State private var error: String?
+    @State private var showScanner = false
 
     private var canSubmit: Bool {
         !members.isEmpty && !isCreating && appState.activeAccountRef != nil
@@ -50,6 +51,13 @@ struct NewChatSheet: View {
                         }
                         .disabled(pendingMember.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+
+                    Button {
+                        error = nil
+                        showScanner = true
+                    } label: {
+                        Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                    }
                 }
 
                 Section("Optional") {
@@ -79,6 +87,12 @@ struct NewChatSheet: View {
                 }
             }
             .interactiveDismissDisabled(isCreating)
+            .fullScreenCover(isPresented: $showScanner) {
+                ScannerSheet { result in
+                    showScanner = false
+                    handleScan(result)
+                }
+            }
         }
     }
 
@@ -89,6 +103,17 @@ struct NewChatSheet: View {
         pendingMember = ""
     }
 
+    /// Add a recipient from a scanned profile QR code.
+    private func handleScan(_ raw: String) {
+        guard case let .profile(npub) = DeepLink.parse(string: raw) else {
+            error = "That QR code isn't a Dark Matter profile."
+            Haptics.error()
+            return
+        }
+        if !members.contains(npub) { members.append(npub) }
+        Haptics.success()
+    }
+
     @MainActor
     private func create() async {
         guard let accountRef = appState.activeAccountRef else { return }
@@ -97,18 +122,24 @@ struct NewChatSheet: View {
         isCreating = true
         error = nil
         do {
-            _ = try await appState.marmot.createGroup(
+            let groupIdHex = try await appState.marmot.createGroup(
                 accountRef: accountRef,
                 name: groupName.trimmingCharacters(in: .whitespacesAndNewlines),
                 memberRefs: members,
                 description: description.isEmpty ? nil : description
             )
             Haptics.success()
-            appState.present(.success(
-                "Chat created",
-                message: members.count == 1 ? "Started a 1-on-1 conversation." : "Invited \(members.count) members."
-            ))
             dismiss()
+            appState.presentChat(groupIdHex: groupIdHex)
+        } catch let marmotError as MarmotKitError {
+            Haptics.error()
+            if case .MissingKeyPackage(let account) = marmotError {
+                // Soft validation — keep the sheet open and name who can't be added.
+                self.error = "\(IdentityFormatter.short(account)) hasn't published a compatible key package, so they can't be added yet."
+            } else {
+                self.error = marmotError.localizedDescription
+                appState.present(.error("Couldn't create chat", message: marmotError.localizedDescription))
+            }
         } catch {
             Haptics.error()
             self.error = error.localizedDescription

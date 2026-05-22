@@ -74,6 +74,12 @@ struct AccountSwitcherSheet: View {
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }
+                } footer: {
+                    Text(appVersion)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 8)
                 }
             }
             .navigationTitle("Accounts")
@@ -87,5 +93,12 @@ struct AccountSwitcherSheet: View {
                 ProfileQRView(accountIdHex: account.hex)
             }
         }
+    }
+
+    private var appVersion: String {
+        let dict = Bundle.main.infoDictionary
+        let version = dict?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = dict?["CFBundleVersion"] as? String ?? "—"
+        return "Version \(version) (\(build))"
     }
 }

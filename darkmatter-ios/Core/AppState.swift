@@ -101,6 +101,11 @@ final class AppState {
         var id: String { npub }
     }
 
+    /// A chat (group id hex) to navigate to once any presenting sheets close —
+    /// set right after creating a chat from the composer or a scanned profile.
+    /// ChatsListView observes this to push the conversation.
+    private(set) var pendingChatId: String?
+
     /// Tracks in-flight directory fetches so we don't pile up duplicate work.
     private var directoryFetchesInFlight: Set<String> = []
 
@@ -108,6 +113,8 @@ final class AppState {
     private static let relaysKey = "marmot.defaultRelays"
     private static let developerModeKey = "marmot.developerMode"
     private static let recentReactionsKey = "marmot.recentReactions"
+    static let agentTextStreamQuicBrokerCandidate = "quic://quic-broker.ipf.dev:4450"
+    static let agentTextStreamQuicCandidates = [agentTextStreamQuicBrokerCandidate]
 
     init(client: MarmotClient) {
         self.client = client
@@ -203,6 +210,20 @@ final class AppState {
         return accounts.first { $0.label == ref }
     }
 
+    @discardableResult
+    func startAgentTextStream(
+        accountRef: String,
+        groupIdHex: String,
+        streamIdHex: String? = nil
+    ) async throws -> AgentStreamStartFfi {
+        try await marmot.startAgentTextStream(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            streamIdHex: streamIdHex,
+            quicCandidates: Self.agentTextStreamQuicCandidates
+        )
+    }
+
     // MARK: - Profiles & display names
 
     /// Full Nostr profile for an account id. Returns the cached value
@@ -221,18 +242,27 @@ final class AppState {
         return nil
     }
 
-    /// Best-effort display name. Prefers the projected kind:0 display_name /
-    /// name, then a local account's label, then short-hex.
+    /// A display name we actually *know* for an account: projected kind:0
+    /// display_name/name, then a cached name, then a local account's label.
+    /// `nil` when nothing better than the raw id is available, so callers can
+    /// choose their own fallback (e.g. an npub for a DM peer).
     @MainActor
-    func displayName(forAccountIdHex id: String) -> String {
+    func knownDisplayName(forAccountIdHex id: String) -> String? {
         if let p = profile(forAccountIdHex: id), let name = Self.name(from: p) {
             return name
         }
         if let cached = displayNames[id] { return cached }
-        if let owned = accounts.first(where: { $0.accountIdHex == id }) {
-            return owned.label.isEmpty ? IdentityFormatter.short(id) : owned.label
+        if let owned = accounts.first(where: { $0.accountIdHex == id }), !owned.label.isEmpty {
+            return owned.label
         }
-        return IdentityFormatter.short(id)
+        return nil
+    }
+
+    /// Best-effort display name. Prefers the projected kind:0 display_name /
+    /// name, then a local account's label, then short-hex.
+    @MainActor
+    func displayName(forAccountIdHex id: String) -> String {
+        knownDisplayName(forAccountIdHex: id) ?? IdentityFormatter.short(id)
     }
 
     /// Picture URL for an account id, if its profile has a *safe* one.
@@ -330,11 +360,27 @@ final class AppState {
         pendingProfile = nil
     }
 
+    /// Request navigation into a chat (e.g. just after creating one).
+    @MainActor
+    func presentChat(groupIdHex: String) {
+        pendingChatId = groupIdHex
+    }
+
+    @MainActor
+    func clearPendingChat() {
+        pendingChatId = nil
+    }
+
     /// Route an inbound deep link (from `.onOpenURL`).
     @MainActor
     func handle(url: URL) {
-        if case let .profile(npub) = DeepLink.parse(url) {
+        switch DeepLink.parse(url) {
+        case .profile(let npub):
             presentProfile(npub: npub)
+        case .chat(let groupIdHex):
+            presentChat(groupIdHex: groupIdHex)
+        case nil:
+            break
         }
     }
 }

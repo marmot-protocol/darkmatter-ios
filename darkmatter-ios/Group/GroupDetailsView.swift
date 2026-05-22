@@ -76,9 +76,9 @@ struct GroupDetailsView: View {
         Section {
             HStack(spacing: 14) {
                 AvatarBubble(
-                    seed: GroupDisplay.avatarSeed(group: viewModel.group, otherMember: viewModel.otherMember),
+                    seed: GroupDisplay.avatarSeed(group: viewModel.group, otherMember: viewModel.otherMember, memberCount: viewModel.members.count),
                     title: viewModel.displayTitle,
-                    pictureURL: GroupDisplay.avatarURL(group: viewModel.group, otherMember: viewModel.otherMember, appState: appState)
+                    pictureURL: GroupDisplay.avatarURL(group: viewModel.group, otherMember: viewModel.otherMember, memberCount: viewModel.members.count, appState: appState)
                 )
                 .frame(width: 56, height: 56)
                 VStack(alignment: .leading, spacing: 2) {

@@ -137,7 +137,7 @@ final class ChatsListViewModel {
                 groupIdHex: groupIdHex
             )
             let me = appState.activeAccount?.accountIdHex
-            let other = members.first { $0.account != nil && $0.account != me }?.account
+            let other = GroupDisplay.otherMemberAccount(in: members, myAccountId: me)
             memberInfoByGroup[groupIdHex] = (count: members.count, other: other)
             recompute()
         } catch {

@@ -54,7 +54,11 @@ struct ProfileView: View {
                 Spacer()
 
                 if let error {
-                    Text(error).font(.footnote).foregroundStyle(.red).padding(.horizontal, 24)
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                 }
 
                 Button {
@@ -119,15 +123,22 @@ struct ProfileView: View {
         creating = true
         error = nil
         do {
-            _ = try await appState.marmot.createGroup(
+            let groupIdHex = try await appState.marmot.createGroup(
                 accountRef: accountRef,
                 name: "",
                 memberRefs: [npub],
                 description: nil
             )
             Haptics.success()
-            appState.present(.success("Chat started"))
             dismiss()
+            appState.presentChat(groupIdHex: groupIdHex)
+        } catch let marmotError as MarmotKitError {
+            Haptics.error()
+            if case .MissingKeyPackage = marmotError {
+                self.error = "\(title) hasn't published a compatible key package, so they can't be messaged yet."
+            } else {
+                self.error = marmotError.localizedDescription
+            }
         } catch {
             Haptics.error()
             self.error = error.localizedDescription

@@ -146,7 +146,119 @@ struct ProfileSanitizerTests {
     }
 }
 
+struct GroupDisplayTests {
+
+    @Test func otherMemberUsesMemberIdNotLocalAccountLabel() {
+        let me = hex("11")
+        let other = hex("22")
+        let members = [
+            AppGroupMemberRecordFfi(memberIdHex: me, account: "Jeff", local: true),
+            AppGroupMemberRecordFfi(memberIdHex: other, account: nil, local: false)
+        ]
+
+        #expect(GroupDisplay.otherMemberAccount(in: members, myAccountId: me) == other)
+    }
+
+    @MainActor
+    @Test func namedGroupTitleWinsOverMemberRules() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let title = GroupDisplay.title(
+            group: group(name: "  Project Room  "),
+            otherMember: hex("22"),
+            memberCount: 2,
+            appState: appState
+        )
+
+        #expect(title == "Project Room")
+    }
+
+    @MainActor
+    @Test func unnamedMultiPersonGroupShowsCount() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let title = GroupDisplay.title(
+            group: group(name: ""),
+            otherMember: hex("22"),
+            memberCount: 3,
+            appState: appState
+        )
+
+        #expect(title == "3 person group")
+    }
+
+    @MainActor
+    @Test func unnamedTwoPersonGroupShowsOtherDisplayName() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let other = hex("22")
+        appState.cacheProfile(
+            UserProfileMetadataFfi(
+                name: nil,
+                displayName: "Alice",
+                about: nil,
+                picture: nil,
+                nip05: nil,
+                lud16: nil
+            ),
+            for: other
+        )
+
+        let title = GroupDisplay.title(
+            group: group(name: ""),
+            otherMember: other,
+            memberCount: 2,
+            appState: appState
+        )
+
+        #expect(title == "Alice")
+    }
+
+    @MainActor
+    @Test func unnamedTwoPersonGroupFallsBackToNpub() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let title = GroupDisplay.title(
+            group: group(name: ""),
+            otherMember: hex("22"),
+            memberCount: 2,
+            appState: appState
+        )
+
+        #expect(title.hasPrefix("npub1"))
+    }
+}
+
+struct AgentStreamTests {
+
+    @Test func streamIdIsDecodedFromStartPayload() {
+        let streamId = hex("ab")
+        let payload = """
+        {"marmot_payload":"marmot.agent_text_stream.v1","stream_id":"\(streamId.uppercased())","created_at":1770000000,"route":"brokered_quic","quic_candidates":["\(AppState.agentTextStreamQuicBrokerCandidate)"]}
+        """
+
+        #expect(ConversationViewModel.agentStreamId(from: payload) == streamId)
+    }
+
+    @Test func agentStreamStartUsesProductionBrokerCandidate() {
+        #expect(AppState.agentTextStreamQuicCandidates == ["quic://quic-broker.ipf.dev:4450"])
+    }
+}
+
 // MARK: - Test scaffolding
+
+private func hex(_ byte: String) -> String {
+    String(repeating: byte, count: 32)
+}
+
+private func group(name: String) -> AppGroupRecordFfi {
+    AppGroupRecordFfi(
+        groupIdHex: hex("aa"),
+        endpoint: "",
+        name: name,
+        description: "",
+        admins: [],
+        relays: [],
+        nostrGroupIdHex: "",
+        archived: false
+    )
+}
 
 extension MarmotClient {
     /// Builds a MarmotClient pointed at a unique temp directory so unit tests

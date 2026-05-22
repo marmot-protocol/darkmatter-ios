@@ -11,6 +11,17 @@ struct ConversationView: View {
     @State private var showDetails = false
     @State private var actionsTarget: ActionsTarget?
     @State private var emojiPickerTarget: ActionsTarget?
+    /// When the long-pressed bubble sits too low for the actions popover to fit
+    /// below it, flip the popover above the bubble instead.
+    @State private var actionsAbove = false
+    /// When a bubble is so tall that neither above nor below has room, drop the
+    /// popover and show the menu as a centered overlay over the bubble instead.
+    @State private var actionsCentered = false
+    @State private var rowFrames = RowFrameStore()
+    /// Global Y bounds of the visible timeline (between nav bar and composer).
+    /// The bottom shrinks when the keyboard rises, so placement accounts for it.
+    @State private var contentTopY: CGFloat = 0
+    @State private var contentBottomY: CGFloat = 0
 
     private struct ActionsTarget: Identifiable {
         let record: AppMessageRecordFfi
@@ -21,14 +32,19 @@ struct ConversationView: View {
     /// floating actions popover anchors to the long-pressed bubble.
     private func actionsBinding(for record: AppMessageRecordFfi) -> Binding<Bool> {
         Binding(
-            get: { actionsTarget?.record.messageIdHex == record.messageIdHex && !record.messageIdHex.isEmpty },
-            set: { shown in if !shown { actionsTarget = nil } }
+            get: {
+                !actionsCentered
+                    && actionsTarget?.record.messageIdHex == record.messageIdHex
+                    && !record.messageIdHex.isEmpty
+            },
+            set: { shown in if !shown { dismissActions() } }
         )
     }
 
     var body: some View {
         timeline
             .safeAreaInset(edge: .bottom) { composerArea }
+            .overlay { centeredActionsOverlay }
             .navigationTitle(viewModel?.displayTitle ?? chat.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -163,23 +179,34 @@ struct ConversationView: View {
                 )
             } else {
                 ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 4) {
-                            ForEach(viewModel.timeline) { item in
-                                row(for: item, viewModel: viewModel)
+                    GeometryReader { outer in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 4) {
+                                ForEach(viewModel.timeline) { item in
+                                    row(for: item, viewModel: viewModel)
+                                }
+                            }
+                            .padding(.vertical, 8)
+                        }
+                        .scrollDismissesKeyboard(.interactively)
+                        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+                        .onPreferenceChange(RowFramesKey.self) { rowFrames.frames = $0 }
+                        .onChange(of: viewModel.timeline.last?.id) { _, newId in
+                            guard let newId else { return }
+                            withAnimation(.smooth(duration: 0.2)) {
+                                proxy.scrollTo(newId, anchor: .bottom)
                             }
                         }
-                        .padding(.vertical, 8)
-                    }
-                    .onChange(of: viewModel.timeline.last?.id) { _, newId in
-                        guard let newId else { return }
-                        withAnimation(.smooth(duration: 0.2)) {
-                            proxy.scrollTo(newId, anchor: .bottom)
+                        .onChange(of: outer.size.height) { _, _ in
+                            contentTopY = outer.frame(in: .global).minY
+                            contentBottomY = outer.frame(in: .global).maxY
                         }
-                    }
-                    .onAppear {
-                        if let last = viewModel.timeline.last?.id {
-                            proxy.scrollTo(last, anchor: .bottom)
+                        .onAppear {
+                            contentTopY = outer.frame(in: .global).minY
+                            contentBottomY = outer.frame(in: .global).maxY
+                            if let last = viewModel.timeline.last?.id {
+                                proxy.scrollTo(last, anchor: .bottom)
+                            }
                         }
                     }
                 }
@@ -205,46 +232,28 @@ struct ConversationView: View {
                     appState.addRecentReaction(emoji)
                 }
             )
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: RowFramesKey.self,
+                        value: [record.messageIdHex: geo.frame(in: .global)]
+                    )
+                }
+            )
             .id(item.id)
             .onLongPressGesture {
                 guard !record.messageIdHex.isEmpty,
                       !viewModel.isDeleted(record.messageIdHex) else { return }
                 Haptics.tap()
-                actionsTarget = ActionsTarget(record: record)
+                presentActions(for: record)
             }
             .gesture(replySwipe(for: record, viewModel: viewModel))
             .popover(
                 isPresented: actionsBinding(for: record),
-                attachmentAnchor: .point(.bottom),
-                arrowEdge: .top
+                attachmentAnchor: .point(actionsAbove ? .top : .bottom),
+                arrowEdge: actionsAbove ? .bottom : .top
             ) {
-                MessageActionsMenu(
-                    isMine: record.direction == "sent",
-                    quickReactions: appState.quickReactions,
-                    onReact: { emoji in
-                        Task { await viewModel.toggleReaction(emoji, on: record) }
-                        appState.addRecentReaction(emoji)
-                        actionsTarget = nil
-                    },
-                    onReply: {
-                        viewModel.replyingTo = record
-                        actionsTarget = nil
-                    },
-                    onCopy: {
-                        UIPasteboard.general.string = viewModel.displayBody(of: record)
-                        Haptics.tap()
-                        actionsTarget = nil
-                    },
-                    onDelete: {
-                        Task { await viewModel.deleteMessage(record) }
-                        actionsTarget = nil
-                    },
-                    onMoreEmoji: {
-                        let target = record
-                        actionsTarget = nil
-                        emojiPickerTarget = ActionsTarget(record: target)
-                    }
-                )
+                actionsMenu(for: record, viewModel: viewModel)
             }
         case .systemEvent(let event):
             SystemEventRow(event: event)
@@ -271,5 +280,118 @@ struct ConversationView: View {
         Task {
             await viewModel?.send(text)
         }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+    }
+
+    // MARK: - Message actions placement
+
+    /// Decide where the actions menu opens for the long-pressed bubble: below it
+    /// (default), flipped above it (no room below), or centered over it (the
+    /// bubble is so tall neither end has room — a popover would land off-screen).
+    private func presentActions(for record: AppMessageRecordFfi) {
+        let frame = rowFrames.frames[record.messageIdHex]
+        let spaceBelow = contentBottomY - (frame?.maxY ?? 0)
+        let spaceAbove = (frame?.minY ?? 0) - contentTopY
+        let fitsBelow = spaceBelow >= Self.actionsMenuEstimate
+        let fitsAbove = spaceAbove >= Self.actionsMenuEstimate
+
+        actionsAbove = !fitsBelow
+        if !fitsBelow && !fitsAbove {
+            withAnimation(.easeOut(duration: 0.15)) {
+                actionsCentered = true
+                actionsTarget = ActionsTarget(record: record)
+            }
+        } else {
+            actionsCentered = false
+            actionsTarget = ActionsTarget(record: record)
+        }
+    }
+
+    private func dismissActions() {
+        if actionsCentered {
+            withAnimation(.easeOut(duration: 0.15)) {
+                actionsTarget = nil
+                actionsCentered = false
+            }
+        } else {
+            actionsTarget = nil
+            actionsCentered = false
+        }
+    }
+
+    /// The centered, scrim-backed variant shown for over-tall bubbles. A normal
+    /// bubble uses the anchored `.popover` in `row(for:)` instead.
+    @ViewBuilder
+    private var centeredActionsOverlay: some View {
+        if actionsCentered, let viewModel, let target = actionsTarget {
+            ZStack {
+                Color.black.opacity(0.18)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismissActions() }
+                actionsMenu(for: target.record, viewModel: viewModel)
+                    .background(.regularMaterial, in: .rect(cornerRadius: 16))
+                    .shadow(radius: 24, y: 8)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    /// The shared actions menu, used both by the anchored popover and the
+    /// centered overlay so their buttons stay in sync.
+    private func actionsMenu(
+        for record: AppMessageRecordFfi,
+        viewModel: ConversationViewModel
+    ) -> some View {
+        MessageActionsMenu(
+            isMine: record.direction == "sent",
+            quickReactions: appState.quickReactions,
+            onReact: { emoji in
+                Task { await viewModel.toggleReaction(emoji, on: record) }
+                appState.addRecentReaction(emoji)
+                dismissActions()
+            },
+            onReply: {
+                viewModel.replyingTo = record
+                dismissActions()
+            },
+            onCopy: {
+                UIPasteboard.general.string = viewModel.displayBody(of: record)
+                Haptics.tap()
+                dismissActions()
+            },
+            onDelete: {
+                Task { await viewModel.deleteMessage(record) }
+                dismissActions()
+            },
+            onMoreEmoji: {
+                let target = record
+                dismissActions()
+                emojiPickerTarget = ActionsTarget(record: target)
+            }
+        )
+    }
+
+    /// Approximate height of the actions popover (reaction row + action rows +
+    /// arrow). If neither end of the bubble has at least this much room, the
+    /// menu is centered over the bubble instead of anchored to it.
+    private static let actionsMenuEstimate: CGFloat = 280
+}
+
+/// Holds the latest on-screen frame of each message row. A reference type so
+/// scroll-driven updates don't churn SwiftUI state; we only read it on demand
+/// when a long press needs to decide which way the actions popover should open.
+private final class RowFrameStore {
+    var frames: [String: CGRect] = [:]
+}
+
+private struct RowFramesKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
