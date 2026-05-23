@@ -106,6 +106,9 @@ final class ChatsListViewModel {
             )
             var newest: [String: AppMessageRecordFfi] = [:]
             for message in recent {
+                // Skip control envelopes / reactions / deletes so the preview
+                // shows the latest real message, never raw payload JSON.
+                guard MessagePreview.isPreviewable(message) else { continue }
                 if let existing = newest[message.groupIdHex],
                    existing.recordedAt >= message.recordedAt {
                     continue
@@ -117,6 +120,13 @@ final class ChatsListViewModel {
         } catch {
             // Non-fatal: previews simply won't refresh this cycle.
         }
+    }
+
+    /// Reflect a locally-produced group change (e.g. an archive toggle) right
+    /// away. The chats subscription only emits on transport events, so local
+    /// projection writes (setGroupArchived) won't otherwise update the list.
+    func applyLocalGroupChange(_ record: AppGroupRecordFfi) {
+        foldGroup(record)
     }
 
     private func foldGroup(_ record: AppGroupRecordFfi) {

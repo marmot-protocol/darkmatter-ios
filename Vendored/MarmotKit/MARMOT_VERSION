@@ -1,6 +1,6 @@
-darkmatter-sha: 026a3be
+darkmatter-sha: 6455b99
 darkmatter-branch: master
-built-at: 2026-05-22T15:44:41Z
+built-at: 2026-05-23T11:15:49Z
 uniffi-version: 0.28.3
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
 ios-deployment-target: 18.0

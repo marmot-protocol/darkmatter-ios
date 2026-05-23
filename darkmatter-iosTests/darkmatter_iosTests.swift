@@ -227,13 +227,23 @@ struct GroupDisplayTests {
 
 struct AgentStreamTests {
 
-    @Test func streamIdIsDecodedFromStartPayload() {
+    @Test func streamIdIsDecodedFromStartTags() {
         let streamId = hex("ab")
-        let payload = """
-        {"marmot_payload":"marmot.agent_text_stream.v1","stream_id":"\(streamId.uppercased())","created_at":1770000000,"route":"brokered_quic","quic_candidates":["\(AppState.agentTextStreamQuicBrokerCandidate)"]}
-        """
+        let start = ReceivedMessageFfi(
+            messageIdHex: hex("cc"),
+            groupIdHex: hex("aa"),
+            sender: hex("11"),
+            senderDisplayName: nil,
+            plaintext: "",
+            kind: MessageSemantics.kindAgentStreamStart,
+            tags: [
+                MessageTagFfi(values: [MessageSemantics.streamTag, streamId.uppercased()]),
+                MessageTagFfi(values: [MessageSemantics.streamRouteTag, "quic"]),
+                MessageTagFfi(values: [MessageSemantics.streamBrokerTag, AppState.agentTextStreamQuicBrokerCandidate]),
+            ]
+        )
 
-        #expect(ConversationViewModel.agentStreamId(from: payload) == streamId)
+        #expect(ConversationViewModel.agentStreamId(from: start) == streamId)
     }
 
     @Test func agentStreamStartUsesProductionBrokerCandidate() {

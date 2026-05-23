@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import MarmotKit
+import os
 
 /// Owns the live state of a single conversation: the merged timeline of
 /// message bubbles + system events, aggregated reactions, the group roster,
@@ -42,9 +43,17 @@ final class ConversationViewModel {
     private var streamWatchTasks: [String: Task<Void, Never>] = [:]
     /// Accumulated text per live stream, keyed by stream id.
     private var streamText: [String: String] = [:]
+    /// Streams whose final anchor message has arrived. Once finalized, the
+    /// anchor's full text is authoritative and late live updates are ignored.
+    private var finalizedStreamIds: Set<String> = []
 
-    /// Agent-stream control envelopes are never chat bubbles.
-    private static let agentStreamMarker = "marmot.agent_text_stream.v1"
+    /// Live diagnostics for the agent-text-stream watch. Visible in the Xcode
+    /// console (and Console.app) under category "agent-stream". We log sizes and
+    /// counts rather than message text to avoid leaking chat content.
+    private static let streamLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.darkmatter",
+        category: "agent-stream"
+    )
 
     var myAccountId: String? { appState?.activeAccount?.accountIdHex }
 
@@ -97,17 +106,17 @@ final class ConversationViewModel {
 
     /// The quoted preview (sender name + text) for a reply bubble, if resolvable.
     func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
-        guard case .reply(let targetId, _)? = record.appMessage else { return nil }
+        guard case .reply(let targetId) = MessageSemantics.classify(record) else { return nil }
         guard let target = messageById[targetId] else { return nil }
         let name = appState?.displayName(forAccountIdHex: target.sender) ?? "Unknown"
         let text = ProfileSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
         return (name, text)
     }
 
-    /// The visible body for a message — reply text for replies, else plaintext.
+    /// The visible body for a message. Reply text, media captions, and plain
+    /// chat all live in plaintext now that inner messages are Nostr events.
     func displayBody(of record: AppMessageRecordFfi) -> String {
-        if case .reply(_, let text)? = record.appMessage { return text }
-        return record.plaintext
+        record.plaintext
     }
 
     init(appState: AppState, group: AppGroupRecordFfi) {
@@ -169,35 +178,71 @@ final class ConversationViewModel {
         case .message(let m):
             ingest(receivedToRecord(m))
         case .agentStreamStarted(let m):
-            // Open a live bubble and watch the QUIC stream as it fills in.
+            // A kind-1200 start: open a live bubble and watch the QUIC stream as
+            // it fills in. The stream id lives on the inner event's `stream` tag.
             let sender = m.message.sender
-            let streamIdHex = Self.agentStreamId(from: m.message.plaintext)
+            let streamIdHex = Self.agentStreamId(from: m.message)
+            Self.streamLog.info("start received: streamId=\(streamIdHex ?? "<latest>", privacy: .public) sender=\(IdentityFormatter.short(sender), privacy: .public)")
             Task { [weak self] in await self?.startWatching(sender: sender, streamIdHex: streamIdHex) }
-        case .agentStreamFinalized:
-            // The watch's .finished update swaps in the final text.
-            break
         }
     }
 
-    /// Route a message record to the timeline or the reactions index.
+    /// Tear down a live preview that produced no usable transcript (the stream
+    /// failed). agentnoise falls back to a plain chat reply in that case, which
+    /// arrives as a normal message — so drop the preview and mark the stream
+    /// finalized so trailing updates can't recreate it.
+    private func endStream(streamId: String) {
+        finalizedStreamIds.insert(streamId)
+        streamWatchTasks[streamId]?.cancel()
+        streamWatchTasks[streamId] = nil
+        streamText[streamId] = nil
+        removeStreamBubble(streamId: streamId)
+    }
+
+    /// Promote the transient live preview into a permanent received bubble
+    /// carrying the final transcript. The Final MLS anchor is authoritative; the
+    /// QUIC `.finished` transcript is a provisional fill if it lands first. Both
+    /// key the same `msg:stream:<id>` row, so whichever arrives later wins.
+    private func finalizeStreamBubble(streamId: String, sender: String, text: String) {
+        streamText[streamId] = text
+        upsertStreamBubble(streamId: streamId, sender: sender, status: .received)
+        finalizedStreamIds.insert(streamId)
+        streamWatchTasks[streamId]?.cancel()
+        streamWatchTasks[streamId] = nil
+    }
+
+    private func removeStreamBubble(streamId: String) {
+        timeline.removeAll { $0.id == "msg:stream:\(streamId)" }
+    }
+
+    /// Route a message record to the timeline or the reactions index by
+    /// branching on its inner-event kind + tags.
     private func ingest(_ record: AppMessageRecordFfi) {
-        // Agent-stream control envelopes (Start/Final) aren't chat bubbles.
-        if record.plaintext.contains(Self.agentStreamMarker) { return }
-        if !record.messageIdHex.isEmpty {
-            messageById[record.messageIdHex] = record
-        }
-        switch record.appMessage {
-        case .reaction?:
+        switch MessageSemantics.classify(record) {
+        case .agentStreamStart, .unknown:
+            // The kind-1200 start signal isn't a chat bubble; it's handled by
+            // `fold` opening the live preview. Unknown kinds aren't rendered.
+            return
+        case .streamFinal(let streamId):
+            // The kind-9 stream-final is the canonical record: its plaintext is
+            // the full transcript. Promote the live preview into a permanent
+            // bubble, matching on the `stream` tag value.
+            if !record.messageIdHex.isEmpty { messageById[record.messageIdHex] = record }
+            Self.streamLog.info("FINAL message in: streamId=\(streamId, privacy: .public) sender=\(IdentityFormatter.short(record.sender), privacy: .public) textLen=\(record.plaintext.count)B — promoting preview to permanent bubble")
+            finalizeStreamBubble(streamId: streamId, sender: record.sender, text: record.plaintext)
+        case .reaction:
+            if !record.messageIdHex.isEmpty { messageById[record.messageIdHex] = record }
             reactionRecords[reactionKey(record)] = record
             recomputeReactions()
-        case .delete?:
-            if case .delete(let target)? = record.appMessage {
-                deletedMessageIds.insert(target)
-            }
-        case .retry?:
-            break // internal, not rendered
-        default:
-            upsertBubble(record) // reply, media, or plain text
+        case .delete(let target):
+            if !record.messageIdHex.isEmpty { messageById[record.messageIdHex] = record }
+            // A delete tombstones either a chat message or a reaction event id;
+            // recompute reactions so an un-react (delete of a kind-7) drops it.
+            deletedMessageIds.insert(target)
+            recomputeReactions()
+        case .chat, .reply, .media:
+            if !record.messageIdHex.isEmpty { messageById[record.messageIdHex] = record }
+            upsertBubble(record)
         }
     }
 
@@ -224,8 +269,9 @@ final class ConversationViewModel {
         record.messageIdHex.isEmpty ? UUID().uuidString : record.messageIdHex
     }
 
-    /// Rebuild the per-target reaction tallies from all reaction messages,
-    /// processed oldest-first so adds/removes net out per (sender, emoji).
+    /// Rebuild the per-target reaction tallies from all reaction messages
+    /// (kind-7, emoji in content, target in the `e` tag). A reaction is dropped
+    /// when its own event id has been tombstoned by a delete (the un-react path).
     private func recomputeReactions() {
         let me = myAccountId ?? ""
         let ordered: [AppMessageRecordFfi] = reactionRecords.values
@@ -233,13 +279,14 @@ final class ConversationViewModel {
 
         var byTarget: [String: [String: Set<String>]] = [:] // target -> emoji -> senders
         for record in ordered {
-            guard case .reaction(let target, let emoji, let removed)? = record.appMessage else { continue }
+            guard case .reaction(let target) = MessageSemantics.classify(record) else { continue }
+            // Un-react: the reaction event was deleted (kind-5 on its id).
+            if !record.messageIdHex.isEmpty, deletedMessageIds.contains(record.messageIdHex) {
+                continue
+            }
+            let emoji = record.plaintext
             var emojis: [String: Set<String>] = byTarget[target] ?? [:]
-            if removed {
-                for key in emojis.keys {
-                    emojis[key]?.remove(record.sender)
-                }
-            } else if !emoji.isEmpty {
+            if !emoji.isEmpty {
                 var senders: Set<String> = emojis[emoji] ?? []
                 senders.insert(record.sender)
                 emojis[emoji] = senders
@@ -269,7 +316,8 @@ final class ConversationViewModel {
             groupIdHex: r.message.groupIdHex,
             sender: r.message.sender,
             plaintext: r.message.plaintext,
-            appMessage: r.message.appMessage,
+            kind: r.message.kind,
+            tags: r.message.tags,
             recordedAt: UInt64(Date().timeIntervalSince1970),
             receivedAt: UInt64(Date().timeIntervalSince1970)
         )
@@ -324,16 +372,22 @@ final class ConversationViewModel {
         let replyTargetId = replyTargetMessageId()
         let tempId = UUID().uuidString
         let now = UInt64(Date().timeIntervalSince1970)
-        let optimisticPayload: AppMessagePayloadFfi? = replyTargetId.map {
-            .reply(targetMessageId: $0, text: trimmed)
-        }
+        // A reply is a kind-9 with `e` + `q` tags pointing at the parent; a plain
+        // message is a bare kind-9.
+        let optimisticTags: [MessageTagFfi] = replyTargetId.map {
+            [
+                MessageTagFfi(values: [MessageSemantics.eventRefTag, $0]),
+                MessageTagFfi(values: [MessageSemantics.quoteRefTag, $0]),
+            ]
+        } ?? []
         let optimistic = AppMessageRecordFfi(
             messageIdHex: "",
             direction: "sent",
             groupIdHex: group.groupIdHex,
             sender: appState.activeAccount?.accountIdHex ?? "",
             plaintext: trimmed,
-            appMessage: optimisticPayload,
+            kind: MessageSemantics.kindChat,
+            tags: optimisticTags,
             recordedAt: now,
             receivedAt: now
         )
@@ -383,7 +437,8 @@ final class ConversationViewModel {
             groupIdHex: record.groupIdHex,
             sender: record.sender,
             plaintext: record.plaintext,
-            appMessage: record.appMessage,
+            kind: record.kind,
+            tags: record.tags,
             recordedAt: record.recordedAt,
             receivedAt: record.receivedAt
         )
@@ -432,21 +487,15 @@ final class ConversationViewModel {
 
     // MARK: - Agent text streaming
 
-    struct AgentStreamEnvelope: Decodable {
-        let marmotPayload: String
-        let streamId: String?
-
-        enum CodingKeys: String, CodingKey {
-            case marmotPayload = "marmot_payload"
-            case streamId = "stream_id"
-        }
+    /// The stream id of a kind-1200 start, read from its `stream` tag. Returns
+    /// nil (watch the latest stream) if absent or malformed.
+    static func agentStreamId(from message: ReceivedMessageFfi) -> String? {
+        guard case .agentStreamStart(let start) = MessageSemantics.classify(message) else { return nil }
+        return normalizedStreamId(start.streamId)
     }
 
-    static func agentStreamId(from plaintext: String) -> String? {
-        guard let data = plaintext.data(using: .utf8),
-              let envelope = try? JSONDecoder().decode(AgentStreamEnvelope.self, from: data),
-              envelope.marmotPayload == agentStreamMarker,
-              let streamId = envelope.streamId?.trimmingCharacters(in: .whitespacesAndNewlines),
+    private static func normalizedStreamId(_ raw: String?) -> String? {
+        guard let streamId = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !streamId.isEmpty,
               streamId.range(of: #"^[0-9a-fA-F]+$"#, options: .regularExpression) != nil
         else { return nil }
@@ -472,6 +521,7 @@ final class ConversationViewModel {
             if streamWatchTasks[streamId] != nil { return }
             streamText[streamId] = ""
             upsertStreamBubble(streamId: streamId, sender: sender, status: .streaming)
+            Self.streamLog.info("watch opened: streamId=\(streamId, privacy: .public) developerMode=\(appState.developerMode, privacy: .public); bubble shown as Streaming")
             let task = Task { [weak self] in
                 while !Task.isCancelled, let update = await subscription.next() {
                     await self?.applyStreamUpdate(streamId: streamId, sender: sender, update: update)
@@ -480,22 +530,26 @@ final class ConversationViewModel {
             streamWatchTasks[streamId] = task
         } catch {
             // No resolvable start payload yet, or the broker is unreachable.
+            Self.streamLog.error("watch failed to open: streamId=\(streamIdHex ?? "<latest>", privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
     private func applyStreamUpdate(streamId: String, sender: String, update: AgentStreamUpdateFfi) {
+        // The final anchor already supplied the authoritative transcript.
+        if finalizedStreamIds.contains(streamId) { return }
         switch update {
         case .chunk(_, let text):
             streamText[streamId, default: ""].append(text)
             upsertStreamBubble(streamId: streamId, sender: sender, status: .streaming)
-        case .finished(let text, _, _):
-            streamText[streamId] = text
-            upsertStreamBubble(streamId: streamId, sender: sender, status: .received)
-            streamWatchTasks[streamId] = nil
-        case .failed:
-            // Keep whatever streamed; just stop the live indicator.
-            upsertStreamBubble(streamId: streamId, sender: sender, status: .received)
-            streamWatchTasks[streamId] = nil
+        case .finished(let text, let transcriptHashHex, let chunkCount):
+            // QUIC stream closed. Promote the preview to a permanent bubble using
+            // the streamed transcript; the authoritative MLS Final anchor will
+            // overwrite the same row if it arrives afterwards.
+            Self.streamLog.info("finished: streamId=\(streamId, privacy: .public) chunkCount=\(chunkCount) textLen=\(text.count)B hashLen=\(transcriptHashHex.count) — promoting preview to permanent bubble")
+            finalizeStreamBubble(streamId: streamId, sender: sender, text: text)
+        case .failed(let message):
+            Self.streamLog.error("failed: streamId=\(streamId, privacy: .public) gotText=\(self.streamText[streamId]?.count ?? 0)B reason=\(message, privacy: .public) — dropping live preview")
+            endStream(streamId: streamId)
         }
     }
 
@@ -509,7 +563,8 @@ final class ConversationViewModel {
             groupIdHex: group.groupIdHex,
             sender: sender,
             plaintext: streamText[streamId] ?? "",
-            appMessage: nil,
+            kind: MessageSemantics.kindChat,
+            tags: [],
             recordedAt: now,
             receivedAt: now
         )
@@ -531,21 +586,40 @@ final class ConversationViewModel {
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {
         guard let appState, let accountRef = appState.activeAccountRef,
               !message.messageIdHex.isEmpty else { return }
+        let me = appState.activeAccount?.accountIdHex ?? ""
         let alreadyMine = reactions(for: message.messageIdHex).contains { $0.emoji == emoji && $0.mine }
 
-        // Optimistic: synthesize a reaction record and re-aggregate.
-        let me = appState.activeAccount?.accountIdHex ?? ""
-        let synthetic = AppMessageRecordFfi(
-            messageIdHex: "optimistic-\(UUID().uuidString)",
-            direction: "sent",
-            groupIdHex: group.groupIdHex,
-            sender: me,
-            plaintext: "",
-            appMessage: .reaction(targetMessageId: message.messageIdHex, emoji: alreadyMine ? "" : emoji, removed: alreadyMine),
-            recordedAt: UInt64(Date().timeIntervalSince1970),
-            receivedAt: UInt64(Date().timeIntervalSince1970)
-        )
-        reactionRecords[synthetic.messageIdHex] = synthetic
+        // Optimistic state we can roll back on failure.
+        var addedKey: String?
+        var removedRecords: [String: AppMessageRecordFfi] = [:]
+
+        if alreadyMine {
+            // Un-react: drop my matching reaction record(s) for this target+emoji.
+            // The real un-react publishes a kind-5 delete of the reaction event id.
+            for (key, record) in reactionRecords {
+                guard record.sender == me, record.plaintext == emoji,
+                      case .reaction(let target) = MessageSemantics.classify(record),
+                      target == message.messageIdHex else { continue }
+                removedRecords[key] = record
+            }
+            for key in removedRecords.keys { reactionRecords.removeValue(forKey: key) }
+        } else {
+            // Add: synthesize a kind-7 reaction (emoji in content, `e` tag target).
+            let key = "optimistic-\(UUID().uuidString)"
+            let synthetic = AppMessageRecordFfi(
+                messageIdHex: key,
+                direction: "sent",
+                groupIdHex: group.groupIdHex,
+                sender: me,
+                plaintext: emoji,
+                kind: MessageSemantics.kindReaction,
+                tags: [MessageTagFfi(values: [MessageSemantics.eventRefTag, message.messageIdHex])],
+                recordedAt: UInt64(Date().timeIntervalSince1970),
+                receivedAt: UInt64(Date().timeIntervalSince1970)
+            )
+            reactionRecords[key] = synthetic
+            addedKey = key
+        }
         recomputeReactions()
         Haptics.tap()
 
@@ -566,7 +640,8 @@ final class ConversationViewModel {
             }
         } catch {
             // Revert the optimistic change.
-            reactionRecords.removeValue(forKey: synthetic.messageIdHex)
+            if let addedKey { reactionRecords.removeValue(forKey: addedKey) }
+            for (key, record) in removedRecords { reactionRecords[key] = record }
             recomputeReactions()
             Haptics.error()
             appState.present(.error("Reaction failed", message: error.localizedDescription))

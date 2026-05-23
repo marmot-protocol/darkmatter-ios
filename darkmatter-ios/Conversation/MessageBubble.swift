@@ -26,10 +26,10 @@ struct MessageBubble: View {
         sizeClass == .regular ? 64 : 0
     }
 
-    /// Reply text lives in the structured payload; plain messages use plaintext.
+    /// Body text. Replies, media captions, and plain chat all live in plaintext
+    /// now that inner messages are unsigned Nostr events (kind + tags).
     private var bodyText: String {
-        if case .reply(_, let text)? = record.appMessage { return text }
-        return record.plaintext
+        record.plaintext
     }
 
     var body: some View {

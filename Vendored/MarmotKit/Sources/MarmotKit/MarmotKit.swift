@@ -2860,19 +2860,33 @@ public struct AppMessageRecordFfi {
     public var groupIdHex: String
     public var sender: String
     public var plaintext: String
-    public var appMessage: AppMessagePayloadFfi?
+    /**
+     * Nostr `kind` of the inner Marmot app event (9 chat, 7 reaction, …).
+     */
+    public var kind: UInt64
+    /**
+     * Nostr `tags` of the inner Marmot app event.
+     */
+    public var tags: [MessageTagFfi]
     public var recordedAt: UInt64
     public var receivedAt: UInt64
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(messageIdHex: String, direction: String, groupIdHex: String, sender: String, plaintext: String, appMessage: AppMessagePayloadFfi?, recordedAt: UInt64, receivedAt: UInt64) {
+    public init(messageIdHex: String, direction: String, groupIdHex: String, sender: String, plaintext: String, 
+        /**
+         * Nostr `kind` of the inner Marmot app event (9 chat, 7 reaction, …).
+         */kind: UInt64, 
+        /**
+         * Nostr `tags` of the inner Marmot app event.
+         */tags: [MessageTagFfi], recordedAt: UInt64, receivedAt: UInt64) {
         self.messageIdHex = messageIdHex
         self.direction = direction
         self.groupIdHex = groupIdHex
         self.sender = sender
         self.plaintext = plaintext
-        self.appMessage = appMessage
+        self.kind = kind
+        self.tags = tags
         self.recordedAt = recordedAt
         self.receivedAt = receivedAt
     }
@@ -2897,7 +2911,10 @@ extension AppMessageRecordFfi: Equatable, Hashable {
         if lhs.plaintext != rhs.plaintext {
             return false
         }
-        if lhs.appMessage != rhs.appMessage {
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.tags != rhs.tags {
             return false
         }
         if lhs.recordedAt != rhs.recordedAt {
@@ -2915,7 +2932,8 @@ extension AppMessageRecordFfi: Equatable, Hashable {
         hasher.combine(groupIdHex)
         hasher.combine(sender)
         hasher.combine(plaintext)
-        hasher.combine(appMessage)
+        hasher.combine(kind)
+        hasher.combine(tags)
         hasher.combine(recordedAt)
         hasher.combine(receivedAt)
     }
@@ -2934,7 +2952,8 @@ public struct FfiConverterTypeAppMessageRecordFfi: FfiConverterRustBuffer {
                 groupIdHex: FfiConverterString.read(from: &buf), 
                 sender: FfiConverterString.read(from: &buf), 
                 plaintext: FfiConverterString.read(from: &buf), 
-                appMessage: FfiConverterOptionTypeAppMessagePayloadFfi.read(from: &buf), 
+                kind: FfiConverterUInt64.read(from: &buf), 
+                tags: FfiConverterSequenceTypeMessageTagFfi.read(from: &buf), 
                 recordedAt: FfiConverterUInt64.read(from: &buf), 
                 receivedAt: FfiConverterUInt64.read(from: &buf)
         )
@@ -2946,7 +2965,8 @@ public struct FfiConverterTypeAppMessageRecordFfi: FfiConverterRustBuffer {
         FfiConverterString.write(value.groupIdHex, into: &buf)
         FfiConverterString.write(value.sender, into: &buf)
         FfiConverterString.write(value.plaintext, into: &buf)
-        FfiConverterOptionTypeAppMessagePayloadFfi.write(value.appMessage, into: &buf)
+        FfiConverterUInt64.write(value.kind, into: &buf)
+        FfiConverterSequenceTypeMessageTagFfi.write(value.tags, into: &buf)
         FfiConverterUInt64.write(value.recordedAt, into: &buf)
         FfiConverterUInt64.write(value.receivedAt, into: &buf)
     }
@@ -2968,23 +2988,100 @@ public func FfiConverterTypeAppMessageRecordFfi_lower(_ value: AppMessageRecordF
 }
 
 
+/**
+ * One Nostr tag from an inner Marmot app event, e.g. `["e", "<id>"]` or an
+ * `["imeta", …]` media descriptor. Host apps branch on the inner event `kind`
+ * plus these tags instead of a fixed payload enum.
+ */
+public struct MessageTagFfi {
+    public var values: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(values: [String]) {
+        self.values = values
+    }
+}
+
+
+
+extension MessageTagFfi: Equatable, Hashable {
+    public static func ==(lhs: MessageTagFfi, rhs: MessageTagFfi) -> Bool {
+        if lhs.values != rhs.values {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(values)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMessageTagFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MessageTagFfi {
+        return
+            try MessageTagFfi(
+                values: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: MessageTagFfi, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.values, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageTagFfi_lift(_ buf: RustBuffer) throws -> MessageTagFfi {
+    return try FfiConverterTypeMessageTagFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMessageTagFfi_lower(_ value: MessageTagFfi) -> RustBuffer {
+    return FfiConverterTypeMessageTagFfi.lower(value)
+}
+
+
 public struct ReceivedMessageFfi {
     public var messageIdHex: String
     public var groupIdHex: String
     public var sender: String
     public var senderDisplayName: String?
     public var plaintext: String
-    public var appMessage: AppMessagePayloadFfi?
+    /**
+     * Nostr `kind` of the inner Marmot app event.
+     */
+    public var kind: UInt64
+    /**
+     * Nostr `tags` of the inner Marmot app event.
+     */
+    public var tags: [MessageTagFfi]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(messageIdHex: String, groupIdHex: String, sender: String, senderDisplayName: String?, plaintext: String, appMessage: AppMessagePayloadFfi?) {
+    public init(messageIdHex: String, groupIdHex: String, sender: String, senderDisplayName: String?, plaintext: String, 
+        /**
+         * Nostr `kind` of the inner Marmot app event.
+         */kind: UInt64, 
+        /**
+         * Nostr `tags` of the inner Marmot app event.
+         */tags: [MessageTagFfi]) {
         self.messageIdHex = messageIdHex
         self.groupIdHex = groupIdHex
         self.sender = sender
         self.senderDisplayName = senderDisplayName
         self.plaintext = plaintext
-        self.appMessage = appMessage
+        self.kind = kind
+        self.tags = tags
     }
 }
 
@@ -3007,7 +3104,10 @@ extension ReceivedMessageFfi: Equatable, Hashable {
         if lhs.plaintext != rhs.plaintext {
             return false
         }
-        if lhs.appMessage != rhs.appMessage {
+        if lhs.kind != rhs.kind {
+            return false
+        }
+        if lhs.tags != rhs.tags {
             return false
         }
         return true
@@ -3019,7 +3119,8 @@ extension ReceivedMessageFfi: Equatable, Hashable {
         hasher.combine(sender)
         hasher.combine(senderDisplayName)
         hasher.combine(plaintext)
-        hasher.combine(appMessage)
+        hasher.combine(kind)
+        hasher.combine(tags)
     }
 }
 
@@ -3036,7 +3137,8 @@ public struct FfiConverterTypeReceivedMessageFfi: FfiConverterRustBuffer {
                 sender: FfiConverterString.read(from: &buf), 
                 senderDisplayName: FfiConverterOptionString.read(from: &buf), 
                 plaintext: FfiConverterString.read(from: &buf), 
-                appMessage: FfiConverterOptionTypeAppMessagePayloadFfi.read(from: &buf)
+                kind: FfiConverterUInt64.read(from: &buf), 
+                tags: FfiConverterSequenceTypeMessageTagFfi.read(from: &buf)
         )
     }
 
@@ -3046,7 +3148,8 @@ public struct FfiConverterTypeReceivedMessageFfi: FfiConverterRustBuffer {
         FfiConverterString.write(value.sender, into: &buf)
         FfiConverterOptionString.write(value.senderDisplayName, into: &buf)
         FfiConverterString.write(value.plaintext, into: &buf)
-        FfiConverterOptionTypeAppMessagePayloadFfi.write(value.appMessage, into: &buf)
+        FfiConverterUInt64.write(value.kind, into: &buf)
+        FfiConverterSequenceTypeMessageTagFfi.write(value.tags, into: &buf)
     }
 }
 
@@ -3608,116 +3711,6 @@ extension AgentStreamUpdateFfi: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Structured chat payloads (reactions, replies, deletes, …) carried inside a
- * message. Flattened from `MarmotAppMessagePayloadV1` for host bindings.
- */
-
-public enum AppMessagePayloadFfi {
-    
-    case reaction(targetMessageId: String, emoji: String, removed: Bool
-    )
-    case delete(targetMessageId: String
-    )
-    case retry(targetMessageId: String
-    )
-    case media(fileName: String, mediaType: String, sizeBytes: UInt64, caption: String?
-    )
-    case reply(targetMessageId: String, text: String
-    )
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAppMessagePayloadFfi: FfiConverterRustBuffer {
-    typealias SwiftType = AppMessagePayloadFfi
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppMessagePayloadFfi {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-        
-        case 1: return .reaction(targetMessageId: try FfiConverterString.read(from: &buf), emoji: try FfiConverterString.read(from: &buf), removed: try FfiConverterBool.read(from: &buf)
-        )
-        
-        case 2: return .delete(targetMessageId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 3: return .retry(targetMessageId: try FfiConverterString.read(from: &buf)
-        )
-        
-        case 4: return .media(fileName: try FfiConverterString.read(from: &buf), mediaType: try FfiConverterString.read(from: &buf), sizeBytes: try FfiConverterUInt64.read(from: &buf), caption: try FfiConverterOptionString.read(from: &buf)
-        )
-        
-        case 5: return .reply(targetMessageId: try FfiConverterString.read(from: &buf), text: try FfiConverterString.read(from: &buf)
-        )
-        
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: AppMessagePayloadFfi, into buf: inout [UInt8]) {
-        switch value {
-        
-        
-        case let .reaction(targetMessageId,emoji,removed):
-            writeInt(&buf, Int32(1))
-            FfiConverterString.write(targetMessageId, into: &buf)
-            FfiConverterString.write(emoji, into: &buf)
-            FfiConverterBool.write(removed, into: &buf)
-            
-        
-        case let .delete(targetMessageId):
-            writeInt(&buf, Int32(2))
-            FfiConverterString.write(targetMessageId, into: &buf)
-            
-        
-        case let .retry(targetMessageId):
-            writeInt(&buf, Int32(3))
-            FfiConverterString.write(targetMessageId, into: &buf)
-            
-        
-        case let .media(fileName,mediaType,sizeBytes,caption):
-            writeInt(&buf, Int32(4))
-            FfiConverterString.write(fileName, into: &buf)
-            FfiConverterString.write(mediaType, into: &buf)
-            FfiConverterUInt64.write(sizeBytes, into: &buf)
-            FfiConverterOptionString.write(caption, into: &buf)
-            
-        
-        case let .reply(targetMessageId,text):
-            writeInt(&buf, Int32(5))
-            FfiConverterString.write(targetMessageId, into: &buf)
-            FfiConverterString.write(text, into: &buf)
-            
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAppMessagePayloadFfi_lift(_ buf: RustBuffer) throws -> AppMessagePayloadFfi {
-    return try FfiConverterTypeAppMessagePayloadFfi.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAppMessagePayloadFfi_lower(_ value: AppMessagePayloadFfi) -> RustBuffer {
-    return FfiConverterTypeAppMessagePayloadFfi.lower(value)
-}
-
-
-
-extension AppMessagePayloadFfi: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
  * Top-level event firehose, FFI-shaped. Agent streams collapse to a single
  * "agent stream activity" variant — host apps do not differentiate them at
  * the surface level for v1.
@@ -3979,11 +3972,19 @@ extension MarmotKitError: Foundation.LocalizedError {
 
 public enum MessageUpdateFfi {
     
+    /**
+     * A timeline message: chat, reply, media, reaction, delete, or the kind-9
+     * stream-final. Host apps branch on `received.message.kind` and `tags`; a
+     * kind-9 carrying a `stream` tag is the stream-final that replaces the
+     * ephemeral preview.
+     */
     case message(received: RuntimeMessageReceivedFfi
     )
+    /**
+     * A kind-1200 agent text stream start — the signal to open the QUIC
+     * preview. Its stream id, route, and brokers live on `message.tags`.
+     */
     case agentStreamStarted(received: RuntimeMessageReceivedFfi
-    )
-    case agentStreamFinalized(received: RuntimeMessageReceivedFfi
     )
 }
 
@@ -4004,9 +4005,6 @@ public struct FfiConverterTypeMessageUpdateFfi: FfiConverterRustBuffer {
         case 2: return .agentStreamStarted(received: try FfiConverterTypeRuntimeMessageReceivedFfi.read(from: &buf)
         )
         
-        case 3: return .agentStreamFinalized(received: try FfiConverterTypeRuntimeMessageReceivedFfi.read(from: &buf)
-        )
-        
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -4022,11 +4020,6 @@ public struct FfiConverterTypeMessageUpdateFfi: FfiConverterRustBuffer {
         
         case let .agentStreamStarted(received):
             writeInt(&buf, Int32(2))
-            FfiConverterTypeRuntimeMessageReceivedFfi.write(received, into: &buf)
-            
-        
-        case let .agentStreamFinalized(received):
-            writeInt(&buf, Int32(3))
             FfiConverterTypeRuntimeMessageReceivedFfi.write(received, into: &buf)
             
         }
@@ -4193,30 +4186,6 @@ fileprivate struct FfiConverterOptionTypeAgentStreamUpdateFfi: FfiConverterRustB
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeAgentStreamUpdateFfi.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
-        }
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterOptionTypeAppMessagePayloadFfi: FfiConverterRustBuffer {
-    typealias SwiftType = AppMessagePayloadFfi?
-
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
-        }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeAppMessagePayloadFfi.write(value, into: &buf)
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeAppMessagePayloadFfi.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -4415,6 +4384,31 @@ fileprivate struct FfiConverterSequenceTypeAppMessageRecordFfi: FfiConverterRust
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAppMessageRecordFfi.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMessageTagFfi: FfiConverterRustBuffer {
+    typealias SwiftType = [MessageTagFfi]
+
+    public static func write(_ value: [MessageTagFfi], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMessageTagFfi.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [MessageTagFfi] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [MessageTagFfi]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMessageTagFfi.read(from: &buf))
         }
         return seq
     }
