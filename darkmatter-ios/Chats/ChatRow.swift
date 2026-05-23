@@ -27,7 +27,7 @@ struct ChatRow: View {
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(2, reservesSpace: true)
             }
 
             Spacer(minLength: 8)
@@ -46,12 +46,13 @@ struct ChatRow: View {
         GroupDisplay.title(group: chat, otherMember: item.otherMemberAccount, memberCount: item.memberCount, appState: appState)
     }
 
-    /// Latest message preview. Sent messages are prefixed with "You:".
+    /// Latest message preview. Sent messages are prefixed with "You:". Renders
+    /// structured payloads cleanly so raw agent-stream JSON never leaks here.
     private var subtitle: String {
         guard let latest = item.latest else {
             return "No messages yet"
         }
-        let body = ProfileSanitizer.singleLine(latest.plaintext, maxLength: 140) ?? ""
+        let body = ProfileSanitizer.singleLine(MessagePreview.body(latest), maxLength: 140) ?? ""
         if latest.direction == "sent" {
             return body.isEmpty ? "You sent a message" : "You: \(body)"
         }

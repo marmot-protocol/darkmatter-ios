@@ -7,6 +7,10 @@ struct ChatsListView: View {
     @State private var showNewChat = false
     @State private var showSwitcher = false
     @State private var path: [String] = []
+    @State private var searchText = ""
+    @State private var scope: ChatScope = .active
+
+    enum ChatScope { case active, archived }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -15,7 +19,6 @@ struct ChatsListView: View {
                     content(viewModel: viewModel)
                 } else {
                     ProgressView()
-                        .task { viewModel = ChatsListViewModel(appState: appState) }
                 }
             }
             // No large "Chats" header — just the toolbar icons, then the list.
@@ -24,6 +27,9 @@ struct ChatsListView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     accountSwitcher
+                }
+                ToolbarItem(placement: .principal) {
+                    scopePills
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -34,6 +40,15 @@ struct ChatsListView: View {
                     .accessibilityLabel("New chat")
                 }
             }
+            // Hidden by default; pulling the list down reveals it.
+            .searchable(text: $searchText, prompt: "Search chats")
+            // Registered at a stable level so navigation works even when the
+            // visible list is empty (e.g. just-created or deep-linked chats).
+            .navigationDestination(for: String.self) { groupIdHex in
+                if let viewModel {
+                    ChatDestination(groupIdHex: groupIdHex, viewModel: viewModel)
+                }
+            }
             .sheet(isPresented: $showNewChat) {
                 NewChatSheet()
             }
@@ -41,7 +56,12 @@ struct ChatsListView: View {
                 AccountSwitcherSheet()
             }
             .task(id: appState.activeAccountRef) {
-                await viewModel?.bind(accountRef: appState.activeAccountRef)
+                // Own both creation and binding here so bind() can't be skipped
+                // by a nil viewModel: the lazy-creation task could fire after
+                // this one, leaving the list permanently empty and unbound.
+                let vm = viewModel ?? ChatsListViewModel(appState: appState)
+                if viewModel == nil { viewModel = vm }
+                await vm.bind(accountRef: appState.activeAccountRef)
             }
             .onAppear {
                 // Reflect messages we sent from a conversation (which emit no
@@ -62,9 +82,37 @@ struct ChatsListView: View {
         guard let newId = appState.pendingChatId else { return }
         showNewChat = false
         showSwitcher = false
+        scope = .active
         path = [newId]
         appState.clearPendingChat()
     }
+
+    // MARK: - Active / Archived pills
+
+    private var scopePills: some View {
+        HStack(spacing: 6) {
+            pill("Active", target: .active)
+            pill("Archived", target: .archived)
+        }
+    }
+
+    private func pill(_ title: String, target: ChatScope) -> some View {
+        let selected = scope == target
+        return Button {
+            scope = target
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(selected ? Color.accentColor : Color(.secondarySystemFill)))
+                .foregroundStyle(selected ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+    }
+
+    // MARK: - List
 
     @ViewBuilder
     private func content(viewModel: ChatsListViewModel) -> some View {
@@ -76,11 +124,10 @@ struct ChatsListView: View {
                 systemImage: "exclamationmark.triangle",
                 description: Text(error)
             )
-        } else if viewModel.items.isEmpty {
-            EmptyChatsState(action: { showNewChat = true })
         } else {
+            let rows = currentRows(viewModel)
             List {
-                ForEach(viewModel.items) { item in
+                ForEach(rows) { item in
                     // ZStack with a hidden NavigationLink keeps the whole row
                     // tappable while suppressing the default disclosure chevron
                     // (the trailing slot shows the message timestamp instead).
@@ -90,41 +137,82 @@ struct ChatsListView: View {
                             .opacity(0)
                     }
                     .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            Task { await leave(group: item.group) }
-                        } label: {
-                            Label("Leave", systemImage: "person.crop.circle.badge.minus")
-                        }
-                        Button {
-                            Task { await setArchived(group: item.group, archived: true) }
-                        } label: {
-                            Label("Archive", systemImage: "archivebox")
-                        }
-                        .tint(.gray)
+                        swipeActions(for: item)
                     }
                     // Drop the separator above the very first row.
                     .listRowSeparator(
-                        item.id == viewModel.items.first?.id ? .hidden : .automatic,
+                        item.id == rows.first?.id ? .hidden : .automatic,
                         edges: .top
                     )
                 }
-
-                if !viewModel.archivedItems.isEmpty {
-                    Section {
-                        NavigationLink {
-                            ArchivedChatsView(viewModel: viewModel)
-                        } label: {
-                            Label("Archived", systemImage: "archivebox")
-                                .badge(viewModel.archivedItems.count)
-                        }
-                    }
-                }
             }
             .listStyle(.plain)
-            .refreshable { await viewModel.refreshLatest() }
-            .navigationDestination(for: String.self) { groupIdHex in
-                ChatDestination(groupIdHex: groupIdHex, viewModel: viewModel)
+            .overlay {
+                if rows.isEmpty { emptyState }
             }
+            .refreshable { await viewModel.refreshLatest() }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView.search(text: searchText)
+        } else if scope == .archived {
+            ContentUnavailableView(
+                "No archived chats",
+                systemImage: "archivebox",
+                description: Text("Swipe a chat to archive it; archived chats stay active and still notify you.")
+            )
+        } else {
+            EmptyChatsState(action: { showNewChat = true })
+        }
+    }
+
+    private func currentRows(_ viewModel: ChatsListViewModel) -> [ChatsListViewModel.Item] {
+        let base = scope == .active ? viewModel.items : viewModel.archivedItems
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return base }
+        return base.filter { searchHaystack(for: $0).localizedCaseInsensitiveContains(query) }
+    }
+
+    private func searchHaystack(for item: ChatsListViewModel.Item) -> String {
+        let title = GroupDisplay.title(
+            group: item.group,
+            otherMember: item.otherMemberAccount,
+            memberCount: item.memberCount,
+            appState: appState
+        )
+        let preview = item.latest.map { MessagePreview.body($0) } ?? ""
+        return title + " " + preview
+    }
+
+    @ViewBuilder
+    private func swipeActions(for item: ChatsListViewModel.Item) -> some View {
+        if item.group.archived {
+            Button {
+                Task { await setArchived(group: item.group, archived: false) }
+            } label: {
+                Label("Unarchive", systemImage: "tray.and.arrow.up")
+            }
+            .tint(.blue)
+            Button(role: .destructive) {
+                Task { await leave(group: item.group) }
+            } label: {
+                Label("Leave", systemImage: "person.crop.circle.badge.minus")
+            }
+        } else {
+            Button(role: .destructive) {
+                Task { await leave(group: item.group) }
+            } label: {
+                Label("Leave", systemImage: "person.crop.circle.badge.minus")
+            }
+            Button {
+                Task { await setArchived(group: item.group, archived: true) }
+            } label: {
+                Label("Archive", systemImage: "archivebox")
+            }
+            .tint(.gray)
         }
     }
 
@@ -170,11 +258,14 @@ struct ChatsListView: View {
     private func setArchived(group: AppGroupRecordFfi, archived: Bool) async {
         guard let ref = appState.activeAccountRef else { return }
         do {
-            _ = try appState.marmot.setGroupArchived(
+            let updated = try appState.marmot.setGroupArchived(
                 accountRef: ref,
                 groupIdHex: group.groupIdHex,
                 archived: archived
             )
+            // The chats subscription only fires on transport events, not local
+            // projection writes, so reflect the archive change immediately.
+            viewModel?.applyLocalGroupChange(updated)
             Haptics.success()
         } catch {
             Haptics.error()
