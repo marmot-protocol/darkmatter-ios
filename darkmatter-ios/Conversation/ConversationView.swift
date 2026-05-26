@@ -28,8 +28,33 @@ enum TimelineBottom {
 
 enum TimelineInitialScroll {
     static func shouldStartAtBottom(hasItems: Bool, didPerformInitialScroll: Bool) -> Bool {
-        hasItems && !didPerformInitialScroll
+        destination(
+            hasItems: hasItems,
+            didPerformInitialScroll: didPerformInitialScroll,
+            targetMessageIdHex: nil,
+            targetItemId: nil
+        ) == .bottom
     }
+
+    static func destination(
+        hasItems: Bool,
+        didPerformInitialScroll: Bool,
+        targetMessageIdHex: String?,
+        targetItemId: String?
+    ) -> TimelineInitialDestination {
+        guard hasItems, !didPerformInitialScroll else { return .none }
+        if targetMessageIdHex?.isEmpty == false {
+            guard let targetItemId, !targetItemId.isEmpty else { return .none }
+            return .item(targetItemId)
+        }
+        return .bottom
+    }
+}
+
+enum TimelineInitialDestination: Equatable {
+    case none
+    case bottom
+    case item(String)
 }
 
 enum ReplyPreviewLayout {
@@ -60,6 +85,7 @@ struct ConversationView: View {
     let chat: AppGroupRecordFfi
     let initialOtherMember: String?
     let initialMemberCount: Int?
+    let initialTargetMessageIdHex: String?
 
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
@@ -91,11 +117,14 @@ struct ConversationView: View {
     init(
         chat: AppGroupRecordFfi,
         initialOtherMember: String? = nil,
-        initialMemberCount: Int? = nil
+        initialMemberCount: Int? = nil,
+        initialTargetMessageIdHex: String? = nil
     ) {
         self.chat = chat
         self.initialOtherMember = initialOtherMember
         self.initialMemberCount = initialMemberCount
+        let targetMessageId = initialTargetMessageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.initialTargetMessageIdHex = targetMessageId?.isEmpty == false ? targetMessageId : nil
     }
 
     /// Binding that's `true` only for the row matching `actionsTarget`, so the
@@ -294,7 +323,7 @@ struct ConversationView: View {
                         }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
                             guard newId != nil else { return }
-                            if performInitialBottomScrollIfNeeded(proxy: proxy, hasItems: !viewModel.timeline.isEmpty) {
+                            if performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel) {
                                 return
                             }
                             if isAtTimelineBottom {
@@ -312,7 +341,7 @@ struct ConversationView: View {
                         .onAppear {
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
-                            _ = performInitialBottomScrollIfNeeded(proxy: proxy, hasItems: !viewModel.timeline.isEmpty)
+                            _ = performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel)
                         }
                     }
                 }
@@ -430,21 +459,49 @@ struct ConversationView: View {
         }
     }
 
-    private func performInitialBottomScrollIfNeeded(proxy: ScrollViewProxy, hasItems: Bool) -> Bool {
-        guard TimelineInitialScroll.shouldStartAtBottom(
-            hasItems: hasItems,
-            didPerformInitialScroll: didPerformInitialBottomScroll
-        ) else {
-            return false
+    private func performInitialScrollIfNeeded(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> Bool {
+        let targetItemId = initialTargetMessageIdHex.flatMap {
+            timelineItemId(forMessageIdHex: $0, viewModel: viewModel)
         }
-
-        didPerformInitialBottomScroll = true
-        isAtTimelineBottom = true
-        scrollToBottom(proxy: proxy, animated: false)
-        DispatchQueue.main.async {
+        switch TimelineInitialScroll.destination(
+            hasItems: !viewModel.timeline.isEmpty,
+            didPerformInitialScroll: didPerformInitialBottomScroll,
+            targetMessageIdHex: initialTargetMessageIdHex,
+            targetItemId: targetItemId
+        ) {
+        case .none:
+            return false
+        case .bottom:
+            didPerformInitialBottomScroll = true
+            isAtTimelineBottom = true
             scrollToBottom(proxy: proxy, animated: false)
+            DispatchQueue.main.async {
+                scrollToBottom(proxy: proxy, animated: false)
+            }
+        case .item(let itemId):
+            didPerformInitialBottomScroll = true
+            isAtTimelineBottom = false
+            scrollTo(itemId, proxy: proxy, anchor: .center)
+            DispatchQueue.main.async {
+                scrollTo(itemId, proxy: proxy, anchor: .center)
+            }
         }
         return true
+    }
+
+    private func timelineItemId(forMessageIdHex messageIdHex: String, viewModel: ConversationViewModel) -> String? {
+        viewModel.timeline.first { item in
+            guard case .message(let record, _) = item.kind else { return false }
+            return record.messageIdHex == messageIdHex
+        }?.id
+    }
+
+    private func scrollTo(_ itemId: String, proxy: ScrollViewProxy, anchor: UnitPoint) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(itemId, anchor: anchor)
+        }
     }
 
     private func canReply(to record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> Bool {
