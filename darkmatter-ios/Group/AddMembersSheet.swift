@@ -1,25 +1,28 @@
 import SwiftUI
+import MarmotKit
 
 struct AddMembersSheet: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    let onSubmit: ([String]) async -> Void
+    let normalize: (String) throws -> MemberRefFfi
+    let onSubmit: ([String]) async throws -> Void
 
-    @State private var members: [String] = []
+    @State private var members: [MemberRefFfi] = []
     @State private var pending: String = ""
     @State private var isInviting = false
     @State private var error: String?
+    @State private var showScanner = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Invite") {
-                    ForEach(members, id: \.self) { member in
-                        HStack {
-                            Text(IdentityFormatter.short(member))
-                                .font(.system(.body, design: .monospaced))
-                            Spacer()
+                    ForEach(members, id: \.accountIdHex) { member in
+                        HStack(spacing: 8) {
+                            StagedGroupMemberRow(member: member)
+
                             Button(role: .destructive) {
-                                members.removeAll { $0 == member }
+                                members.removeAll { $0.accountIdHex == member.accountIdHex }
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
@@ -39,6 +42,13 @@ struct AddMembersSheet: View {
                                 .foregroundStyle(.tint)
                         }
                         .disabled(pending.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+
+                    Button {
+                        error = nil
+                        showScanner = true
+                    } label: {
+                        Label("Scan QR code", systemImage: "qrcode.viewfinder")
                     }
                 }
 
@@ -63,14 +73,43 @@ struct AddMembersSheet: View {
                 }
             }
             .interactiveDismissDisabled(isInviting)
+            .fullScreenCover(isPresented: $showScanner) {
+                ScannerSheet { result in
+                    showScanner = false
+                    addScanned(result)
+                }
+            }
+        }
+    }
+
+    private func add(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            let normalized = try normalize(trimmed)
+            guard !members.contains(where: { $0.accountIdHex == normalized.accountIdHex }) else {
+                pending = ""
+                error = nil
+                Haptics.selection()
+                return
+            }
+            members.append(normalized)
+            pending = ""
+            error = nil
+            Haptics.success()
+            _ = appState.profile(forAccountIdHex: normalized.accountIdHex)
+        } catch {
+            Haptics.error()
+            self.error = "Enter a valid npub, Nostr URI, profile link, or hex public key."
         }
     }
 
     private func addPending() {
-        let trimmed = pending.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !members.contains(trimmed) else { return }
-        members.append(trimmed)
-        pending = ""
+        add(pending)
+    }
+
+    private func addScanned(_ raw: String) {
+        add(AddMembersPresentation.memberRef(fromScannedPayload: raw))
     }
 
     private func invite() async {
@@ -78,8 +117,62 @@ struct AddMembersSheet: View {
         guard !members.isEmpty else { return }
         isInviting = true
         error = nil
-        await onSubmit(members)
-        isInviting = false
-        dismiss()
+        do {
+            try await onSubmit(members.map(\.memberRef))
+            isInviting = false
+            dismiss()
+        } catch {
+            isInviting = false
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+struct StagedGroupMemberRow: View {
+    @Environment(AppState.self) private var appState
+    let member: MemberRefFfi
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AvatarBubble(
+                seed: member.accountIdHex,
+                title: displayName,
+                pictureURL: appState.avatarURL(forAccountIdHex: member.accountIdHex)
+            )
+            .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayName)
+                    .font(.body)
+                Text(AddMembersPresentation.secondaryIdentity(for: member))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var displayName: String {
+        AddMembersPresentation.displayName(for: member, appState: appState)
+    }
+}
+
+enum AddMembersPresentation {
+    static func memberRef(fromScannedPayload raw: String) -> String {
+        if case let .profile(npub) = DeepLink.parse(string: raw) {
+            return npub
+        }
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @MainActor
+    static func displayName(for member: MemberRefFfi, appState: AppState) -> String {
+        appState.knownDisplayName(forAccountIdHex: member.accountIdHex)
+            ?? IdentityFormatter.short(member.accountIdHex)
+    }
+
+    static func secondaryIdentity(for member: MemberRefFfi) -> String {
+        IdentityFormatter.short(member.npub)
     }
 }

@@ -148,7 +148,7 @@ final class AppState {
                 // Warm the active account's profile (name + avatar) right away
                 // so it's visible without waiting for a screen to request it.
                 if let activeId = activeAccount?.accountIdHex {
-                    _ = await profile(forAccountIdHex: activeId)
+                    _ = profile(forAccountIdHex: activeId)
                 }
             }
         } catch {
@@ -256,6 +256,11 @@ final class AppState {
             return name
         }
         if let cached = displayNames[id] { return cached }
+        if let projected = marmot.displayName(accountIdHex: id),
+           let name = ProfileSanitizer.displayName(projected) {
+            displayNames[id] = name
+            return name
+        }
         if let owned = accounts.first(where: { $0.accountIdHex == id }), !owned.label.isEmpty {
             return owned.label
         }

@@ -283,14 +283,18 @@ private struct ChatDestination: View {
     let viewModel: ChatsListViewModel
     @State private var timedOut = false
 
-    private var group: AppGroupRecordFfi? {
+    private var item: ChatsListViewModel.Item? {
         (viewModel.items + viewModel.archivedItems)
-            .first(where: { $0.group.groupIdHex == groupIdHex })?.group
+            .first(where: { $0.group.groupIdHex == groupIdHex })
     }
 
     var body: some View {
-        if let group {
-            ConversationView(chat: group)
+        if let item {
+            ConversationView(
+                chat: item.group,
+                initialOtherMember: item.otherMemberAccount,
+                initialMemberCount: item.memberCount
+            )
         } else if timedOut {
             ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
         } else {

@@ -63,6 +63,12 @@ before every release tag.
       shows B's display name (when projected via kind:0).
 - [ ] A invites a 4th member (D); A/B/C see the roster grow plus an
       inline "Membership changed" system row.
+- [ ] Group Details: an admin can add members using npub/hex/profile
+      links, promote a member, remove admin status, and remove a member.
+- [ ] Group Details: a non-admin sees the member list but no add/manage
+      controls.
+- [ ] Group Details: an admin must step down before leaving; the last
+      admin cannot step down until another admin exists.
 - [ ] D launches the app and sees the group materialize without manual
       refresh.
 - [ ] A removes C; C loses access; A/B see the system row.
@@ -105,7 +111,8 @@ before every release tag.
       with no white-on-white text.
 - [ ] Dynamic Type (XL): chat rows, conversation bubbles, settings
       cells all scale; no truncation that hides actionable text.
-- [ ] Liquid Glass: navigation bars and the composer use the iOS 26
-      material; no flat-white toolbars.
+- [ ] Visual material: on iOS 26, navigation bars and the composer use Liquid
+      Glass; on iOS 18, the composer uses the material fallback with no
+      flat-white toolbar.
 - [ ] VoiceOver: every primary action has a label (compose, send,
       group details, account switcher).

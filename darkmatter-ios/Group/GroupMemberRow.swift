@@ -62,3 +62,55 @@ struct GroupMemberRow: View {
         return IdentityFormatter.short(member.memberIdHex)
     }
 }
+
+struct GroupMemberDetailsRow: View {
+    @Environment(AppState.self) private var appState
+    let member: GroupMemberDetailsFfi
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AvatarBubble(seed: member.memberIdHex, title: displayName, pictureURL: avatarURL)
+                .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.body)
+                    if member.isSelf {
+                        Text("You")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.tint.opacity(0.18), in: Capsule())
+                            .foregroundStyle(.tint)
+                    }
+                    if member.isAdmin {
+                        Text("Admin")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.18), in: Capsule())
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Text(IdentityFormatter.short(member.npub))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var displayName: String {
+        if let name = ProfileSanitizer.displayName(member.displayName) {
+            return name
+        }
+        return appState.knownDisplayName(forAccountIdHex: member.memberIdHex)
+            ?? IdentityFormatter.short(member.memberIdHex)
+    }
+
+    private var avatarURL: URL? {
+        appState.avatarURL(forAccountIdHex: member.memberIdHex)
+    }
+}

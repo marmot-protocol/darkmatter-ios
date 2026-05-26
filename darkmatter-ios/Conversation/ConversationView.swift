@@ -2,9 +2,64 @@ import SwiftUI
 import UIKit
 import MarmotKit
 
+enum TimelineBottom {
+    static let pinnedThreshold: CGFloat = 44
+
+    static func isPinned(bottomY: CGFloat, viewportBottomY: CGFloat) -> Bool {
+        bottomY <= viewportBottomY + pinnedThreshold
+    }
+
+    static func distanceToBottom(contentHeight: CGFloat, visibleBottomY: CGFloat) -> CGFloat {
+        max(0, contentHeight - visibleBottomY)
+    }
+
+    static func shouldShowScrollToBottomButton(distanceToBottom: CGFloat) -> Bool {
+        distanceToBottom > pinnedThreshold
+    }
+
+    static func shouldFollowViewportChange(wasPinned: Bool) -> Bool {
+        wasPinned
+    }
+
+    static func pinnedStateAfterScrollButtonTap(currentIsPinned: Bool) -> Bool {
+        currentIsPinned
+    }
+}
+
+enum TimelineInitialScroll {
+    static func shouldStartAtBottom(hasItems: Bool, didPerformInitialScroll: Bool) -> Bool {
+        hasItems && !didPerformInitialScroll
+    }
+}
+
+enum ReplyPreviewLayout {
+    enum CloseAlignment {
+        case trailing
+
+        var swiftUI: Alignment {
+            switch self {
+            case .trailing: .trailing
+            }
+        }
+    }
+
+    static let leadingContentInset: CGFloat = 14
+    static let closeTrailingInset = leadingContentInset
+    static let contentTopInset: CGFloat = 5
+    static let contentBottomInset = contentTopInset
+    static let closeHitSize: CGFloat = 44
+    static let closeIconSize: CGFloat = 20
+    static let closeAlignment: CloseAlignment = .trailing
+    static let outerHorizontalInset: CGFloat = 10
+    static let outerTopInset: CGFloat = 2
+    static let outerBottomInset: CGFloat = 2
+}
+
 struct ConversationView: View {
     @Environment(AppState.self) private var appState
     let chat: AppGroupRecordFfi
+    let initialOtherMember: String?
+    let initialMemberCount: Int?
 
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
@@ -18,14 +73,29 @@ struct ConversationView: View {
     /// popover and show the menu as a centered overlay over the bubble instead.
     @State private var actionsCentered = false
     @State private var rowFrames = RowFrameStore()
+    @State private var composerFocusRequest = 0
+    @State private var isAtTimelineBottom = true
+    @State private var didPerformInitialBottomScroll = false
     /// Global Y bounds of the visible timeline (between nav bar and composer).
     /// The bottom shrinks when the keyboard rises, so placement accounts for it.
     @State private var contentTopY: CGFloat = 0
     @State private var contentBottomY: CGFloat = 0
 
+    private static let timelineBottomID = "conversation-timeline-bottom"
+
     private struct ActionsTarget: Identifiable {
         let record: AppMessageRecordFfi
         let id = UUID()
+    }
+
+    init(
+        chat: AppGroupRecordFfi,
+        initialOtherMember: String? = nil,
+        initialMemberCount: Int? = nil
+    ) {
+        self.chat = chat
+        self.initialOtherMember = initialOtherMember
+        self.initialMemberCount = initialMemberCount
     }
 
     /// Binding that's `true` only for the row matching `actionsTarget`, so the
@@ -43,7 +113,7 @@ struct ConversationView: View {
 
     var body: some View {
         timeline
-            .safeAreaInset(edge: .bottom) { composerArea }
+            .safeAreaInset(edge: .bottom, spacing: 0) { composerArea }
             .overlay { centeredActionsOverlay }
             .navigationTitle(viewModel?.displayTitle ?? chat.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -77,7 +147,12 @@ struct ConversationView: View {
             }
             .task {
                 if viewModel == nil {
-                    viewModel = ConversationViewModel(appState: appState, group: chat)
+                    viewModel = ConversationViewModel(
+                        appState: appState,
+                        group: chat,
+                        initialOtherMember: initialOtherMember,
+                        initialMemberCount: initialMemberCount
+                    )
                 }
                 await viewModel?.start()
             }
@@ -94,58 +169,65 @@ struct ConversationView: View {
             ComposerBar(
                 draft: $draft,
                 isSending: viewModel?.sendInFlight ?? false,
+                focusRequest: composerFocusRequest,
                 onSend: send
             )
         }
-        .background(alignment: .bottom) { composerBackdrop }
-    }
-
-    /// Blur behind the composer + reply box that mirrors the nav bar's
-    /// scroll-edge effect at the top: the toolbar `.bar` material, fading out
-    /// as it rises, extended ~40pt above the composer.
-    private var composerBackdrop: some View {
-        Rectangle()
-            .fill(.bar)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.65),
-                        .init(color: .black, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .padding(.top, -40)
-            .ignoresSafeArea(edges: .bottom)
-            .allowsHitTesting(false)
     }
 
     private func replyBar(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.accentColor)
-                .frame(width: 3, height: 30)
+                .frame(width: 3, height: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Replying to \(appState.displayName(forAccountIdHex: record.sender))")
                     .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
                 Text(ProfileSanitizer.singleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .shadow(color: .black.opacity(0.22), radius: 1, y: 1)
             }
             Spacer()
             Button {
                 viewModel.replyingTo = nil
             } label: {
                 Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: ReplyPreviewLayout.closeIconSize, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.secondary)
+                    .frame(
+                        width: ReplyPreviewLayout.closeHitSize,
+                        height: ReplyPreviewLayout.closeHitSize,
+                        alignment: ReplyPreviewLayout.closeAlignment.swiftUI
+                    )
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Cancel reply")
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
+        .padding(.leading, ReplyPreviewLayout.leadingContentInset)
+        .padding(.trailing, ReplyPreviewLayout.closeTrailingInset)
+        .padding(.top, ReplyPreviewLayout.contentTopInset)
+        .padding(.bottom, ReplyPreviewLayout.contentBottomInset)
+        .background {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.regularMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(.secondarySystemBackground).opacity(0.82))
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+        }
+        .padding(.horizontal, ReplyPreviewLayout.outerHorizontalInset)
+        .padding(.top, ReplyPreviewLayout.outerTopInset)
+        .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
     }
 
     @ViewBuilder
@@ -181,32 +263,56 @@ struct ConversationView: View {
                 ScrollViewReader { proxy in
                     GeometryReader { outer in
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 4) {
-                                ForEach(viewModel.timeline) { item in
-                                    row(for: item, viewModel: viewModel)
+                            VStack(spacing: 0) {
+                                LazyVStack(alignment: .leading, spacing: 4) {
+                                    ForEach(viewModel.timeline) { item in
+                                        row(for: item, viewModel: viewModel)
+                                    }
+                                    .padding(.bottom, 4)
                                 }
+                                timelineBottomSentinel
                             }
-                            .padding(.vertical, 8)
+                            .padding(.top, 8)
+                            .padding(.bottom, 2)
                         }
+                        .overlay(alignment: .bottomTrailing) {
+                            scrollToBottomButton(proxy: proxy)
+                        }
+                        .defaultScrollAnchor(.bottom)
                         .scrollDismissesKeyboard(.interactively)
                         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
                         .onPreferenceChange(RowFramesKey.self) { rowFrames.frames = $0 }
+                        .onScrollGeometryChange(for: Bool.self) { geometry in
+                            TimelineBottom.shouldShowScrollToBottomButton(
+                                distanceToBottom: TimelineBottom.distanceToBottom(
+                                    contentHeight: geometry.contentSize.height,
+                                    visibleBottomY: geometry.visibleRect.maxY
+                                )
+                            )
+                        } action: { _, shouldShowButton in
+                            isAtTimelineBottom = !shouldShowButton
+                        }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
-                            guard let newId else { return }
-                            withAnimation(.smooth(duration: 0.2)) {
-                                proxy.scrollTo(newId, anchor: .bottom)
+                            guard newId != nil else { return }
+                            if performInitialBottomScrollIfNeeded(proxy: proxy, hasItems: !viewModel.timeline.isEmpty) {
+                                return
+                            }
+                            if isAtTimelineBottom {
+                                scrollToBottom(proxy: proxy, animated: true)
                             }
                         }
                         .onChange(of: outer.size.height) { _, _ in
+                            let wasAtBottom = isAtTimelineBottom
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
+                            if TimelineBottom.shouldFollowViewportChange(wasPinned: wasAtBottom) {
+                                scrollToBottom(proxy: proxy, animated: false)
+                            }
                         }
                         .onAppear {
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
-                            if let last = viewModel.timeline.last?.id {
-                                proxy.scrollTo(last, anchor: .bottom)
-                            }
+                            _ = performInitialBottomScrollIfNeeded(proxy: proxy, hasItems: !viewModel.timeline.isEmpty)
                         }
                     }
                 }
@@ -232,6 +338,9 @@ struct ConversationView: View {
                     appState.addRecentReaction(emoji)
                 }
             )
+            .replySwipeToReply(isEnabled: canReply(to: record, viewModel: viewModel)) {
+                beginReply(to: record, viewModel: viewModel)
+            }
             .background(
                 GeometryReader { geo in
                     Color.clear.preference(
@@ -247,7 +356,6 @@ struct ConversationView: View {
                 Haptics.tap()
                 presentActions(for: record)
             }
-            .gesture(replySwipe(for: record, viewModel: viewModel))
             .popover(
                 isPresented: actionsBinding(for: record),
                 attachmentAnchor: .point(actionsAbove ? .top : .bottom),
@@ -261,17 +369,92 @@ struct ConversationView: View {
         }
     }
 
-    /// Lightweight swipe-right-to-reply. Fires only on release for a clearly
-    /// horizontal drag, so it doesn't fight the scroll view.
-    private func replySwipe(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some Gesture {
-        DragGesture(minimumDistance: 30)
-            .onEnded { value in
-                if value.translation.width > 60,
-                   abs(value.translation.width) > abs(value.translation.height) {
-                    Haptics.tap()
-                    viewModel.replyingTo = record
-                }
+    private var timelineBottomSentinel: some View {
+        Color.clear
+            .frame(height: 1)
+            .id(Self.timelineBottomID)
+    }
+
+    @ViewBuilder
+    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
+        if !isAtTimelineBottom {
+            Button {
+                Haptics.tap()
+                isAtTimelineBottom = TimelineBottom.pinnedStateAfterScrollButtonTap(currentIsPinned: isAtTimelineBottom)
+                jumpToBottom(proxy: proxy)
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 42, height: 42)
+                    .background {
+                        ZStack {
+                            Circle().fill(.regularMaterial)
+                            Circle().fill(Color(.secondarySystemBackground).opacity(0.86))
+                        }
+                    }
+                    .overlay {
+                        Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Scroll to latest message")
+            .padding(.trailing, 9)
+            .padding(.bottom, 10)
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
+        }
+    }
+
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        if animated {
+            withAnimation(.smooth(duration: 0.2)) {
+                proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
+            }
+        }
+    }
+
+    private func jumpToBottom(proxy: ScrollViewProxy) {
+        scrollToBottom(proxy: proxy, animated: false)
+        DispatchQueue.main.async {
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+    }
+
+    private func performInitialBottomScrollIfNeeded(proxy: ScrollViewProxy, hasItems: Bool) -> Bool {
+        guard TimelineInitialScroll.shouldStartAtBottom(
+            hasItems: hasItems,
+            didPerformInitialScroll: didPerformInitialBottomScroll
+        ) else {
+            return false
+        }
+
+        didPerformInitialBottomScroll = true
+        isAtTimelineBottom = true
+        scrollToBottom(proxy: proxy, animated: false)
+        DispatchQueue.main.async {
+            scrollToBottom(proxy: proxy, animated: false)
+        }
+        return true
+    }
+
+    private func canReply(to record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> Bool {
+        !record.messageIdHex.isEmpty && !viewModel.isDeleted(record.messageIdHex)
+    }
+
+    private func beginReply(to record: AppMessageRecordFfi, viewModel: ConversationViewModel) {
+        guard canReply(to: record, viewModel: viewModel) else { return }
+        viewModel.replyingTo = record
+        composerFocusRequest += 1
     }
 
     private func send() {
@@ -356,8 +539,8 @@ struct ConversationView: View {
                 dismissActions()
             },
             onReply: {
-                viewModel.replyingTo = record
                 dismissActions()
+                beginReply(to: record, viewModel: viewModel)
             },
             onCopy: {
                 UIPasteboard.general.string = viewModel.displayBody(of: record)
