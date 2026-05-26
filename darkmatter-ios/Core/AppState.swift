@@ -66,6 +66,8 @@ final class AppState {
     }
 
     let client: MarmotClient
+    let notifications: AppNotifications
+    private var notificationSubscriptionTask: Task<Void, Never>?
 
     /// Cache of best-known display names keyed by account id hex. Derived
     /// from `profiles` when available. Read-only from view code.
@@ -97,6 +99,7 @@ final class AppState {
     /// set right after creating a chat from the composer or a scanned profile.
     /// ChatsListView observes this to push the conversation.
     private(set) var pendingChatId: String?
+    private(set) var pendingChatAccountRef: String?
 
     /// Tracks in-flight directory fetches so we don't pile up duplicate work.
     private var directoryFetchesInFlight: Set<String> = []
@@ -107,12 +110,17 @@ final class AppState {
     static let agentTextStreamQuicBrokerCandidate = "quic://quic-broker.ipf.dev:4450"
     static let agentTextStreamQuicCandidates = [agentTextStreamQuicBrokerCandidate]
 
-    init(client: MarmotClient) {
+    init(client: MarmotClient, notifications: AppNotifications) {
         self.client = client
+        self.notifications = notifications
         self.activeAccountRef = UserDefaults.standard.string(forKey: Self.activeAccountKey)
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
         self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
             ?? Self.defaultReactions
+    }
+
+    convenience init(client: MarmotClient) {
+        self.init(client: client, notifications: .shared)
     }
 
     /// Production entry point. Builds a keychain-backed client; if secure
@@ -150,9 +158,143 @@ final class AppState {
                 if let activeId = activeAccount?.accountIdHex {
                     _ = profile(forAccountIdHex: activeId)
                 }
+                notifications.configure(appState: self)
+                startNotificationSubscription()
+                resumeNativePushRegistrationIfNeeded()
             }
         } catch {
             phase = .failed(error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func startNotificationSubscription() {
+        notificationSubscriptionTask?.cancel()
+        notificationSubscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let subscription = try await marmot.subscribeNotifications()
+                for await update in SubscriptionDriver.notifications(subscription) {
+                    guard shouldPresentLocalNotification(update) else { continue }
+                    await notifications.present(update: update)
+                }
+            } catch {
+                present(.error("Notifications unavailable", message: error.localizedDescription))
+            }
+        }
+    }
+
+    private func shouldPresentLocalNotification(_ update: NotificationUpdateFfi) -> Bool {
+        (try? marmot.notificationSettings(accountRef: update.accountRef).localNotificationsEnabled) == true
+    }
+
+    // MARK: - Notifications
+
+    func notificationSettings(for accountRef: String) -> NotificationSettingsFfi? {
+        try? marmot.notificationSettings(accountRef: accountRef)
+    }
+
+    func pushRegistration(for accountRef: String) -> PushRegistrationFfi? {
+        try? marmot.pushRegistration(accountRef: accountRef)
+    }
+
+    @discardableResult
+    func setLocalNotificationsEnabled(_ enabled: Bool) async throws -> NotificationSettingsFfi {
+        guard let accountRef = activeAccountRef else {
+            throw NotificationSettingsActionError.noActiveAccount
+        }
+        if enabled {
+            let granted = try await notifications.requestAuthorization()
+            guard granted else { throw NotificationSettingsActionError.permissionDenied }
+        }
+        return try marmot.setLocalNotificationsEnabled(accountRef: accountRef, enabled: enabled)
+    }
+
+    @discardableResult
+    func setNativePushEnabled(_ enabled: Bool) async throws -> NotificationSettingsFfi {
+        guard let accountRef = activeAccountRef else {
+            throw NotificationSettingsActionError.noActiveAccount
+        }
+
+        if enabled {
+            guard NativePushServerConfig.current() != nil else {
+                throw NotificationSettingsActionError.nativePushNotConfigured
+            }
+            let granted = try await notifications.requestAuthorizationAndRegister()
+            guard granted else { throw NotificationSettingsActionError.permissionDenied }
+            let settings = try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: true)
+            do {
+                try await syncNativePushRegistration(accountRef: accountRef)
+            } catch NotificationSettingsActionError.missingApnsToken {
+                // APNS token delivery is asynchronous; the app delegate will
+                // retry registration as soon as iOS provides the token.
+            }
+            return settings
+        } else {
+            try await marmot.clearPushRegistration(accountRef: accountRef)
+            return try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: false)
+        }
+    }
+
+    @discardableResult
+    func syncNativePushRegistration(accountRef: String) async throws -> PushRegistrationFfi {
+        guard let config = NativePushServerConfig.current() else {
+            throw NotificationSettingsActionError.nativePushNotConfigured
+        }
+        guard let tokenHex = notifications.apnsTokenHex, !tokenHex.isEmpty else {
+            throw NotificationSettingsActionError.missingApnsToken
+        }
+        return try await marmot.upsertPushRegistration(
+            accountRef: accountRef,
+            platform: .apns,
+            rawToken: tokenHex,
+            serverPubkeyHex: config.serverPubkeyHex,
+            relayHint: config.relayHint
+        )
+    }
+
+    func syncNativePushRegistrationIfEnabled() async {
+        let accountRefs = nativePushEnabledAccountRefs()
+        guard !accountRefs.isEmpty,
+              NativePushServerConfig.current() != nil
+        else { return }
+
+        if NativePushRegistrationPolicy.shouldRequestRemoteToken(
+            accountRefs: accountRefs,
+            currentToken: notifications.apnsTokenHex
+        ) {
+            await notifications.registerForRemoteNotificationsIfAuthorized()
+        }
+
+        guard notifications.apnsTokenHex?.isEmpty == false else { return }
+
+        var lastError: Error?
+        for accountRef in accountRefs {
+            do {
+                _ = try await syncNativePushRegistration(accountRef: accountRef)
+            } catch NotificationSettingsActionError.missingApnsToken {
+                return
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let lastError {
+            present(.error("Push registration failed", message: lastError.localizedDescription))
+        }
+    }
+
+    private func resumeNativePushRegistrationIfNeeded() {
+        guard !nativePushEnabledAccountRefs().isEmpty else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            await syncNativePushRegistrationIfEnabled()
+        }
+    }
+
+    private func nativePushEnabledAccountRefs() -> [String] {
+        NativePushRegistrationPolicy.enabledAccountRefs(accounts: accounts) { accountRef in
+            try? marmot.notificationSettings(accountRef: accountRef)
         }
     }
 
@@ -373,13 +515,25 @@ final class AppState {
 
     /// Request navigation into a chat (e.g. just after creating one).
     @MainActor
-    func presentChat(groupIdHex: String) {
+    func presentChat(groupIdHex: String, accountRef: String? = nil) {
+        if let accountRef, !accountRef.isEmpty {
+            activeAccountRef = accountRef
+            pendingChatAccountRef = accountRef
+        } else {
+            pendingChatAccountRef = nil
+        }
         pendingChatId = groupIdHex
+    }
+
+    @MainActor
+    func presentNotification(route: LocalNotificationRoute) {
+        presentChat(groupIdHex: route.groupIdHex, accountRef: route.accountRef)
     }
 
     @MainActor
     func clearPendingChat() {
         pendingChatId = nil
+        pendingChatAccountRef = nil
     }
 
     /// Route an inbound deep link (from `.onOpenURL`).

@@ -31,7 +31,7 @@ struct AddMembersSheet: View {
                         }
                     }
                     HStack {
-                        TextField("npub1… or hex public key", text: $pending)
+                        TextField("npub1…, nprofile1…, or hex public key", text: $pending)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .font(.system(.body, design: .monospaced))
@@ -86,7 +86,8 @@ struct AddMembersSheet: View {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            let normalized = try normalize(trimmed)
+            let memberRef = AddMembersPresentation.memberRef(fromScannedPayload: trimmed)
+            let normalized = try normalize(memberRef)
             guard !members.contains(where: { $0.accountIdHex == normalized.accountIdHex }) else {
                 pending = ""
                 error = nil
@@ -100,7 +101,7 @@ struct AddMembersSheet: View {
             _ = appState.profile(forAccountIdHex: normalized.accountIdHex)
         } catch {
             Haptics.error()
-            self.error = "Enter a valid npub, Nostr URI, profile link, or hex public key."
+            self.error = "Enter a valid npub, nprofile, Nostr URI, profile link, or hex public key."
         }
     }
 
@@ -160,8 +161,8 @@ struct StagedGroupMemberRow: View {
 
 enum AddMembersPresentation {
     static func memberRef(fromScannedPayload raw: String) -> String {
-        if case let .profile(npub) = DeepLink.parse(string: raw) {
-            return npub
+        if case let .profile(memberRef) = DeepLink.parse(string: raw) {
+            return memberRef
         }
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }

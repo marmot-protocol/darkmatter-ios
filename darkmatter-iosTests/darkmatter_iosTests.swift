@@ -67,6 +67,52 @@ struct RelaySettingsTests {
 }
 
 @MainActor
+struct AppContainerConfigTests {
+
+    @Test func productionPushServerConfigIsPresent() {
+        let config = NativePushServerConfig.current()
+
+        #expect(config?.serverPubkeyHex == "73a4996bd18de19f6ac5f6ad42f5f2671eba6e5b739ea9695f07b00b0693fc04")
+        #expect(config?.relayHint == "wss://relay.primal.net")
+    }
+
+    @Test func marmotRootUsesStableDirectoryName() {
+        let base = URL(fileURLWithPath: "/tmp/darkmatter-test", isDirectory: true)
+
+        #expect(AppContainerConfig.marmotRoot(in: base).path == "/tmp/darkmatter-test/Marmot")
+    }
+
+    @Test func legacyRootMovesIntoSharedContainerWhenSharedRootIsEmpty() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarmotMove-\(UUID().uuidString)", isDirectory: true)
+        let legacy = tmp.appendingPathComponent("legacy/Marmot", isDirectory: true)
+        let shared = tmp.appendingPathComponent("shared/Marmot", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        let marker = legacy.appendingPathComponent("marker.txt")
+        try "ok".write(to: marker, atomically: true, encoding: .utf8)
+
+        AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
+
+        #expect(!FileManager.default.fileExists(atPath: legacy.path))
+        #expect(FileManager.default.fileExists(atPath: shared.appendingPathComponent("marker.txt").path))
+    }
+
+    @Test func existingSharedRootWinsOverLegacyRoot() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarmotKeep-\(UUID().uuidString)", isDirectory: true)
+        let legacy = tmp.appendingPathComponent("legacy/Marmot", isDirectory: true)
+        let shared = tmp.appendingPathComponent("shared/Marmot", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+
+        AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
+
+        #expect(FileManager.default.fileExists(atPath: legacy.path))
+        #expect(FileManager.default.fileExists(atPath: shared.path))
+    }
+}
+
+@MainActor
 struct IdentityFormatterTests {
 
     @Test func shortTruncatesLongStrings() {
@@ -85,6 +131,123 @@ struct IdentityFormatterTests {
         let id = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
         let result = IdentityFormatter.displayName(label: "", accountIdHex: id)
         #expect(result.contains("…"))
+    }
+}
+
+@MainActor
+struct NotificationPresentationTests {
+
+    @Test func directMessageUsesSenderPreviewAndRouteMetadata() {
+        let update = notificationUpdate(
+            notificationKey: "notif-1",
+            conversationKey: "conv-1",
+            isDm: true,
+            groupName: nil,
+            senderName: " Alice\nExample ",
+            previewText: " hello\u{202E}\nthere ",
+            messageIdHex: "message-1"
+        )
+
+        let presentation = LocalNotificationProjection.makePresentation(for: update)
+
+        #expect(presentation?.identifier == "notif-1")
+        #expect(presentation?.threadIdentifier == "conv-1")
+        #expect(presentation?.title == "Alice Example")
+        #expect(presentation?.body == "hello there")
+        #expect(presentation?.route.accountRef == "account-a")
+        #expect(presentation?.route.groupIdHex == "group-a")
+        #expect(presentation?.route.messageIdHex == "message-1")
+        #expect(presentation?.userInfo[LocalNotificationProjection.accountRefKey] == "account-a")
+    }
+
+    @Test func groupMessageUsesGroupTitleAndSenderBodyPrefix() {
+        let update = notificationUpdate(
+            isDm: false,
+            groupName: " Project\nRoom ",
+            senderName: "Bob",
+            previewText: "Ship it"
+        )
+
+        let presentation = LocalNotificationProjection.makePresentation(for: update)
+
+        #expect(presentation?.title == "Project Room")
+        #expect(presentation?.body == "Bob: Ship it")
+    }
+
+    @Test func selfMessagesAreNotPresentedLocally() {
+        let update = notificationUpdate(isFromSelf: true)
+
+        #expect(LocalNotificationProjection.makePresentation(for: update) == nil)
+    }
+
+    @Test func tapRouteRoundTripsThroughUserInfo() {
+        let route = LocalNotificationRoute(
+            accountRef: "account-b",
+            groupIdHex: "group-b",
+            notificationKey: "notif-b",
+            messageIdHex: "message-b"
+        )
+
+        let parsed = LocalNotificationProjection.route(from: LocalNotificationProjection.userInfo(for: route))
+
+        #expect(parsed == route)
+    }
+
+    @Test func missingPreviewFallsBackToGenericEncryptedMessage() {
+        let update = notificationUpdate(isDm: true, senderName: nil, previewText: nil)
+
+        let presentation = LocalNotificationProjection.makePresentation(for: update)
+
+        #expect(presentation?.title == "01234567…abcdef")
+        #expect(presentation?.body == "New encrypted message")
+    }
+}
+
+struct NativePushRegistrationPolicyTests {
+
+    @Test func enabledAccountsAreSyncedAcrossAllLocalAccounts() {
+        let accounts = [
+            AccountSummaryFfi(label: "account-a", accountIdHex: hex("11"), localSigning: true, running: true),
+            AccountSummaryFfi(label: "account-b", accountIdHex: hex("22"), localSigning: true, running: true),
+            AccountSummaryFfi(label: "account-c", accountIdHex: hex("33"), localSigning: true, running: true)
+        ]
+        let settings = [
+            "account-a": NotificationSettingsFfi(
+                accountRef: "account-a",
+                accountIdHex: hex("11"),
+                localNotificationsEnabled: true,
+                nativePushEnabled: true
+            ),
+            "account-b": NotificationSettingsFfi(
+                accountRef: "account-b",
+                accountIdHex: hex("22"),
+                localNotificationsEnabled: true,
+                nativePushEnabled: false
+            )
+        ]
+
+        let enabled = NativePushRegistrationPolicy.enabledAccountRefs(accounts: accounts) { settings[$0] }
+
+        #expect(enabled == ["account-a"])
+    }
+
+    @Test func remoteTokenIsRequestedOnlyWhenEnabledAccountsLackAToken() {
+        #expect(NativePushRegistrationPolicy.shouldRequestRemoteToken(
+            accountRefs: ["account-a"],
+            currentToken: nil
+        ))
+        #expect(NativePushRegistrationPolicy.shouldRequestRemoteToken(
+            accountRefs: ["account-a"],
+            currentToken: ""
+        ))
+        #expect(!NativePushRegistrationPolicy.shouldRequestRemoteToken(
+            accountRefs: ["account-a"],
+            currentToken: "abc123"
+        ))
+        #expect(!NativePushRegistrationPolicy.shouldRequestRemoteToken(
+            accountRefs: [],
+            currentToken: nil
+        ))
     }
 }
 
@@ -385,12 +548,29 @@ struct GroupManagementPresentationTests {
 
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
         let npub = "npub1abcdefghijklmnopqrstuvwxyz"
+        let nprofile = "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p"
+        let nprofileHex = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
 
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "darkmatter://profile/\(npub)") == npub
         )
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(npub)") == npub
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: nprofile) == nprofileHex
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(nprofile)") == nprofileHex
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "darkmatter://profile/\(nprofile)") == nprofileHex
+        )
+        #expect(
+            DeepLink.parse(string: "nostr:\(nprofile)") == .profile(npub: nprofileHex)
+        )
+        #expect(
+            NostrProfileReference.memberRef(from: nprofileHex.uppercased()) == nprofileHex
         )
     }
 
@@ -1000,7 +1180,10 @@ private func group(name: String, admins: [String] = []) -> AppGroupRecordFfi {
         admins: admins,
         relays: [],
         nostrGroupIdHex: "",
-        archived: false
+        archived: false,
+        pendingConfirmation: false,
+        welcomerAccountIdHex: nil,
+        viaWelcomeMessageIdHex: nil
     )
 }
 
@@ -1013,6 +1196,46 @@ private func groupMember(memberIdHex: String, isAdmin: Bool, isSelf: Bool) -> Gr
         isSelf: isSelf,
         npub: "npub-\(IdentityFormatter.short(memberIdHex))",
         displayName: nil
+    )
+}
+
+private func notificationUpdate(
+    notificationKey: String = "notif-a",
+    conversationKey: String = "conv-a",
+    trigger: NotificationTriggerFfi = .newMessage,
+    accountRef: String = "account-a",
+    accountIdHex: String = hex("11"),
+    groupIdHex: String = "group-a",
+    isDm: Bool = true,
+    groupName: String? = nil,
+    senderName: String? = "Alice",
+    previewText: String? = "Hello",
+    messageIdHex: String? = "message-a",
+    isFromSelf: Bool = false
+) -> NotificationUpdateFfi {
+    NotificationUpdateFfi(
+        notificationKey: notificationKey,
+        conversationKey: conversationKey,
+        trigger: trigger,
+        accountRef: accountRef,
+        accountIdHex: accountIdHex,
+        groupIdHex: groupIdHex,
+        groupName: groupName,
+        isDm: isDm,
+        messageIdHex: messageIdHex,
+        sender: NotificationUserFfi(
+            accountIdHex: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            displayName: senderName,
+            pictureUrl: nil
+        ),
+        receiver: NotificationUserFfi(
+            accountIdHex: accountIdHex,
+            displayName: "Me",
+            pictureUrl: nil
+        ),
+        previewText: previewText,
+        timestampMs: 1_700_000_000_123,
+        isFromSelf: isFromSelf
     )
 }
 

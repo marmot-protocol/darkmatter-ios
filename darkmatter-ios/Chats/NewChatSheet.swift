@@ -1,9 +1,9 @@
 import SwiftUI
 import MarmotKit
 
-/// Compose a new MLS group. Add one or more recipients by npub (or hex
-/// account id). Optional group name — auto-omitted for 2-member groups so
-/// the chats list renders them as DMs.
+/// Compose a new MLS group. Add one or more recipients by profile reference.
+/// Optional group name — auto-omitted for 2-member groups so the chats list
+/// renders them as DMs.
 struct NewChatSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -39,7 +39,7 @@ struct NewChatSheet: View {
                         }
                     }
                     HStack {
-                        TextField("npub1… or hex public key", text: $pendingMember)
+                        TextField("npub1…, nprofile1…, or hex public key", text: $pendingMember)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .font(.system(.body, design: .monospaced))
@@ -97,20 +97,20 @@ struct NewChatSheet: View {
     }
 
     private func addPending() {
-        let trimmed = pendingMember.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !members.contains(trimmed) else { return }
-        members.append(trimmed)
+        let memberRef = AddMembersPresentation.memberRef(fromScannedPayload: pendingMember)
+        guard !memberRef.isEmpty, !members.contains(memberRef) else { return }
+        members.append(memberRef)
         pendingMember = ""
     }
 
     /// Add a recipient from a scanned profile QR code.
     private func handleScan(_ raw: String) {
-        guard case let .profile(npub) = DeepLink.parse(string: raw) else {
+        guard let memberRef = NostrProfileReference.memberRef(from: raw) else {
             error = "That QR code isn't a Dark Matter profile."
             Haptics.error()
             return
         }
-        if !members.contains(npub) { members.append(npub) }
+        if !members.contains(memberRef) { members.append(memberRef) }
         Haptics.success()
     }
 

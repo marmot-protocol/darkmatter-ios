@@ -78,6 +78,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Notifications") {
+                NavigationLink {
+                    NotificationSettingsView()
+                } label: {
+                    Label("Notifications", systemImage: "bell.badge.fill")
+                }
+            }
+
             Section("About") {
                 LabeledContent("Version") {
                     Text(appVersion)

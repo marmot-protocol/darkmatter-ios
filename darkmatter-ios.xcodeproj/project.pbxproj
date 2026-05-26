@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A007CA420B74BAC99C5B6BB /* MarmotKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1FF76E1B2FBE466900DCDFA7 /* MarmotKit */; };
 		1FF76E1C2FBE466900DCDFA7 /* MarmotKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1FF76E1B2FBE466900DCDFA7 /* MarmotKit */; };
+		3ED1C9AC2AE94EBDA800EA3E /* NotificationServiceExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 707C5DCDB7AF47DFB23C7B96 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		41AF4E801BFE453B8DCD621C /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD7505231BF5445F8BE52AD9 /* NotificationService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,12 +28,37 @@
 			remoteGlobalIDString = 1FF76DED2FBE3C9A00DCDFA7;
 			remoteInfo = "darkmatter-ios";
 		};
+		EDD62D7C49E848D5BF5C3E2C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1FF76DE62FBE3C9A00DCDFA7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B34CACB28CA942DF81D66BA4;
+			remoteInfo = NotificationServiceExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		536495ADFC53404EB32650CB /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				3ED1C9AC2AE94EBDA800EA3E /* NotificationServiceExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1FF76DEE2FBE3C9A00DCDFA7 /* darkmatter-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "darkmatter-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FF76DFD2FBE3C9C00DCDFA7 /* darkmatter-iosTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "darkmatter-iosTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1FF76E072FBE3C9C00DCDFA7 /* darkmatter-iosUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "darkmatter-iosUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		47E69E0E236640A7A1AC8EA5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		707C5DCDB7AF47DFB23C7B96 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D8F785D58E06493C858F6C28 /* NotificationServiceExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NotificationServiceExtension.entitlements; sourceTree = "<group>"; };
+		FD7505231BF5445F8BE52AD9 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -47,6 +75,11 @@
 		1FF76E0A2FBE3C9C00DCDFA7 /* darkmatter-iosUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "darkmatter-iosUITests";
+			sourceTree = "<group>";
+		};
+		35E1980C8878463EBE1C21A0 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -74,12 +107,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DCC04784494A4B6FA402FDA0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A007CA420B74BAC99C5B6BB /* MarmotKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		1FF76DE52FBE3C9A00DCDFA7 = {
 			isa = PBXGroup;
 			children = (
+				35E1980C8878463EBE1C21A0 /* Shared */,
+				D2B6FB15E3B24B4CA5B8A161 /* NotificationServiceExtension */,
 				1FF76DF02FBE3C9A00DCDFA7 /* darkmatter-ios */,
 				1FF76E002FBE3C9C00DCDFA7 /* darkmatter-iosTests */,
 				1FF76E0A2FBE3C9C00DCDFA7 /* darkmatter-iosUITests */,
@@ -91,10 +134,21 @@
 			isa = PBXGroup;
 			children = (
 				1FF76DEE2FBE3C9A00DCDFA7 /* darkmatter-ios.app */,
+				707C5DCDB7AF47DFB23C7B96 /* NotificationServiceExtension.appex */,
 				1FF76DFD2FBE3C9C00DCDFA7 /* darkmatter-iosTests.xctest */,
 				1FF76E072FBE3C9C00DCDFA7 /* darkmatter-iosUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D2B6FB15E3B24B4CA5B8A161 /* NotificationServiceExtension */ = {
+			isa = PBXGroup;
+			children = (
+				FD7505231BF5445F8BE52AD9 /* NotificationService.swift */,
+				47E69E0E236640A7A1AC8EA5 /* Info.plist */,
+				D8F785D58E06493C858F6C28 /* NotificationServiceExtension.entitlements */,
+			);
+			path = NotificationServiceExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -107,13 +161,16 @@
 				1FF76DEA2FBE3C9A00DCDFA7 /* Sources */,
 				1FF76DEB2FBE3C9A00DCDFA7 /* Frameworks */,
 				1FF76DEC2FBE3C9A00DCDFA7 /* Resources */,
+				536495ADFC53404EB32650CB /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8308474467364A508D1F8F3C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1FF76DF02FBE3C9A00DCDFA7 /* darkmatter-ios */,
+				35E1980C8878463EBE1C21A0 /* Shared */,
 			);
 			name = "darkmatter-ios";
 			packageProductDependencies = (
@@ -169,6 +226,29 @@
 			productReference = 1FF76E072FBE3C9C00DCDFA7 /* darkmatter-iosUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		B34CACB28CA942DF81D66BA4 /* NotificationServiceExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC92CB0AD6C6404E9CFCDA12 /* Build configuration list for PBXNativeTarget "NotificationServiceExtension" */;
+			buildPhases = (
+				D45B9686E57E4E439E81C6AC /* Sources */,
+				DCC04784494A4B6FA402FDA0 /* Frameworks */,
+				BF124E174588456195656AEC /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				35E1980C8878463EBE1C21A0 /* Shared */,
+			);
+			name = NotificationServiceExtension;
+			packageProductDependencies = (
+				1FF76E1B2FBE466900DCDFA7 /* MarmotKit */,
+			);
+			productName = NotificationServiceExtension;
+			productReference = 707C5DCDB7AF47DFB23C7B96 /* NotificationServiceExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -190,6 +270,9 @@
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 1FF76DED2FBE3C9A00DCDFA7;
 					};
+					B34CACB28CA942DF81D66BA4 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 				};
 			};
 			buildConfigurationList = 1FF76DE92FBE3C9A00DCDFA7 /* Build configuration list for PBXProject "darkmatter-ios" */;
@@ -210,6 +293,7 @@
 			projectRoot = "";
 			targets = (
 				1FF76DED2FBE3C9A00DCDFA7 /* darkmatter-ios */,
+				B34CACB28CA942DF81D66BA4 /* NotificationServiceExtension */,
 				1FF76DFC2FBE3C9C00DCDFA7 /* darkmatter-iosTests */,
 				1FF76E062FBE3C9C00DCDFA7 /* darkmatter-iosUITests */,
 			);
@@ -232,6 +316,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1FF76E052FBE3C9C00DCDFA7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BF124E174588456195656AEC /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -262,6 +353,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D45B9686E57E4E439E81C6AC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				41AF4E801BFE453B8DCD621C /* NotificationService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +373,11 @@
 			isa = PBXTargetDependency;
 			target = 1FF76DED2FBE3C9A00DCDFA7 /* darkmatter-ios */;
 			targetProxy = 1FF76E082FBE3C9C00DCDFA7 /* PBXContainerItemProxy */;
+		};
+		8308474467364A508D1F8F3C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B34CACB28CA942DF81D66BA4 /* NotificationServiceExtension */;
+			targetProxy = EDD62D7C49E848D5BF5C3E2C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -397,10 +501,14 @@
 		1FF76E122FBE3C9C00DCDFA7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = darkmatter;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
+				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
+				DARKMATTER_PUSH_SERVER_PUBKEY_HEX = 73a4996bd18de19f6ac5f6ad42f5f2671eba6e5b739ea9695f07b00b0693fc04;
 				DEVELOPMENT_TEAM = V8U75D7Q49;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -425,7 +533,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
-				MARKETING_VERSION = 2026.5.22;
+				MARKETING_VERSION = 2026.5.26;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.darkmatter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -446,10 +554,14 @@
 		1FF76E132FBE3C9C00DCDFA7 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = darkmatter;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
+				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
+				DARKMATTER_PUSH_SERVER_PUBKEY_HEX = 73a4996bd18de19f6ac5f6ad42f5f2671eba6e5b739ea9695f07b00b0693fc04;
 				DEVELOPMENT_TEAM = V8U75D7Q49;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -474,7 +586,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
-				MARKETING_VERSION = 2026.5.22;
+				MARKETING_VERSION = 2026.5.26;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.darkmatter;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -594,6 +706,72 @@
 			};
 			name = Release;
 		};
+		8520668C382849EEA4C35E67 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = NotificationServiceExtension/NotificationServiceExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V8U75D7Q49;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2026.5.26;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.darkmatter.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		ED8B60CF064445B4AD5FC24A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = NotificationServiceExtension/NotificationServiceExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = V8U75D7Q49;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2026.5.26;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.darkmatter.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -629,6 +807,15 @@
 			buildConfigurations = (
 				1FF76E182FBE3C9C00DCDFA7 /* Debug */,
 				1FF76E192FBE3C9C00DCDFA7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BC92CB0AD6C6404E9CFCDA12 /* Build configuration list for PBXNativeTarget "NotificationServiceExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED8B60CF064445B4AD5FC24A /* Debug */,
+				8520668C382849EEA4C35E67 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

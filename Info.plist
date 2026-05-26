@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>DarkmatterPushRelayHint</key>
+	<string>$(DARKMATTER_PUSH_RELAY_HINT)</string>
+	<key>DarkmatterPushServerPubkeyHex</key>
+	<string>$(DARKMATTER_PUSH_SERVER_PUBKEY_HEX)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

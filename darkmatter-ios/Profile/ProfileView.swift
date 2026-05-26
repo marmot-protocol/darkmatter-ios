@@ -2,9 +2,9 @@ import SwiftUI
 import MarmotKit
 
 /// Read-only profile shown when you scan someone's QR or open a profile deep
-/// link. Resolves the npub to an account id, enriches with cached/fetched
-/// kind:0 metadata, and offers a "Message" action that starts a 2-member
-/// group with them.
+/// link. Resolves the profile reference to an account id, enriches with
+/// cached/fetched kind:0 metadata, and offers a "Message" action that starts
+/// a 2-member group with them.
 struct ProfileView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -32,9 +32,9 @@ struct ProfileView: View {
                     .font(.title2.weight(.semibold))
                     .multilineTextAlignment(.center)
 
-                Button(action: copyNpub) {
+                Button(action: copyProfileReference) {
                     HStack(spacing: 8) {
-                        Text(copied ? "Copied" : IdentityFormatter.short(npub))
+                        Text(copied ? "Copied" : IdentityFormatter.short(displayReference))
                             .font(.system(.callout, design: .monospaced))
                             .foregroundStyle(copied ? Color.green : Color.secondary)
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -93,6 +93,11 @@ struct ProfileView: View {
         return IdentityFormatter.short(npub)
     }
 
+    private var displayReference: String {
+        if let hex { return appState.npub(forAccountIdHex: hex) }
+        return npub
+    }
+
     private var isSelf: Bool {
         guard let hex else { return false }
         return appState.accounts.contains { $0.accountIdHex == hex }
@@ -107,8 +112,8 @@ struct ProfileView: View {
         }
     }
 
-    private func copyNpub() {
-        UIPasteboard.general.string = npub
+    private func copyProfileReference() {
+        UIPasteboard.general.string = displayReference
         Haptics.selection()
         withAnimation(.smooth(duration: 0.15)) { copied = true }
         Task {
@@ -126,7 +131,7 @@ struct ProfileView: View {
             let groupIdHex = try await appState.marmot.createGroup(
                 accountRef: accountRef,
                 name: "",
-                memberRefs: [npub],
+                memberRefs: [hex ?? npub],
                 description: nil
             )
             Haptics.success()
