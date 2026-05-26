@@ -6,7 +6,7 @@
 //
 
 - [x] On the chat list screen we need to make the subtitle under the chat name be a preview of the latest message in the chat, not the relays and admin status.
-- [x] We should remove the chevron at the right of each chat on the chat list screen and put the relative date/timestamp of the last message in that group. e.g. "A few seconds ago, "4m", "2h", "Monday 12:56", "18 May 2026"  
+- [x] We should remove the chevron at the right of each chat on the chat list screen and put the relative date/timestamp of the last message in that group. e.g. "A few seconds ago, "4m", "2h", "Monday 12:56", "18 May 2026"
 - [x] on the chat list screen for a group of 2 people and there is no name set for the group, it should show the name of the other member, if it's a group with a name, we should show the name instead
 - [x] We should remove the tabbar at the bottom of hte screen and make settings accessible from the avatar icon at the top left. that should allow you to switch quickly between accounts or tap a settings link.
 - [x] on the chat screen the title of the page should be group name, other user display name (if it's a group of 2), and finally fallback to group id like we have if we cant get anything else.
@@ -22,6 +22,8 @@
 - [x] on the chat screen we need to make the chats from me vs other people from from different sides of the screen. so my messages should show on the right side, and and other people on the left. also - I'm not seeing any timestamps or any other details there about when messagers were sent.
 - [x] on the chat screen we need some sort of contextual menu that like when you hold on a message pops up and shows you a bunch of emojis that you can react with and also an option to reply to messages. I think the reply should be a swipe. You know, so you swipe to the right and that will automatically kind of bounce the message and then starts a reply message and shows the actual message that you're replying to just above the message input field.
 - [x] the avatar button at the top left still seems to have padding around it to show the glass effect. can we remove that padding? if so, we should we still want the button's default drop shadow and behavior but the avatar image should bleed all the way to the edges of the button.
-- [x] on the chat screen we should remove the grey background from behind the message compose and just let the textfield and the send button float. 
+- [x] on the chat screen we should remove the grey background from behind the message compose and just let the textfield and the send button float.
 - [x] on the chat screen the max-width of message bubbles should be full width on ios and pretty wide (but maybe not quite full width) on ipad. THIS IS NOT FINISHED. THE CHAT BUBBLE WIDTH IS STILL AT ~85% width on iOS
 - [x] there is still a black/white background behind the text field and send button on the chat screen. we need to remove those so the fields are just liquid glass floating at the bottom - we should be able to see the chats scroll under them.
+- [x] The scroll to bottom icon shows up when scrolling up but when you tap and the scroll area is still scrolling it just disappears and the page doesn't scroll to the bottom. it should interrupt the current scroll and send you to the bottom of the page immediately.
+- [x] We need to be able to tap on the "Relays" row in the group info screen and have that section expand to show us the relay urls in use for the group.

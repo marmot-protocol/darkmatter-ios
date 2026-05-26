@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Liquid-glass composer at the bottom of the conversation screen. Multi-line
+/// Glass-styled composer at the bottom of the conversation screen. Multi-line
 /// growing text field + send button. Disabled while a send is in-flight.
 struct ComposerBar: View {
     @Binding var draft: String
     let isSending: Bool
+    let focusRequest: Int
     let onSend: () -> Void
     @FocusState private var focused: Bool
 
@@ -18,9 +19,27 @@ struct ComposerBar: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .frame(minHeight: controlHeight)
-                .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                .foregroundStyle(.primary)
+                .background {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.black.opacity(0.26))
+                    }
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                }
                 .submitLabel(.send)
                 .onSubmit(triggerSend)
+                .onChange(of: focusRequest) { _, _ in focusComposer() }
+                .onAppear {
+                    if focusRequest > 0 {
+                        focusComposer()
+                    }
+                }
 
             Button(action: triggerSend) {
                 Group {
@@ -55,5 +74,12 @@ struct ComposerBar: View {
         guard canSend else { return }
         Haptics.tap()
         onSend()
+    }
+
+    private func focusComposer() {
+        Task { @MainActor in
+            await Task.yield()
+            focused = true
+        }
     }
 }

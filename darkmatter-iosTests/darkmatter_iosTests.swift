@@ -8,6 +8,7 @@ import Foundation
 /// Full functional tests require running against a Nostr relay (handled by
 /// `marmot-uniffi`'s Rust integration tests). These tests just exercise the
 /// boundary between MarmotKit and the iOS code, plus pure-Swift helpers.
+@MainActor
 struct AppStateBootstrapTests {
 
     @Test func freshAppStateStartsBootstrapping() async throws {
@@ -39,6 +40,7 @@ struct AppStateBootstrapTests {
     }
 }
 
+@MainActor
 struct RelaySettingsTests {
 
     @Test func editableRelayListComesFromMarmotAccountRelayLists() {
@@ -64,6 +66,7 @@ struct RelaySettingsTests {
     }
 }
 
+@MainActor
 struct IdentityFormatterTests {
 
     @Test func shortTruncatesLongStrings() {
@@ -85,6 +88,7 @@ struct IdentityFormatterTests {
     }
 }
 
+@MainActor
 struct ProfileSanitizerTests {
 
     @Test func stripsBidiOverrideFromName() {
@@ -171,6 +175,7 @@ struct ProfileSanitizerTests {
     }
 }
 
+@MainActor
 struct GroupDisplayTests {
 
     @Test func otherMemberUsesMemberIdNotLocalAccountLabel() {
@@ -250,6 +255,256 @@ struct GroupDisplayTests {
     }
 }
 
+@MainActor
+struct ConversationChromeTests {
+
+    @Test func directMessageTitleUsesInitialChatListHintsBeforeRosterLoads() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let other = hex("22")
+        appState.cacheProfile(
+            UserProfileMetadataFfi(
+                name: nil,
+                displayName: "Alice",
+                about: nil,
+                picture: nil,
+                nip05: nil,
+                lud16: nil
+            ),
+            for: other
+        )
+
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group(name: ""),
+            initialOtherMember: other,
+            initialMemberCount: 2
+        )
+
+        #expect(viewModel.displayTitle == "Alice")
+        #expect(viewModel.displaySubtitle == "2 members")
+    }
+}
+
+@MainActor
+struct GroupManagementPresentationTests {
+
+    @Test func adminCanPromoteAndRemoveNonAdminMember() {
+        let actions = GroupManagementPresentation.memberActions(
+            for: GroupMemberActionStateFfi(
+                memberIdHex: hex("22"),
+                isSelf: false,
+                isAdmin: false,
+                canRemove: true,
+                canPromote: true,
+                canDemote: false
+            ),
+            state: managementState(isSelfAdmin: true, isLastAdmin: false)
+        )
+
+        #expect(actions == [.promote, .remove])
+    }
+
+    @Test func adminCanDemoteAndRemoveAnotherAdminWhenNotLastAdmin() {
+        let actions = GroupManagementPresentation.memberActions(
+            for: GroupMemberActionStateFfi(
+                memberIdHex: hex("22"),
+                isSelf: false,
+                isAdmin: true,
+                canRemove: true,
+                canPromote: false,
+                canDemote: true
+            ),
+            state: managementState(isSelfAdmin: true, isLastAdmin: false)
+        )
+
+        #expect(actions == [.demote, .remove])
+    }
+
+    @Test func selfAdminCanStepDownOnlyWhenAnotherAdminExists() {
+        let selfAction = GroupMemberActionStateFfi(
+            memberIdHex: hex("11"),
+            isSelf: true,
+            isAdmin: true,
+            canRemove: false,
+            canPromote: false,
+            canDemote: false
+        )
+
+        #expect(
+            GroupManagementPresentation.memberActions(
+                for: selfAction,
+                state: managementState(isSelfAdmin: true, isLastAdmin: false)
+            ) == [.selfDemote]
+        )
+        #expect(
+            GroupManagementPresentation.memberActions(
+                for: selfAction,
+                state: managementState(isSelfAdmin: true, isLastAdmin: true)
+            ).isEmpty
+        )
+    }
+
+    @Test func nonLastAdminsCanLeaveWithAutomaticDemotion() {
+        let state = managementState(
+            isSelfAdmin: true,
+            isLastAdmin: false,
+            canLeave: false,
+            requiresSelfDemoteBeforeLeave: true
+        )
+
+        #expect(GroupManagementPresentation.canLeave(state: state, fallbackIsLastAdmin: false))
+        #expect(GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: state))
+        #expect(GroupManagementPresentation.leaveFooter(state: state, fallbackIsLastAdmin: false) == "Leaving will step you down as admin first.")
+        #expect(GroupManagementPresentation.leaveConfirmationMessage(state: state) == "You'll step down as admin first, then stop receiving messages from this group.")
+    }
+
+    @Test func lastAdminStillCannotLeave() {
+        let state = managementState(
+            isSelfAdmin: true,
+            isLastAdmin: true,
+            canLeave: false,
+            requiresSelfDemoteBeforeLeave: true
+        )
+
+        #expect(!GroupManagementPresentation.canLeave(state: state, fallbackIsLastAdmin: false))
+        #expect(!GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: state))
+        #expect(GroupManagementPresentation.leaveFooter(state: state, fallbackIsLastAdmin: false) == "You're the only admin. Make another member an admin before you leave.")
+    }
+
+    @Test func relayDisclosureShowsCountAndUrls() {
+        let relays = ["wss://relay.example", "wss://relay.two"]
+
+        #expect(GroupRelaysPresentation.countLabel(for: relays) == "2")
+        #expect(GroupRelaysPresentation.rows(for: relays) == relays)
+    }
+
+    @Test func relayDisclosureShowsEmptyState() {
+        #expect(GroupRelaysPresentation.countLabel(for: []) == "0")
+        #expect(GroupRelaysPresentation.rows(for: []) == [GroupRelaysPresentation.emptyMessage])
+    }
+
+    @Test func addMembersScannerAcceptsProfileDeepLinks() {
+        let npub = "npub1abcdefghijklmnopqrstuvwxyz"
+
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "darkmatter://profile/\(npub)") == npub
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(npub)") == npub
+        )
+    }
+
+    @Test func stagedMembersUseCachedDisplayNameAndNpubSubtitle() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let account = hex("33")
+        let member = MemberRefFfi(
+            memberRef: account,
+            accountIdHex: account,
+            npub: "npub1abcdefghijklmnopqrstuvwxyz0123456789"
+        )
+        appState.cacheProfile(
+            UserProfileMetadataFfi(
+                name: nil,
+                displayName: "Nadia",
+                about: nil,
+                picture: nil,
+                nip05: nil,
+                lud16: nil
+            ),
+            for: account
+        )
+
+        #expect(AddMembersPresentation.displayName(for: member, appState: appState) == "Nadia")
+        #expect(AddMembersPresentation.secondaryIdentity(for: member).hasPrefix("npub1"))
+    }
+
+    @Test func adminStatusCanUpdateOptimisticallyBeforePublishReturns() throws {
+        let me = hex("11")
+        let other = hex("22")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        viewModel.applyGroupMutation(
+            GroupMutationResultFfi(
+                summary: SendSummaryFfi(published: 0, messageIds: []),
+                details: GroupDetailsFfi(
+                    group: group(name: "", admins: [me]),
+                    members: [
+                        groupMember(memberIdHex: me, isAdmin: true, isSelf: true),
+                        groupMember(memberIdHex: other, isAdmin: false, isSelf: false)
+                    ]
+                ),
+                managementState: GroupManagementStateFfi(
+                    myAccountIdHex: me,
+                    isSelfAdmin: true,
+                    isLastAdmin: true,
+                    canInvite: true,
+                    canLeave: false,
+                    requiresSelfDemoteBeforeLeave: true,
+                    memberActions: [
+                        GroupMemberActionStateFfi(
+                            memberIdHex: other,
+                            isSelf: false,
+                            isAdmin: false,
+                            canRemove: true,
+                            canPromote: true,
+                            canDemote: false
+                        )
+                    ]
+                )
+            )
+        )
+
+        viewModel.applyOptimisticAdminStatus(memberIdHex: other, isAdmin: true)
+
+        #expect(viewModel.group.admins.contains(other))
+        #expect(viewModel.groupMemberDetails.first { $0.memberIdHex == other }?.isAdmin == true)
+        #expect(viewModel.managementAction(for: other)?.canPromote == false)
+        #expect(viewModel.managementAction(for: other)?.canDemote == true)
+        #expect(viewModel.managementState?.isLastAdmin == false)
+    }
+
+    @Test func selfDemoteUpdatesOwnManagementStateOptimistically() throws {
+        let me = hex("11")
+        let other = hex("22")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        viewModel.applyGroupMutation(
+            GroupMutationResultFfi(
+                summary: SendSummaryFfi(published: 0, messageIds: []),
+                details: GroupDetailsFfi(
+                    group: group(name: "", admins: [me, other]),
+                    members: [
+                        groupMember(memberIdHex: me, isAdmin: true, isSelf: true),
+                        groupMember(memberIdHex: other, isAdmin: true, isSelf: false)
+                    ]
+                ),
+                managementState: GroupManagementStateFfi(
+                    myAccountIdHex: me,
+                    isSelfAdmin: true,
+                    isLastAdmin: false,
+                    canInvite: true,
+                    canLeave: false,
+                    requiresSelfDemoteBeforeLeave: true,
+                    memberActions: []
+                )
+            )
+        )
+
+        viewModel.applyOptimisticAdminStatus(memberIdHex: me, isAdmin: false)
+
+        #expect(!viewModel.group.admins.contains(me))
+        #expect(viewModel.groupMemberDetails.first { $0.memberIdHex == me }?.isAdmin == false)
+        #expect(viewModel.managementState?.isSelfAdmin == false)
+        #expect(viewModel.managementState?.requiresSelfDemoteBeforeLeave == false)
+        #expect(viewModel.managementState?.canLeave == true)
+    }
+}
+
+@MainActor
 struct AgentStreamTests {
 
     @Test func streamIdIsDecodedFromStartTags() {
@@ -356,8 +611,95 @@ struct AgentStreamTests {
         #expect(ConversationViewModel.snapshotStartStreamIdToWatch(from: start, finalizedStreamIds: []) == streamId)
         #expect(ConversationViewModel.snapshotStartStreamIdToWatch(from: start, finalizedStreamIds: [streamId]) == nil)
     }
+
+    @MainActor
+    @Test func streamChunksRenderIntoOnePreviewBubble() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        let streamId = hex("ab")
+
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 1, text: "Hel")
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 2, text: "lo")
+        )
+
+        #expect(viewModel.timeline.count == 1)
+        #expect(viewModel.timeline.first?.id == "msg:stream:\(streamId)")
+        guard case .message(let record, let status) = viewModel.timeline.first?.kind else {
+            Issue.record("Expected a stream preview message")
+            return
+        }
+        #expect(status == .streaming)
+        #expect(record.plaintext == "Hello")
+        #expect(MessagePreview.body(record) == "Hello")
+    }
+
+    @MainActor
+    @Test func finishedUpdateReplacesPreviewAndIgnoresLateChunks() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        let streamId = hex("ab")
+
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 1, text: "partial")
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .finished(text: "complete", transcriptHashHex: hex("55"), chunkCount: 1)
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 2, text: " late")
+        )
+
+        #expect(viewModel.timeline.count == 1)
+        guard case .message(let record, let status) = viewModel.timeline.first?.kind else {
+            Issue.record("Expected a finalized stream message")
+            return
+        }
+        #expect(status == .received)
+        #expect(record.plaintext == "complete")
+        #expect(MessagePreview.body(record) == "complete")
+    }
+
+    @MainActor
+    @Test func failedUpdateDropsEmptyLivePreview() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        let streamId = hex("ab")
+
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 1, text: "partial")
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .failed(message: "broker closed")
+        )
+
+        #expect(viewModel.timeline.isEmpty)
+    }
 }
 
+@MainActor
 struct MessageSemanticsTests {
 
     @Test func decodedUnsignedEventChatPreviewsItsContent() {
@@ -550,6 +892,81 @@ struct MessageSemanticsTests {
     }
 }
 
+@MainActor
+struct ReplySwipeTests {
+
+    @Test func horizontalDragPastThresholdActivatesReply() {
+        #expect(ReplySwipe.shouldActivate(translation: CGSize(width: 72, height: 10)))
+    }
+
+    @Test func verticalOrShortDragsDoNotActivateReply() {
+        #expect(!ReplySwipe.shouldActivate(translation: CGSize(width: 59, height: 4)))
+        #expect(!ReplySwipe.shouldActivate(translation: CGSize(width: 90, height: 120)))
+        #expect(!ReplySwipe.shouldActivate(translation: CGSize(width: 72, height: 65)))
+        #expect(!ReplySwipe.shouldActivate(translation: CGSize(width: -90, height: 4)))
+    }
+
+    @Test func feedbackOffsetFollowsHorizontalDragButIsCapped() {
+        let partialOffset = ReplySwipe.feedbackOffset(translation: CGSize(width: 50, height: 3))
+        #expect(partialOffset > 20)
+        #expect(partialOffset < ReplySwipe.maximumFeedbackOffset)
+        #expect(ReplySwipe.feedbackOffset(translation: CGSize(width: 160, height: 3)) == ReplySwipe.maximumFeedbackOffset)
+        #expect(ReplySwipe.feedbackOffset(translation: CGSize(width: 40, height: 80)) == 0)
+    }
+
+    @Test func completionNudgeStaysBelowMaximumFeedback() {
+        #expect(ReplySwipe.minimumDistance >= 20)
+        #expect(ReplySwipe.completionOffset < ReplySwipe.maximumFeedbackOffset)
+        #expect(ReplySwipe.completionOffset <= 12)
+        #expect(ReplySwipe.completionPauseNanoseconds <= 20_000_000)
+    }
+}
+
+@MainActor
+struct TimelineBottomTests {
+
+    @Test func initialEntryStartsAtBottomWhenMessagesExist() {
+        #expect(TimelineInitialScroll.shouldStartAtBottom(hasItems: true, didPerformInitialScroll: false))
+        #expect(!TimelineInitialScroll.shouldStartAtBottom(hasItems: false, didPerformInitialScroll: false))
+        #expect(!TimelineInitialScroll.shouldStartAtBottom(hasItems: true, didPerformInitialScroll: true))
+    }
+
+    @Test func bottomStateAllowsSmallLayoutDrift() {
+        #expect(TimelineBottom.isPinned(bottomY: 1030, viewportBottomY: 1000))
+    }
+
+    @Test func bottomStateDetectsScrolledUpHistory() {
+        #expect(!TimelineBottom.isPinned(bottomY: 1090, viewportBottomY: 1000))
+    }
+
+    @Test func scrollToBottomButtonAppearsOnlyAwayFromBottom() {
+        #expect(!TimelineBottom.shouldShowScrollToBottomButton(distanceToBottom: 12))
+        #expect(!TimelineBottom.shouldShowScrollToBottomButton(distanceToBottom: TimelineBottom.pinnedThreshold))
+        #expect(TimelineBottom.shouldShowScrollToBottomButton(distanceToBottom: 90))
+    }
+
+    @Test func viewportChangesFollowOnlyWhenAlreadyPinned() {
+        #expect(TimelineBottom.shouldFollowViewportChange(wasPinned: true))
+        #expect(!TimelineBottom.shouldFollowViewportChange(wasPinned: false))
+    }
+
+    @Test func scrollButtonTapDoesNotHideButtonBeforeGeometryConfirmsBottom() {
+        #expect(!TimelineBottom.pinnedStateAfterScrollButtonTap(currentIsPinned: false))
+        #expect(TimelineBottom.pinnedStateAfterScrollButtonTap(currentIsPinned: true))
+    }
+}
+
+@MainActor
+struct ReplyPreviewLayoutTests {
+
+    @Test func closeControlIsCenteredWithMatchingTrailingInset() {
+        #expect(ReplyPreviewLayout.contentTopInset == ReplyPreviewLayout.contentBottomInset)
+        #expect(ReplyPreviewLayout.closeHitSize >= 44)
+        #expect(ReplyPreviewLayout.closeAlignment == .trailing)
+        #expect(ReplyPreviewLayout.closeTrailingInset == ReplyPreviewLayout.leadingContentInset)
+    }
+}
+
 // MARK: - Test scaffolding
 
 private func unsignedEventRecord(
@@ -574,16 +991,45 @@ private func hex(_ byte: String) -> String {
     String(repeating: byte, count: 32)
 }
 
-private func group(name: String) -> AppGroupRecordFfi {
+private func group(name: String, admins: [String] = []) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
         groupIdHex: hex("aa"),
         endpoint: "",
         name: name,
         description: "",
-        admins: [],
+        admins: admins,
         relays: [],
         nostrGroupIdHex: "",
         archived: false
+    )
+}
+
+private func groupMember(memberIdHex: String, isAdmin: Bool, isSelf: Bool) -> GroupMemberDetailsFfi {
+    GroupMemberDetailsFfi(
+        memberIdHex: memberIdHex,
+        account: memberIdHex,
+        local: isSelf,
+        isAdmin: isAdmin,
+        isSelf: isSelf,
+        npub: "npub-\(IdentityFormatter.short(memberIdHex))",
+        displayName: nil
+    )
+}
+
+private func managementState(
+    isSelfAdmin: Bool,
+    isLastAdmin: Bool,
+    canLeave: Bool? = nil,
+    requiresSelfDemoteBeforeLeave: Bool? = nil
+) -> GroupManagementStateFfi {
+    GroupManagementStateFfi(
+        myAccountIdHex: hex("11"),
+        isSelfAdmin: isSelfAdmin,
+        isLastAdmin: isLastAdmin,
+        canInvite: isSelfAdmin,
+        canLeave: canLeave ?? !isSelfAdmin,
+        requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave ?? isSelfAdmin,
+        memberActions: []
     )
 }
 

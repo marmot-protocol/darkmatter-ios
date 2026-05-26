@@ -74,7 +74,7 @@ final class ChatsListViewModel {
 
             chatsTask = Task { [weak self] in
                 for await update in SubscriptionDriver.chats(chatsSub) {
-                    await self?.foldGroup(update)
+                    self?.foldGroup(update)
                 }
             }
 

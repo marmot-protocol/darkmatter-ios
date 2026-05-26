@@ -20,6 +20,8 @@ final class ConversationViewModel {
     private(set) var timeline: [TimelineItem] = []
     private(set) var group: AppGroupRecordFfi
     private(set) var members: [AppGroupMemberRecordFfi] = []
+    private(set) var groupMemberDetails: [GroupMemberDetailsFfi] = []
+    private(set) var managementState: GroupManagementStateFfi?
     /// targetMessageId → emoji tallies, derived from reaction messages.
     private(set) var reactions: [String: [ReactionTally]] = [:]
     /// Message ids tombstoned by a delete payload (rendered as a placeholder).
@@ -32,6 +34,8 @@ final class ConversationViewModel {
     var replyingTo: AppMessageRecordFfi?
 
     private weak var appState: AppState?
+    private let initialOtherMember: String?
+    private let initialMemberCount: Int?
     private var messagesTask: Task<Void, Never>?
     private var groupStateTask: Task<Void, Never>?
 
@@ -62,6 +66,13 @@ final class ConversationViewModel {
     /// `accountIdHex`); `member.account` is a local-only label, not comparable.
     var otherMember: String? {
         GroupDisplay.otherMemberAccount(in: members, myAccountId: myAccountId)
+            ?? initialOtherMember
+    }
+
+    private var displayMemberCount: Int {
+        if !members.isEmpty { return members.count }
+        if !groupMemberDetails.isEmpty { return groupMemberDetails.count }
+        return initialMemberCount ?? 0
     }
 
     var displayTitle: String {
@@ -72,31 +83,40 @@ final class ConversationViewModel {
         return GroupDisplay.title(
             group: group,
             otherMember: otherMember,
-            memberCount: members.count,
+            memberCount: displayMemberCount,
             appState: appState
         )
     }
 
     var displaySubtitle: String {
-        let memberCount = members.count
+        let memberCount = displayMemberCount
         if memberCount == 0 { return "Just you" }
         let suffix = memberCount == 1 ? "member" : "members"
         return "\(memberCount) \(suffix)"
     }
 
     var isSelfAdmin: Bool {
+        if let managementState { return managementState.isSelfAdmin }
         guard let me = myAccountId else { return false }
         return group.admins.contains(me)
     }
 
     var isLastAdmin: Bool {
-        isSelfAdmin && group.admins.count <= 1
+        if let managementState { return managementState.isLastAdmin }
+        return isSelfAdmin && group.admins.count <= 1
     }
 
     func isAdmin(_ member: AppGroupMemberRecordFfi) -> Bool {
+        if let detail = groupMemberDetails.first(where: { $0.memberIdHex == member.memberIdHex }) {
+            return detail.isAdmin
+        }
         if group.admins.contains(member.memberIdHex) { return true }
         if let account = member.account { return group.admins.contains(account) }
         return false
+    }
+
+    func managementAction(for memberIdHex: String) -> GroupMemberActionStateFfi? {
+        managementState?.memberActions.first { $0.memberIdHex == memberIdHex }
     }
 
     /// Reaction tallies for a target message (empty when none).
@@ -119,9 +139,16 @@ final class ConversationViewModel {
         MessagePreview.body(record)
     }
 
-    init(appState: AppState, group: AppGroupRecordFfi) {
+    init(
+        appState: AppState,
+        group: AppGroupRecordFfi,
+        initialOtherMember: String? = nil,
+        initialMemberCount: Int? = nil
+    ) {
         self.appState = appState
         self.group = group
+        self.initialOtherMember = initialOtherMember
+        self.initialMemberCount = initialMemberCount
     }
 
     deinit {
@@ -152,14 +179,16 @@ final class ConversationViewModel {
                 group = initial
             }
 
-            members = try await appState.marmot.groupMembers(
-                accountRef: accountRef,
-                groupIdHex: group.groupIdHex
-            )
+            if !(await refreshGroupManagement()) {
+                members = try await appState.marmot.groupMembers(
+                    accountRef: accountRef,
+                    groupIdHex: group.groupIdHex
+                )
+            }
 
             messagesTask = Task { [weak self] in
                 for await update in SubscriptionDriver.messages(messagesSub) {
-                    await self?.fold(update)
+                    self?.fold(update)
                 }
             }
 
@@ -351,13 +380,101 @@ final class ConversationViewModel {
 
         if !previousName.isEmpty && previousName != record.name {
             appendSystemEvent(.groupRenamed(record.name))
+            appState?.present(.success("Group renamed", message: ProfileSanitizer.groupName(record.name)))
         }
         if record.archived && !wasArchived {
             appendSystemEvent(.groupArchived)
+            appState?.present(.warning("Group archived"))
         } else if !record.archived && wasArchived {
             appendSystemEvent(.groupUnarchived)
+            appState?.present(.success("Group unarchived"))
         }
         await refreshMembers()
+    }
+
+    func applyGroupRecord(_ record: AppGroupRecordFfi) {
+        group = record
+    }
+
+    func applyGroupMutation(_ result: GroupMutationResultFfi) {
+        applyGroupDetails(result.details, managementState: result.managementState)
+    }
+
+    func applyOptimisticAdminStatus(memberIdHex: String, isAdmin: Bool) {
+        var updatedGroup = group
+        if isAdmin {
+            if !updatedGroup.admins.contains(memberIdHex) {
+                updatedGroup.admins.append(memberIdHex)
+            }
+        } else {
+            updatedGroup.admins.removeAll { $0 == memberIdHex }
+        }
+        group = updatedGroup
+
+        groupMemberDetails = groupMemberDetails.map { member in
+            guard member.memberIdHex == memberIdHex else { return member }
+            var updated = member
+            updated.isAdmin = isAdmin
+            return updated
+        }
+
+        guard var state = managementState else { return }
+        if memberIdHex == state.myAccountIdHex {
+            state.isSelfAdmin = isAdmin
+        }
+        state.memberActions = state.memberActions.map { action in
+            guard action.memberIdHex == memberIdHex else { return action }
+            var updated = action
+            updated.isAdmin = isAdmin
+            updated.canPromote = state.isSelfAdmin && !updated.isSelf && !isAdmin
+            updated.canDemote = state.isSelfAdmin && !updated.isSelf && isAdmin
+            return updated
+        }
+        state.isLastAdmin = state.isSelfAdmin && group.admins.count <= 1
+        state.requiresSelfDemoteBeforeLeave = state.isSelfAdmin
+        state.canLeave = !state.requiresSelfDemoteBeforeLeave
+        managementState = state
+    }
+
+    @discardableResult
+    func refreshGroupManagement(announceRosterChanges: Bool = false) async -> Bool {
+        guard let appState, let accountRef = appState.activeAccountRef else { return false }
+        do {
+            let details = try await appState.marmot.groupDetails(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex
+            )
+            let state = try await appState.marmot.groupManagementState(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex
+            )
+            applyGroupDetails(details, managementState: state, announceRosterChanges: announceRosterChanges)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func applyGroupDetails(
+        _ details: GroupDetailsFfi,
+        managementState state: GroupManagementStateFfi,
+        announceRosterChanges: Bool = false
+    ) {
+        let nextMembers = details.members.map {
+            AppGroupMemberRecordFfi(
+                memberIdHex: $0.memberIdHex,
+                account: $0.account,
+                local: $0.local
+            )
+        }
+        if announceRosterChanges && nextMembers.map(\.memberIdHex) != members.map(\.memberIdHex) {
+            appendSystemEvent(.rosterChanged)
+            appState?.present(.success("Group membership updated"))
+        }
+        group = details.group
+        groupMemberDetails = details.members
+        managementState = state
+        members = nextMembers
     }
 
     private func appendSystemEvent(_ event: SystemEvent) {
@@ -368,6 +485,9 @@ final class ConversationViewModel {
 
     private func refreshMembers() async {
         guard let appState, let accountRef = appState.activeAccountRef else { return }
+        if await refreshGroupManagement(announceRosterChanges: true) {
+            return
+        }
         do {
             let next = try await appState.marmot.groupMembers(
                 accountRef: accountRef,
@@ -537,7 +657,7 @@ final class ConversationViewModel {
             Self.streamLog.info("watch opened: streamId=\(streamId, privacy: .public) developerMode=\(appState.developerMode, privacy: .public); bubble shown as Streaming")
             let task = Task { [weak self] in
                 while !Task.isCancelled, let update = await subscription.next() {
-                    await self?.applyStreamUpdate(streamId: streamId, sender: sender, update: update)
+                    self?.applyStreamUpdate(streamId: streamId, sender: sender, update: update)
                 }
             }
             streamWatchTasks[streamId] = task
@@ -547,7 +667,7 @@ final class ConversationViewModel {
         }
     }
 
-    private func applyStreamUpdate(streamId: String, sender: String, update: AgentStreamUpdateFfi) {
+    func applyStreamUpdate(streamId: String, sender: String, update: AgentStreamUpdateFfi) {
         // The final anchor already supplied the authoritative transcript.
         if finalizedStreamIds.contains(streamId) { return }
         switch update {
