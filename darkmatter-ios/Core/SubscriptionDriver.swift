@@ -52,4 +52,16 @@ enum SubscriptionDriver {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+    static func notifications(_ sub: NotificationsSubscription) -> AsyncStream<NotificationUpdateFfi> {
+        AsyncStream { continuation in
+            let task = Task {
+                while !Task.isCancelled, let next = await sub.next() {
+                    continuation.yield(next)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Dark Matter deep links. Formats: `darkmatter://profile/<npub>` and
+/// Dark Matter deep links. Formats: `darkmatter://profile/<profile-ref>` and
 /// `darkmatter://chat/<groupIdHex>`.
 ///
 /// Used both for the QR codes the app generates and for routing inbound
@@ -8,6 +8,8 @@ import Foundation
 /// the system (via `.onOpenURL`, once the URL scheme is registered in
 /// Info.plist).
 enum DeepLink: Equatable {
+    /// Profile reference accepted by Marmot. This is usually an `npub`, but
+    /// may be hex when the source was an `nprofile` pointer.
     case profile(npub: String)
     case chat(groupIdHex: String)
 
@@ -28,15 +30,19 @@ enum DeepLink: Equatable {
         let parts = url.pathComponents.filter { $0 != "/" }
         switch url.host?.lowercased() {
         case "profile":
-            if let npub = parts.first, npub.hasPrefix("npub") { return .profile(npub: npub) }
+            if let reference = parts.first,
+               let memberRef = NostrProfileReference.memberRef(fromReference: reference) {
+                return .profile(npub: memberRef)
+            }
         case "chat":
             if let id = parts.first, isHex(id) { return .chat(groupIdHex: id.lowercased()) }
         default:
             break
         }
-        // Tolerate darkmatter://<npub>
-        if let host = url.host, host.hasPrefix("npub") {
-            return .profile(npub: host)
+        // Tolerate darkmatter://<profile-ref>
+        if let host = url.host,
+           let memberRef = NostrProfileReference.memberRef(fromReference: host) {
+            return .profile(npub: memberRef)
         }
         return nil
     }
@@ -46,18 +52,15 @@ enum DeepLink: Equatable {
     }
 
     /// Parse any scanned/pasted string: a deep-link URL, a `nostr:` URI, or a
-    /// bare npub. Makes the scanner forgiving about QR payload formats.
+    /// bare profile reference. Makes the scanner forgiving about QR payload
+    /// formats.
     static func parse(string raw: String) -> DeepLink? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if let url = URL(string: trimmed), let link = parse(url) {
             return link
         }
-        if trimmed.lowercased().hasPrefix("nostr:") {
-            let rest = String(trimmed.dropFirst("nostr:".count))
-            if rest.hasPrefix("npub") { return .profile(npub: rest) }
-        }
-        if trimmed.hasPrefix("npub") {
-            return .profile(npub: trimmed)
+        if let memberRef = NostrProfileReference.memberRef(from: trimmed) {
+            return .profile(npub: memberRef)
         }
         return nil
     }

@@ -1,0 +1,151 @@
+import Foundation
+
+enum NostrProfileReference {
+    private static let bech32Charset = Array("qpzry9x8gf2tvdw0s3jn54khce6mua7l")
+    private static let bech32Generators = [
+        0x3b6a57b2,
+        0x26508e6d,
+        0x1ea119fa,
+        0x3d4233dd,
+        0x2a1462b3
+    ]
+
+    static func memberRef(from raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let reference = reference(fromDarkMatterURLString: trimmed) {
+            return memberRef(fromReference: reference)
+        }
+
+        if trimmed.lowercased().hasPrefix("nostr:") {
+            let rest = String(trimmed.dropFirst("nostr:".count))
+            return memberRef(fromReference: rest)
+        }
+
+        return memberRef(fromReference: trimmed)
+    }
+
+    static func memberRef(fromReference reference: String) -> String? {
+        let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if lower.hasPrefix("nprofile1") {
+            return nprofilePubkeyHex(trimmed)
+        }
+        if lower.hasPrefix("npub1") {
+            return trimmed
+        }
+        if isHexPubkey(trimmed) {
+            return lower
+        }
+        return nil
+    }
+
+    private static func reference(fromDarkMatterURLString raw: String) -> String? {
+        guard let url = URL(string: raw),
+              url.scheme?.lowercased() == DeepLink.scheme
+        else { return nil }
+
+        let parts = url.pathComponents.filter { $0 != "/" }
+        switch url.host?.lowercased() {
+        case "profile":
+            return parts.first
+        default:
+            return url.host
+        }
+    }
+
+    private static func nprofilePubkeyHex(_ raw: String) -> String? {
+        guard let decoded = bech32Decode(raw),
+              decoded.hrp == "nprofile",
+              let bytes = convertBits(decoded.data, from: 5, to: 8, pad: false)
+        else { return nil }
+
+        var i = 0
+        while i + 2 <= bytes.count {
+            let type = bytes[i]
+            let length = Int(bytes[i + 1])
+            let start = i + 2
+            let end = start + length
+            guard end <= bytes.count else { return nil }
+
+            if type == 0, length == 32 {
+                return bytes[start..<end].map { String(format: "%02x", $0) }.joined()
+            }
+            i = end
+        }
+        return nil
+    }
+
+    private static func bech32Decode(_ raw: String) -> (hrp: String, data: [UInt8])? {
+        let lower = raw.lowercased()
+        guard raw == lower || raw == raw.uppercased(),
+              let separator = lower.lastIndex(of: "1")
+        else { return nil }
+
+        let hrp = String(lower[..<separator])
+        let dataPart = lower[lower.index(after: separator)...]
+        guard !hrp.isEmpty, dataPart.count >= 6 else { return nil }
+
+        var values: [UInt8] = []
+        values.reserveCapacity(dataPart.count)
+        for char in dataPart {
+            guard let value = bech32Charset.firstIndex(of: char) else { return nil }
+            values.append(UInt8(value))
+        }
+
+        guard bech32VerifyChecksum(hrp: hrp, values: values) else { return nil }
+        return (hrp, Array(values.dropLast(6)))
+    }
+
+    private static func bech32VerifyChecksum(hrp: String, values: [UInt8]) -> Bool {
+        var expanded: [UInt8] = hrp.unicodeScalars.map { UInt8($0.value >> 5) }
+        expanded.append(0)
+        expanded.append(contentsOf: hrp.unicodeScalars.map { UInt8($0.value & 31) })
+        expanded.append(contentsOf: values)
+        return bech32Polymod(expanded) == 1
+    }
+
+    private static func bech32Polymod(_ values: [UInt8]) -> Int {
+        var checksum = 1
+        for value in values {
+            let top = checksum >> 25
+            checksum = ((checksum & 0x1ffffff) << 5) ^ Int(value)
+            for i in 0..<5 where ((top >> i) & 1) != 0 {
+                checksum ^= bech32Generators[i]
+            }
+        }
+        return checksum
+    }
+
+    private static func convertBits(_ data: [UInt8], from: Int, to: Int, pad: Bool) -> [UInt8]? {
+        var acc = 0
+        var bits = 0
+        let maxv = (1 << to) - 1
+        var result: [UInt8] = []
+
+        for value in data {
+            guard Int(value) >> from == 0 else { return nil }
+            acc = (acc << from) | Int(value)
+            bits += from
+            while bits >= to {
+                bits -= to
+                result.append(UInt8((acc >> bits) & maxv))
+            }
+        }
+
+        if pad {
+            if bits > 0 {
+                result.append(UInt8((acc << (to - bits)) & maxv))
+            }
+        } else {
+            guard bits < from, ((acc << (to - bits)) & maxv) == 0 else { return nil }
+        }
+        return result
+    }
+
+    private static func isHexPubkey(_ s: String) -> Bool {
+        s.count == 64 && s.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil
+    }
+}

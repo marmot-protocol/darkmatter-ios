@@ -10,18 +10,13 @@ final class MarmotClient {
 
     /// Seed relays used to start the Rust relay plane and bootstrap new local
     /// identities. Per-account relay lists live in Marmot after setup.
-    static let seedRelays: [String] = [
-        "wss://relay.damus.io",
-        "wss://nos.lol",
-        "wss://relay.primal.net"
-    ]
+    static let seedRelays = AppContainerConfig.seedRelays
 
     let marmot: Marmot
     let rootPath: String
 
     convenience init() throws {
-        let root = MarmotClient.applicationSupportRoot()
-        try self.init(rootPath: root, relayUrls: Self.seedRelays)
+        try self.init(rootPath: AppContainerConfig.productionMarmotRoot().path, relayUrls: Self.seedRelays)
     }
 
     /// Test-friendly init that lets callers override the on-disk root and
@@ -33,20 +28,6 @@ final class MarmotClient {
         self.marmot = try Marmot(rootPath: rootPath, relayUrls: relayUrls)
     }
 
-    private static func applicationSupportRoot() -> String {
-        let fm = FileManager.default
-        let base = (try? fm.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )) ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let root = base.appendingPathComponent("Marmot", isDirectory: true)
-        if !fm.fileExists(atPath: root.path) {
-            try? fm.createDirectory(at: root, withIntermediateDirectories: true)
-        }
-        return root.path
-    }
 }
 
 enum RelaySettings {

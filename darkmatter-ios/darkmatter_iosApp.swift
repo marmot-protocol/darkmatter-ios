@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct darkmatter_iosApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
 
     var body: some Scene {
