@@ -251,6 +251,32 @@ struct NativePushRegistrationPolicyTests {
     }
 }
 
+struct ForegroundNotificationSyncPolicyTests {
+
+    @Test func catchUpRunsOnlyWhenAppIsReadyAndIdle() {
+        #expect(ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .ready,
+            isCatchUpRunning: false
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .ready,
+            isCatchUpRunning: true
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .bootstrapping,
+            isCatchUpRunning: false
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .onboarding,
+            isCatchUpRunning: false
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .failed("offline"),
+            isCatchUpRunning: false
+        ))
+    }
+}
+
 @MainActor
 struct ProfileSanitizerTests {
 
@@ -1109,6 +1135,33 @@ struct TimelineBottomTests {
         #expect(TimelineInitialScroll.shouldStartAtBottom(hasItems: true, didPerformInitialScroll: false))
         #expect(!TimelineInitialScroll.shouldStartAtBottom(hasItems: false, didPerformInitialScroll: false))
         #expect(!TimelineInitialScroll.shouldStartAtBottom(hasItems: true, didPerformInitialScroll: true))
+    }
+
+    @Test func initialEntryFromNotificationPrefersTargetMessage() {
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: false,
+            targetMessageIdHex: "message-target",
+            targetItemId: "msg-target"
+        ) == .item("msg-target"))
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: false,
+            targetMessageIdHex: nil,
+            targetItemId: nil
+        ) == .bottom)
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: false,
+            targetMessageIdHex: "message-target",
+            targetItemId: nil
+        ) == .none)
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: true,
+            targetMessageIdHex: "message-target",
+            targetItemId: "msg-target"
+        ) == .none)
     }
 
     @Test func bottomStateAllowsSmallLayoutDrift() {

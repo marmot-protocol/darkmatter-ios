@@ -6,11 +6,22 @@ struct ChatsListView: View {
     @State private var viewModel: ChatsListViewModel?
     @State private var showNewChat = false
     @State private var showSwitcher = false
-    @State private var path: [String] = []
+    @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
     @State private var scope: ChatScope = .active
 
     enum ChatScope { case active, archived }
+
+    struct ChatNavigationTarget: Hashable {
+        let groupIdHex: String
+        let messageIdHex: String?
+
+        init(groupIdHex: String, messageIdHex: String? = nil) {
+            self.groupIdHex = groupIdHex
+            let messageId = messageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.messageIdHex = messageId?.isEmpty == false ? messageId : nil
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -44,9 +55,9 @@ struct ChatsListView: View {
             .searchable(text: $searchText, prompt: "Search chats")
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
-            .navigationDestination(for: String.self) { groupIdHex in
+            .navigationDestination(for: ChatNavigationTarget.self) { target in
                 if let viewModel {
-                    ChatDestination(groupIdHex: groupIdHex, viewModel: viewModel)
+                    ChatDestination(target: target, viewModel: viewModel)
                 }
             }
             .sheet(isPresented: $showNewChat) {
@@ -80,10 +91,14 @@ struct ChatsListView: View {
     /// sheets) so the pushed conversation lands on top.
     private func consumePendingChat() {
         guard let newId = appState.pendingChatId else { return }
+        let target = ChatNavigationTarget(
+            groupIdHex: newId,
+            messageIdHex: appState.pendingChatMessageIdHex
+        )
         showNewChat = false
         showSwitcher = false
         scope = .active
-        path = [newId]
+        path = [target]
         appState.clearPendingChat()
     }
 
@@ -133,7 +148,7 @@ struct ChatsListView: View {
                     // (the trailing slot shows the message timestamp instead).
                     ZStack {
                         ChatRow(item: item)
-                        NavigationLink(value: item.group.groupIdHex) { EmptyView() }
+                        NavigationLink(value: ChatNavigationTarget(groupIdHex: item.group.groupIdHex)) { EmptyView() }
                             .opacity(0)
                     }
                     .swipeActions(edge: .trailing) {
@@ -279,13 +294,13 @@ struct ChatsListView: View {
 /// subscription delivers it — then fall back to an unavailable state if it
 /// never arrives (e.g. a link to a chat this account isn't a member of).
 private struct ChatDestination: View {
-    let groupIdHex: String
+    let target: ChatsListView.ChatNavigationTarget
     let viewModel: ChatsListViewModel
     @State private var timedOut = false
 
     private var item: ChatsListViewModel.Item? {
         (viewModel.items + viewModel.archivedItems)
-            .first(where: { $0.group.groupIdHex == groupIdHex })
+            .first(where: { $0.group.groupIdHex == target.groupIdHex })
     }
 
     var body: some View {
@@ -293,7 +308,8 @@ private struct ChatDestination: View {
             ConversationView(
                 chat: item.group,
                 initialOtherMember: item.otherMemberAccount,
-                initialMemberCount: item.memberCount
+                initialMemberCount: item.memberCount,
+                initialTargetMessageIdHex: target.messageIdHex
             )
         } else if timedOut {
             ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")

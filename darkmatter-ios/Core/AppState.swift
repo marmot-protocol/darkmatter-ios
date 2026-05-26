@@ -68,6 +68,7 @@ final class AppState {
     let client: MarmotClient
     let notifications: AppNotifications
     private var notificationSubscriptionTask: Task<Void, Never>?
+    private var isForegroundCatchUpRunning = false
 
     /// Cache of best-known display names keyed by account id hex. Derived
     /// from `profiles` when available. Read-only from view code.
@@ -100,6 +101,7 @@ final class AppState {
     /// ChatsListView observes this to push the conversation.
     private(set) var pendingChatId: String?
     private(set) var pendingChatAccountRef: String?
+    private(set) var pendingChatMessageIdHex: String?
 
     /// Tracks in-flight directory fetches so we don't pile up duplicate work.
     private var directoryFetchesInFlight: Set<String> = []
@@ -289,6 +291,24 @@ final class AppState {
         Task { [weak self] in
             guard let self else { return }
             await syncNativePushRegistrationIfEnabled()
+        }
+    }
+
+    func catchUpAfterForegroundActivation() async {
+        guard ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: phase,
+            isCatchUpRunning: isForegroundCatchUpRunning
+        ) else { return }
+
+        isForegroundCatchUpRunning = true
+        defer { isForegroundCatchUpRunning = false }
+
+        do {
+            try await marmot.catchUpAccounts()
+            await syncNativePushRegistrationIfEnabled()
+        } catch {
+            // Foreground catch-up is a best-effort safety net. The live
+            // subscription and NSE path continue to handle notification flow.
         }
     }
 
@@ -515,25 +535,32 @@ final class AppState {
 
     /// Request navigation into a chat (e.g. just after creating one).
     @MainActor
-    func presentChat(groupIdHex: String, accountRef: String? = nil) {
+    func presentChat(groupIdHex: String, accountRef: String? = nil, messageIdHex: String? = nil) {
         if let accountRef, !accountRef.isEmpty {
             activeAccountRef = accountRef
             pendingChatAccountRef = accountRef
         } else {
             pendingChatAccountRef = nil
         }
+        let messageId = messageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingChatMessageIdHex = messageId?.isEmpty == false ? messageId : nil
         pendingChatId = groupIdHex
     }
 
     @MainActor
     func presentNotification(route: LocalNotificationRoute) {
-        presentChat(groupIdHex: route.groupIdHex, accountRef: route.accountRef)
+        presentChat(
+            groupIdHex: route.groupIdHex,
+            accountRef: route.accountRef,
+            messageIdHex: route.messageIdHex
+        )
     }
 
     @MainActor
     func clearPendingChat() {
         pendingChatId = nil
         pendingChatAccountRef = nil
+        pendingChatMessageIdHex = nil
     }
 
     /// Route an inbound deep link (from `.onOpenURL`).
