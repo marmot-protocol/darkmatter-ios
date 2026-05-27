@@ -14,6 +14,7 @@ final class MarmotClient {
 
     let marmot: Marmot
     let rootPath: String
+    let relayUrls: [String]
 
     convenience init() throws {
         try self.init(rootPath: AppContainerConfig.productionMarmotRoot().path, relayUrls: Self.seedRelays)
@@ -25,7 +26,12 @@ final class MarmotClient {
     /// initialize (account secrets are stored in the Keychain, not on disk).
     init(rootPath: String, relayUrls: [String]) throws {
         self.rootPath = rootPath
+        self.relayUrls = relayUrls
         self.marmot = try Marmot(rootPath: rootPath, relayUrls: relayUrls)
+    }
+
+    func freshRuntime() throws -> MarmotClient {
+        try MarmotClient(rootPath: rootPath, relayUrls: relayUrls)
     }
 
 }

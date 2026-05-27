@@ -65,11 +65,12 @@ final class AppState {
         UserDefaults.standard.set(recentReactions, forKey: Self.recentReactionsKey)
     }
 
-    let client: MarmotClient
+    private(set) var client: MarmotClient
     let notifications: AppNotifications
     private var notificationSubscriptionTask: Task<Void, Never>?
     private var foregroundActivationTask: Task<Void, Never>?
     private var nativePushRegistrationTask: Task<Void, Never>?
+    private var runtimeSuspensionTask: Task<Void, Never>?
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
     private(set) var isAppSceneActive = true
@@ -370,7 +371,25 @@ final class AppState {
         }
     }
 
+    @discardableResult
+    func startRuntimeSuspension() -> Task<Void, Never> {
+        isAppSceneActive = false
+        foregroundActivationTask?.cancel()
+        nativePushRegistrationTask?.cancel()
+        if let runtimeSuspensionTask {
+            return runtimeSuspensionTask
+        }
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await prepareForBackgroundSuspension()
+        }
+        runtimeSuspensionTask = task
+        return task
+    }
+
     func prepareForBackgroundSuspension() async {
+        defer { runtimeSuspensionTask = nil }
         isAppSceneActive = false
         await cancelForegroundMaintenance()
         guard phase == .ready,
@@ -394,6 +413,7 @@ final class AppState {
 
         if runtimeSuspendedForBackground {
             do {
+                client = try client.freshRuntime()
                 try await marmot.start()
                 runtimeSuspendedForBackground = false
                 runtimeGeneration += 1
