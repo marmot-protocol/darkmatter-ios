@@ -259,6 +259,22 @@ final class AppState {
         }
     }
 
+    /// Signs out of the active account: clears its native push registration
+    /// (so the push server stops delivering its notifications to this device)
+    /// and disables its `nativePushEnabled` preference, then switches the
+    /// active account to the next available local account (or `nil`).
+    ///
+    /// Push cleanup is best-effort — a transient marmot error here must not
+    /// block the user from signing out. The account's key material stays in
+    /// the Keychain so they can sign back in later.
+    @MainActor
+    func signOut() async {
+        guard let signingOut = activeAccountRef else { return }
+        try? await marmot.clearPushRegistration(accountRef: signingOut)
+        _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
+        activeAccountRef = accounts.first { $0.label != signingOut }?.label
+    }
+
     @discardableResult
     func syncNativePushRegistration(accountRef: String) async throws -> PushRegistrationFfi {
         guard let config = NativePushServerConfig.current() else {
