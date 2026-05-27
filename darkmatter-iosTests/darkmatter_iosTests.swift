@@ -109,6 +109,43 @@ struct AppStateBootstrapTests {
         #expect(appState.runtimeSuspendedForBackground)
         #expect(appState.marmot.isStopping())
     }
+
+    @Test func signOutDisablesNativePushAndSwitchesActiveAccount() async throws {
+        // Regression for issue #7: signing out must clear the signed-out
+        // account's push registration so the push server stops delivering
+        // its notifications to this device. Previously sign-out only mutated
+        // `activeAccountRef`, leaving the registration (and the
+        // `nativePushEnabled` preference) intact.
+        let appState = AppState(client: try MarmotClient.testClient())
+        await appState.bootstrap()
+        let accountA = try await appState.createIdentity()
+        let accountB = try await appState.createIdentity()
+        appState.activeAccountRef = accountA.label
+
+        // Simulate the app having enabled native push for A. The production
+        // path goes through `setNativePushEnabled(_:)`, which requires an
+        // APNS token unavailable in unit tests; calling marmot directly
+        // flips the same local preference.
+        _ = try await appState.marmot.setNativePushEnabled(accountRef: accountA.label, enabled: true)
+        #expect(appState.notificationSettings(for: accountA.label)?.nativePushEnabled == true)
+
+        await appState.signOut()
+
+        #expect(appState.activeAccountRef == accountB.label)
+        #expect(appState.notificationSettings(for: accountA.label)?.nativePushEnabled == false)
+    }
+
+    @Test func signOutOfOnlyAccountLeavesActiveAccountRefNil() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        await appState.bootstrap()
+        let only = try await appState.createIdentity()
+        appState.activeAccountRef = only.label
+
+        await appState.signOut()
+
+        #expect(appState.activeAccountRef == nil)
+        #expect(appState.notificationSettings(for: only.label)?.nativePushEnabled == false)
+    }
 }
 
 @MainActor
