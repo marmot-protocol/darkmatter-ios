@@ -1,14 +1,9 @@
 import Foundation
 
-/// Compile-time gate that prevents the developer-mode toggle from disabling
-/// TLS verification for the agent QUIC stream in release builds.
-///
-/// Developer mode is a user-facing Settings switch that points the stream
-/// at a loopback broker with no real certificate. If a release build let
-/// that switch turn off TLS verification, anyone who flips it — the user,
-/// or an attacker who tricks them — would be exposed to a MitM on the
-/// agent stream. Gating at compile time keeps the production path safe
-/// while still letting developers exercise the loopback broker in DEBUG.
+/// Compile-time gate that stops the developer-mode Settings toggle from
+/// disabling TLS verification for the agent QUIC stream in release builds.
+/// Developer mode ships in production, so a runtime-only check would let
+/// any user — or attacker who tricks them — MitM the agent stream (#10).
 enum AgentStreamSecurity {
 
     /// Whether the current build is permitted to bypass TLS verification
