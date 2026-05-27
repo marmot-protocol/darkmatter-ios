@@ -91,6 +91,7 @@ struct AccountSwitcherSheet: View {
             }
             .sheet(item: $qrAccount) { account in
                 ProfileQRView(accountIdHex: account.hex)
+                    .appAppearance()
             }
         }
     }
@@ -99,6 +100,6 @@ struct AccountSwitcherSheet: View {
         let dict = Bundle.main.infoDictionary
         let version = dict?["CFBundleShortVersionString"] as? String ?? "—"
         let build = dict?["CFBundleVersion"] as? String ?? "—"
-        return "Version \(version) (\(build))"
+        return L10n.string("Version \(version) (\(build))")
     }
 }

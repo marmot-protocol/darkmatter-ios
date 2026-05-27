@@ -43,9 +43,9 @@ enum GroupManagementPresentation {
 
     static func leaveConfirmationMessage(state: GroupManagementStateFfi?) -> String {
         if shouldSelfDemoteBeforeLeave(state: state) {
-            return "You'll step down as admin first, then stop receiving messages from this group."
+            return L10n.string("You'll step down as admin first, then stop receiving messages from this group.")
         }
-        return "You'll stop receiving messages from this group. Other members will see a system message."
+        return L10n.string("You'll stop receiving messages from this group. Other members will see a system message.")
     }
 
     static func leaveHelpMessage(
@@ -53,24 +53,24 @@ enum GroupManagementPresentation {
         fallbackIsLastAdmin: Bool
     ) -> String {
         if state?.isLastAdmin == true || fallbackIsLastAdmin {
-            return "You're the only admin. Make another member an admin before you leave."
+            return L10n.string("You're the only admin. Make another member an admin before you leave.")
         }
         return leaveConfirmationMessage(state: state)
     }
 
     static func leaveFooter(state: GroupManagementStateFfi?, fallbackIsLastAdmin: Bool) -> String? {
         if state?.isLastAdmin == true || fallbackIsLastAdmin {
-            return "You're the only admin. Make another member an admin before you leave."
+            return L10n.string("You're the only admin. Make another member an admin before you leave.")
         }
         if shouldSelfDemoteBeforeLeave(state: state) {
-            return "Leaving will step you down as admin first."
+            return L10n.string("Leaving will step you down as admin first.")
         }
         return nil
     }
 }
 
 enum GroupRelaysPresentation {
-    static let emptyMessage = "No relays configured."
+    static let emptyMessage = L10n.string("No relays configured.")
 
     static func countLabel(for relays: [String]) -> String {
         "\(relays.count)"

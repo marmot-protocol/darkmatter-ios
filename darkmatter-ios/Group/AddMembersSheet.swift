@@ -66,7 +66,7 @@ struct AddMembersSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isInviting ? "Inviting…" : "Invite") {
+                    Button(isInviting ? L10n.string("Inviting…") : L10n.string("Invite")) {
                         Task { await invite() }
                     }
                     .disabled(members.isEmpty || isInviting)
@@ -78,6 +78,7 @@ struct AddMembersSheet: View {
                     showScanner = false
                     addScanned(result)
                 }
+                .appAppearance()
             }
         }
     }
@@ -101,7 +102,7 @@ struct AddMembersSheet: View {
             _ = appState.profile(forAccountIdHex: normalized.accountIdHex)
         } catch {
             Haptics.error()
-            self.error = "Enter a valid npub, nprofile, Nostr URI, profile link, or hex public key."
+            self.error = L10n.string("Enter a valid npub, nprofile, Nostr URI, profile link, or hex public key.")
         }
     }
 

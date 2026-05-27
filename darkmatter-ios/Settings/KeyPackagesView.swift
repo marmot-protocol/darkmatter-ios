@@ -165,11 +165,11 @@ struct KeyPackagesView: View {
     @ViewBuilder
     private func badge(for pkg: AccountKeyPackageFfi) -> some View {
         if pkg.local && pkg.relay {
-            badgeLabel("Synced", tint: .green)
+            badgeLabel(L10n.string("Synced"), tint: .green)
         } else if pkg.local {
-            badgeLabel("Local only", tint: .orange)
+            badgeLabel(L10n.string("Local only"), tint: .orange)
         } else {
-            badgeLabel("Relay only", tint: .blue)
+            badgeLabel(L10n.string("Relay only"), tint: .blue)
         }
     }
 
@@ -193,7 +193,7 @@ struct KeyPackagesView: View {
     private func publishedDescription(_ ts: UInt64) -> String? {
         guard ts > 0 else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(ts))
-        return "Published \(date.formatted(.relative(presentation: .named)))"
+        return L10n.string("Published \(date.formatted(.relative(presentation: .named)))")
     }
 
     private func byteCount(_ bytes: UInt64) -> String {
@@ -216,6 +216,7 @@ struct KeyPackagesView: View {
 
     // MARK: - Actions
 
+    @MainActor
     private var bootstrapRelays: [String] {
         lists.map(RelaySettings.bootstrapRelays(from:)) ?? MarmotClient.seedRelays
     }
@@ -251,11 +252,11 @@ struct KeyPackagesView: View {
         do {
             _ = try await appState.marmot.publishNewKeyPackage(accountRef: ref)
             Haptics.success()
-            appState.present(.success("New key package published"))
+            appState.present(.success(L10n.string("New key package published")))
             await reload()
         } catch {
             Haptics.error()
-            appState.present(.error("Publish failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Publish failed"), message: error.localizedDescription))
         }
     }
 
@@ -273,11 +274,11 @@ struct KeyPackagesView: View {
                 relays: bootstrapRelays
             )
             Haptics.success()
-            appState.present(.success("Key package deleted"))
+            appState.present(.success(L10n.string("Key package deleted")))
             await reload()
         } catch {
             Haptics.error()
-            appState.present(.error("Delete failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Delete failed"), message: error.localizedDescription))
         }
     }
 }

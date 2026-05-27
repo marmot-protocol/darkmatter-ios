@@ -5,11 +5,11 @@ import Foundation
 enum RelativeTime {
     static func short(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let seconds = now.timeIntervalSince(date)
-        if seconds < 0 { return "now" }
-        if seconds < 60 { return "now" }
+        if seconds < 0 { return L10n.string("now") }
+        if seconds < 60 { return L10n.string("now") }
         if seconds < 3600 { return "\(Int(seconds / 60))m" }
         if calendar.isDateInToday(date) { return "\(Int(seconds / 3600))h" }
-        if calendar.isDateInYesterday(date) { return "Yesterday" }
+        if calendar.isDateInYesterday(date) { return L10n.string("Yesterday") }
 
         if seconds < 7 * 24 * 3600 {
             return formatted(date, "EEEE") // full weekday, e.g. "Monday"

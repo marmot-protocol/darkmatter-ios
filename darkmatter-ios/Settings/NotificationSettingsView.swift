@@ -56,12 +56,12 @@ struct NotificationSettingsView: View {
                 }
 
                 LabeledContent("APNS token") {
-                    Text(appState.notifications.apnsTokenHex == nil ? "Not received" : "Received")
+                    Text(appState.notifications.apnsTokenHex == nil ? L10n.string("Not received") : L10n.string("Received"))
                         .foregroundStyle(.secondary)
                 }
 
                 LabeledContent("Push server") {
-                    Text(NativePushServerConfig.current() == nil ? "Not configured" : "Configured")
+                    Text(NativePushServerConfig.current() == nil ? L10n.string("Not configured") : L10n.string("Configured"))
                         .foregroundStyle(.secondary)
                 }
 
@@ -116,9 +116,9 @@ struct NotificationSettingsView: View {
 
     private var deliveryFooter: String {
         if NativePushServerConfig.current() == nil {
-            return "Native push is unavailable in this build until a Darkmatter push server public key is configured."
+            return L10n.string("Native push is unavailable in this build until a Darkmatter push server public key is configured.")
         }
-        return "Native push registers only an encrypted APNS token with Darkmatter. Apple receives generic notification wakes."
+        return L10n.string("Native push registers only an encrypted APNS token with Darkmatter. Apple receives generic notification wakes.")
     }
 
     @MainActor
@@ -207,17 +207,17 @@ private extension UNAuthorizationStatus {
     var displayName: String {
         switch self {
         case .notDetermined:
-            return "Not requested"
+            return L10n.string("Not requested")
         case .denied:
-            return "Denied"
+            return L10n.string("Denied")
         case .authorized:
-            return "Authorized"
+            return L10n.string("Authorized")
         case .provisional:
-            return "Provisional"
+            return L10n.string("Provisional")
         case .ephemeral:
-            return "Ephemeral"
+            return L10n.string("Ephemeral")
         @unknown default:
-            return "Unknown"
+            return L10n.string("Unknown")
         }
     }
 }

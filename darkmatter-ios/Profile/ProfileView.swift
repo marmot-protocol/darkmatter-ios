@@ -34,7 +34,7 @@ struct ProfileView: View {
 
                 Button(action: copyProfileReference) {
                     HStack(spacing: 8) {
-                        Text(copied ? "Copied" : IdentityFormatter.short(displayReference))
+                        Text(copied ? L10n.string("Copied") : IdentityFormatter.short(displayReference))
                             .font(.system(.callout, design: .monospaced))
                             .foregroundStyle(copied ? Color.green : Color.secondary)
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
@@ -140,7 +140,7 @@ struct ProfileView: View {
         } catch let marmotError as MarmotKitError {
             Haptics.error()
             if case .MissingKeyPackage = marmotError {
-                self.error = "\(title) hasn't published a compatible key package, so they can't be messaged yet."
+                self.error = L10n.string("\(title) hasn't published a compatible key package, so they can't be messaged yet.")
             } else {
                 self.error = marmotError.localizedDescription
             }

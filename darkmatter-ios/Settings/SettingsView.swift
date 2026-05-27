@@ -54,31 +54,33 @@ struct SettingsView: View {
                 NavigationLink {
                     AccountsView()
                 } label: {
-                    Label("Accounts", systemImage: "person.2.circle.fill")
+                    Label("Accounts", systemImage: "person.2.badge.plus.fill")
                 }
 
                 NavigationLink {
                     IdentityView()
                 } label: {
-                    Label("Identity & Keys", systemImage: "key.fill")
+                    Label("Identity & Keys", systemImage: "person.badge.key.fill")
                 }
 
                 NavigationLink {
                     KeyPackagesView()
                 } label: {
-                    Label("Key Packages", systemImage: "key.horizontal.fill")
+                    Label("Key Packages", systemImage: "key.icloud.fill")
                 }
-            }
 
-            Section("Network") {
                 NavigationLink {
                     RelaysView()
                 } label: {
                     Label("Relays", systemImage: "antenna.radiowaves.left.and.right")
                 }
-            }
 
-            Section("Notifications") {
+                NavigationLink {
+                    AppearanceSettingsView()
+                } label: {
+                    Label("Appearance", systemImage: "paintbrush.fill")
+                }
+
                 NavigationLink {
                     NotificationSettingsView()
                 } label: {
@@ -93,30 +95,30 @@ struct SettingsView: View {
                 }
                 LabeledContent("Built on") {
                     Text("MarmotKit \(marmotVersion)")
-                        .font(.caption.monospaced())
+                        .font(.body.monospaced())
                         .foregroundStyle(.secondary)
                 }
             }
 
             Section {
-                Toggle("Developer mode", isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { appState.developerMode },
                     set: { appState.developerMode = $0 }
-                ))
-            } header: {
-                Text("Developer")
-            } footer: {
-                Text("Adds debugging tools, including MLS group internals and diagnostics. The diagnostics console can log message text and account activity on this device.")
-            }
+                )) {
+                    Label("Developer mode", systemImage: "apple.terminal")
+                }
 
-            if appState.developerMode {
-                Section("Diagnostics") {
+                if appState.developerMode {
                     NavigationLink {
                         DiagnosticsView()
                     } label: {
                         Label("Open Diagnostics", systemImage: "stethoscope")
                     }
                 }
+            } header: {
+                Text("Developer")
+            } footer: {
+                Text("Adds debugging tools, including MLS group internals and diagnostics. The diagnostics console can log message text and account activity on this device.")
             }
         }
         .navigationTitle("Settings")

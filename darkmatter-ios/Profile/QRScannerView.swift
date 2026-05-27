@@ -61,7 +61,7 @@ final class ScannerViewController: UIViewController {
                 if granted {
                     self.configureSession()
                 } else {
-                    self.coordinator?.onError("Camera access denied. Enable it in Settings to scan QR codes.")
+                    self.coordinator?.onError(L10n.string("Camera access denied. Enable it in Settings to scan QR codes."))
                 }
             }
         }
@@ -72,14 +72,14 @@ final class ScannerViewController: UIViewController {
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input)
         else {
-            coordinator?.onError("No camera available on this device.")
+            coordinator?.onError(L10n.string("No camera available on this device."))
             return
         }
         session.addInput(input)
 
         let output = AVCaptureMetadataOutput()
         guard session.canAddOutput(output) else {
-            coordinator?.onError("Couldn't start the camera.")
+            coordinator?.onError(L10n.string("Couldn't start the camera."))
             return
         }
         session.addOutput(output)

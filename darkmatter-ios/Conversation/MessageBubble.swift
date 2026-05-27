@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MarmotKit
 
 /// One chat bubble. Aligned right for our own messages, left for everyone
@@ -171,10 +172,10 @@ struct MessageBubble: View {
 
     private var statusLabel: String? {
         switch status {
-        case .sending: return "Sending…"
-        case .sent: return "Sent"
-        case .failed: return "Not delivered"
-        case .streaming: return "Streaming…"
+        case .sending: return L10n.string("Sending…")
+        case .sent: return L10n.string("Sent")
+        case .failed: return L10n.string("Not delivered")
+        case .streaming: return L10n.string("Streaming…")
         case .received: return nil
         }
     }
@@ -188,7 +189,11 @@ struct MessageBubble: View {
                 endPoint: .bottomTrailing
             )
         } else {
-            Color(.secondarySystemBackground)
+            Color(UIColor { traits in
+                traits.userInterfaceStyle == .dark
+                    ? UIColor.tertiarySystemBackground
+                    : UIColor.secondarySystemBackground
+            })
         }
     }
 }

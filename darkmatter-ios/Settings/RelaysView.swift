@@ -109,7 +109,7 @@ struct RelaysView: View {
         }
     }
 
-    private func relayListRow(_ title: String, systemImage: String, list: RelayListFfi) -> some View {
+    private func relayListRow(_ title: LocalizedStringKey, systemImage: String, list: RelayListFfi) -> some View {
         DisclosureGroup {
             if list.relays.isEmpty {
                 Text("Not published")
@@ -185,7 +185,7 @@ struct RelaysView: View {
         guard let accountRef = appState.activeAccountRef else { return false }
         let normalized = RelaySettings.normalizedRelayURLs(relays)
         guard !normalized.isEmpty else {
-            saveError = "Keep at least one relay."
+            saveError = L10n.string("Keep at least one relay.")
             Haptics.error()
             return false
         }
@@ -213,12 +213,12 @@ struct RelaysView: View {
             )
             savedAt = Date()
             Haptics.success()
-            appState.present(.success("Relay lists updated"))
+            appState.present(.success(L10n.string("Relay lists updated")))
             return true
         } catch {
             Haptics.error()
             saveError = error.localizedDescription
-            appState.present(.error("Relay update failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Relay update failed"), message: error.localizedDescription))
             return false
         }
     }

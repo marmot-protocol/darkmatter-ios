@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MarmotKit
 
 /// Inspector for a single group. Name, members + admin management,
@@ -14,6 +15,8 @@ struct GroupDetailsView: View {
     @State private var renameDraft = ""
     @State private var actionError: String?
     @State private var mlsState: AppGroupMlsStateFfi?
+    @State private var pushDebugInfo: GroupPushDebugInfoFfi?
+    @State private var pushDebugError: String?
     @State private var pendingRemoval: GroupMemberDetailsFfi?
     @State private var showSelfDemoteConfirm = false
     @State private var membershipActionInFlight = false
@@ -42,6 +45,7 @@ struct GroupDetailsView: View {
 
             if appState.developerMode {
                 developerSection
+                pushNotificationsDeveloperSection
             }
 
             if let actionError {
@@ -63,6 +67,7 @@ struct GroupDetailsView: View {
                 normalize: { try appState.marmot.normalizeMemberRef(memberRef: $0) },
                 onSubmit: { refs in try await invite(refs: refs) }
             )
+            .appAppearance()
         }
         .alert("Group name", isPresented: $showRename) {
             TextField("Group name", text: $renameDraft)
@@ -118,10 +123,10 @@ struct GroupDetailsView: View {
         }
         .task(id: appState.developerMode) {
             await viewModel.refreshGroupManagement()
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
         }
         .task(id: mlsRefreshKey) {
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
         }
     }
 
@@ -235,7 +240,7 @@ struct GroupDetailsView: View {
     private var groupActionsSection: some View {
         Section {
             groupActionRow(
-                title: viewModel.group.archived ? "Unarchive Group" : "Archive Group",
+                title: viewModel.group.archived ? L10n.string("Unarchive Group") : L10n.string("Archive Group"),
                 systemImage: viewModel.group.archived ? "tray.and.arrow.up" : "archivebox",
                 isDisabled: membershipActionInFlight,
                 help: .archive
@@ -245,7 +250,7 @@ struct GroupDetailsView: View {
 
             if shouldShowSelfDemoteAction {
                 groupActionRow(
-                    title: "Step Down as Admin",
+                    title: L10n.string("Step Down as Admin"),
                     systemImage: "star.slash",
                     role: .destructive,
                     isDisabled: !canSelfDemoteAction || membershipActionInFlight,
@@ -256,7 +261,7 @@ struct GroupDetailsView: View {
             }
 
             groupActionRow(
-                title: "Leave Group",
+                title: L10n.string("Leave Group"),
                 systemImage: "rectangle.portrait.and.arrow.right",
                 role: .destructive,
                 isDisabled: !GroupManagementPresentation.canLeave(
@@ -307,7 +312,7 @@ struct GroupDetailsView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .accessibilityLabel("\(title) info")
+            .accessibilityLabel(L10n.string("\(title) info"))
         }
     }
 
@@ -319,18 +324,11 @@ struct GroupDetailsView: View {
 
     private var developerSection: some View {
         Section("MLS group (developer)") {
-            LabeledContent("Group ID") {
-                Text(viewModel.group.groupIdHex)
-                    .font(.system(.caption2, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            LabeledContent("Nostr group ID") {
-                Text(viewModel.group.nostrGroupIdHex)
-                    .font(.system(.caption2, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            copyableDeveloperValueRow(
+                title: "MLS group ID",
+                value: mlsState?.groupIdHex ?? viewModel.group.groupIdHex
+            )
+            copyableDeveloperValueRow(title: "Nostr group ID", value: viewModel.group.nostrGroupIdHex)
             if let mlsState {
                 LabeledContent("Epoch", value: "\(mlsState.epoch)")
                 LabeledContent("Members (MLS)", value: "\(mlsState.memberCount)")
@@ -344,6 +342,106 @@ struct GroupDetailsView: View {
             }
             LabeledContent("Admins", value: "\(viewModel.group.admins.count)")
         }
+    }
+
+    private var pushNotificationsDeveloperSection: some View {
+        Section("Push notifications (developer)") {
+            if let pushDebugInfo {
+                LabeledContent("Tokens") {
+                    Text(GroupPushDebugPresentation.tokenSummary(for: pushDebugInfo))
+                        .monospacedDigit()
+                }
+                LabeledContent("Relay hints") {
+                    Text(GroupPushDebugPresentation.missingRelayHintSummary(for: pushDebugInfo))
+                        .monospacedDigit()
+                }
+                LabeledContent("Local registration") {
+                    Text(GroupPushDebugPresentation.localRegistrationSummary(for: pushDebugInfo.localRegistration))
+                        .foregroundStyle(.secondary)
+                }
+                if let leafIndex = pushDebugInfo.localRegistration.localLeafIndex {
+                    LabeledContent("Local leaf", value: "\(leafIndex)")
+                }
+                if let updatedAtMs = pushDebugInfo.lastTokenListUpdatedAtMs {
+                    LabeledContent("Last token list update") {
+                        Text(Date(timeIntervalSince1970: TimeInterval(updatedAtMs) / 1000), style: .relative)
+                    }
+                }
+                if !pushDebugInfo.tokens.isEmpty {
+                    DisclosureGroup("Token fingerprints") {
+                        ForEach(pushDebugInfo.tokens, id: \.self) { token in
+                            tokenDebugRow(token)
+                        }
+                    }
+                }
+            } else if let pushDebugError {
+                Label(pushDebugError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else {
+                Text("Loading push notification state…")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func copyableDeveloperValueRow(title: String, value: String) -> some View {
+        Button {
+            UIPasteboard.general.string = value
+            Haptics.selection()
+            appState.present(.success(L10n.string("Copied to clipboard"), message: title))
+        } label: {
+            LabeledContent(title) {
+                HStack(spacing: 6) {
+                    Text(value)
+                        .font(.system(.caption2, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(.tint)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Copies \(title)")
+    }
+
+    private func tokenDebugRow(_ token: GroupPushTokenDebugEntryFfi) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(GroupPushDebugPresentation.platformLabel(token.platform))
+                    .font(.caption.weight(.semibold))
+                Text("leaf \(token.leafIndex)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if token.isLocalMember {
+                    Text("local")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.16), in: Capsule())
+                        .foregroundStyle(.tint)
+                }
+                if !token.activeLeaf {
+                    Text("stale")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.16), in: Capsule())
+                        .foregroundStyle(.orange)
+                }
+            }
+            Text(token.tokenFingerprint)
+                .font(.system(.caption2, design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Text(IdentityFormatter.short(token.memberIdHex, head: 12, tail: 12))
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Actions
@@ -439,22 +537,22 @@ struct GroupDetailsView: View {
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
         do {
-            appState.present(.warning("Inviting members…", message: "Publishing group update."))
+            appState.present(.warning(L10n.string("Inviting members…"), message: L10n.string("Publishing group update.")))
             let result = try await appState.marmot.inviteMembersDetailed(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex,
                 memberRefs: refs
             )
             viewModel.applyGroupMutation(result)
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
             appState.present(.success(
-                "Invited \(refs.count) member\(refs.count == 1 ? "" : "s")",
+                refs.count == 1 ? L10n.string("Invited 1 member") : L10n.string("Invited \(refs.count) members"),
                 message: publishMessage(for: result.summary)
             ))
         } catch {
             await refreshAfterFailedMutation()
-            handleActionError(error, title: "Invite failed")
+            handleActionError(error, title: L10n.string("Invite failed"))
             throw error
         }
     }
@@ -465,19 +563,19 @@ struct GroupDetailsView: View {
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
         do {
-            appState.present(.warning("Removing member…", message: "Publishing group update."))
+            appState.present(.warning(L10n.string("Removing member…"), message: L10n.string("Publishing group update.")))
             let result = try await appState.marmot.removeMembersDetailed(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex,
                 memberRefs: [member.memberIdHex]
             )
             viewModel.applyGroupMutation(result)
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
-            appState.present(.warning("Member removed", message: publishMessage(for: result.summary)))
+            appState.present(.warning(L10n.string("Member removed"), message: publishMessage(for: result.summary)))
         } catch {
             await refreshAfterFailedMutation()
-            handleActionError(error, title: "Couldn't remove member")
+            handleActionError(error, title: L10n.string("Couldn't remove member"))
         }
     }
 
@@ -487,8 +585,8 @@ struct GroupDetailsView: View {
         defer { membershipActionInFlight = false }
         viewModel.applyOptimisticAdminStatus(memberIdHex: member.memberIdHex, isAdmin: admin)
         appState.present(.warning(
-            admin ? "Making admin…" : "Removing admin…",
-            message: "Publishing group update."
+            admin ? L10n.string("Making admin…") : L10n.string("Removing admin…"),
+            message: L10n.string("Publishing group update.")
         ))
         do {
             let result: GroupMutationResultFfi
@@ -506,16 +604,16 @@ struct GroupDetailsView: View {
                 )
             }
             viewModel.applyGroupMutation(result)
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
             appState.present(
                 admin
-                    ? .success("Made admin", message: publishMessage(for: result.summary))
-                    : .warning("Admin removed", message: publishMessage(for: result.summary))
+                    ? .success(L10n.string("Made admin"), message: publishMessage(for: result.summary))
+                    : .warning(L10n.string("Admin removed"), message: publishMessage(for: result.summary))
             )
         } catch {
             await refreshAfterFailedMutation()
-            handleActionError(error, title: "Couldn't change admin")
+            handleActionError(error, title: L10n.string("Couldn't change admin"))
         }
     }
 
@@ -526,19 +624,19 @@ struct GroupDetailsView: View {
         if let myAccountId = viewModel.managementState?.myAccountIdHex {
             viewModel.applyOptimisticAdminStatus(memberIdHex: myAccountId, isAdmin: false)
         }
-        appState.present(.warning("Stepping down…", message: "Publishing group update."))
+        appState.present(.warning(L10n.string("Stepping down…"), message: L10n.string("Publishing group update.")))
         do {
             let result = try await appState.marmot.selfDemoteAdminDetailed(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex
             )
             viewModel.applyGroupMutation(result)
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
-            appState.present(.warning("You stepped down as admin", message: publishMessage(for: result.summary)))
+            appState.present(.warning(L10n.string("You stepped down as admin"), message: publishMessage(for: result.summary)))
         } catch {
             await refreshAfterFailedMutation()
-            handleActionError(error, title: "Couldn't step down")
+            handleActionError(error, title: L10n.string("Couldn't step down"))
         }
     }
 
@@ -546,7 +644,7 @@ struct GroupDetailsView: View {
         guard let accountRef = appState.activeAccountRef else { return }
         let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            appState.present(.warning("Updating group name…", message: "Publishing group update."))
+            appState.present(.warning(L10n.string("Updating group name…"), message: L10n.string("Publishing group update.")))
             let summary = try await appState.marmot.updateGroupProfile(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex,
@@ -554,14 +652,14 @@ struct GroupDetailsView: View {
                 description: nil
             )
             await viewModel.refreshGroupManagement()
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
-            appState.present(.success("Group name updated", message: publishMessage(for: summary)))
+            appState.present(.success(L10n.string("Group name updated"), message: publishMessage(for: summary)))
         } catch {
             await refreshAfterFailedMutation()
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(.error("Couldn't rename group", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't rename group"), message: error.localizedDescription))
         }
     }
 
@@ -574,13 +672,13 @@ struct GroupDetailsView: View {
                 archived: archived
             )
             viewModel.applyGroupRecord(record)
-            await refreshVisibleMlsState()
+            await refreshVisibleDebugState()
             Haptics.success()
-            appState.present(archived ? .warning("Group archived") : .success("Group unarchived"))
+            appState.present(archived ? .warning(L10n.string("Group archived")) : .success(L10n.string("Group unarchived")))
         } catch {
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(.error("Couldn't update archive", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't update archive"), message: error.localizedDescription))
         }
     }
 
@@ -603,25 +701,25 @@ struct GroupDetailsView: View {
                 if let myAccountId = viewModel.managementState?.myAccountIdHex {
                     viewModel.applyOptimisticAdminStatus(memberIdHex: myAccountId, isAdmin: false)
                 }
-                appState.present(.warning("Stepping down before leaving…", message: "Publishing group update."))
+                appState.present(.warning(L10n.string("Stepping down before leaving…"), message: L10n.string("Publishing group update.")))
                 let result = try await appState.marmot.selfDemoteAdminDetailed(
                     accountRef: accountRef,
                     groupIdHex: viewModel.group.groupIdHex
                 )
                 viewModel.applyGroupMutation(result)
-                await refreshVisibleMlsState()
+                await refreshVisibleDebugState()
             }
-            appState.present(.warning("Leaving group…", message: "Publishing group update."))
+            appState.present(.warning(L10n.string("Leaving group…"), message: L10n.string("Publishing group update.")))
             _ = try await appState.marmot.leaveGroup(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex
             )
             Haptics.warning()
-            appState.present(.warning("You left the group"))
+            appState.present(.warning(L10n.string("You left the group")))
             dismiss()
         } catch {
             await refreshAfterFailedMutation()
-            handleActionError(error, title: "Couldn't leave group")
+            handleActionError(error, title: L10n.string("Couldn't leave group"))
         }
     }
 
@@ -638,45 +736,60 @@ struct GroupDetailsView: View {
         }
         switch marmotError {
         case .NotGroupAdmin:
-            return "Only admins can manage group members."
+            return L10n.string("Only admins can manage group members.")
         case .AdminCannotSelfRemove:
-            return "Step down as admin before leaving the group."
+            return L10n.string("Step down as admin before leaving the group.")
         case .WouldRemoveLastAdmin:
-            return "Make another member an admin before removing the last admin."
+            return L10n.string("Make another member an admin before removing the last admin.")
         case .MemberNotInGroup:
-            return "That member is no longer in this group."
+            return L10n.string("That member is no longer in this group.")
         case .AlreadyAdmin:
-            return "That member is already an admin."
+            return L10n.string("That member is already an admin.")
         case .NotAdmin:
-            return "That member is not an admin."
+            return L10n.string("That member is not an admin.")
         case .MissingKeyPackage(let account):
-            return "\(IdentityFormatter.short(account)) hasn't published a compatible key package yet."
+            return L10n.string("\(IdentityFormatter.short(account)) hasn't published a compatible key package yet.")
         default:
             return marmotError.localizedDescription
         }
     }
 
     private func publishMessage(for summary: SendSummaryFfi) -> String {
-        guard summary.published > 0 else { return "Saved locally." }
-        let suffix = summary.published == 1 ? "" : "s"
-        return "Published \(summary.published) update\(suffix)."
+        guard summary.published > 0 else { return L10n.string("Saved locally.") }
+        return summary.published == 1
+            ? L10n.string("Published 1 update.")
+            : L10n.string("Published \(summary.published) updates.")
     }
 
     private func refreshAfterFailedMutation() async {
         _ = await viewModel.refreshGroupManagement()
-        await refreshVisibleMlsState()
+        await refreshVisibleDebugState()
     }
 
-    private func refreshVisibleMlsState() async {
+    private func refreshVisibleDebugState() async {
         guard appState.developerMode else {
             mlsState = nil
+            pushDebugInfo = nil
+            pushDebugError = nil
             return
         }
         guard let accountRef = appState.activeAccountRef else { return }
-        mlsState = try? await appState.marmot.groupMlsState(
+        async let mlsResult = appState.marmot.groupMlsState(
             accountRef: accountRef,
             groupIdHex: viewModel.group.groupIdHex
         )
+        async let pushResult = appState.marmot.groupPushDebugInfo(
+            accountRef: accountRef,
+            groupIdHex: viewModel.group.groupIdHex
+        )
+        mlsState = try? await mlsResult
+        do {
+            pushDebugInfo = try await pushResult
+            pushDebugError = nil
+        } catch {
+            pushDebugInfo = nil
+            pushDebugError = error.localizedDescription
+        }
     }
 }
 
@@ -686,7 +799,7 @@ private enum GroupDetailsActionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noActiveAccount:
-            "No active account is selected."
+            L10n.string("No active account is selected.")
         }
     }
 }
@@ -699,20 +812,20 @@ private enum GroupActionHelp {
     var title: String {
         switch self {
         case .stepDown:
-            return "Step Down as Admin"
+            return L10n.string("Step Down as Admin")
         case .archive:
-            return "Archive Group"
+            return L10n.string("Archive Group")
         case .leave:
-            return "Leave Group"
+            return L10n.string("Leave Group")
         }
     }
 
     var message: String {
         switch self {
         case .stepDown:
-            return "You'll stay in the group, but another admin will need to restore your admin status."
+            return L10n.string("You'll stay in the group, but another admin will need to restore your admin status.")
         case .archive:
-            return "Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone."
+            return L10n.string("Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone.")
         case .leave(let message):
             return message
         }

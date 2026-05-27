@@ -68,6 +68,8 @@ final class AppState {
     let client: MarmotClient
     let notifications: AppNotifications
     private var notificationSubscriptionTask: Task<Void, Never>?
+    private var foregroundActivationTask: Task<Void, Never>?
+    private var nativePushRegistrationTask: Task<Void, Never>?
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
     private(set) var isAppSceneActive = true
@@ -167,7 +169,7 @@ final class AppState {
                 }
                 notifications.configure(appState: self)
                 startNotificationSubscription()
-                resumeNativePushRegistrationIfNeeded()
+                scheduleNativePushRegistrationIfEnabled()
             }
         } catch {
             phase = .failed(error.localizedDescription)
@@ -186,7 +188,7 @@ final class AppState {
                     await notifications.present(update: update)
                 }
             } catch {
-                present(.error("Notifications unavailable", message: error.localizedDescription))
+                present(.error(L10n.string("Notifications unavailable"), message: error.localizedDescription))
             }
         }
     }
@@ -274,6 +276,12 @@ final class AppState {
     }
 
     func syncNativePushRegistrationIfEnabled() async {
+        guard isAppSceneActive,
+              !runtimeSuspendedForBackground,
+              !isRuntimeSuspending,
+              !Task.isCancelled
+        else { return }
+
         let accountRefs = nativePushEnabledAccountRefs()
         guard !accountRefs.isEmpty,
               NativePushServerConfig.current() != nil
@@ -290,6 +298,12 @@ final class AppState {
 
         var lastError: Error?
         for accountRef in accountRefs {
+            guard isAppSceneActive,
+                  !runtimeSuspendedForBackground,
+                  !isRuntimeSuspending,
+                  !Task.isCancelled
+            else { return }
+
             do {
                 _ = try await syncNativePushRegistration(accountRef: accountRef)
             } catch NotificationSettingsActionError.missingApnsToken {
@@ -300,13 +314,18 @@ final class AppState {
         }
 
         if let lastError {
-            present(.error("Push registration failed", message: lastError.localizedDescription))
+            present(.error(L10n.string("Push registration failed"), message: lastError.localizedDescription))
         }
     }
 
-    private func resumeNativePushRegistrationIfNeeded() {
+    func scheduleNativePushRegistrationIfEnabled() {
+        guard isAppSceneActive,
+              !runtimeSuspendedForBackground,
+              !isRuntimeSuspending
+        else { return }
         guard !nativePushEnabledAccountRefs().isEmpty else { return }
-        Task { [weak self] in
+        nativePushRegistrationTask?.cancel()
+        nativePushRegistrationTask = Task { [weak self] in
             guard let self else { return }
             await syncNativePushRegistrationIfEnabled()
         }
@@ -315,7 +334,10 @@ final class AppState {
     func catchUpAfterForegroundActivation() async {
         guard ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: phase,
-            isCatchUpRunning: isForegroundCatchUpRunning
+            isCatchUpRunning: isForegroundCatchUpRunning,
+            isAppSceneActive: isAppSceneActive,
+            runtimeSuspendedForBackground: runtimeSuspendedForBackground,
+            isRuntimeSuspending: isRuntimeSuspending
         ) else { return }
 
         isForegroundCatchUpRunning = true
@@ -323,6 +345,7 @@ final class AppState {
 
         do {
             try await marmot.catchUpAccounts()
+            guard isAppSceneActive, !Task.isCancelled else { return }
             await syncNativePushRegistrationIfEnabled()
         } catch {
             // Foreground catch-up is a best-effort safety net. The live
@@ -332,10 +355,24 @@ final class AppState {
 
     func setAppSceneActive(_ active: Bool) {
         isAppSceneActive = active
+        if !active {
+            foregroundActivationTask?.cancel()
+            nativePushRegistrationTask?.cancel()
+        }
+    }
+
+    func startForegroundActivation() {
+        isAppSceneActive = true
+        foregroundActivationTask?.cancel()
+        foregroundActivationTask = Task { [weak self] in
+            guard let self else { return }
+            await resumeAfterForegroundActivation()
+        }
     }
 
     func prepareForBackgroundSuspension() async {
         isAppSceneActive = false
+        await cancelForegroundMaintenance()
         guard phase == .ready,
               !runtimeSuspendedForBackground,
               !isRuntimeSuspending
@@ -350,10 +387,10 @@ final class AppState {
 
     func resumeAfterForegroundActivation() async {
         isAppSceneActive = true
-        while isRuntimeSuspending {
+        while isRuntimeSuspending, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 25_000_000)
         }
-        guard phase == .ready else { return }
+        guard phase == .ready, !Task.isCancelled else { return }
 
         if runtimeSuspendedForBackground {
             do {
@@ -367,7 +404,21 @@ final class AppState {
             }
         }
 
+        guard isAppSceneActive, !Task.isCancelled else { return }
         await catchUpAfterForegroundActivation()
+    }
+
+    private func cancelForegroundMaintenance() async {
+        let foregroundTask = foregroundActivationTask
+        foregroundActivationTask = nil
+        foregroundTask?.cancel()
+
+        let pushTask = nativePushRegistrationTask
+        nativePushRegistrationTask = nil
+        pushTask?.cancel()
+
+        await foregroundTask?.value
+        await pushTask?.value
     }
 
     private func nativePushEnabledAccountRefs() -> [String] {

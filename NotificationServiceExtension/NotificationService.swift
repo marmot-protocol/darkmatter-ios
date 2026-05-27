@@ -1,4 +1,4 @@
-import Foundation
+    import Foundation
 import MarmotKit
 import UserNotifications
 
@@ -86,10 +86,10 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func applyFallback(to content: UNMutableNotificationContent) {
         if content.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            content.title = "Darkmatter"
+            content.title = L10n.string("Darkmatter")
         }
         if content.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            content.body = "New encrypted message"
+            content.body = L10n.string("New encrypted message")
         }
     }
 

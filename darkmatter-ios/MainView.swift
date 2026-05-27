@@ -15,6 +15,7 @@ struct MainView: View {
                 set: { if $0 == nil { appState.clearPendingProfile() } }
             )) { link in
                 ProfileView(npub: link.npub)
+                    .appAppearance()
             }
     }
 }

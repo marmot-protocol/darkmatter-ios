@@ -59,7 +59,7 @@ struct MessageActionsMenu: View {
     }
 
     private func actionRow(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String,
         role: ButtonRole? = nil,
         action: @escaping () -> Void

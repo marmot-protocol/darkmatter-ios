@@ -33,7 +33,7 @@ struct IdentityView: View {
                             .foregroundStyle(active.localSigning ? .green : .red)
                     }
                     LabeledContent("Status") {
-                        Text(active.running ? "Online" : "Idle")
+                        Text(active.running ? L10n.string("Online") : L10n.string("Idle"))
                             .foregroundStyle(active.running ? .green : .secondary)
                     }
                 } footer: {
@@ -88,9 +88,9 @@ private struct CopyableValueRow: View {
 
     var body: some View {
         Button(action: copy) {
-            LabeledContent(label) {
+            LabeledContent {
                 HStack(spacing: 8) {
-                    Text(justCopied ? "Copied" : display)
+                    Text(justCopied ? L10n.string("Copied") : display)
                         .font(.system(.callout, design: .monospaced))
                         .foregroundStyle(justCopied ? Color.green : Color.secondary)
                     Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
@@ -98,6 +98,8 @@ private struct CopyableValueRow: View {
                         .foregroundStyle(justCopied ? Color.green : Color.accentColor)
                 }
                 .contentShape(.rect)
+            } label: {
+                Text(LocalizedStringKey(label))
             }
         }
         .buttonStyle(.plain)

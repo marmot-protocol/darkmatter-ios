@@ -92,6 +92,7 @@ struct NewChatSheet: View {
                     showScanner = false
                     handleScan(result)
                 }
+                .appAppearance()
             }
         }
     }
@@ -106,7 +107,7 @@ struct NewChatSheet: View {
     /// Add a recipient from a scanned profile QR code.
     private func handleScan(_ raw: String) {
         guard let memberRef = NostrProfileReference.memberRef(from: raw) else {
-            error = "That QR code isn't a Dark Matter profile."
+            error = L10n.string("That QR code isn't a Dark Matter profile.")
             Haptics.error()
             return
         }
@@ -135,15 +136,15 @@ struct NewChatSheet: View {
             Haptics.error()
             if case .MissingKeyPackage(let account) = marmotError {
                 // Soft validation — keep the sheet open and name who can't be added.
-                self.error = "\(IdentityFormatter.short(account)) hasn't published a compatible key package, so they can't be added yet."
+                self.error = L10n.string("\(IdentityFormatter.short(account)) hasn't published a compatible key package, so they can't be added yet.")
             } else {
                 self.error = marmotError.localizedDescription
-                appState.present(.error("Couldn't create chat", message: marmotError.localizedDescription))
+                appState.present(.error(L10n.string("Couldn't create chat"), message: marmotError.localizedDescription))
             }
         } catch {
             Haptics.error()
             self.error = error.localizedDescription
-            appState.present(.error("Couldn't create chat", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't create chat"), message: error.localizedDescription))
         }
         isCreating = false
     }
