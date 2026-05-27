@@ -18,7 +18,7 @@ struct ChatRow: View {
                 title: title,
                 pictureURL: GroupDisplay.avatarURL(group: chat, otherMember: item.otherMemberAccount, memberCount: item.memberCount, appState: appState)
             )
-            .frame(width: 48, height: 48)
+            .frame(width: 52, height: 52)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -27,7 +27,7 @@ struct ChatRow: View {
                 Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -39,7 +39,7 @@ struct ChatRow: View {
                     .monospacedDigit()
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 
     private var title: String {
@@ -50,13 +50,13 @@ struct ChatRow: View {
     /// structured payloads cleanly so raw agent-stream JSON never leaks here.
     private var subtitle: String {
         guard let latest = item.latest else {
-            return "No messages yet"
+            return L10n.string("No messages yet")
         }
         let body = ProfileSanitizer.singleLine(MessagePreview.body(latest), maxLength: 140) ?? ""
         if latest.direction == "sent" {
-            return body.isEmpty ? "You sent a message" : "You: \(body)"
+            return body.isEmpty ? L10n.string("You sent a message") : L10n.string("You: \(body)")
         }
-        return body.isEmpty ? "New message" : body
+        return body.isEmpty ? L10n.string("New message") : body
     }
 
     private var timestamp: String? {

@@ -93,16 +93,18 @@ enum LocalNotificationProjection {
         switch trigger {
         case .groupInvite:
             return (
-                title: "Group invite",
-                body: groupName.map { "Invitation to \($0)" } ?? "Open Darkmatter to view the invite"
+                title: L10n.string("Group invite"),
+                body: groupName.map { L10n.string("Invitation to \($0)") }
+                    ?? L10n.string("Open Darkmatter to view the invite")
             )
         case .newMessage:
             if isDm {
-                return (title: senderName, body: preview ?? "New encrypted message")
+                return (title: senderName, body: preview ?? L10n.string("New encrypted message"))
             }
             return (
-                title: groupName ?? "Group message",
-                body: preview.map { "\(senderName): \($0)" } ?? "\(senderName) sent a message"
+                title: groupName ?? L10n.string("Group message"),
+                body: preview.map { "\(senderName): \($0)" }
+                    ?? L10n.string("\(senderName) sent a message")
             )
         }
     }
@@ -112,7 +114,7 @@ enum LocalNotificationProjection {
             return name
         }
         if user.accountIdHex.isEmpty {
-            return "Someone"
+            return L10n.string("Someone")
         }
         return IdentityFormatter.short(user.accountIdHex)
     }

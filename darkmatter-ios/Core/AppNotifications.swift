@@ -65,9 +65,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     func recordDeviceToken(_ deviceToken: Data) {
         apnsTokenHex = deviceToken.map { String(format: "%02x", $0) }.joined()
         lastRegistrationError = nil
-        Task { [weak self] in
-            await self?.appState?.syncNativePushRegistrationIfEnabled()
-        }
+        appState?.scheduleNativePushRegistrationIfEnabled()
     }
 
     func recordRegistrationFailure(_ error: Error) {
@@ -95,7 +93,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         do {
             try await center.add(request)
         } catch {
-            appState?.present(.error("Notification failed", message: error.localizedDescription))
+            appState?.present(.error(L10n.string("Notification failed"), message: error.localizedDescription))
         }
     }
 
@@ -150,13 +148,13 @@ enum NotificationSettingsActionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noActiveAccount:
-            return "No active account."
+            return L10n.string("No active account.")
         case .permissionDenied:
-            return "Notifications are disabled in system settings."
+            return L10n.string("Notifications are disabled in system settings.")
         case .nativePushNotConfigured:
-            return "Native push server configuration is missing."
+            return L10n.string("Native push server configuration is missing.")
         case .missingApnsToken:
-            return "APNS has not returned a device token yet."
+            return L10n.string("APNS has not returned a device token yet.")
         }
     }
 }

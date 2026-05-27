@@ -39,7 +39,7 @@ struct ImportIdentityView: View {
                         if isImporting {
                             ProgressView().controlSize(.small)
                         }
-                        Text(isImporting ? "Importing…" : "Import")
+                        Text(isImporting ? L10n.string("Importing…") : L10n.string("Import"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 2)
                     }
@@ -70,12 +70,12 @@ struct ImportIdentityView: View {
         do {
             try await appState.importIdentity(trimmed)
             Haptics.success()
-            appState.present(.success("Welcome back", message: "Identity imported."))
+            appState.present(.success(L10n.string("Welcome back"), message: L10n.string("Identity imported.")))
             dismiss()
         } catch {
             Haptics.error()
             self.error = error.localizedDescription
-            appState.present(.error("Import failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Import failed"), message: error.localizedDescription))
         }
         isImporting = false
     }

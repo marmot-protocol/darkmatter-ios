@@ -62,9 +62,11 @@ struct ChatsListView: View {
             }
             .sheet(isPresented: $showNewChat) {
                 NewChatSheet()
+                    .appAppearance()
             }
             .sheet(isPresented: $showSwitcher) {
                 AccountSwitcherSheet()
+                    .appAppearance()
             }
             .task(id: subscriptionScope) {
                 // Own both creation and binding here so bind() can't be skipped
@@ -123,7 +125,7 @@ struct ChatsListView: View {
         }
     }
 
-    private func pill(_ title: String, target: ChatScope) -> some View {
+    private func pill(_ title: LocalizedStringKey, target: ChatScope) -> some View {
         let selected = scope == target
         return Button {
             scope = target
@@ -171,6 +173,8 @@ struct ChatsListView: View {
                         item.id == rows.first?.id ? .hidden : .automatic,
                         edges: .top
                     )
+                    .listRowSeparatorTint(Color(.separator).opacity(0.35))
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 }
             }
             .listStyle(.plain)
@@ -277,7 +281,7 @@ struct ChatsListView: View {
             Haptics.warning()
         } catch {
             Haptics.error()
-            appState.present(.error("Couldn't leave chat", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't leave chat"), message: error.localizedDescription))
         }
     }
 
@@ -296,7 +300,7 @@ struct ChatsListView: View {
             Haptics.success()
         } catch {
             Haptics.error()
-            appState.present(.error("Couldn't archive chat", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't archive chat"), message: error.localizedDescription))
         }
     }
 }

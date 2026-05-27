@@ -11,6 +11,7 @@ struct darkmatter_iosApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .appAppearance()
                 .task {
                     appState.setAppSceneActive(scenePhase == .active)
                     await appState.bootstrap()
@@ -21,7 +22,7 @@ struct darkmatter_iosApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:
-                        Task { await appState.resumeAfterForegroundActivation() }
+                        appState.startForegroundActivation()
                     case .inactive:
                         appState.setAppSceneActive(false)
                     case .background:
@@ -43,4 +44,5 @@ struct darkmatter_iosApp: App {
             }
         }
     }
+
 }

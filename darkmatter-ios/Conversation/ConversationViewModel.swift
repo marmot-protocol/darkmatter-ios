@@ -90,9 +90,10 @@ final class ConversationViewModel {
 
     var displaySubtitle: String {
         let memberCount = displayMemberCount
-        if memberCount == 0 { return "Just you" }
-        let suffix = memberCount == 1 ? "member" : "members"
-        return "\(memberCount) \(suffix)"
+        if memberCount == 0 { return L10n.string("Just you") }
+        return memberCount == 1
+            ? L10n.string("1 member")
+            : L10n.string("\(memberCount) members")
     }
 
     var isSelfAdmin: Bool {
@@ -128,7 +129,7 @@ final class ConversationViewModel {
     func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
         guard case .reply(let targetId) = MessageSemantics.classify(record) else { return nil }
         guard let target = messageById[targetId] else { return nil }
-        let name = appState?.displayName(forAccountIdHex: target.sender) ?? "Unknown"
+        let name = appState?.displayName(forAccountIdHex: target.sender) ?? L10n.string("Unknown")
         let text = ProfileSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
         return (name, text)
     }
@@ -392,14 +393,14 @@ final class ConversationViewModel {
 
         if !previousName.isEmpty && previousName != record.name {
             appendSystemEvent(.groupRenamed(record.name))
-            appState?.present(.success("Group renamed", message: ProfileSanitizer.groupName(record.name)))
+            appState?.present(.success(L10n.string("Group renamed"), message: ProfileSanitizer.groupName(record.name)))
         }
         if record.archived && !wasArchived {
             appendSystemEvent(.groupArchived)
-            appState?.present(.warning("Group archived"))
+            appState?.present(.warning(L10n.string("Group archived")))
         } else if !record.archived && wasArchived {
             appendSystemEvent(.groupUnarchived)
-            appState?.present(.success("Group unarchived"))
+            appState?.present(.success(L10n.string("Group unarchived")))
         }
         await refreshMembers()
     }
@@ -481,7 +482,7 @@ final class ConversationViewModel {
         }
         if announceRosterChanges && nextMembers.map(\.memberIdHex) != members.map(\.memberIdHex) {
             appendSystemEvent(.rosterChanged)
-            appState?.present(.success("Group membership updated"))
+            appState?.present(.success(L10n.string("Group membership updated")))
         }
         group = details.group
         groupMemberDetails = details.members
@@ -572,7 +573,7 @@ final class ConversationViewModel {
             self.error = error.localizedDescription
             await MainActor.run {
                 Haptics.error()
-                appState.present(.error("Send failed", message: error.localizedDescription))
+                appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
             }
         }
     }
@@ -634,7 +635,7 @@ final class ConversationViewModel {
         } catch {
             deletedMessageIds.remove(message.messageIdHex)
             Haptics.error()
-            appState.present(.error("Couldn't delete message", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't delete message"), message: error.localizedDescription))
         }
     }
 
@@ -789,7 +790,7 @@ final class ConversationViewModel {
             for (key, record) in removedRecords { reactionRecords[key] = record }
             recomputeReactions()
             Haptics.error()
-            appState.present(.error("Reaction failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Reaction failed"), message: error.localizedDescription))
         }
     }
 }

@@ -28,7 +28,7 @@ struct CreateIdentityView: View {
                         if isCreating {
                             ProgressView().controlSize(.small)
                         }
-                        Text(isCreating ? "Creating…" : "Generate Identity")
+                        Text(isCreating ? L10n.string("Creating…") : L10n.string("Generate Identity"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 2)
                     }
@@ -63,7 +63,7 @@ struct CreateIdentityView: View {
         } catch {
             Haptics.error()
             self.error = error.localizedDescription
-            appState.present(.error("Identity creation failed", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Identity creation failed"), message: error.localizedDescription))
         }
         isCreating = false
     }

@@ -21,11 +21,11 @@ struct SystemEventRow: View {
 
     private var text: String {
         switch event {
-        case .groupCreated: "Chat created"
-        case .groupRenamed(let new): "Renamed to \(new)"
-        case .groupArchived: "Chat archived"
-        case .groupUnarchived: "Chat unarchived"
-        case .rosterChanged: "Membership changed"
+        case .groupCreated: L10n.string("Chat created")
+        case .groupRenamed(let new): L10n.string("Renamed to \(new)")
+        case .groupArchived: L10n.string("Chat archived")
+        case .groupUnarchived: L10n.string("Chat unarchived")
+        case .rosterChanged: L10n.string("Membership changed")
         }
     }
 

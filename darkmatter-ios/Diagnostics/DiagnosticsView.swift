@@ -38,7 +38,7 @@ struct DiagnosticsView: View {
                     Image(systemName: streaming ? "dot.radiowaves.left.and.right" : "circle.dotted")
                         .foregroundStyle(streaming ? .green : .secondary)
                         .symbolEffect(.variableColor.iterative, isActive: streaming)
-                    Text(streaming ? "Live" : "Idle")
+                    Text(streaming ? L10n.string("Live") : L10n.string("Idle"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

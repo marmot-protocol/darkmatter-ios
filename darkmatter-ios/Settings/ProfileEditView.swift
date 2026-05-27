@@ -31,7 +31,7 @@ struct ProfileEditView: View {
                         )
                         .frame(width: 56, height: 56)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(displayName.isEmpty ? "Anonymous" : displayName)
+                            Text(displayName.isEmpty ? L10n.string("Anonymous") : displayName)
                                 .font(.headline)
                             Text(appState.shortNpub(forAccountIdHex: active.accountIdHex))
                                 .font(.caption.monospaced())
@@ -66,7 +66,7 @@ struct ProfileEditView: View {
                         if isPublishing {
                             ProgressView().controlSize(.small)
                         }
-                        Text(isPublishing ? "Publishing…" : "Publish to Relays")
+                        Text(isPublishing ? L10n.string("Publishing…") : L10n.string("Save profile"))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 2)
                     }
@@ -131,13 +131,13 @@ struct ProfileEditView: View {
             success = true
             Haptics.success()
             appState.present(.success(
-                "Profile published",
-                message: "Your kind:0 metadata is live on \(relays.count) relays."
+                L10n.string("Profile published"),
+                message: L10n.string("Your kind:0 metadata is live on \(relays.count) relays.")
             ))
         } catch {
             Haptics.error()
             self.error = error.localizedDescription
-            appState.present(.error("Couldn't publish profile", message: error.localizedDescription))
+            appState.present(.error(L10n.string("Couldn't publish profile"), message: error.localizedDescription))
         }
         isPublishing = false
     }

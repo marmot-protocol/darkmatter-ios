@@ -32,6 +32,7 @@ struct AccountsView: View {
             NavigationStack {
                 WelcomeView()
             }
+            .appAppearance()
         }
         // Close the add-account sheet as soon as a new identity lands, so the
         // user returns straight to the (updated) accounts list rather than

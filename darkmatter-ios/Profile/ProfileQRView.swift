@@ -37,7 +37,7 @@ struct ProfileQRView: View {
 
                         Button(action: copyNpub) {
                             HStack(spacing: 8) {
-                                Text(copied ? "Copied" : IdentityFormatter.short(npub, head: 16, tail: 14))
+                                Text(copied ? L10n.string("Copied") : IdentityFormatter.short(npub, head: 16, tail: 14))
                                     .font(.system(.callout, design: .monospaced))
                                     .foregroundStyle(copied ? Color.green : Color.secondary)
                                     .lineLimit(1)
@@ -96,9 +96,11 @@ struct ProfileQRView: View {
                     showScanner = false
                     handleScan(result)
                 }
+                .appAppearance()
             }
             .sheet(item: $scanned) { link in
                 ProfileView(npub: link.npub)
+                    .appAppearance()
             }
         }
     }
@@ -138,7 +140,7 @@ struct ProfileQRView: View {
 
     private func handleScan(_ raw: String) {
         guard case let .profile(scannedNpub) = DeepLink.parse(string: raw) else {
-            scanError = "That QR code isn't a Dark Matter profile."
+            scanError = L10n.string("That QR code isn't a Dark Matter profile.")
             Haptics.error()
             return
         }

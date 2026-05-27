@@ -1,5 +1,7 @@
 import Testing
 import Foundation
+import SwiftUI
+import UIKit
 @testable import darkmatter_ios
 @testable import MarmotKit
 
@@ -163,6 +165,233 @@ struct AppContainerConfigTests {
 
         #expect(FileManager.default.fileExists(atPath: legacy.path))
         #expect(FileManager.default.fileExists(atPath: shared.path))
+    }
+}
+
+struct LocalizationCatalogTests {
+    private let expectedLocales = ["de", "es", "fr", "it", "pt", "ru", "tr", "zh-Hans", "zh-Hant"]
+
+    @Test func sharedCatalogCoversLaunchLanguagesAndCoreKeys() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let expectedKeys = [
+            "Settings",
+            "Notifications",
+            "New Chat",
+            "Message",
+            "Appearance",
+            "Theme",
+            "Light",
+            "Dark",
+            "System",
+            "Language",
+            "Preferences",
+            "New encrypted message",
+            "That QR code isn't a Dark Matter profile.",
+            "Couldn't create chat",
+            "Push registration failed"
+        ]
+
+        for key in expectedKeys {
+            let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+            let localizations = try #require(entry["localizations"] as? [String: Any])
+            for locale in expectedLocales {
+                #expect(localizations[locale] != nil, "Missing \(locale) localization for \(key)")
+            }
+        }
+    }
+
+    @Test func sharedCatalogHasFilledTranslationsForRepresentativeVisibleKeys() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let expectedTranslations: [String: [String: String]] = [
+            "Save profile": [
+                "de": "Profil speichern",
+                "es": "Guardar perfil",
+                "fr": "Enregistrer le profil",
+                "it": "Salva profilo",
+                "pt": "Salvar perfil",
+                "ru": "Сохранить профиль",
+                "tr": "Profili kaydet",
+                "zh-Hans": "保存个人资料",
+                "zh-Hant": "儲存個人資料"
+            ],
+            "Couldn't load chats": [
+                "de": "Chats konnten nicht geladen werden",
+                "es": "No se pudieron cargar los chats",
+                "fr": "Impossible de charger les discussions",
+                "it": "Impossibile caricare le chat",
+                "pt": "Não foi possível carregar os bate-papos",
+                "ru": "Не удалось загрузить чаты",
+                "tr": "Sohbetler yüklenemedi",
+                "zh-Hans": "无法加载聊天记录",
+                "zh-Hant": "無法載入聊天記錄"
+            ]
+        ]
+
+        for (key, translations) in expectedTranslations {
+            for (locale, expected) in translations {
+                #expect(try localizedValue(key, locale: locale, in: strings) == expected)
+            }
+        }
+    }
+
+    @Test func sharedCatalogHasNoMissingLocalizedValuesAndKeepsPlaceholders() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+
+        for (key, rawEntry) in strings {
+            let entry = try #require(rawEntry as? [String: Any], "Invalid localization entry: \(key)")
+            let expectedPlaceholders = placeholders(in: key)
+            for locale in expectedLocales {
+                let value = try localizedValue(key, locale: locale, in: strings)
+                if !key.isEmpty {
+                    #expect(!value.isEmpty, "Missing \(locale) value for \(key)")
+                }
+                #expect(placeholders(in: value).sorted() == expectedPlaceholders.sorted(), "Broken placeholders for \(key) in \(locale)")
+            }
+        }
+    }
+
+    @Test func infoPlistCatalogLocalizesCameraPermissionCopy() throws {
+        let catalog = try readCatalog("darkmatter-ios/InfoPlist.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let cameraUsage = try #require(strings["NSCameraUsageDescription"] as? [String: Any])
+        let localizations = try #require(cameraUsage["localizations"] as? [String: Any])
+
+        #expect(localizations["fr"] != nil)
+        #expect(localizations["zh-Hant"] != nil)
+    }
+
+    @Test func infoPlistCatalogCoversLaunchLanguages() throws {
+        let catalog = try readCatalog("darkmatter-ios/InfoPlist.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+
+        for key in ["CFBundleDisplayName", "CFBundleName", "NSCameraUsageDescription"] {
+            for locale in expectedLocales {
+                #expect(!(try localizedValue(key, locale: locale, in: strings)).isEmpty)
+            }
+        }
+    }
+
+    private func readCatalog(_ relativePath: String) throws -> [String: Any] {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let repoRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let url = repoRoot.appendingPathComponent(relativePath)
+        let data = try Data(contentsOf: url)
+        return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private func localizedValue(_ key: String, locale: String, in strings: [String: Any]) throws -> String {
+        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
+        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
+        let stringUnit = try #require(localeEntry["stringUnit"] as? [String: Any], "Missing string unit for \(key) in \(locale)")
+        return try #require(stringUnit["value"] as? String, "Missing value for \(key) in \(locale)")
+    }
+
+    private func placeholders(in value: String) -> [String] {
+        let pattern = #"%[@a-zA-Z0-9]+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(value.startIndex..<value.endIndex, in: value)
+        return regex.matches(in: value, range: range).compactMap { match in
+            guard let swiftRange = Range(match.range, in: value) else { return nil }
+            return String(value[swiftRange])
+        }
+    }
+}
+
+struct AppearancePreferencesTests {
+    @Test func themePreferencesResolveToExpectedColorSchemes() {
+        #expect(AppearanceTheme.resolved(rawValue: nil) == .system)
+        #expect(AppearanceTheme.resolved(rawValue: "nope") == .system)
+        #expect(AppearanceTheme.system.preferredColorScheme == nil)
+        #expect(AppearanceTheme.light.preferredColorScheme == .light)
+        #expect(AppearanceTheme.dark.preferredColorScheme == .dark)
+        #expect(AppearanceTheme.system.userInterfaceStyle == .unspecified)
+        #expect(AppearanceTheme.light.userInterfaceStyle == .light)
+        #expect(AppearanceTheme.dark.userInterfaceStyle == .dark)
+    }
+
+    @Test func languagePreferencesCoverSupportedCatalogLocales() {
+        let localeIDs = AppLanguage.supportedAppLanguages.compactMap(\.localeIdentifier)
+
+        #expect(AppLanguage.resolved(rawValue: nil) == .system)
+        #expect(AppLanguage.resolved(rawValue: "nope") == .system)
+        #expect(AppLanguage.system.localeIdentifier == nil)
+        #expect(localeIDs == ["en", "de", "es", "fr", "it", "pt", "ru", "tr", "zh-Hans", "zh-Hant"])
+    }
+
+    @Test func appAppearanceSelectionResolvesThemeAndLanguageTogether() {
+        let selected = AppAppearanceSelection(themeRawValue: "dark", languageRawValue: "fr")
+        let fallback = AppAppearanceSelection(themeRawValue: "unknown", languageRawValue: "unknown")
+
+        #expect(selected.theme == .dark)
+        #expect(selected.preferredColorScheme == .dark)
+        #expect(selected.language == .french)
+        #expect(selected.locale.identifier == "fr")
+        #expect(fallback.theme == .system)
+        #expect(fallback.preferredColorScheme == nil)
+        #expect(fallback.language == .system)
+    }
+}
+
+@MainActor
+struct ToastPresentationTests {
+    @Test func toastOverlayPresentsAboveModalWindows() {
+        #expect(ToastOverlayPresentation.windowLevel.rawValue > UIWindow.Level.alert.rawValue)
+    }
+}
+
+struct GroupPushDebugPresentationTests {
+    @Test func tokenSummaryIncludesTotalActiveAndStaleCounts() {
+        let info = GroupPushDebugInfoFfi(
+            totalTokenCount: 3,
+            activeTokenCount: 2,
+            staleTokenCount: 1,
+            missingRelayHintCount: 1,
+            lastTokenListUpdatedAtMs: nil,
+            localRegistration: LocalPushRegistrationDebugFfi(
+                registered: true,
+                shareable: true,
+                localNotificationsEnabled: true,
+                nativePushEnabled: true,
+                localLeafIndex: 7,
+                localTokenCached: true
+            ),
+            tokens: []
+        )
+
+        #expect(GroupPushDebugPresentation.tokenSummary(for: info) == "3 total, 2 active, 1 stale")
+        #expect(GroupPushDebugPresentation.missingRelayHintSummary(for: info) == "1 missing relay hint")
+        #expect(GroupPushDebugPresentation.localRegistrationSummary(for: info.localRegistration) == "Registered, native push on, token cached")
+        #expect(GroupPushDebugPresentation.platformLabel(.apns) == "APNS")
+        #expect(GroupPushDebugPresentation.platformLabel(.fcm) == "FCM")
+    }
+
+    @Test func tokenSummaryPluralizesZeroAndMultipleCounts() {
+        let info = GroupPushDebugInfoFfi(
+            totalTokenCount: 0,
+            activeTokenCount: 0,
+            staleTokenCount: 0,
+            missingRelayHintCount: 2,
+            lastTokenListUpdatedAtMs: nil,
+            localRegistration: LocalPushRegistrationDebugFfi(
+                registered: false,
+                shareable: false,
+                localNotificationsEnabled: false,
+                nativePushEnabled: false,
+                localLeafIndex: nil,
+                localTokenCached: false
+            ),
+            tokens: []
+        )
+
+        #expect(GroupPushDebugPresentation.tokenSummary(for: info) == "0 total, 0 active, 0 stale")
+        #expect(GroupPushDebugPresentation.missingRelayHintSummary(for: info) == "2 missing relay hints")
+        #expect(GroupPushDebugPresentation.localRegistrationSummary(for: info.localRegistration) == "Not registered, native push off, no local token")
     }
 }
 
@@ -366,23 +595,62 @@ struct ForegroundNotificationSyncPolicyTests {
     @Test func catchUpRunsOnlyWhenAppIsReadyAndIdle() {
         #expect(ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: .ready,
-            isCatchUpRunning: false
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
         ))
         #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: .ready,
-            isCatchUpRunning: true
+            isCatchUpRunning: true,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
         ))
         #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: .bootstrapping,
-            isCatchUpRunning: false
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
         ))
         #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: .onboarding,
-            isCatchUpRunning: false
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
         ))
         #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
             appPhase: .failed("offline"),
-            isCatchUpRunning: false
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
+        ))
+    }
+
+    @Test func catchUpDoesNotRunWhileInactiveSuspendedOrSuspending() {
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .ready,
+            isCatchUpRunning: false,
+            isAppSceneActive: false,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .ready,
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: true,
+            isRuntimeSuspending: false
+        ))
+        #expect(!ForegroundNotificationSyncPolicy.shouldCatchUp(
+            appPhase: .ready,
+            isCatchUpRunning: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: true
         ))
     }
 }

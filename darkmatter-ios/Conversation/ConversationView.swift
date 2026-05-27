@@ -165,6 +165,7 @@ struct ConversationView: View {
                     NavigationStack {
                         GroupDetailsView(viewModel: viewModel)
                     }
+                    .appAppearance()
                 }
             }
             .sheet(item: $emojiPickerTarget) { target in
@@ -173,6 +174,7 @@ struct ConversationView: View {
                         Task { await viewModel.toggleReaction(emoji, on: target.record) }
                         appState.addRecentReaction(emoji)
                     })
+                    .appAppearance()
                 }
             }
             .task(id: appState.runtimeGeneration) {
