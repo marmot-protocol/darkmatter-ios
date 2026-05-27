@@ -86,6 +86,7 @@ struct AppStateBootstrapTests {
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
         #expect(appState.runtimeGeneration == generation)
+        #expect(appState.marmot.isStopping())
 
         await appState.resumeAfterForegroundActivation()
 
@@ -93,6 +94,20 @@ struct AppStateBootstrapTests {
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.runtimeGeneration == generation + 1)
         #expect(appState.phase == .ready)
+        #expect(!appState.marmot.isStopping())
+    }
+
+    @Test func inactiveSceneStartsRuntimeSuspensionBeforeBackground() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        await appState.bootstrap()
+        try await appState.createIdentity()
+
+        let suspension = appState.startRuntimeSuspension()
+        await suspension.value
+
+        #expect(!appState.isAppSceneActive)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.marmot.isStopping())
     }
 }
 

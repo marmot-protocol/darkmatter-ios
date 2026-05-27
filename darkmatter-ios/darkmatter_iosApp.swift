@@ -24,21 +24,21 @@ struct darkmatter_iosApp: App {
                     case .active:
                         appState.startForegroundActivation()
                     case .inactive:
-                        appState.setAppSceneActive(false)
+                        appState.startRuntimeSuspension()
                     case .background:
                         beginBackgroundRuntimeSuspension()
                     @unknown default:
-                        appState.setAppSceneActive(false)
+                        appState.startRuntimeSuspension()
                     }
                 }
         }
     }
 
     private func beginBackgroundRuntimeSuspension() {
-        appState.setAppSceneActive(false)
         let taskID = UIApplication.shared.beginBackgroundTask(withName: "Suspend Marmot runtime")
+        let suspensionTask = appState.startRuntimeSuspension()
         Task {
-            await appState.prepareForBackgroundSuspension()
+            await suspensionTask.value
             if taskID != .invalid {
                 UIApplication.shared.endBackgroundTask(taskID)
             }
