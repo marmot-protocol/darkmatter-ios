@@ -244,6 +244,87 @@ struct AppContainerConfigTests {
         #expect(FileManager.default.fileExists(atPath: legacy.path))
         #expect(FileManager.default.fileExists(atPath: shared.path))
     }
+
+    @Test func productionRootThrowsWhenNoDurableLocationIsAvailable() {
+        // Neither the App Group container nor Application Support can be
+        // resolved. The store must *not* silently degrade to a temporary
+        // directory iOS can purge — it must surface a hard failure.
+        let fileManager = StubFileManager(
+            sharedContainerURL: nil,
+            applicationSupportError: CocoaError(.fileNoSuchFile)
+        )
+
+        #expect(throws: (any Error).self) {
+            _ = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
+        }
+    }
+
+    @Test func productionRootFallsBackToApplicationSupportWhenNoAppGroup() throws {
+        // No App Group container, but Application Support is reachable: the
+        // store lives in the durable, backed-up Application Support location.
+        let appSupport = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarmotAppSupport-\(UUID().uuidString)", isDirectory: true)
+        let fileManager = StubFileManager(
+            sharedContainerURL: nil,
+            applicationSupportURL: appSupport
+        )
+
+        let root = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
+
+        #expect(root.path == appSupport.appendingPathComponent("Marmot").path)
+    }
+
+    @Test func productionRootPrefersSharedContainerEvenIfApplicationSupportFails() throws {
+        // App Group container present but Application Support unreachable: the
+        // missing legacy location only blocks best-effort migration, never the
+        // resolution of the shared root.
+        let shared = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarmotShared-\(UUID().uuidString)", isDirectory: true)
+        let fileManager = StubFileManager(
+            sharedContainerURL: shared,
+            applicationSupportError: CocoaError(.fileNoSuchFile)
+        )
+
+        let root = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
+
+        #expect(root.path == shared.appendingPathComponent("Marmot").path)
+    }
+}
+
+/// Test double that lets us drive `AppContainerConfig`'s storage resolution
+/// down its failure and fallback branches deterministically.
+private final class StubFileManager: FileManager {
+    private let sharedContainerURL: URL?
+    private let applicationSupportURL: URL?
+    private let applicationSupportError: Error?
+
+    init(
+        sharedContainerURL: URL?,
+        applicationSupportURL: URL? = nil,
+        applicationSupportError: Error? = nil
+    ) {
+        self.sharedContainerURL = sharedContainerURL
+        self.applicationSupportURL = applicationSupportURL
+        self.applicationSupportError = applicationSupportError
+        super.init()
+    }
+
+    override func containerURL(forSecurityApplicationGroupIdentifier groupIdentifier: String) -> URL? {
+        sharedContainerURL
+    }
+
+    override func url(
+        for directory: FileManager.SearchPathDirectory,
+        in domain: FileManager.SearchPathDomainMask,
+        appropriateFor url: URL?,
+        create shouldCreate: Bool
+    ) throws -> URL {
+        if directory == .applicationSupportDirectory {
+            if let applicationSupportError { throw applicationSupportError }
+            if let applicationSupportURL { return applicationSupportURL }
+        }
+        return try super.url(for: directory, in: domain, appropriateFor: url, create: shouldCreate)
+    }
 }
 
 struct LocalizationCatalogTests {
