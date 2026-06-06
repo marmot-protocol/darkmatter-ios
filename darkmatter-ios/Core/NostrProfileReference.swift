@@ -86,7 +86,13 @@ enum NostrProfileReference {
 
         let hrp = String(lower[..<separator])
         let dataPart = lower[lower.index(after: separator)...]
-        guard !hrp.isEmpty, dataPart.count >= 6 else { return nil }
+        guard !hrp.isEmpty,
+              dataPart.count >= 6,
+              // BIP-0173 requires HRP characters to be printable ASCII (33–126).
+              // Enforcing this prevents a runtime trap in bech32VerifyChecksum
+              // where a Unicode scalar > 0x1FFF overflows UInt8($0.value >> 5).
+              hrp.unicodeScalars.allSatisfy({ (33...126).contains($0.value) })
+        else { return nil }
 
         var values: [UInt8] = []
         values.reserveCapacity(dataPart.count)
