@@ -444,6 +444,7 @@ final class ConversationViewModel {
         } else {
             projectedDeletedMessageIds.remove(record.messageIdHex)
         }
+        reconcilePendingOutgoingMessage(with: appRecord, replyTargetId: record.replyToMessageIdHex)
 
         if case .streamFinal(let streamId) = MessageSemantics.classify(appRecord) {
             finalizedStreamIds.insert(streamId)
@@ -501,6 +502,46 @@ final class ConversationViewModel {
             return $0.timestamp < $1.timestamp
         }
         timeline = next
+    }
+
+    func applyPendingOutgoingMessage(tempId: String, record: AppMessageRecordFfi) {
+        transientTimelineItems["msg:\(tempId)"] = .pendingMessage(tempId: tempId, record: record)
+        rebuildTimeline()
+    }
+
+    private func reconcilePendingOutgoingMessage(with record: AppMessageRecordFfi, replyTargetId: String?) {
+        guard record.direction == "sent" else { return }
+        let projectedReplyTarget = replyTargetId ?? Self.replyTargetMessageId(in: record)
+        guard let match = transientTimelineItems.first(where: { _, item in
+            Self.pendingOutgoingMessage(item, matches: record, replyTargetId: projectedReplyTarget)
+        }) else { return }
+        transientTimelineItems[match.key] = nil
+    }
+
+    private static func pendingOutgoingMessage(
+        _ item: TimelineItem,
+        matches record: AppMessageRecordFfi,
+        replyTargetId: String?
+    ) -> Bool {
+        guard case .message(let pending, let status) = item.kind,
+              status == .sending,
+              pending.messageIdHex.isEmpty,
+              pending.direction == "sent" else {
+            return false
+        }
+
+        return pending.groupIdHex == record.groupIdHex
+            && pending.sender == record.sender
+            && pending.plaintext == record.plaintext
+            && pending.kind == record.kind
+            && replyTargetMessageId(in: pending) == replyTargetId
+    }
+
+    private static func replyTargetMessageId(in record: AppMessageRecordFfi) -> String? {
+        guard case .reply(let messageId) = MessageSemantics.classify(record) else {
+            return nil
+        }
+        return messageId
     }
 
     // MARK: - Ingestion
@@ -789,8 +830,7 @@ final class ConversationViewModel {
             recordedAt: now,
             receivedAt: now
         )
-        transientTimelineItems["msg:\(tempId)"] = .pendingMessage(tempId: tempId, record: optimistic)
-        rebuildTimeline()
+        applyPendingOutgoingMessage(tempId: tempId, record: optimistic)
         replyingTo = nil
 
         sendInFlight = true
@@ -840,8 +880,12 @@ final class ConversationViewModel {
             recordedAt: record.recordedAt,
             receivedAt: record.receivedAt
         )
-        if !realId.isEmpty { messageById[realId] = confirmed }
-        if !realId.isEmpty { messageStatusById[realId] = .sent }
+        if !realId.isEmpty {
+            if messageById[realId] == nil {
+                messageById[realId] = confirmed
+            }
+            messageStatusById[realId] = .sent
+        }
         let rowId = "msg:\(realId.isEmpty ? tempId : realId)"
         transientTimelineItems["msg:\(tempId)"] = nil
         if realId.isEmpty {

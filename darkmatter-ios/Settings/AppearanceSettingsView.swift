@@ -14,6 +14,7 @@ struct AppearanceSettingsView: View {
                     }
                 }
                 .pickerStyle(.inline)
+                .labelsHidden()
             } header: {
                 Text("Theme")
             } footer: {
@@ -33,6 +34,7 @@ struct AppearanceSettingsView: View {
                     }
                 }
                 .pickerStyle(.inline)
+                .labelsHidden()
             } header: {
                 Text("Language")
             } footer: {

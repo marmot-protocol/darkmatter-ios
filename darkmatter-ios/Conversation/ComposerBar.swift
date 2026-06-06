@@ -1,8 +1,45 @@
 import SwiftUI
 
+enum ComposerInputChrome {
+    enum FillBase: Equatable {
+        case systemBackground
+        case black
+
+        var color: Color {
+            switch self {
+            case .systemBackground:
+                Color(.systemBackground)
+            case .black:
+                Color.black
+            }
+        }
+    }
+
+    struct OverlayFill: Equatable {
+        let base: FillBase
+        let opacity: Double
+
+        var color: Color {
+            base.color.opacity(opacity)
+        }
+    }
+
+    static func overlayFill(for colorScheme: ColorScheme) -> OverlayFill {
+        switch colorScheme {
+        case .light:
+            OverlayFill(base: .systemBackground, opacity: 0.88)
+        case .dark:
+            OverlayFill(base: .black, opacity: 0.26)
+        @unknown default:
+            OverlayFill(base: .systemBackground, opacity: 0.88)
+        }
+    }
+}
+
 /// Glass-styled composer at the bottom of the conversation screen. Multi-line
 /// growing text field + send button. Disabled while a send is in-flight.
 struct ComposerBar: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var draft: String
     let isSending: Bool
     let focusRequest: Int
@@ -25,7 +62,7 @@ struct ComposerBar: View {
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
                             .fill(.ultraThinMaterial)
                         RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.black.opacity(0.26))
+                            .fill(ComposerInputChrome.overlayFill(for: colorScheme).color)
                     }
                 }
                 .overlay {
