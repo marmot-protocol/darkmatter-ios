@@ -148,13 +148,14 @@ final class AppState {
     }
 
     /// Production entry point. Builds a keychain-backed client; if secure
-    /// storage can't be initialized the app can't run safely, so we trap
-    /// with a clear message rather than fall back to insecure on-disk keys.
+    /// storage or a durable on-disk root can't be initialized the app can't run
+    /// safely, so we trap with a clear message rather than fall back to insecure
+    /// on-disk keys or a temporary directory iOS will silently purge.
     convenience init() {
         do {
             self.init(client: try MarmotClient())
         } catch {
-            fatalError("Failed to initialize Keychain-backed secret storage: \(error)")
+            fatalError("Failed to initialize durable Marmot storage: \(error)")
         }
     }
 
