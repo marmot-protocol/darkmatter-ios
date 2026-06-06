@@ -225,7 +225,7 @@ struct AppContainerConfigTests {
         let marker = legacy.appendingPathComponent("marker.txt")
         try "ok".write(to: marker, atomically: true, encoding: .utf8)
 
-        AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
+        try AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
 
         #expect(!FileManager.default.fileExists(atPath: legacy.path))
         #expect(FileManager.default.fileExists(atPath: shared.appendingPathComponent("marker.txt").path))
@@ -239,29 +239,17 @@ struct AppContainerConfigTests {
         try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
 
-        AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
+        try AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared)
 
         #expect(FileManager.default.fileExists(atPath: legacy.path))
         #expect(FileManager.default.fileExists(atPath: shared.path))
     }
 
-    @Test func productionRootThrowsWhenNoDurableLocationIsAvailable() {
-        // Neither the App Group container nor Application Support can be
-        // resolved. The store must *not* silently degrade to a temporary
-        // directory iOS can purge — it must surface a hard failure.
-        let fileManager = StubFileManager(
-            sharedContainerURL: nil,
-            applicationSupportError: CocoaError(.fileNoSuchFile)
-        )
-
-        #expect(throws: (any Error).self) {
-            _ = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
-        }
-    }
-
-    @Test func productionRootFallsBackToApplicationSupportWhenNoAppGroup() throws {
-        // No App Group container, but Application Support is reachable: the
-        // store lives in the durable, backed-up Application Support location.
+    @Test func productionRootThrowsWhenAppGroupContainerUnavailable() {
+        // Marmot data must live only in the shared App Group container so the
+        // app and the Notification Service Extension share one store. When the
+        // container is missing we hard-fail rather than fork the store into a
+        // per-process path — even though Application Support is reachable here.
         let appSupport = FileManager.default.temporaryDirectory
             .appendingPathComponent("MarmotAppSupport-\(UUID().uuidString)", isDirectory: true)
         let fileManager = StubFileManager(
@@ -269,14 +257,15 @@ struct AppContainerConfigTests {
             applicationSupportURL: appSupport
         )
 
-        let root = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
-
-        #expect(root.path == appSupport.appendingPathComponent("Marmot").path)
+        #expect(throws: AppContainerError.appGroupContainerUnavailable) {
+            _ = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
+        }
+        #expect(!FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("Marmot").path))
     }
 
-    @Test func productionRootPrefersSharedContainerEvenIfApplicationSupportFails() throws {
+    @Test func productionRootResolvesSharedRootEvenIfApplicationSupportFails() throws {
         // App Group container present but Application Support unreachable: the
-        // missing legacy location only blocks best-effort migration, never the
+        // missing legacy location only blocks one-time migration, never the
         // resolution of the shared root.
         let shared = FileManager.default.temporaryDirectory
             .appendingPathComponent("MarmotShared-\(UUID().uuidString)", isDirectory: true)
@@ -289,23 +278,50 @@ struct AppContainerConfigTests {
 
         #expect(root.path == shared.appendingPathComponent("Marmot").path)
     }
+
+    @Test func failedLegacyMigrationPropagatesAndLeavesDataRecoverable() throws {
+        // If the legacy→shared move fails, the error must propagate and the
+        // shared root must NOT be created. Otherwise the next launch would see
+        // an existing (empty) shared root, skip migration, and strand the
+        // legacy data permanently.
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MarmotMigrateFail-\(UUID().uuidString)", isDirectory: true)
+        let legacy = tmp.appendingPathComponent("legacy/Marmot", isDirectory: true)
+        let shared = tmp.appendingPathComponent("shared/Marmot", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try "ok".write(to: legacy.appendingPathComponent("marker.txt"), atomically: true, encoding: .utf8)
+
+        let fileManager = StubFileManager(
+            sharedContainerURL: nil,
+            moveItemError: CocoaError(.fileWriteNoPermission)
+        )
+
+        #expect(throws: (any Error).self) {
+            try AppContainerConfig.migrateLegacyRootIfNeeded(from: legacy, to: shared, fileManager: fileManager)
+        }
+        #expect(FileManager.default.fileExists(atPath: legacy.appendingPathComponent("marker.txt").path))
+        #expect(!FileManager.default.fileExists(atPath: shared.path))
+    }
 }
 
 /// Test double that lets us drive `AppContainerConfig`'s storage resolution
-/// down its failure and fallback branches deterministically.
+/// down its failure and migration branches deterministically.
 private final class StubFileManager: FileManager {
     private let sharedContainerURL: URL?
     private let applicationSupportURL: URL?
     private let applicationSupportError: Error?
+    private let moveItemError: Error?
 
     init(
         sharedContainerURL: URL?,
         applicationSupportURL: URL? = nil,
-        applicationSupportError: Error? = nil
+        applicationSupportError: Error? = nil,
+        moveItemError: Error? = nil
     ) {
         self.sharedContainerURL = sharedContainerURL
         self.applicationSupportURL = applicationSupportURL
         self.applicationSupportError = applicationSupportError
+        self.moveItemError = moveItemError
         super.init()
     }
 
@@ -324,6 +340,11 @@ private final class StubFileManager: FileManager {
             if let applicationSupportURL { return applicationSupportURL }
         }
         return try super.url(for: directory, in: domain, appropriateFor: url, create: shouldCreate)
+    }
+
+    override func moveItem(at srcURL: URL, to dstURL: URL) throws {
+        if let moveItemError { throw moveItemError }
+        try super.moveItem(at: srcURL, to: dstURL)
     }
 }
 
