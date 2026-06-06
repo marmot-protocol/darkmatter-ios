@@ -816,6 +816,23 @@ struct AppearancePreferencesTests {
     }
 }
 
+struct ComposerInputChromeTests {
+    @Test func lightModeComposerInputUsesLightSystemFill() {
+        let lightFill = ComposerInputChrome.overlayFill(for: .light)
+        let darkFill = ComposerInputChrome.overlayFill(for: .dark)
+
+        #expect(lightFill.base == .systemBackground)
+        #expect(lightFill.opacity > darkFill.opacity)
+    }
+
+    @Test func darkModeComposerInputKeepsSmokyOverlay() {
+        let fill = ComposerInputChrome.overlayFill(for: .dark)
+
+        #expect(fill.base == .black)
+        #expect(fill.opacity == 0.26)
+    }
+}
+
 @MainActor
 struct ToastPresentationTests {
     @Test func toastOverlayPresentsAboveModalWindows() {
@@ -1422,6 +1439,28 @@ struct GroupDisplayTests {
 @MainActor
 struct ConversationChromeTests {
 
+    @Test func initialChromeUsesChatListTitleBeforeViewModelLoads() {
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: "Alice",
+            initialMemberCount: nil
+        )
+
+        #expect(chrome.title == "Alice")
+        #expect(chrome.subtitle == nil)
+    }
+
+    @Test func initialChromeReservesKnownMemberSubtitle() {
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: "Project Room",
+            initialMemberCount: 2
+        )
+
+        #expect(chrome.title == "Project Room")
+        #expect(chrome.subtitle == "2 members")
+    }
+
     @Test func directMessageTitleUsesInitialChatListHintsBeforeRosterLoads() throws {
         let appState = AppState(client: try MarmotClient.testClient())
         let other = hex("22")
@@ -1665,6 +1704,61 @@ struct ConversationTimelineProjectionTests {
         #expect(viewModel.hasMoreBefore)
         #expect(forwardedRows.map(\.groupIdHex) == [row.groupIdHex])
         #expect(forwardedRows.first?.firstUnreadMessageIdHex == projected.messageIdHex)
+    }
+
+    @Test func projectedOutgoingMessageReplacesMatchingPendingBubble() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let pending = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "hello from me",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+        let projected = timelineRecord(
+            messageIdHex: hex("b2"),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: pending.plaintext,
+            timelineAt: 20
+        )
+
+        viewModel.applyPendingOutgoingMessage(tempId: "pending-1", record: pending)
+        viewModel.applyTimelineSubscriptionUpdate(
+            .projection(
+                update: RuntimeProjectionUpdateFfi(
+                    accountIdHex: sender,
+                    accountLabel: "account-a",
+                    update: TimelineProjectionUpdateFfi(
+                        groupIdHex: groupIdHex,
+                        messages: [projected],
+                        changes: [],
+                        chatListRow: nil,
+                        chatListTrigger: .newLastMessage
+                    )
+                )
+            )
+        )
+
+        let messages = viewModel.timeline.compactMap { item -> (String, MessageStatus, UInt64)? in
+            guard case .message(let record, let status) = item.kind else { return nil }
+            return (record.messageIdHex, status, item.timestamp)
+        }
+
+        #expect(messages.count == 1)
+        #expect(messages.first?.0 == projected.messageIdHex)
+        #expect(messages.first?.1 == .sent)
+        #expect(messages.first?.2 == projected.timelineAt)
     }
 }
 

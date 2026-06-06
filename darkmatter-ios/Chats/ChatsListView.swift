@@ -9,6 +9,7 @@ struct ChatsListView: View {
     @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
     @State private var scope: ChatScope = .active
+    @FocusState private var searchFocused: Bool
 
     enum ChatScope { case active, archived }
 
@@ -53,11 +54,12 @@ struct ChatsListView: View {
             }
             // Hidden by default; pulling the list down reveals it.
             .searchable(text: $searchText, prompt: "Search chats")
+            .searchFocused($searchFocused)
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
                 if let viewModel {
-                    ChatDestination(target: target, viewModel: viewModel)
+                    ChatDestination(target: target, viewModel: viewModel, appState: appState)
                 }
             }
             .sheet(isPresented: $showNewChat) {
@@ -99,6 +101,7 @@ struct ChatsListView: View {
         )
         showNewChat = false
         showSwitcher = false
+        searchFocused = false
         scope = .active
         path = [target]
         appState.clearPendingChat()
@@ -157,19 +160,14 @@ struct ChatsListView: View {
             let rows = currentRows(viewModel)
             List {
                 ForEach(rows) { item in
-                    // ZStack with a hidden NavigationLink keeps the whole row
-                    // tappable while suppressing the default disclosure chevron
-                    // (the trailing slot shows the message timestamp instead).
-                    ZStack {
+                    // A plain button keeps the whole row tappable while the
+                    // trailing slot remains available for the message timestamp.
+                    Button {
+                        navigate(to: item)
+                    } label: {
                         ChatRow(item: item)
-                        NavigationLink(
-                            value: ChatNavigationTarget(
-                                groupIdHex: item.group.groupIdHex,
-                                messageIdHex: item.firstUnreadMessageIdHex
-                            )
-                        ) { EmptyView() }
-                            .opacity(0)
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         swipeActions(for: item)
                     }
@@ -216,6 +214,16 @@ struct ChatsListView: View {
         let title = item.title
         let preview = item.previewText ?? ""
         return title + " " + preview
+    }
+
+    private func navigate(to item: ChatsListViewModel.Item) {
+        searchFocused = false
+        path.append(
+            ChatNavigationTarget(
+                groupIdHex: item.group.groupIdHex,
+                messageIdHex: item.firstUnreadMessageIdHex
+            )
+        )
     }
 
     @ViewBuilder
@@ -312,6 +320,7 @@ struct ChatsListView: View {
 private struct ChatDestination: View {
     let target: ChatsListView.ChatNavigationTarget
     let viewModel: ChatsListViewModel
+    let appState: AppState
     @State private var timedOut = false
 
     private var item: ChatsListViewModel.Item? {
@@ -325,6 +334,7 @@ private struct ChatDestination: View {
                 chat: item.group,
                 initialTitle: item.title,
                 initialTargetMessageIdHex: target.messageIdHex,
+                initialAppState: appState,
                 onChatListRowUpdated: { viewModel.applyChatListRow($0) }
             )
         } else if timedOut {

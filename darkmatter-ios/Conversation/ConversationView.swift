@@ -80,6 +80,31 @@ enum ReplyPreviewLayout {
     static let outerBottomInset: CGFloat = 2
 }
 
+struct ConversationChromePresentation: Equatable {
+    let title: String
+    let subtitle: String?
+
+    static func initial(
+        chat: AppGroupRecordFfi,
+        initialTitle: String?,
+        initialMemberCount: Int?
+    ) -> ConversationChromePresentation {
+        ConversationChromePresentation(
+            title: ProfileSanitizer.groupName(initialTitle)
+                ?? ProfileSanitizer.groupName(chat.name)
+                ?? IdentityFormatter.short(chat.groupIdHex),
+            subtitle: initialMemberCount.flatMap(memberSubtitle)
+        )
+    }
+
+    static func memberSubtitle(for memberCount: Int) -> String? {
+        if memberCount == 0 { return L10n.string("Just you") }
+        return memberCount == 1
+            ? L10n.string("1 member")
+            : L10n.string("\(memberCount) members")
+    }
+}
+
 struct ConversationView: View {
     @Environment(AppState.self) private var appState
     let chat: AppGroupRecordFfi
@@ -123,6 +148,7 @@ struct ConversationView: View {
         initialOtherMember: String? = nil,
         initialMemberCount: Int? = nil,
         initialTargetMessageIdHex: String? = nil,
+        initialAppState: AppState? = nil,
         onChatListRowUpdated: ((ChatListRowFfi) -> Void)? = nil
     ) {
         self.chat = chat
@@ -132,6 +158,18 @@ struct ConversationView: View {
         self.onChatListRowUpdated = onChatListRowUpdated
         let targetMessageId = initialTargetMessageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialTargetMessageIdHex = targetMessageId?.isEmpty == false ? targetMessageId : nil
+        _viewModel = State(
+            initialValue: initialAppState.map {
+                ConversationViewModel(
+                    appState: $0,
+                    group: chat,
+                    initialTitle: initialTitle,
+                    initialOtherMember: initialOtherMember,
+                    initialMemberCount: initialMemberCount,
+                    onChatListRowUpdated: onChatListRowUpdated
+                )
+            }
+        )
     }
 
     /// Binding that's `true` only for the row matching `actionsTarget`, so the
@@ -151,7 +189,7 @@ struct ConversationView: View {
         timeline
             .safeAreaInset(edge: .bottom, spacing: 0) { composerArea }
             .overlay { centeredActionsOverlay }
-            .navigationTitle(viewModel?.displayTitle ?? chat.name)
+            .navigationTitle(conversationChrome.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -280,20 +318,31 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var conversationTitle: some View {
-        if let viewModel {
-            VStack(spacing: 0) {
-                Text(viewModel.displayTitle)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(viewModel.displaySubtitle)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        } else {
-            Text(chat.name)
+        let chrome = conversationChrome
+        VStack(spacing: 0) {
+            Text(chrome.title)
                 .font(.headline)
+                .lineLimit(1)
+            Text(chrome.subtitle ?? " ")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .opacity(chrome.subtitle == nil ? 0 : 1)
         }
+    }
+
+    private var conversationChrome: ConversationChromePresentation {
+        if let viewModel {
+            return ConversationChromePresentation(
+                title: viewModel.displayTitle,
+                subtitle: viewModel.displaySubtitle
+            )
+        }
+        return .initial(
+            chat: chat,
+            initialTitle: initialTitle,
+            initialMemberCount: initialMemberCount
+        )
     }
 
     // MARK: - Timeline
