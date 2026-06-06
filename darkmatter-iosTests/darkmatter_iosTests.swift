@@ -1395,6 +1395,21 @@ struct GroupManagementPresentationTests {
         )
     }
 
+    @Test func memberRefRejectsNonASCIIHRPWithoutCrashing() {
+        // Regression test for issue #35: a bech32 string whose HRP contains a
+        // Unicode scalar > 0x1FFF used to trap in bech32VerifyChecksum via
+        // UInt8($0.value >> 5). The decoder must reject it and return nil.
+        let crafted = "nprofile🎉1qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+        #expect(NostrProfileReference.memberRef(from: crafted) == nil)
+        #expect(NostrProfileReference.memberRef(fromReference: crafted) == nil)
+        #expect(DeepLink.parse(string: "nostr:\(crafted)") == nil)
+        #expect(AddMembersPresentation.memberRef(fromScannedPayload: crafted) == nil)
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "darkmatter://profile/\(crafted)") == nil
+        )
+    }
+
     @Test func stagedMembersUseCachedDisplayNameAndNpubSubtitle() throws {
         let appState = AppState(client: try MarmotClient.testClient())
         let account = hex("33")
