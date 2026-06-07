@@ -1742,6 +1742,22 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.firstUnreadMessageIdHex == hex("c2"))
     }
 
+    @Test func previewTextSanitizesProjectedLastMessage() throws {
+        let unsafe = chatListRow(
+            groupIdHex: hex("d0"),
+            title: "Unsafe",
+            lastMessage: chatListPreview(
+                messageIdHex: hex("d1"),
+                plaintext: " hello\u{202E}\nthere\u{200B} ",
+                timelineAt: 1
+            )
+        )
+
+        let item = ChatsListViewModel.Item(row: unsafe)
+
+        #expect(item.previewText == "hello there")
+    }
+
     @Test func localArchiveChangeMovesProjectedRowBetweenScopes() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let row = chatListRow(groupIdHex: hex("d1"), title: "General")
