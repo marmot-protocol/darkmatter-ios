@@ -27,7 +27,7 @@ enum GroupDisplay {
         appState: AppState
     ) -> String {
         if let name = ProfileSanitizer.groupName(group.name) { return name }
-        if memberCount > 2 { return L10n.string("\(memberCount) person group") }
+        if memberCount > 2 { return L10n.formatted("%lld person group", Int64(memberCount)) }
         if memberCount == 2, let other = otherMember {
             return appState.knownDisplayName(forAccountIdHex: other)
                 ?? appState.shortNpub(forAccountIdHex: other)
