@@ -163,11 +163,7 @@ struct MessageBubble: View {
 
     private var timeLabel: String {
         let date = Date(timeIntervalSince1970: TimeInterval(record.recordedAt))
-        let formatter = DateFormatter()
-        formatter.locale = .autoupdatingCurrent
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: date)
+        return RelativeTime.shortTime(date)
     }
 
     private var statusLabel: String? {

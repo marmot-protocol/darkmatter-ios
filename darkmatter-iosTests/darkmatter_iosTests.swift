@@ -518,6 +518,19 @@ struct RelativeTimeTests {
         #expect(RelativeTime.formatterCacheCountForTesting == 2)
     }
 
+    @Test func shortTimeReusesCachedDateFormatterForMessageBubbles() {
+        let messageDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        RelativeTime.resetFormatterCacheForTesting()
+        defer { RelativeTime.resetFormatterCacheForTesting() }
+
+        for _ in 0..<50 {
+            _ = RelativeTime.shortTime(messageDate)
+        }
+
+        #expect(RelativeTime.formatterCacheCountForTesting == 1)
+    }
+
     @Test func shortRefreshesFormatterCacheWhenLocaleIdentifierChanges() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -537,6 +550,21 @@ struct RelativeTimeTests {
 
         #expect(RelativeTime.formatterCacheCountForTesting == 1)
         #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == Locale.autoupdatingCurrent.identifier)
+    }
+
+    @Test func messageBubbleTimeLabelUsesCachedFormatter() throws {
+        let source = try String(contentsOf: messageBubbleSourceURL, encoding: .utf8)
+
+        #expect(source.matches(#"private var timeLabel: String\s*\{[\s\S]*RelativeTime\.shortTime\("#))
+        #expect(!source.matches(#"private var timeLabel: String\s*\{[\s\S]*DateFormatter\("#))
+    }
+
+    private var messageBubbleSourceURL: URL {
+        let testFile = URL(fileURLWithPath: #filePath)
+        return testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Conversation/MessageBubble.swift")
     }
 }
 
