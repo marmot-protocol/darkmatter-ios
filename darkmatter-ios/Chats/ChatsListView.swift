@@ -220,7 +220,7 @@ struct ChatsListView: View {
         searchFocused = false
         path.append(
             ChatNavigationTarget(
-                groupIdHex: item.group.groupIdHex,
+                groupIdHex: item.id,
                 messageIdHex: item.firstUnreadMessageIdHex
             )
         )
@@ -228,26 +228,26 @@ struct ChatsListView: View {
 
     @ViewBuilder
     private func swipeActions(for item: ChatsListViewModel.Item) -> some View {
-        if item.group.archived {
+        if item.isArchived {
             Button {
-                Task { await setArchived(group: item.group, archived: false) }
+                Task { await setArchived(groupIdHex: item.id, archived: false) }
             } label: {
                 Label("Unarchive", systemImage: "tray.and.arrow.up")
             }
             .tint(.blue)
             Button(role: .destructive) {
-                Task { await leave(group: item.group) }
+                Task { await leave(groupIdHex: item.id) }
             } label: {
                 Label("Leave", systemImage: "person.crop.circle.badge.minus")
             }
         } else {
             Button(role: .destructive) {
-                Task { await leave(group: item.group) }
+                Task { await leave(groupIdHex: item.id) }
             } label: {
                 Label("Leave", systemImage: "person.crop.circle.badge.minus")
             }
             Button {
-                Task { await setArchived(group: item.group, archived: true) }
+                Task { await setArchived(groupIdHex: item.id, archived: true) }
             } label: {
                 Label("Archive", systemImage: "archivebox")
             }
@@ -279,12 +279,12 @@ struct ChatsListView: View {
     }
 
     @MainActor
-    private func leave(group: AppGroupRecordFfi) async {
+    private func leave(groupIdHex: String) async {
         guard let ref = appState.activeAccountRef else { return }
         do {
             _ = try await appState.marmot.leaveGroup(
                 accountRef: ref,
-                groupIdHex: group.groupIdHex
+                groupIdHex: groupIdHex
             )
             Haptics.warning()
         } catch {
@@ -294,12 +294,12 @@ struct ChatsListView: View {
     }
 
     @MainActor
-    private func setArchived(group: AppGroupRecordFfi, archived: Bool) async {
+    private func setArchived(groupIdHex: String, archived: Bool) async {
         guard let ref = appState.activeAccountRef else { return }
         do {
             let updated = try appState.marmot.setGroupArchived(
                 accountRef: ref,
-                groupIdHex: group.groupIdHex,
+                groupIdHex: groupIdHex,
                 archived: archived
             )
             // The chats subscription only fires on transport events, not local
@@ -315,28 +315,53 @@ struct ChatsListView: View {
 
 /// Resolves a group id to its conversation. A just-created or deep-linked
 /// chat may not be in the list yet, so show a spinner until the chats
-/// subscription delivers it — then fall back to an unavailable state if it
+/// subscription delivers it. Once the row exists, load the authoritative group
+/// record before opening the conversation so membership/admin metadata is not
+/// inferred from the chat-list projection. Fall back to an unavailable state if it
 /// never arrives (e.g. a link to a chat this account isn't a member of).
 private struct ChatDestination: View {
     let target: ChatsListView.ChatNavigationTarget
     let viewModel: ChatsListViewModel
     let appState: AppState
     @State private var timedOut = false
+    @State private var resolvedGroup: AppGroupRecordFfi?
+    @State private var loadingGroupId: String?
+    @State private var loadError: String?
 
     private var item: ChatsListViewModel.Item? {
         (viewModel.items + viewModel.archivedItems)
-            .first(where: { $0.group.groupIdHex == target.groupIdHex })
+            .first(where: { $0.id == target.groupIdHex })
     }
 
     var body: some View {
         if let item {
-            ConversationView(
-                chat: item.group,
-                initialTitle: item.title,
-                initialTargetMessageIdHex: target.messageIdHex,
-                initialAppState: appState,
-                onChatListRowUpdated: { viewModel.applyChatListRow($0) }
-            )
+            Group {
+                if let resolvedGroup, resolvedGroup.groupIdHex == item.id {
+                    ConversationView(
+                        chat: resolvedGroup,
+                        initialTitle: item.title,
+                        initialTargetMessageIdHex: target.messageIdHex,
+                        initialAppState: appState,
+                        onChatListRowUpdated: { viewModel.applyChatListRow($0) }
+                    )
+                } else if let loadError, loadingGroupId == item.id {
+                    ContentUnavailableView {
+                        Label("Couldn't load conversation", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button("Retry") {
+                            Task { await resolveGroup(for: item, force: true) }
+                        }
+                    }
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .task(id: item.id) {
+                await resolveGroup(for: item)
+            }
         } else if timedOut {
             ContentUnavailableView("Chat unavailable", systemImage: "questionmark.circle")
         } else {
@@ -346,6 +371,27 @@ private struct ChatDestination: View {
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                     timedOut = true
                 }
+        }
+    }
+
+    @MainActor
+    private func resolveGroup(for item: ChatsListViewModel.Item, force: Bool = false) async {
+        guard force || resolvedGroup?.groupIdHex != item.id || loadError != nil else { return }
+        guard let accountRef = appState.activeAccountRef else {
+            loadingGroupId = item.id
+            loadError = L10n.string("No active account.")
+            return
+        }
+
+        loadingGroupId = item.id
+        loadError = nil
+        do {
+            let details = try await appState.marmot.groupDetails(accountRef: accountRef, groupIdHex: item.id)
+            guard !Task.isCancelled else { return }
+            resolvedGroup = details.group
+        } catch {
+            guard !Task.isCancelled else { return }
+            loadError = error.localizedDescription
         }
     }
 }

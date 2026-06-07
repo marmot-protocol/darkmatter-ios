@@ -19,24 +19,9 @@ final class ChatsListViewModel {
         }
         var unreadCount: UInt64 { row.unreadCount }
         var hasUnread: Bool { row.hasUnread }
+        var isArchived: Bool { row.archived }
         var firstUnreadMessageIdHex: String? { row.firstUnreadMessageIdHex }
         var lastMessage: ChatListMessagePreviewFfi? { row.lastMessage }
-
-        var group: AppGroupRecordFfi {
-            AppGroupRecordFfi(
-                groupIdHex: row.groupIdHex,
-                endpoint: "",
-                name: row.groupName,
-                description: "",
-                admins: [],
-                relays: [],
-                nostrGroupIdHex: "",
-                archived: row.archived,
-                pendingConfirmation: row.pendingConfirmation,
-                welcomerAccountIdHex: nil,
-                viaWelcomeMessageIdHex: nil
-            )
-        }
     }
 
     private(set) var items: [Item] = []
