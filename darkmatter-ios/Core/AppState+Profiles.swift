@@ -14,7 +14,7 @@ extension AppState {
             cacheProfile(local, for: id)
             return local
         }
-        Task { await refreshProfile(forAccountIdHex: id) }
+        scheduleProfileRefresh(forAccountIdHex: id)
         return nil
     }
 
@@ -67,20 +67,75 @@ extension AppState {
     }
 
     @MainActor
+    private func scheduleProfileRefresh(forAccountIdHex id: String) {
+        guard !scheduledProfileFetchIDs.contains(id) else { return }
+        scheduledProfileFetchIDs.insert(id)
+        queuedProfileFetchIDs.append(id)
+        startProfileFetchQueueIfNeeded()
+    }
+
+    @MainActor
+    private func startProfileFetchQueueIfNeeded() {
+        guard profileFetchQueueTask == nil, !queuedProfileFetchIDs.isEmpty else { return }
+        profileFetchQueueTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runProfileFetchQueue()
+        }
+    }
+
+    @MainActor
+    private func runProfileFetchQueue() async {
+        defer {
+            profileFetchQueueTask = nil
+            if !queuedProfileFetchIDs.isEmpty {
+                startProfileFetchQueueIfNeeded()
+            }
+        }
+
+        while !Task.isCancelled, let id = nextQueuedProfileFetchID() {
+            activeProfileFetchID = id
+            await refreshProfile(forAccountIdHex: id)
+            activeProfileFetchID = nil
+            scheduledProfileFetchIDs.remove(id)
+        }
+    }
+
+    @MainActor
+    private func nextQueuedProfileFetchID() -> String? {
+        guard !queuedProfileFetchIDs.isEmpty else { return nil }
+        return queuedProfileFetchIDs.removeFirst()
+    }
+
+    @MainActor
+    func cancelProfileFetchQueue() {
+        queuedProfileFetchIDs.removeAll()
+        if let activeProfileFetchID {
+            scheduledProfileFetchIDs = [activeProfileFetchID]
+        } else {
+            scheduledProfileFetchIDs.removeAll()
+        }
+        profileFetchQueueTask?.cancel()
+    }
+
+    @MainActor
     private func refreshProfile(forAccountIdHex id: String) async {
+        guard !Task.isCancelled else { return }
         guard profileCache.beginDirectoryFetch(for: id) else { return }
         defer { profileCache.finishDirectoryFetch(for: id) }
 
+        guard !Task.isCancelled else { return }
         if let local = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
             cacheProfile(local, for: id)
             return
         }
 
+        guard !Task.isCancelled else { return }
         // Fetch this account's OWN kind:0 through the active account's relay
         // lists. Marmot owns those lists; iOS only asks for the current view.
         let relays = activeAccountRef.map(relayBootstrapRelays(for:)) ?? MarmotClient.seedRelays
         try? await marmot.refreshProfile(accountIdHex: id, relays: relays)
 
+        guard !Task.isCancelled else { return }
         if let fetched = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
             cacheProfile(fetched, for: id)
         } else if let name = marmot.displayName(accountIdHex: id), !name.isEmpty {
