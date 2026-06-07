@@ -85,8 +85,12 @@ enum RelaySettings {
 
     static func normalizedRelayURL(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let scheme = trimmed.lowercased()
-        guard scheme.hasPrefix("wss://") || scheme.hasPrefix("ws://") else { return nil }
+        guard let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "wss" || scheme == "ws",
+              let host = components.host,
+              !host.isEmpty
+        else { return nil }
         return trimmed
     }
 

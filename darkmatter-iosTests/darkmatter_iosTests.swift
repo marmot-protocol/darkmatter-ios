@@ -525,6 +525,9 @@ struct RelaySettingsTests {
         #expect(RelaySettings.normalizedRelayURL("wss://relay.example") == "wss://relay.example")
         #expect(RelaySettings.normalizedRelayURL("https://relay.example") == nil)
         #expect(RelaySettings.normalizedRelayURL("relay.example") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss:// ") == nil)
+        #expect(RelaySettings.normalizedRelayURL("ws://\n") == nil)
     }
 
     @Test func savingRelaysReloadsAuthoritativeListsWhenFinalPublishFails() async throws {
