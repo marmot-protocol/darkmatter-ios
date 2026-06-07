@@ -231,19 +231,12 @@ struct AppStateBootstrapTests {
         #expect(!appState.marmot.isStopping())
     }
 
-    @Test func inactiveSceneStartsRuntimeSuspensionBeforeBackground() async throws {
-        let appState = AppState(client: try MarmotClient.testClient())
-        await appState.bootstrap()
-        try await appState.createIdentity()
+    @Test func inactiveSceneDoesNotStartRuntimeSuspensionBeforeBackground() throws {
+        let source = try String(contentsOf: appSourceURL, encoding: .utf8)
 
-        let suspension = appState.startRuntimeSuspension()
-        await suspension.value
-
-        #expect(!appState.isAppSceneActive)
-        #expect(appState.runtimeSuspendedForBackground)
-        // Runtime released (storage closed) rather than kept alive in a
-        // stopping state — see readyRuntimeSuspendsForBackgroundAndResumesForForeground.
-        #expect(appState.client == nil)
+        #expect(source.matches(#"case \.inactive:\s*appState\.setAppSceneActive\(false\)"#))
+        #expect(!source.matches(#"case \.inactive:\s*appState\.startRuntimeSuspension\(\)"#))
+        #expect(source.matches(#"case \.background:\s*beginBackgroundRuntimeSuspension\(\)"#))
     }
 
     @Test func foregroundActivationDoesNotPollForRuntimeSuspension() throws {
