@@ -233,6 +233,16 @@ struct AppStateBootstrapTests {
         #expect(!source.matches(#"while\s+isRuntimeSuspending"#))
     }
 
+    @Test func profileMissesUseTrackedFetchQueue() throws {
+        let appStateSource = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let profilesSource = try String(contentsOf: appStateProfilesSourceURL, encoding: .utf8)
+
+        #expect(profilesSource.contains("scheduleProfileRefresh(forAccountIdHex: id)"))
+        #expect(profilesSource.contains("profileFetchQueueTask = Task"))
+        #expect(!profilesSource.matches(#"Task\s*\{\s*await\s+refreshProfile\(forAccountIdHex:\s*id\)\s*\}"#))
+        #expect(appStateSource.contains("cancelProfileFetchQueue()"))
+    }
+
     @Test func signOutDisablesNativePushAndSwitchesActiveAccount() async throws {
         // Regression for issue #7: signing out must clear the signed-out
         // account's push registration so the push server stops delivering
@@ -320,6 +330,13 @@ struct AppStateBootstrapTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/darkmatter_iosApp.swift")
+    }
+
+    private var appStateProfilesSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Core/AppState+Profiles.swift")
     }
 }
 

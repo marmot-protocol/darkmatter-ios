@@ -88,6 +88,10 @@ final class AppState {
     private var foregroundActivationTask: Task<Void, Never>?
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var runtimeSuspensionTask: Task<Void, Never>?
+    @ObservationIgnored var profileFetchQueueTask: Task<Void, Never>?
+    @ObservationIgnored var queuedProfileFetchIDs: [String] = []
+    @ObservationIgnored var scheduledProfileFetchIDs: Set<String> = []
+    @ObservationIgnored var activeProfileFetchID: String?
     private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
@@ -159,6 +163,10 @@ final class AppState {
         } catch {
             fatalError("Failed to initialize durable Marmot storage: \(error)")
         }
+    }
+
+    deinit {
+        profileFetchQueueTask?.cancel()
     }
 
     /// Convenience accessor for the underlying FFI handle.
@@ -321,6 +329,7 @@ final class AppState {
     @MainActor
     func signOut() async {
         guard let signingOut = activeAccountRef else { return }
+        cancelProfileFetchQueue()
         try? await marmot.clearPushRegistration(accountRef: signingOut)
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
@@ -520,6 +529,7 @@ final class AppState {
     func prepareForBackgroundSuspension() async {
         defer { runtimeSuspensionTask = nil }
         isAppSceneActive = false
+        cancelProfileFetchQueue()
         await cancelForegroundMaintenance()
         guard phase == .ready,
               !runtimeSuspendedForBackground,
