@@ -1795,7 +1795,7 @@ struct ChatsListProjectionTests {
 
         #expect(viewModel.items.isEmpty)
         #expect(viewModel.archivedItems.map(\.id) == [row.groupIdHex])
-        #expect(viewModel.archivedItems.first?.group.archived == true)
+        #expect(viewModel.archivedItems.first?.isArchived == true)
     }
 
     @Test func chatListRemoveUpdateDropsProjectedRow() throws {
@@ -1808,6 +1808,36 @@ struct ChatsListProjectionTests {
 
         #expect(viewModel.items.map(\.id) == [kept.groupIdHex])
         #expect(viewModel.archivedItems.isEmpty)
+    }
+
+    @Test func chatListItemsDoNotExposeSyntheticGroupRecords() throws {
+        let source = try String(contentsOf: chatsListViewModelSourceURL, encoding: .utf8)
+
+        #expect(!source.contains("var group: AppGroupRecordFfi"))
+        #expect(!source.contains("endpoint: \"\""))
+        #expect(!source.contains("admins: []"))
+    }
+
+    @Test func chatDestinationResolvesFullGroupBeforeOpeningConversation() throws {
+        let source = try String(contentsOf: chatsListViewSourceURL, encoding: .utf8)
+
+        #expect(source.contains("@State private var resolvedGroup"))
+        #expect(source.contains("groupDetails(accountRef: accountRef, groupIdHex: item.id)"))
+        #expect(source.matches(#"ConversationView\(\s*chat: resolvedGroup"#))
+    }
+
+    private var chatsListViewModelSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Chats/ChatsListViewModel.swift")
+    }
+
+    private var chatsListViewSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Chats/ChatsListView.swift")
     }
 }
 
