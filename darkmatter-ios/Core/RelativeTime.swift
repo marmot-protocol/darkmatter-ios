@@ -6,6 +6,7 @@ import Foundation
 enum RelativeTime {
     private static var formatterCache: [String: DateFormatter] = [:]
     private static var formatterCacheLocaleIdentifier = Locale.autoupdatingCurrent.identifier
+    private static let shortTimeFormatterKey = "style:time:short"
 
     static func short(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let seconds = now.timeIntervalSince(date)
@@ -22,12 +23,29 @@ enum RelativeTime {
         return formatted(date, sameYear ? "d MMM" : "d MMM yyyy")
     }
 
+    static func shortTime(_ date: Date) -> String {
+        let formatter = formatter(for: shortTimeFormatterKey) { formatter in
+            formatter.timeStyle = .short
+            formatter.dateStyle = .none
+        }
+        return formatter.string(from: date)
+    }
+
     private static func formatted(_ date: Date, _ template: String) -> String {
         let formatter = formatter(for: template)
         return formatter.string(from: date)
     }
 
     private static func formatter(for template: String) -> DateFormatter {
+        formatter(for: "template:\(template)") { formatter in
+            formatter.dateFormat = template
+        }
+    }
+
+    private static func formatter(
+        for key: String,
+        configure: (DateFormatter) -> Void
+    ) -> DateFormatter {
         let locale = Locale.autoupdatingCurrent
         let localeIdentifier = locale.identifier
         if formatterCacheLocaleIdentifier != localeIdentifier {
@@ -35,14 +53,14 @@ enum RelativeTime {
             formatterCacheLocaleIdentifier = localeIdentifier
         }
 
-        if let cached = formatterCache[template] {
+        if let cached = formatterCache[key] {
             return cached
         }
 
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = template
-        formatterCache[template] = formatter
+        configure(formatter)
+        formatterCache[key] = formatter
         return formatter
     }
 
