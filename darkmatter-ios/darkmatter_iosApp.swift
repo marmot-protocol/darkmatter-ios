@@ -27,11 +27,11 @@ struct darkmatter_iosApp: App {
                     case .active:
                         appState.startForegroundActivation()
                     case .inactive:
-                        appState.startRuntimeSuspension()
+                        appState.setAppSceneActive(false)
                     case .background:
                         beginBackgroundRuntimeSuspension()
                     @unknown default:
-                        appState.startRuntimeSuspension()
+                        appState.setAppSceneActive(false)
                     }
                 }
         }
