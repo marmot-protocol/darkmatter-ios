@@ -1454,6 +1454,22 @@ struct NotificationServiceProjectionTests {
     }
 }
 
+struct NotificationServiceTests {
+    @Test func notificationServiceSerializesFinishOnMainActor() throws {
+        let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
+
+        #expect(source.matches(#"@MainActor\s+final class NotificationService"#))
+        #expect(source.matches(#"private func finish\(\)[\s\S]*self\.contentHandler = nil[\s\S]*self\.bestAttemptContent = nil[\s\S]*contentHandler\(bestAttemptContent\)"#))
+    }
+
+    private var notificationServiceSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("NotificationServiceExtension/NotificationService.swift")
+    }
+}
+
 @MainActor
 struct ProfileSanitizerTests {
 
