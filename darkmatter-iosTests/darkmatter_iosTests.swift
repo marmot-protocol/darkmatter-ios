@@ -1993,6 +1993,12 @@ struct ConversationTimelineProjectionTests {
         #expect(!source.matches(#"private func upsertStreamBubble[\s\S]*?rebuildTimeline\("#))
     }
 
+    @Test func conversationViewModelDeclaresMainActorIsolation() throws {
+        let source = try String(contentsOf: conversationViewModelSourceURL, encoding: .utf8)
+
+        #expect(source.matches(#"@Observable\s+@MainActor\s+final class ConversationViewModel"#))
+    }
+
     private var conversationViewModelSourceURL: URL {
         URL(filePath: #filePath)
             .deletingLastPathComponent()

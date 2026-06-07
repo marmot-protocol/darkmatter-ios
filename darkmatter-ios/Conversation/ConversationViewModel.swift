@@ -7,6 +7,7 @@ import os
 /// message bubbles + system events, aggregated reactions, the group roster,
 /// the in-progress reply, and the send pipeline.
 @Observable
+@MainActor
 final class ConversationViewModel {
 
     /// One emoji's tally on a target message.
@@ -214,7 +215,7 @@ final class ConversationViewModel {
         self.onChatListRowUpdated = onChatListRowUpdated
     }
 
-    deinit {
+    isolated deinit {
         timelineTask?.cancel()
         groupStateTask?.cancel()
         groupDetailsTask?.cancel()
