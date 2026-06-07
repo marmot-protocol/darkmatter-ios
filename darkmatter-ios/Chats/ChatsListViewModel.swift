@@ -12,7 +12,11 @@ final class ChatsListViewModel {
         let row: ChatListRowFfi
         var id: String { row.groupIdHex }
         var title: String { ProfileSanitizer.groupName(row.title) ?? IdentityFormatter.short(row.groupIdHex) }
-        @MainActor var previewText: String? { row.lastMessage.map(MessagePreview.body) }
+        @MainActor var previewText: String? {
+            row.lastMessage.flatMap { preview in
+                ProfileSanitizer.singleLine(MessagePreview.body(preview), maxLength: 140)
+            }
+        }
         var unreadCount: UInt64 { row.unreadCount }
         var hasUnread: Bool { row.hasUnread }
         var firstUnreadMessageIdHex: String? { row.firstUnreadMessageIdHex }
