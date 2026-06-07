@@ -1,7 +1,8 @@
-    import Foundation
+import Foundation
 import MarmotKit
 import UserNotifications
 
+@MainActor
 final class NotificationService: UNNotificationServiceExtension {
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
@@ -15,8 +16,8 @@ final class NotificationService: UNNotificationServiceExtension {
         self.contentHandler = contentHandler
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
 
-        collectionTask = Task {
-            await collectAndDecorateNotification()
+        collectionTask = Task { [weak self] in
+            await self?.collectAndDecorateNotification()
         }
     }
 
@@ -96,6 +97,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private func finish() {
         guard let contentHandler, let bestAttemptContent else { return }
         self.contentHandler = nil
+        self.bestAttemptContent = nil
         contentHandler(bestAttemptContent)
     }
 }
