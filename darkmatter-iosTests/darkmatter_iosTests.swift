@@ -848,6 +848,10 @@ struct LocalizationCatalogTests {
                 "darkmatter-ios/Settings/ProfileEditView.swift",
                 #"L10n.string("Your kind:0 metadata is live on \(relays.count) relays.")"#
             ),
+            (
+                "darkmatter-ios/Core/GroupDisplay.swift",
+                #"L10n.string("\(memberCount) person group")"#
+            ),
         ]
 
         for (relativePath, dynamicKey) in dynamicCountKeys {
@@ -885,6 +889,13 @@ struct LocalizationCatalogTests {
                 arguments: [Int64(4)],
                 locale: Locale(identifier: "de")
             ) == "Ihre kind:0-Metadaten sind live auf 4-Relays."
+        )
+        #expect(
+            L10n.formatted(
+                "%lld person group",
+                arguments: [Int64(3)],
+                locale: Locale(identifier: "it")
+            ) == "3 gruppo di persone"
         )
     }
 
