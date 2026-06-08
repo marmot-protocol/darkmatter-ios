@@ -705,10 +705,7 @@ final class AppState {
 
     @MainActor
     private func refreshAccounts() async throws {
-        let listed = try await Task.detached { [marmot] in
-            try marmot.listAccounts()
-        }.value
-        accounts = listed
+        accounts = try await runtimeClient().listAccounts()
     }
 
     // MARK: - Identity management
