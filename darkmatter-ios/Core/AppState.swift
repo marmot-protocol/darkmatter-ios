@@ -162,7 +162,10 @@ final class AppState {
         do {
             self.init(client: try MarmotClient())
         } catch {
-            fatalError("Failed to initialize durable Marmot storage: \(error)")
+            // Don't interpolate the error: its description can carry internal
+            // Keychain/storage details into crash logs (#21). The type alone is
+            // enough to triage which failure mode trapped.
+            fatalError("Failed to initialize durable Marmot storage (\(type(of: error)))")
         }
     }
 
@@ -183,7 +186,9 @@ final class AppState {
         do {
             return try runtimeClient().marmot
         } catch {
-            fatalError("Failed to rebuild Keychain-backed Marmot runtime: \(error)")
+            // See init(): keep internal Keychain/storage error details out of
+            // crash logs (#21); the error type is enough to triage.
+            fatalError("Failed to rebuild Keychain-backed Marmot runtime (\(type(of: error)))")
         }
     }
 
