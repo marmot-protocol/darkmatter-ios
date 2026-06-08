@@ -181,18 +181,27 @@ final class AppState {
     var marmot: Marmot {
         if let client { return client.marmot }
         do {
-            let restored = try makeRuntime()
-            client = restored
-            return restored.marmot
+            return try runtimeClient().marmot
         } catch {
             fatalError("Failed to rebuild Keychain-backed Marmot runtime: \(error)")
         }
+    }
+
+    private func runtimeClient() throws -> MarmotClient {
+        if let client { return client }
+        let restored = try makeRuntime()
+        client = restored
+        return restored
     }
 
     /// Build a fresh runtime from the captured on-disk root and relay set. Used
     /// to restore the runtime after a background suspension released it.
     private func makeRuntime() throws -> MarmotClient {
         try MarmotClient(rootPath: runtimeRootPath, relayUrls: runtimeRelayUrls)
+    }
+
+    private func startCurrentRuntime() async throws {
+        try await runtimeClient().startRuntime()
     }
 
     // MARK: - Bootstrap
@@ -202,7 +211,7 @@ final class AppState {
     @MainActor
     func bootstrap() async {
         do {
-            try await marmot.start()
+            try await startCurrentRuntime()
             try await refreshAccounts()
             if accounts.isEmpty {
                 phase = .onboarding
@@ -446,13 +455,18 @@ final class AppState {
         try marmot.relayTelemetrySettings()
     }
 
+    @MainActor
     @discardableResult
-    func setRelayTelemetryExportEnabled(_ enabled: Bool) throws -> RelayTelemetrySettingsFfi {
+    func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi {
         if enabled && !telemetryBuildConfig.telemetryCredentialsAvailable {
             throw TelemetrySettingsActionError.telemetryNotConfigured
         }
-        let current = try marmot.relayTelemetrySettings()
-        return try marmot.setRelayTelemetrySettings(
+        let client = try runtimeClient()
+        if enabled {
+            try await client.configureTelemetryRuntime()
+        }
+        let current = try client.marmot.relayTelemetrySettings()
+        return try await client.marmot.setRelayTelemetrySettings(
             settings: RelayTelemetrySettingsFfi(
                 exportEnabled: enabled,
                 exportIntervalSeconds: current.exportIntervalSeconds
@@ -474,13 +488,6 @@ final class AppState {
 
     func auditLogFiles() throws -> [AuditLogFileFfi] {
         try marmot.auditLogFiles()
-    }
-
-    func postAuditLogFile(_ file: AuditLogFileFfi) async throws -> AuditLogUploadResultFfi {
-        try await marmot.postAuditLogFile(
-            path: file.path,
-            endpoint: telemetryBuildConfig.auditUploadEndpoint
-        )
     }
 
     func catchUpAfterForegroundActivation() async {
@@ -569,8 +576,9 @@ final class AppState {
 
         if runtimeSuspendedForBackground {
             do {
-                client = try makeRuntime()
-                try await marmot.start()
+                let restored = try makeRuntime()
+                client = restored
+                try await restored.startRuntime()
                 runtimeSuspendedForBackground = false
                 runtimeGeneration += 1
                 startNotificationSubscription()
@@ -630,7 +638,7 @@ final class AppState {
         do {
             let restored = try makeRuntime()
             client = restored
-            try await restored.marmot.start()
+            try await restored.startRuntime()
             runtimeSuspendedForBackground = false
             runtimeGeneration += 1
             try await refreshAccounts()

@@ -12,8 +12,6 @@
 	<string>$(DARKMATTER_OTLP_BEARER_TOKEN)</string>
 	<key>DarkmatterTelemetryEnvironment</key>
 	<string>$(DARKMATTER_TELEMETRY_ENVIRONMENT)</string>
-	<key>DarkmatterAuditUploadEndpoint</key>
-	<string>$(DARKMATTER_AUDIT_UPLOAD_ENDPOINT)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

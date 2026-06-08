@@ -1,0 +1,6 @@
+// App target build settings shared by Debug and Release.
+// Put local secrets in Config/TelemetrySecrets.xcconfig. That file is ignored.
+
+OTLP_TOKEN_DARKMATTER_IOS =
+
+#include? "TelemetrySecrets.xcconfig"

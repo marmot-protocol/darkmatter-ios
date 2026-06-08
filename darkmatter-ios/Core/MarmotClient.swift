@@ -30,18 +30,26 @@ final class MarmotClient {
         self.relayUrls = relayUrls
         self.telemetryConfig = TelemetryBuildConfig.current()
         self.marmot = try Marmot(rootPath: rootPath, relayUrls: relayUrls)
-        try configureTelemetryRuntime()
+        try configureAuditLogTracker()
     }
 
     func freshRuntime() throws -> MarmotClient {
         try MarmotClient(rootPath: rootPath, relayUrls: relayUrls)
     }
 
-    private func configureTelemetryRuntime() throws {
+    func startRuntime() async throws {
+        try await configureTelemetryRuntime()
+        try await marmot.start()
+    }
+
+    func configureTelemetryRuntime() async throws {
         let installId = try marmot.telemetryInstallId()
-        try marmot.setRelayTelemetryRuntimeConfig(
+        try await marmot.setRelayTelemetryRuntimeConfig(
             config: telemetryConfig.runtimeConfig(installId: installId)
         )
+    }
+
+    private func configureAuditLogTracker() throws {
         try marmot.setAuditLogTrackerConfig(
             config: telemetryConfig.auditTrackerConfig()
         )
