@@ -960,6 +960,10 @@ final class ConversationViewModel {
               let appState,
               let accountRef = appState.activeAccountRef else { return }
 
+        // Defense-in-depth: clamp to the protocol's max length so an oversized
+        // paste can't bypass the composer's cap (#54).
+        let outgoing = Self.cappedOutgoingText(trimmed)
+
         let replyTargetId = replyTargetMessageId()
         let tempId = UUID().uuidString
         let now = UInt64(Date().timeIntervalSince1970)
@@ -976,7 +980,7 @@ final class ConversationViewModel {
             direction: "sent",
             groupIdHex: group.groupIdHex,
             sender: appState.activeAccount?.accountIdHex ?? "",
-            plaintext: trimmed,
+            plaintext: outgoing,
             kind: MessageSemantics.kindChat,
             tags: optimisticTags,
             recordedAt: now,
@@ -994,13 +998,13 @@ final class ConversationViewModel {
                     accountRef: accountRef,
                     groupIdHex: group.groupIdHex,
                     targetMessageId: replyTargetId,
-                    text: trimmed
+                    text: outgoing
                 )
             } else {
                 summary = try await appState.marmot.sendText(
                     accountRef: accountRef,
                     groupIdHex: group.groupIdHex,
-                    text: trimmed
+                    text: outgoing
                 )
             }
             confirmSent(tempId: tempId, record: optimistic, messageId: summary.messageIds.first)
@@ -1170,6 +1174,11 @@ final class ConversationViewModel {
             return text
         }
         return String(text.prefix(ProfileSanitizer.maxMessageLength))
+    }
+
+    /// Clamp outbound message text to the protocol's max length (#54).
+    nonisolated static func cappedOutgoingText(_ text: String) -> String {
+        String(text.prefix(ProfileSanitizer.maxMessageLength))
     }
 
     /// Create or update the synthetic bubble for a live stream (keyed by id).
