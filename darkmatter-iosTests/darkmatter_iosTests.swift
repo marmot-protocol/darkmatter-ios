@@ -1196,6 +1196,28 @@ struct DiagnosticsPresentationTests {
         #expect(text.contains("[alice] msg from \(IdentityFormatter.short(sender))"))
         #expect(text.contains("(\(secret.count) chars)"))
         #expect(!text.contains(secret))
+
+        let emptyEvent = MarmotEventFfi.messageReceived(
+            received: RuntimeMessageReceivedFfi(
+                accountIdHex: hex("aa"),
+                accountLabel: "alice",
+                message: ReceivedMessageFfi(
+                    messageIdHex: hex("dd"),
+                    groupIdHex: hex("cc"),
+                    sender: sender,
+                    senderDisplayName: nil,
+                    plaintext: "",
+                    kind: MessageSemantics.kindChat,
+                    tags: [],
+                    recordedAt: 43
+                )
+            )
+        )
+
+        let emptyText = DiagnosticsView.diagnosticText(for: emptyEvent)
+        #expect(emptyText.contains("[alice] msg from \(IdentityFormatter.short(sender))"))
+        #expect(emptyText.contains("(empty)"))
+        #expect(!emptyText.contains(secret))
     }
 }
 
