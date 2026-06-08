@@ -55,7 +55,11 @@ enum DeepLink: Equatable {
                 return .profile(npub: memberRef)
             }
         case "chat":
-            if let id = parts.first, Hex.isHex(id) { return .chat(groupIdHex: id.lowercased()) }
+            // A Marmot group id is a 32-byte (64-char) hex value. Reject any
+            // other length before routing it to Marmot (#68).
+            if let id = parts.first, let groupId = Hex.normalized32Bytes(id) {
+                return .chat(groupIdHex: groupId)
+            }
         default:
             break
         }
