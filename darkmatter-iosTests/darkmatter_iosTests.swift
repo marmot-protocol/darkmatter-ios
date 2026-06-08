@@ -29,6 +29,15 @@ struct AppStateBootstrapTests {
         #expect(appState.accounts.isEmpty)
     }
 
+    @Test func telemetryExportSettingPersistsThroughAppState() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+
+        let saved = try await appState.setRelayTelemetryExportEnabled(false)
+
+        #expect(!saved.exportEnabled)
+        #expect(try appState.relayTelemetrySettings().exportEnabled == false)
+    }
+
     @Test func createIdentityFromOnboardingStartsNotificationSubscription() async throws {
         let appState = AppState(client: try MarmotClient.testClient(), notifications: AppNotifications())
         await appState.bootstrap()
@@ -433,17 +442,34 @@ struct TelemetryBuildConfigTests {
             "DarkmatterTelemetryOTLPEndpoint": "$(DARKMATTER_OTLP_ENDPOINT)",
             "DarkmatterTelemetryBearerToken": "$(DARKMATTER_OTLP_BEARER_TOKEN)",
             "DarkmatterTelemetryEnvironment": "",
-            "DarkmatterAuditUploadEndpoint": "$(DARKMATTER_AUDIT_UPLOAD_ENDPOINT)",
             "CFBundleShortVersionString": "1.2.3",
             "CFBundleVersion": "45"
-        ])
+        ], environment: [:])
 
         #expect(config.otlpEndpoint == TelemetryBuildConfig.defaultOtlpEndpoint)
         #expect(config.bearerToken == nil)
         #expect(!config.telemetryCredentialsAvailable)
         #expect(config.deploymentEnvironment == "staging")
-        #expect(config.auditUploadEndpoint == TelemetryBuildConfig.defaultAuditUploadEndpoint)
         #expect(config.serviceVersion == "1.2.3+45")
+    }
+
+    @Test func unresolvedBuildSettingsCanReadTelemetryCredentialsFromEnvironment() {
+        let config = TelemetryBuildConfig.current(infoDictionary: [
+            "DarkmatterTelemetryOTLPEndpoint": "$(DARKMATTER_OTLP_ENDPOINT)",
+            "DarkmatterTelemetryBearerToken": "$(DARKMATTER_OTLP_BEARER_TOKEN)",
+            "DarkmatterTelemetryEnvironment": "$(DARKMATTER_TELEMETRY_ENVIRONMENT)",
+            "CFBundleShortVersionString": "1.2.3",
+            "CFBundleVersion": "45"
+        ], environment: [
+            "DARKMATTER_OTLP_ENDPOINT": "https://collector.example/v1/metrics",
+            "OTLP_TOKEN_DARKMATTER_IOS": "env-token",
+            "DARKMATTER_TELEMETRY_ENVIRONMENT": "production"
+        ])
+
+        #expect(config.otlpEndpoint == "https://collector.example/v1/metrics")
+        #expect(config.bearerToken == "env-token")
+        #expect(config.telemetryCredentialsAvailable)
+        #expect(config.deploymentEnvironment == "production")
     }
 
     @Test func productionEnvironmentMustBeExplicitlyConfigured() {
@@ -451,7 +477,6 @@ struct TelemetryBuildConfigTests {
             "DarkmatterTelemetryOTLPEndpoint": "https://collector.example/v1/metrics",
             "DarkmatterTelemetryBearerToken": "secret-token",
             "DarkmatterTelemetryEnvironment": "production",
-            "DarkmatterAuditUploadEndpoint": "https://audits.example/upload",
             "CFBundleShortVersionString": "2.0",
             "CFBundleVersion": "9"
         ])
@@ -460,18 +485,16 @@ struct TelemetryBuildConfigTests {
         #expect(config.bearerToken == "secret-token")
         #expect(config.telemetryCredentialsAvailable)
         #expect(config.deploymentEnvironment == "production")
-        #expect(config.auditUploadEndpoint == "https://audits.example/upload")
         #expect(config.serviceVersion == "2.0+9")
     }
 
-    @Test func runtimeConfigCarriesInstallAndPlatformResource() {
+    @Test func runtimeConfigCarriesInstallAndIOSResourceFields() {
         let config = TelemetryBuildConfig(
             otlpEndpoint: "https://collector.example/v1/metrics",
             bearerToken: "secret-token",
             deploymentEnvironment: "staging",
-            auditUploadEndpoint: "https://audits.example/upload",
             serviceVersion: "2.0+9",
-            osVersion: "Version 18.0",
+            osVersion: "26.0",
             deviceModelIdentifier: "iPhone99,9"
         )
 
@@ -479,19 +502,30 @@ struct TelemetryBuildConfigTests {
 
         #expect(runtime.otlpEndpoint == "https://collector.example/v1/metrics")
         #expect(runtime.authorizationBearerToken == "secret-token")
+        #expect(runtime.resource?.serviceVersion == "2.0+9")
         #expect(runtime.resource?.serviceInstanceId == "install-a")
         #expect(runtime.resource?.deploymentEnvironment == "staging")
-        #expect(runtime.resource?.osType == "ios")
-        #expect(runtime.resource?.osVersion == "Version 18.0")
+        #expect(runtime.resource?.tenant == "darkmatter-ios")
+        #expect(runtime.resource?.osType == "darwin")
+        #expect(runtime.resource?.osVersion == "26.0")
         #expect(runtime.resource?.deviceModelIdentifier == "iPhone99,9")
     }
 
-    @Test func auditTrackerConfigCarriesUploadEndpointCredentialsAndSource() {
+    @Test func supportedDeploymentEnvironmentsPassThrough() {
+        for environment in ["production", "staging", "development", "test"] {
+            let config = TelemetryBuildConfig.current(infoDictionary: [
+                "DarkmatterTelemetryEnvironment": environment
+            ], environment: [:])
+
+            #expect(config.deploymentEnvironment == environment)
+        }
+    }
+
+    @Test func auditTrackerConfigDefersEndpointToMarmotAndCarriesCredentialsAndSource() {
         let config = TelemetryBuildConfig(
             otlpEndpoint: "https://collector.example/v1/metrics",
             bearerToken: "secret-token",
             deploymentEnvironment: "staging",
-            auditUploadEndpoint: "https://audits.example/upload",
             serviceVersion: "2.0+9",
             osVersion: "Version 18.0",
             deviceModelIdentifier: "iPhone99,9"
@@ -499,7 +533,7 @@ struct TelemetryBuildConfigTests {
 
         let tracker = config.auditTrackerConfig()
 
-        #expect(tracker.endpoint == "https://audits.example/upload")
+        #expect(tracker.endpoint == nil)
         #expect(tracker.authorizationBearerToken == "secret-token")
         #expect(tracker.source.accountLabel == nil)
         #expect(tracker.source.deviceLabel == "iPhone99,9")
@@ -1988,12 +2022,32 @@ struct ChatsListProjectionTests {
         #expect(source.matches(#"ConversationView\(\s*chat: resolvedGroup"#))
     }
 
-    @Test func chatListUsesNativeSearchAndFilterMenuChrome() throws {
+    @Test func chatListUsesMessagesStyleSearchAndComposeChrome() throws {
         let source = try String(contentsOf: chatsListViewSourceURL, encoding: .utf8)
 
         #expect(source.contains(#".navigationTitle("Chats")"#))
-        #expect(source.contains(#".searchable(text: $searchText"#))
-        #expect(source.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
+        #expect(source.contains("private var chatSearchBar"))
+        #expect(source.contains("chatListBottomAccessory"))
+        #expect(source.contains("safeAreaBar(edge: .bottom"))
+        #expect(source.contains("safeAreaInset(edge: .bottom"))
+        #expect(source.contains("glassEffect(.regular"))
+        #expect(source.contains("private let chatListSearchHorizontalInset: CGFloat = 12"))
+        #expect(source.contains(".padding(.horizontal, chatListSearchHorizontalInset)"))
+        #expect(source.contains(#"TextField("Search", text: $searchText, onEditingChanged: { isEditing in"#))
+        #expect(source.contains(#"Image(systemName: "mic.fill")"#))
+        #expect(source.contains(".frame(height: 44)"))
+        #expect(source.contains("private func focusSearchField()"))
+        #expect(source.contains("private var searchCancellationActive: Bool"))
+        #expect(source.contains("searchFocused || searchEditing"))
+        #expect(source.contains(".searchDictationBehavior(.inline(activation: .onSelect))"))
+        #expect(source.contains("private func cancelSearch()"))
+        #expect(source.contains("UIApplication.shared.sendAction"))
+        #expect(source.contains("private func searchActionTapped()"))
+        #expect(source.contains("searchText = \"\""))
+        #expect(source.contains("searchFocused = false"))
+        #expect(!source.contains("safeAreaInset(edge: .top"))
+        #expect(!source.contains(#".searchable(text: $searchText"#))
+        #expect(!source.contains(#""Search chats""#))
         #expect(source.contains("private var filterMenu"))
         #expect(source.contains("case active, archived, unread"))
         #expect(source.contains(#"Picker("Filter", selection: $scope)"#))

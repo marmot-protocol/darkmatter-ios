@@ -1,3 +1,6 @@
 ## Xcode per-user state
 xcuserdata/
 *.xcuserstate
+
+## Local build secrets
+Config/TelemetrySecrets.xcconfig

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MarmotKit
 
 struct ChatsListView: View {
@@ -8,8 +9,19 @@ struct ChatsListView: View {
     @State private var showSwitcher = false
     @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
+    @State private var searchEditing = false
     @State private var scope: ChatScope = .active
     @FocusState private var searchFocused: Bool
+
+    private let chatListSearchHorizontalInset: CGFloat = 12
+
+    private var hasSearchText: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var searchCancellationActive: Bool {
+        searchFocused || searchEditing || hasSearchText
+    }
 
     enum ChatScope: CaseIterable, Hashable {
         case active, archived, unread
@@ -57,19 +69,13 @@ struct ChatsListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     accountSwitcher
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
-                    Button {
-                        showNewChat = true
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                    .accessibilityLabel("New chat")
                 }
             }
-            // Hidden by default; pulling the list down reveals it.
-            .searchable(text: $searchText, prompt: "Search chats")
-            .searchFocused($searchFocused)
+            .chatListBottomAccessory {
+                chatListSearchControls
+            }
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
@@ -117,9 +123,106 @@ struct ChatsListView: View {
         showNewChat = false
         showSwitcher = false
         searchFocused = false
+        searchEditing = false
         scope = .active
         path = [target]
         appState.clearPendingChat()
+    }
+
+    // MARK: - Search
+
+    private var chatListSearchControls: some View {
+        HStack(spacing: 8) {
+            chatSearchBar
+            searchActionButton
+        }
+        .padding(.horizontal, chatListSearchHorizontalInset)
+        .padding(.vertical, 8)
+    }
+
+    private var chatSearchBar: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            TextField("Search", text: $searchText, onEditingChanged: { isEditing in
+                searchEditing = isEditing
+            })
+                .focused($searchFocused)
+                .submitLabel(.search)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .onChange(of: searchFocused) { _, isFocused in
+                    searchEditing = isFocused
+                }
+
+            Button {
+                beginSearchDictation()
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 36, height: 44)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Dictation")
+            .accessibilityHint("Starts dictation in search.")
+        }
+        .frame(height: 44)
+        .padding(.leading, 12)
+        .padding(.trailing, 2)
+        .searchDictationBehavior(.inline(activation: .onSelect))
+        .chatSearchFieldChrome()
+    }
+
+    private var searchActionButton: some View {
+        Button(action: searchActionTapped) {
+            Image(systemName: searchCancellationActive ? "xmark" : "square.and.pencil")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 44, height: 44)
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .chatSearchActionChrome(isClearing: searchCancellationActive)
+        .foregroundStyle(searchCancellationActive ? Color.secondary : Color.accentColor)
+        .accessibilityLabel(searchCancellationActive ? "Clear search" : "New chat")
+        .animation(.easeInOut(duration: 0.16), value: searchCancellationActive)
+    }
+
+    private func searchActionTapped() {
+        if searchCancellationActive {
+            cancelSearch()
+        } else {
+            showNewChat = true
+        }
+    }
+
+    private func focusSearchField() {
+        searchEditing = true
+        searchFocused = true
+        DispatchQueue.main.async {
+            searchEditing = true
+            searchFocused = true
+        }
+    }
+
+    private func beginSearchDictation() {
+        focusSearchField()
+    }
+
+    private func cancelSearch() {
+        searchText = ""
+        searchEditing = false
+        searchFocused = false
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private var subscriptionScope: SubscriptionScope {
@@ -238,6 +341,7 @@ struct ChatsListView: View {
 
     private func navigate(to item: ChatsListViewModel.Item) {
         searchFocused = false
+        searchEditing = false
         path.append(
             ChatNavigationTarget(
                 groupIdHex: item.id,
@@ -329,6 +433,51 @@ struct ChatsListView: View {
         } catch {
             Haptics.error()
             appState.present(.error(L10n.string("Couldn't archive chat"), message: error.localizedDescription))
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func chatListBottomAccessory<Accessory: View>(
+        @ViewBuilder accessory: @escaping () -> Accessory
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            safeAreaBar(edge: .bottom, spacing: 0) {
+                accessory()
+            }
+        } else {
+            safeAreaInset(edge: .bottom, spacing: 0) {
+                accessory()
+                    .background(.regularMaterial)
+            }
+        }
+    }
+
+    @ViewBuilder
+    func chatSearchFieldChrome() -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: 20))
+        } else {
+            background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(.secondarySystemFill))
+            )
+        }
+    }
+
+    @ViewBuilder
+    func chatSearchActionChrome(isClearing: Bool) -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(
+                .regular.tint(isClearing ? nil : Color.accentColor.opacity(0.18)),
+                in: Circle()
+            )
+        } else {
+            background(
+                Circle()
+                    .fill(isClearing ? Color(.tertiarySystemFill) : Color.accentColor.opacity(0.14))
+            )
         }
     }
 }

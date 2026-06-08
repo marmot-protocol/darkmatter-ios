@@ -1307,8 +1307,8 @@ public protocol MarmotProtocol : AnyObject {
     func accountNip65Relays(accountRef: String) throws  -> [String]
 
     /**
-     * Per-account relay lists: the NIP-65, inbox, and key-package lists the
-     * account has published, plus the configured default/bootstrap sets.
+     * Per-account relay lists: the NIP-65 and inbox lists the account has
+     * published, plus the configured default/bootstrap sets.
      */
     func accountRelayLists(accountRef: String) throws  -> AccountRelayListsFfi
 
@@ -1609,13 +1609,13 @@ public protocol MarmotProtocol : AnyObject {
      * override, bearer token from the host app's build-time secret, and
      * resource attributes from the platform shell.
      */
-    func setRelayTelemetryRuntimeConfig(config: RelayTelemetryRuntimeConfigFfi) throws
+    func setRelayTelemetryRuntimeConfig(config: RelayTelemetryRuntimeConfigFfi) async throws
 
     /**
      * Persist device-wide relay telemetry export settings and return the
      * normalized settings that were stored.
      */
-    func setRelayTelemetrySettings(settings: RelayTelemetrySettingsFfi) throws  -> RelayTelemetrySettingsFfi
+    func setRelayTelemetrySettings(settings: RelayTelemetrySettingsFfi) async throws  -> RelayTelemetrySettingsFfi
 
     /**
      * Tear the runtime down. Drops all subscriptions; long-lived
@@ -1878,8 +1878,8 @@ open func accountNip65Relays(accountRef: String)throws  -> [String] {
 }
 
     /**
-     * Per-account relay lists: the NIP-65, inbox, and key-package lists the
-     * account has published, plus the configured default/bootstrap sets.
+     * Per-account relay lists: the NIP-65 and inbox lists the account has
+     * published, plus the configured default/bootstrap sets.
      */
 open func accountRelayLists(accountRef: String)throws  -> AccountRelayListsFfi {
     return try  FfiConverterTypeAccountRelayListsFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
@@ -2937,23 +2937,42 @@ open func setNativePushEnabled(accountRef: String, enabled: Bool)async throws  -
      * override, bearer token from the host app's build-time secret, and
      * resource attributes from the platform shell.
      */
-open func setRelayTelemetryRuntimeConfig(config: RelayTelemetryRuntimeConfigFfi)throws  {try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_set_relay_telemetry_runtime_config(self.uniffiClonePointer(),
-        FfiConverterTypeRelayTelemetryRuntimeConfigFfi.lower(config),$0
-    )
-}
+open func setRelayTelemetryRuntimeConfig(config: RelayTelemetryRuntimeConfigFfi)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_set_relay_telemetry_runtime_config(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRelayTelemetryRuntimeConfigFfi.lower(config)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_void,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_void,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
 
     /**
      * Persist device-wide relay telemetry export settings and return the
      * normalized settings that were stored.
      */
-open func setRelayTelemetrySettings(settings: RelayTelemetrySettingsFfi)throws  -> RelayTelemetrySettingsFfi {
-    return try  FfiConverterTypeRelayTelemetrySettingsFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_set_relay_telemetry_settings(self.uniffiClonePointer(),
-        FfiConverterTypeRelayTelemetrySettingsFfi.lower(settings),$0
-    )
-})
+open func setRelayTelemetrySettings(settings: RelayTelemetrySettingsFfi)async throws  -> RelayTelemetrySettingsFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_set_relay_telemetry_settings(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRelayTelemetrySettingsFfi.lower(settings)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRelayTelemetrySettingsFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
 
     /**
@@ -7749,16 +7768,18 @@ public struct RelayTelemetryResourceFfi {
     public var serviceVersion: String
     public var serviceInstanceId: String
     public var deploymentEnvironment: String
+    public var tenant: String
     public var osType: String
     public var osVersion: String
     public var deviceModelIdentifier: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(serviceVersion: String, serviceInstanceId: String, deploymentEnvironment: String, osType: String, osVersion: String, deviceModelIdentifier: String?) {
+    public init(serviceVersion: String, serviceInstanceId: String, deploymentEnvironment: String, tenant: String, osType: String, osVersion: String, deviceModelIdentifier: String?) {
         self.serviceVersion = serviceVersion
         self.serviceInstanceId = serviceInstanceId
         self.deploymentEnvironment = deploymentEnvironment
+        self.tenant = tenant
         self.osType = osType
         self.osVersion = osVersion
         self.deviceModelIdentifier = deviceModelIdentifier
@@ -7778,6 +7799,9 @@ extension RelayTelemetryResourceFfi: Equatable, Hashable {
         if lhs.deploymentEnvironment != rhs.deploymentEnvironment {
             return false
         }
+        if lhs.tenant != rhs.tenant {
+            return false
+        }
         if lhs.osType != rhs.osType {
             return false
         }
@@ -7794,6 +7818,7 @@ extension RelayTelemetryResourceFfi: Equatable, Hashable {
         hasher.combine(serviceVersion)
         hasher.combine(serviceInstanceId)
         hasher.combine(deploymentEnvironment)
+        hasher.combine(tenant)
         hasher.combine(osType)
         hasher.combine(osVersion)
         hasher.combine(deviceModelIdentifier)
@@ -7811,6 +7836,7 @@ public struct FfiConverterTypeRelayTelemetryResourceFfi: FfiConverterRustBuffer 
                 serviceVersion: FfiConverterString.read(from: &buf),
                 serviceInstanceId: FfiConverterString.read(from: &buf),
                 deploymentEnvironment: FfiConverterString.read(from: &buf),
+                tenant: FfiConverterString.read(from: &buf),
                 osType: FfiConverterString.read(from: &buf),
                 osVersion: FfiConverterString.read(from: &buf),
                 deviceModelIdentifier: FfiConverterOptionString.read(from: &buf)
@@ -7821,6 +7847,7 @@ public struct FfiConverterTypeRelayTelemetryResourceFfi: FfiConverterRustBuffer 
         FfiConverterString.write(value.serviceVersion, into: &buf)
         FfiConverterString.write(value.serviceInstanceId, into: &buf)
         FfiConverterString.write(value.deploymentEnvironment, into: &buf)
+        FfiConverterString.write(value.tenant, into: &buf)
         FfiConverterString.write(value.osType, into: &buf)
         FfiConverterString.write(value.osVersion, into: &buf)
         FfiConverterOptionString.write(value.deviceModelIdentifier, into: &buf)
@@ -11505,7 +11532,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_account_nip65_relays() != 27766) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_account_relay_lists() != 20645) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_account_relay_lists() != 47794) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_audit_log_files() != 25846) {
@@ -11691,10 +11718,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_native_push_enabled() != 28116) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_set_relay_telemetry_runtime_config() != 203) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_set_relay_telemetry_runtime_config() != 6820) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_set_relay_telemetry_settings() != 54491) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_set_relay_telemetry_settings() != 50897) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown() != 57342) {

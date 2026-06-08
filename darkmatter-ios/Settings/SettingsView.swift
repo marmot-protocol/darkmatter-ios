@@ -105,27 +105,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-
-            Section {
-                Toggle(isOn: Binding(
-                    get: { appState.developerMode },
-                    set: { appState.developerMode = $0 }
-                )) {
-                    Label("Developer mode", systemImage: "apple.terminal")
-                }
-
-                if appState.developerMode {
-                    NavigationLink {
-                        DiagnosticsView()
-                    } label: {
-                        Label("Open Diagnostics", systemImage: "stethoscope")
-                    }
-                }
-            } header: {
-                Text("Developer")
-            } footer: {
-                Text("Adds debugging tools, including MLS group internals and diagnostics. The diagnostics console can log message text and account activity on this device.")
-            }
         }
         .navigationTitle("Settings")
         .navigationDestination(isPresented: $showProfileEdit) {

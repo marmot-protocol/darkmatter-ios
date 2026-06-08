@@ -10,8 +10,6 @@ struct PrivacySecuritySettingsView: View {
     @State private var telemetrySaving = false
     @State private var auditSaving = false
     @State private var filesLoading = false
-    @State private var uploadingPath: String?
-    @State private var pendingUpload: AuditLogFileFfi?
     @State private var errorMessage: String?
     @State private var savedAt: Date?
 
@@ -22,7 +20,7 @@ struct PrivacySecuritySettingsView: View {
                     get: { telemetrySettings?.exportEnabled ?? false },
                     set: { enabled in Task { await setTelemetryEnabled(enabled) } }
                 )) {
-                    Label("Analytics & Telemetry", systemImage: "chart.line.uptrend.xyaxis")
+                    Label("Anonymous Telemetry", systemImage: "chart.line.uptrend.xyaxis")
                 }
                 .disabled(telemetryToggleDisabled)
 
@@ -30,9 +28,30 @@ struct PrivacySecuritySettingsView: View {
                     ProgressView("Saving")
                 }
             } header: {
-                Text("Analytics & Telemetry")
+                Text("Telemetry")
             } footer: {
                 Text(telemetryFooter)
+            }
+
+            Section {
+                Toggle(isOn: Binding(
+                    get: { appState.developerMode },
+                    set: { appState.developerMode = $0 }
+                )) {
+                    Label("Developer mode", systemImage: "apple.terminal")
+                }
+
+                if appState.developerMode {
+                    NavigationLink {
+                        DiagnosticsView()
+                    } label: {
+                        Label("Open Diagnostics", systemImage: "stethoscope")
+                    }
+                }
+            } header: {
+                Text("Developer")
+            } footer: {
+                Text("Adds debugging tools, including MLS group internals and diagnostics. The diagnostics console can log message text and account activity on this device.")
             }
 
             Section {
@@ -69,13 +88,6 @@ struct PrivacySecuritySettingsView: View {
                         auditFileRow(file)
                     }
                 }
-
-                Button {
-                    Task { await reloadAuditFiles() }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                .disabled(filesLoading || uploadingPath != nil)
             } header: {
                 Text("Audit Log Files")
             }
@@ -101,70 +113,31 @@ struct PrivacySecuritySettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
         .refreshable { await reload() }
-        .confirmationDialog(
-            "Send audit log?",
-            isPresented: pendingUploadBinding,
-            titleVisibility: .visible
-        ) {
-            Button("Send Audit Log") {
-                guard let pendingUpload else { return }
-                Task { await upload(pendingUpload) }
-            }
-            Button("Cancel", role: .cancel) {
-                pendingUpload = nil
-            }
-        } message: {
-            Text("Uploads \(pendingUpload?.fileName ?? "the selected audit log") to \(appState.telemetryBuildConfig.auditUploadEndpoint).")
-        }
     }
 
     private var telemetryToggleDisabled: Bool {
-        guard !telemetrySaving, telemetrySettings != nil else { return true }
-        if appState.telemetryBuildConfig.telemetryCredentialsAvailable {
-            return false
-        }
-        return telemetrySettings?.exportEnabled != true
+        telemetrySaving || telemetrySettings == nil
     }
 
     private var telemetryFooter: String {
-        if appState.telemetryBuildConfig.telemetryCredentialsAvailable {
-            return "Sends aggregate relay/runtime metrics for this device."
-        }
-        return "Telemetry credentials are not configured for this build."
-    }
-
-    private var pendingUploadBinding: Binding<Bool> {
-        Binding(
-            get: { pendingUpload != nil },
-            set: { if !$0 { pendingUpload = nil } }
-        )
+        "Anonymous telemetry helps improve reliability and performance."
     }
 
     @ViewBuilder
     private func auditFileRow(_ file: AuditLogFileFfi) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(file.fileName)
-                    .font(.body.monospaced())
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(auditFileDetails(file))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            Button {
-                pendingUpload = file
-            } label: {
-                if uploadingPath == file.path {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Label("Send", systemImage: "paperplane.fill")
-                }
-            }
-            .buttonStyle(.borderless)
-            .disabled(uploadingPath != nil)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(file.fileName)
+                .font(.body.monospaced())
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(auditFileDetails(file))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(file.path)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         .padding(.vertical, 2)
     }
@@ -207,7 +180,7 @@ struct PrivacySecuritySettingsView: View {
         defer { telemetrySaving = false }
 
         do {
-            telemetrySettings = try appState.setRelayTelemetryExportEnabled(enabled)
+            telemetrySettings = try await appState.setRelayTelemetryExportEnabled(enabled)
             savedAt = Date()
             Haptics.success()
         } catch {
@@ -232,32 +205,6 @@ struct PrivacySecuritySettingsView: View {
             await reloadAuditFiles()
         } catch {
             auditSettings = current
-            Haptics.error()
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    @MainActor
-    private func upload(_ file: AuditLogFileFfi) async {
-        guard uploadingPath == nil else { return }
-        uploadingPath = file.path
-        errorMessage = nil
-        defer {
-            uploadingPath = nil
-            pendingUpload = nil
-        }
-
-        do {
-            let result = try await appState.postAuditLogFile(file)
-            Haptics.success()
-            appState.present(
-                .success(
-                    "Audit log sent",
-                    message: "\(byteCount(result.bytesSent)) uploaded"
-                )
-            )
-            await reloadAuditFiles()
-        } catch {
             Haptics.error()
             errorMessage = error.localizedDescription
         }
