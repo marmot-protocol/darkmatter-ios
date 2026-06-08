@@ -44,11 +44,19 @@ enum ProfileSanitizer {
     }
 
     /// Multi-line free text (e.g. about): strip control/bidi but keep normal
-    /// newlines/tabs, trim, cap length.
+    /// newlines/tabs, clamp runs of blank lines, trim, cap length.
     static func multilineText(_ raw: String?, maxLength: Int = maxAboutLength) -> String? {
         guard let raw else { return nil }
-        let cleaned = stripUnsafe(raw)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let stripped = stripUnsafe(raw)
+        // Clamp runs of 3+ newlines to a single blank line so an "about" field
+        // can't flood the UI with vertical whitespace (#60), matching the
+        // message-body policy.
+        let clamped = blankLineRunRegex.stringByReplacingMatches(
+            in: stripped,
+            range: NSRange(stripped.startIndex..., in: stripped),
+            withTemplate: "\n\n"
+        )
+        let cleaned = clamped.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
         return String(cleaned.prefix(maxLength))
     }
