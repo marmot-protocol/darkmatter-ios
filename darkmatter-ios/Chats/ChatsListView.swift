@@ -11,7 +11,25 @@ struct ChatsListView: View {
     @State private var scope: ChatScope = .active
     @FocusState private var searchFocused: Bool
 
-    enum ChatScope { case active, archived }
+    enum ChatScope: CaseIterable, Hashable {
+        case active, archived, unread
+
+        var title: LocalizedStringKey {
+            switch self {
+            case .active: "Active"
+            case .archived: "Archived"
+            case .unread: "Unread"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .active: "bubble.left.and.bubble.right"
+            case .archived: "archivebox"
+            case .unread: "circle.fill"
+            }
+        }
+    }
 
     struct ChatNavigationTarget: Hashable {
         let groupIdHex: String
@@ -33,17 +51,14 @@ struct ChatsListView: View {
                     ProgressView()
                 }
             }
-            // No large "Chats" header — just the toolbar icons, then the list.
-            .navigationTitle("")
+            .navigationTitle("Chats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     accountSwitcher
                 }
-                ToolbarItem(placement: .principal) {
-                    scopePills
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    filterMenu
                     Button {
                         showNewChat = true
                     } label: {
@@ -119,29 +134,24 @@ struct ChatsListView: View {
         let runtimeGeneration: Int
     }
 
-    // MARK: - Active / Archived pills
+    // MARK: - Filter
 
-    private var scopePills: some View {
-        HStack(spacing: 6) {
-            pill("Active", target: .active)
-            pill("Archived", target: .archived)
-        }
-    }
+    private var filterMenu: some View {
+        let filterIcon = scope == .active
+            ? "line.3.horizontal.decrease.circle"
+            : "line.3.horizontal.decrease.circle.fill"
 
-    private func pill(_ title: LocalizedStringKey, target: ChatScope) -> some View {
-        let selected = scope == target
-        return Button {
-            scope = target
+        return Menu {
+            Picker("Filter", selection: $scope) {
+                ForEach(ChatScope.allCases, id: \.self) { scope in
+                    Label(scope.title, systemImage: scope.systemImage)
+                        .tag(scope)
+                }
+            }
         } label: {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(selected ? Color.accentColor : Color(.secondarySystemFill)))
-                .foregroundStyle(selected ? Color.white : Color.primary)
+            Label("Filter", systemImage: filterIcon)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityLabel("Filter chats")
     }
 
     // MARK: - List
@@ -198,13 +208,23 @@ struct ChatsListView: View {
                 systemImage: "archivebox",
                 description: Text("Swipe a chat to archive it; archived chats stay active and still notify you.")
             )
+        } else if scope == .unread {
+            ContentUnavailableView("No unread chats", systemImage: "circle")
         } else {
             EmptyChatsState(action: { showNewChat = true })
         }
     }
 
     private func currentRows(_ viewModel: ChatsListViewModel) -> [ChatsListViewModel.Item] {
-        let base = scope == .active ? viewModel.items : viewModel.archivedItems
+        let base: [ChatsListViewModel.Item]
+        switch scope {
+        case .active:
+            base = viewModel.items
+        case .archived:
+            base = viewModel.archivedItems
+        case .unread:
+            base = viewModel.items.filter(\.hasUnread)
+        }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return base }
         return base.filter { searchHaystack(for: $0).localizedCaseInsensitiveContains(query) }
