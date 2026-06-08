@@ -1988,6 +1988,19 @@ struct ChatsListProjectionTests {
         #expect(source.matches(#"ConversationView\(\s*chat: resolvedGroup"#))
     }
 
+    @Test func chatListUsesNativeSearchAndFilterMenuChrome() throws {
+        let source = try String(contentsOf: chatsListViewSourceURL, encoding: .utf8)
+
+        #expect(source.contains(#".navigationTitle("Chats")"#))
+        #expect(source.contains(#".searchable(text: $searchText"#))
+        #expect(source.contains("ToolbarItemGroup(placement: .topBarTrailing)"))
+        #expect(source.contains("private var filterMenu"))
+        #expect(source.contains("case active, archived, unread"))
+        #expect(source.contains(#"Picker("Filter", selection: $scope)"#))
+        #expect(!source.contains("ToolbarItem(placement: .principal)"))
+        #expect(!source.contains("scopePills"))
+    }
+
     @Test func chatsListViewModelDeclaresMainActorIsolation() throws {
         let source = try String(contentsOf: chatsListViewModelSourceURL, encoding: .utf8)
 
