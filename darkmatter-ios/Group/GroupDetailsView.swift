@@ -72,6 +72,7 @@ struct GroupDetailsView: View {
         .alert("Group name", isPresented: $showRename) {
             TextField("Group name", text: $renameDraft)
             Button("Save") { Task { await rename() } }
+                .disabled(Self.validatedGroupName(renameDraft) == nil)
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Everyone in the group will see the new name.")
@@ -644,9 +645,16 @@ struct GroupDetailsView: View {
         }
     }
 
+    /// A group rename must have a non-empty name; an empty/whitespace value
+    /// would silently blank the shared group name (#80).
+    static func validatedGroupName(_ draft: String) -> String? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private func rename() async {
-        guard let accountRef = appState.activeAccountRef else { return }
-        let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let accountRef = appState.activeAccountRef,
+              let name = Self.validatedGroupName(renameDraft) else { return }
         do {
             appState.present(.warning(L10n.string("Updating group name…"), message: L10n.string("Publishing group update.")))
             let summary = try await appState.marmot.updateGroupProfile(
