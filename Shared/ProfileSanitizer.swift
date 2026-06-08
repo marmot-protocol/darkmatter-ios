@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Sanitizes untrusted Nostr profile metadata (kind:0) before it's rendered.
 ///
@@ -96,22 +97,28 @@ enum ProfileSanitizer {
         }
 
         if let octets = ipv4Octets(normalized) {
-            if octets[0] == 10 || octets[0] == 127 {
-                return true
-            }
-            if octets[0] == 169 && octets[1] == 254 {
-                return true
-            }
-            if octets[0] == 172 && (16...31).contains(Int(octets[1])) {
-                return true
-            }
-            if octets[0] == 192 && octets[1] == 168 {
-                return true
-            }
-            return false
+            return isPrivateOrLoopbackIPv4(octets)
         }
 
         return isPrivateOrLoopbackIPv6(normalized)
+    }
+
+    private static func isPrivateOrLoopbackIPv4(_ octets: [UInt8]) -> Bool {
+        guard octets.count == 4 else { return false }
+
+        if octets[0] == 10 || octets[0] == 127 {
+            return true
+        }
+        if octets[0] == 169 && octets[1] == 254 {
+            return true
+        }
+        if octets[0] == 172 && (16...31).contains(Int(octets[1])) {
+            return true
+        }
+        if octets[0] == 192 && octets[1] == 168 {
+            return true
+        }
+        return false
     }
 
     private static func ipv4Octets(_ host: String) -> [UInt8]? {
@@ -132,16 +139,32 @@ enum ProfileSanitizer {
     private static func isPrivateOrLoopbackIPv6(_ host: String) -> Bool {
         guard host.contains(":") else { return false }
 
-        let address = host.split(separator: "%", maxSplits: 1, omittingEmptySubsequences: false)[0]
-        if address == "::1" || address == "0:0:0:0:0:0:0:1" {
+        let address = String(host.split(separator: "%", maxSplits: 1, omittingEmptySubsequences: false)[0])
+        guard let bytes = ipv6Bytes(address), bytes.count == 16 else { return false }
+
+        if bytes[0..<15].allSatisfy({ $0 == 0 }) && bytes[15] == 1 {
             return true
         }
 
-        guard let first = address.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: true).first,
-              let firstHextet = UInt16(first, radix: 16)
-        else { return false }
+        let isIPv4Mapped = bytes[0..<10].allSatisfy { $0 == 0 } &&
+            bytes[10] == 0xff &&
+            bytes[11] == 0xff
+        if isIPv4Mapped {
+            return isPrivateOrLoopbackIPv4(Array(bytes[12..<16]))
+        }
 
-        return (firstHextet & 0xfe00) == 0xfc00 || (firstHextet & 0xffc0) == 0xfe80
+        return (bytes[0] & 0xfe) == 0xfc || (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)
+    }
+
+    private static func ipv6Bytes(_ host: String) -> [UInt8]? {
+        var address = in6_addr()
+        let parsed = host.withCString { cString in
+            withUnsafeMutablePointer(to: &address) { pointer in
+                inet_pton(AF_INET6, cString, pointer)
+            }
+        }
+        guard parsed == 1 else { return nil }
+        return withUnsafeBytes(of: address) { Array($0) }
     }
 
     /// Remove Unicode control characters and bidirectional formatting /
