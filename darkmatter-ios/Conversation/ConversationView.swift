@@ -618,10 +618,14 @@ struct ConversationView: View {
     }
 
     private func send() {
+        // Capture the view model first: clearing the draft before confirming we
+        // have something to send to would silently discard the message if the
+        // view model were nil at dispatch time (#49).
+        guard let viewModel else { return }
         let text = draft
         draft = ""
         Task {
-            await viewModel?.send(text)
+            await viewModel.send(text)
         }
     }
 

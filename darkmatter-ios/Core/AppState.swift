@@ -456,6 +456,10 @@ final class AppState {
                 _ = try await syncNativePushRegistration(accountRef: accountRef)
             } catch NotificationSettingsActionError.missingApnsToken {
                 return
+            } catch is CancellationError {
+                // Cancellation (backgrounding, account switch) isn't a failure —
+                // don't surface it to the user as "Push registration failed" (#76).
+                return
             } catch {
                 lastError = error
             }
