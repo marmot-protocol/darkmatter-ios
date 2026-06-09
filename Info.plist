@@ -10,6 +10,8 @@
 	<string>$(DARKMATTER_OTLP_ENDPOINT)</string>
 	<key>DarkmatterTelemetryBearerToken</key>
 	<string>$(DARKMATTER_OTLP_BEARER_TOKEN)</string>
+	<key>DarkmatterAuditLogBearerToken</key>
+	<string>$(DARKMATTER_AUDIT_LOG_BEARER_TOKEN)</string>
 	<key>DarkmatterTelemetryEnvironment</key>
 	<string>$(DARKMATTER_TELEMETRY_ENVIRONMENT)</string>
 	<key>CFBundleURLTypes</key>

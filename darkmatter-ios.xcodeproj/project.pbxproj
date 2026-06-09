@@ -527,6 +527,7 @@
 				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DARKMATTER_AUDIT_LOG_BEARER_TOKEN = "$(AUDIT_LOG_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_BEARER_TOKEN = "$(OTLP_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_ENDPOINT = "https://otlp.ipf.dev/v1/metrics";
 				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
@@ -584,6 +585,7 @@
 				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
+				DARKMATTER_AUDIT_LOG_BEARER_TOKEN = "$(AUDIT_LOG_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_BEARER_TOKEN = "$(OTLP_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_ENDPOINT = "https://otlp.ipf.dev/v1/metrics";
 				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
