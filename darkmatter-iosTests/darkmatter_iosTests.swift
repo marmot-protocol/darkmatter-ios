@@ -3419,6 +3419,43 @@ struct AgentStreamTests {
         #expect(record.plaintext == "replacement continued")
     }
 
+    @MainActor
+    @Test func finishedUpdateKeepsCheckpointPreviewWhenBrokerTextIsDeltaOnly() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        let streamId = hex("ab")
+
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 1, text: "hello")
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .record(seq: 2, recordType: 0x04, text: "hello world")
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .finished(text: "hello", transcriptHashHex: hex("55"), chunkCount: 2)
+        )
+        viewModel.applyStreamUpdate(
+            streamId: streamId,
+            sender: hex("11"),
+            update: .chunk(seq: 3, text: " late")
+        )
+
+        guard case .message(let record, let status) = viewModel.timeline.first?.kind else {
+            Issue.record("Expected a finalized stream message")
+            return
+        }
+        #expect(status == .received)
+        #expect(record.plaintext == "hello world")
+    }
+
     private func streamStartTags(_ streamId: String) -> [MessageTagFfi] {
         [
             MessageTagFfi(values: [MessageSemantics.streamTag, streamId]),
@@ -3884,6 +3921,28 @@ struct MessageSemanticsTests {
     }
 
     @MainActor
+    @Test func mediaReferenceMatchingIgnoresOnlySourceEpoch() {
+        let timelineReference = encryptedMediaReference(sourceEpoch: 0)
+        let listedReference = encryptedMediaReference(sourceEpoch: 42)
+        let differentCiphertext = encryptedMediaReference(ciphertextByte: "45", sourceEpoch: 42)
+
+        #expect(ConversationViewModel.sameMediaAttachment(listedReference, timelineReference))
+        #expect(!ConversationViewModel.sameMediaAttachment(differentCiphertext, timelineReference))
+    }
+
+    @Test func mediaAttachmentIdentityChangesWhenSourceEpochArrives() throws {
+        let timelineReference = encryptedMediaReference(sourceEpoch: 0)
+        let listedReference = encryptedMediaReference(sourceEpoch: 42)
+
+        let timelineItem = try #require(MessageMediaAttachment.displayItems(from: [timelineReference]).first)
+        let listedItem = try #require(MessageMediaAttachment.displayItems(from: [listedReference]).first)
+
+        #expect(timelineItem.id != listedItem.id)
+        #expect(timelineItem.id.hasSuffix(":0:0"))
+        #expect(listedItem.id.hasSuffix(":42:0"))
+    }
+
+    @MainActor
     @Test func conversationDisplayBodyUsesMediaFileNameFallback() throws {
         let nonce = String(repeating: "22", count: 12)
         let record = unsignedEventRecord(
@@ -4329,6 +4388,27 @@ private func encryptedMediaTag(
         "filename \(fileName)",
         "dim 640x480",
     ])
+}
+
+private func encryptedMediaReference(
+    fileName: String = "a.jpg",
+    plaintextByte: String = "33",
+    ciphertextByte: String = "44",
+    nonce: String = String(repeating: "22", count: 12),
+    sourceEpoch: UInt64
+) -> MediaAttachmentReferenceFfi {
+    MediaAttachmentReferenceFfi(
+        locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(fileName)")],
+        ciphertextSha256: hex(ciphertextByte),
+        plaintextSha256: hex(plaintextByte),
+        nonceHex: nonce,
+        fileName: fileName,
+        mediaType: "image/jpeg",
+        version: MessageSemantics.encryptedMediaVersion,
+        sourceEpoch: sourceEpoch,
+        dim: "640x480",
+        thumbhash: nil
+    )
 }
 
 private func encryptedMediaComponent() -> AppGroupEncryptedMediaComponentFfi {

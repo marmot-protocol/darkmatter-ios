@@ -17,7 +17,7 @@ struct MessageMediaAttachment: Identifiable, Hashable {
     static func displayItems(from references: [MediaAttachmentReferenceFfi]) -> [MessageMediaAttachment] {
         references.enumerated().map { index, reference in
             MessageMediaAttachment(
-                id: "\(reference.plaintextSha256):\(index)",
+                id: "\(reference.plaintextSha256):\(reference.sourceEpoch):\(index)",
                 reference: reference,
                 fileName: reference.fileName,
                 mediaType: reference.mediaType,
