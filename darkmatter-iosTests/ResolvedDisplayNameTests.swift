@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import darkmatter_ios
 @testable import MarmotKit
 
@@ -38,9 +39,38 @@ struct ResolvedDisplayNameTests {
         #expect(AppState.resolvedKnownDisplayName(profile: nil, projectedName: "", localAccountLabel: "") == nil)
     }
 
+    @Test func ignoresWhitespaceOrControlOnlyLocalLabel() {
+        // A blank/control-only label must not be returned (it would render empty
+        // and suppress the npub fallback) — it's sanitized like any other name.
+        #expect(AppState.resolvedKnownDisplayName(
+            profile: nil, projectedName: nil, localAccountLabel: "   \n\t "
+        ) == nil)
+        #expect(AppState.resolvedKnownDisplayName(
+            profile: nil, projectedName: nil, localAccountLabel: "\u{202E}\u{200B}"
+        ) == nil)
+    }
+
     @Test func stripsUnsafeCharactersFromResolvedName() {
         #expect(AppState.resolvedKnownDisplayName(
             profile: profile(displayName: "Ali\u{202E}ce"), projectedName: nil, localAccountLabel: nil
         ) == "Alice")
+    }
+
+    @Test func profileLookupSchedulesRefreshWhenCacheMisses() throws {
+        let source = try sourceString("darkmatter-ios/Core/AppState+Profiles.swift")
+
+        #expect(source.range(
+            of: #"func profile\(forAccountIdHex id: String\) -> UserProfileMetadataFfi\? \{[\s\S]*scheduleProfileRefresh\(forAccountIdHex: id\)"#,
+            options: .regularExpression
+        ) != nil)
+        #expect(source.contains("profileRefreshGeneration"))
+    }
+
+    private func sourceString(_ relativePath: String) throws -> String {
+        let testFile = URL(filePath: #filePath)
+        let repoRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        return try String(contentsOf: repoRoot.appendingPathComponent(relativePath), encoding: .utf8)
     }
 }

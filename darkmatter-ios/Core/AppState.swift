@@ -87,12 +87,17 @@ final class AppState {
     private var foregroundActivationTask: Task<Void, Never>?
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var runtimeSuspensionTask: Task<Void, Never>?
+    @ObservationIgnored var profileFetchQueueTask: Task<Void, Never>?
+    @ObservationIgnored var queuedProfileFetchIDs: [String] = []
+    @ObservationIgnored var scheduledProfileFetchIDs: Set<String> = []
+    @ObservationIgnored var activeProfileFetchID: String?
     private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
     private(set) var isAppSceneActive = true
     private(set) var runtimeSuspendedForBackground = false
     private(set) var runtimeGeneration = 0
+    private(set) var profileRefreshGeneration = 0
 
     /// Most recent transient banner. View code reads this via the
     /// `.toastHost()` modifier on the root view.
@@ -113,6 +118,9 @@ final class AppState {
         client?.telemetryConfig ?? TelemetryBuildConfig.current()
     }
     var notificationSubscriptionActive: Bool { notificationDriver.isRunning }
+    var canRefreshProfiles: Bool {
+        isAppSceneActive && !runtimeSuspendedForBackground && !isRuntimeSuspending
+    }
 
     private static let activeAccountKey = "marmot.activeAccountRef"
     private static let developerModeKey = "marmot.developerMode"
@@ -135,6 +143,14 @@ final class AppState {
 
     convenience init(client: MarmotClient) {
         self.init(client: client, notifications: .shared)
+    }
+
+    deinit {
+        profileFetchQueueTask?.cancel()
+    }
+
+    func noteProfileRefreshCompleted() {
+        profileRefreshGeneration += 1
     }
 
     /// Production entry point. Builds a keychain-backed client; if secure
@@ -435,8 +451,8 @@ final class AppState {
             } catch NotificationSettingsActionError.missingApnsToken {
                 return
             } catch is CancellationError {
-                // Cancellation (backgrounding, account switch) isn't a failure —
-                // don't surface it to the user as "Push registration failed" (#76).
+                // Cancellation (backgrounding, account switch) isn't a real
+                // failure, so it must not reach the error toast below (#76).
                 return
             } catch {
                 lastError = error
@@ -670,8 +686,11 @@ final class AppState {
         nativePushRegistrationTask = nil
         pushTask?.cancel()
 
+        let profileTask = cancelProfileFetchQueue()
+
         await foregroundTask?.value
         await pushTask?.value
+        await profileTask?.value
     }
 
     private func nativePushEnabledAccountRefs() -> [String] {

@@ -10,6 +10,14 @@ struct ProfileSanitizerMultilineTests {
         #expect(ProfileSanitizer.multilineText(flooded) == "Line one\n\nLine two")
     }
 
+    @Test func clampsCRLFAndLoneCRBlankLineRuns() {
+        // CRLF / CR sequences must be normalized so they can't bypass the \n{3,} clamp.
+        let crlf = "Line one" + String(repeating: "\r\n", count: 5) + "Line two"
+        #expect(ProfileSanitizer.multilineText(crlf) == "Line one\n\nLine two")
+        let cr = "Line one" + String(repeating: "\r", count: 5) + "Line two"
+        #expect(ProfileSanitizer.multilineText(cr) == "Line one\n\nLine two")
+    }
+
     @Test func keepsASingleBlankLineAndStripsBidi() {
         let raw = "Para one\n\nPara\u{202E}two"
         #expect(ProfileSanitizer.multilineText(raw) == "Para one\n\nParatwo")

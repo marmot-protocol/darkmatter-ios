@@ -48,18 +48,26 @@ enum ProfileSanitizer {
     /// newlines/tabs, clamp runs of blank lines, trim, cap length.
     static func multilineText(_ raw: String?, maxLength: Int = maxAboutLength) -> String? {
         guard let raw else { return nil }
-        let stripped = stripUnsafe(raw)
-        // Clamp runs of 3+ newlines to a single blank line so an "about" field
-        // can't flood the UI with vertical whitespace (#60), matching the
-        // message-body policy.
-        let clamped = blankLineRunRegex.stringByReplacingMatches(
-            in: stripped,
-            range: NSRange(stripped.startIndex..., in: stripped),
-            withTemplate: "\n\n"
-        )
-        let cleaned = clamped.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Clamp runs of blank lines so an "about" field can't flood the UI with
+        // vertical whitespace (#60), matching the message-body policy.
+        let cleaned = clampBlankLineRuns(stripUnsafe(raw))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
         return String(cleaned.prefix(maxLength))
+    }
+
+    /// Normalize line endings (CRLF and lone CR → LF) then clamp runs of 3+
+    /// newlines to a single blank line. Normalizing first means `\r\n` and `\r`
+    /// sequences can't slip past the `\n{3,}` clamp.
+    private static func clampBlankLineRuns(_ s: String) -> String {
+        let normalized = s
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        return blankLineRunRegex.stringByReplacingMatches(
+            in: normalized,
+            range: NSRange(normalized.startIndex..., in: normalized),
+            withTemplate: "\n\n"
+        )
     }
 
     /// Message body: multi-line-safe. Strips control/bidi (Trojan-Source
@@ -69,13 +77,8 @@ enum ProfileSanitizer {
     /// length. Returns "" (not nil) so the bubble renders without optional
     /// handling at the call site.
     static func messageBody(_ raw: String) -> String {
-        let stripped = stripUnsafe(raw)
-        let clamped = blankLineRunRegex.stringByReplacingMatches(
-            in: stripped,
-            range: NSRange(stripped.startIndex..., in: stripped),
-            withTemplate: "\n\n"
-        )
-        let trimmed = clamped.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = clampBlankLineRuns(stripUnsafe(raw))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(maxMessageLength))
     }
 

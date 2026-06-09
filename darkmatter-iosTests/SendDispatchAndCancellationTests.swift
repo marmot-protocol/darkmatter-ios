@@ -19,8 +19,17 @@ struct SendDispatchAndCancellationTests {
     /// not surface it as "Push registration failed".
     @Test func pushRegistrationIgnoresCancellation() throws {
         let source = try sourceString("darkmatter-ios/Core/AppState.swift")
-        let pattern = #"catch is CancellationError[\s\S]*?Push registration failed"#
-        #expect(source.range(of: pattern, options: .regularExpression) != nil)
+        // The CancellationError branch must exist and must NOT surface the error
+        // toast — assert the failure string is absent from that catch block, yet
+        // present elsewhere (the generic catch).
+        let cancellationPattern = #"catch is CancellationError\s*\{[\s\S]*?\}"#
+        guard let range = source.range(of: cancellationPattern, options: .regularExpression) else {
+            Issue.record("Expected an explicit CancellationError catch block")
+            return
+        }
+        let cancellationBody = String(source[range])
+        #expect(!cancellationBody.contains("Push registration failed"))
+        #expect(source.contains("Push registration failed"))
     }
 
     private func sourceString(_ relativePath: String) throws -> String {

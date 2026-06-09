@@ -3,11 +3,18 @@ import MarmotKit
 
 extension AppState {
     /// Full Nostr profile for an account id, read straight from Marmot's
-    /// directory each time. iOS keeps no profile cache of its own — the binding
-    /// owns fetching and freshness — so values are never stale here (#17).
+    /// directory each time. iOS keeps no profile cache of its own; on a miss it
+    /// asks Marmot to refresh that account's kind:0 metadata from relays so
+    /// later reads can hydrate names and avatars.
     @MainActor
+    @discardableResult
     func profile(forAccountIdHex id: String) -> UserProfileMetadataFfi? {
-        (try? marmot.userProfile(accountIdHex: id)) ?? nil
+        _ = profileRefreshGeneration
+        if let local = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
+            return local
+        }
+        scheduleProfileRefresh(forAccountIdHex: id)
+        return nil
     }
 
     /// A display name we actually *know* for an account: projected kind:0
@@ -38,8 +45,10 @@ extension AppState {
         if let name = ProfileSanitizer.displayName(projectedName) {
             return name
         }
-        if let localAccountLabel, !localAccountLabel.isEmpty {
-            return localAccountLabel
+        // Sanitize the local label too: a whitespace/control-only label would
+        // otherwise render blank and suppress the npub fallback.
+        if let label = ProfileSanitizer.displayName(localAccountLabel) {
+            return label
         }
         return nil
     }
@@ -68,5 +77,81 @@ extension AppState {
     @MainActor
     func shortNpub(forAccountIdHex id: String) -> String {
         IdentityFormatter.short(npub(forAccountIdHex: id))
+    }
+
+    @MainActor
+    private func scheduleProfileRefresh(forAccountIdHex id: String) {
+        guard !id.isEmpty,
+              canRefreshProfiles,
+              !scheduledProfileFetchIDs.contains(id)
+        else { return }
+        scheduledProfileFetchIDs.insert(id)
+        queuedProfileFetchIDs.append(id)
+        startProfileFetchQueueIfNeeded()
+    }
+
+    @MainActor
+    private func startProfileFetchQueueIfNeeded() {
+        guard profileFetchQueueTask == nil, !queuedProfileFetchIDs.isEmpty else { return }
+        profileFetchQueueTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runProfileFetchQueue()
+        }
+    }
+
+    @MainActor
+    private func runProfileFetchQueue() async {
+        defer {
+            profileFetchQueueTask = nil
+            activeProfileFetchID = nil
+            if !queuedProfileFetchIDs.isEmpty {
+                startProfileFetchQueueIfNeeded()
+            }
+        }
+
+        while !Task.isCancelled, let id = nextQueuedProfileFetchID() {
+            activeProfileFetchID = id
+            await refreshProfile(forAccountIdHex: id)
+            activeProfileFetchID = nil
+            scheduledProfileFetchIDs.remove(id)
+        }
+    }
+
+    @MainActor
+    private func nextQueuedProfileFetchID() -> String? {
+        guard !queuedProfileFetchIDs.isEmpty else { return nil }
+        return queuedProfileFetchIDs.removeFirst()
+    }
+
+    @MainActor
+    @discardableResult
+    func cancelProfileFetchQueue() -> Task<Void, Never>? {
+        queuedProfileFetchIDs.removeAll()
+        scheduledProfileFetchIDs.removeAll()
+        activeProfileFetchID = nil
+        let task = profileFetchQueueTask
+        profileFetchQueueTask = nil
+        task?.cancel()
+        return task
+    }
+
+    @MainActor
+    private func refreshProfile(forAccountIdHex id: String) async {
+        guard !Task.isCancelled,
+              canRefreshProfiles
+        else { return }
+
+        let relays = activeAccountRef.map(relayBootstrapRelays(for:)) ?? MarmotClient.seedRelays
+        do {
+            try await marmot.refreshProfile(accountIdHex: id, relays: relays)
+        } catch {
+            return
+        }
+
+        guard !Task.isCancelled else { return }
+        if ((try? marmot.userProfile(accountIdHex: id)) ?? nil) != nil ||
+            ProfileSanitizer.displayName(marmot.displayName(accountIdHex: id)) != nil {
+            noteProfileRefreshCompleted()
+        }
     }
 }
