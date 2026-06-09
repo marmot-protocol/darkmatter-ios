@@ -2,5 +2,6 @@
 // Put local secrets in Config/TelemetrySecrets.xcconfig. That file is ignored.
 
 OTLP_TOKEN_DARKMATTER_IOS =
+AUDIT_LOG_TOKEN_DARKMATTER_IOS =
 
 #include? "TelemetrySecrets.xcconfig"

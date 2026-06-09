@@ -538,6 +538,7 @@ struct TelemetryBuildConfigTests {
         let config = TelemetryBuildConfig(
             otlpEndpoint: "https://collector.example/v1/metrics",
             bearerToken: "secret-token",
+            auditLogBearerToken: nil,
             deploymentEnvironment: "staging",
             serviceVersion: "2.0+9",
             osVersion: "26.0",
@@ -570,7 +571,8 @@ struct TelemetryBuildConfigTests {
     @Test func auditTrackerConfigDefersEndpointToMarmotAndCarriesCredentialsAndSource() {
         let config = TelemetryBuildConfig(
             otlpEndpoint: "https://collector.example/v1/metrics",
-            bearerToken: "secret-token",
+            bearerToken: "otlp-token",
+            auditLogBearerToken: "audit-token",
             deploymentEnvironment: "staging",
             serviceVersion: "2.0+9",
             osVersion: "Version 18.0",
@@ -580,11 +582,45 @@ struct TelemetryBuildConfigTests {
         let tracker = config.auditTrackerConfig()
 
         #expect(tracker.endpoint == nil)
-        #expect(tracker.authorizationBearerToken == "secret-token")
+        // Must carry the dedicated audit-log token, NOT the OTLP/telemetry token.
+        #expect(tracker.authorizationBearerToken == "audit-token")
         #expect(tracker.source.accountLabel == nil)
         #expect(tracker.source.deviceLabel == "iPhone99,9")
         #expect(tracker.source.platform == "ios")
         #expect(tracker.source.appVersion == "2.0+9")
+    }
+
+    @Test func auditTokenIsReadFromDedicatedKeyAndDoesNotFallBackToOtlpToken() {
+        let config = TelemetryBuildConfig.current(infoDictionary: [
+            "DarkmatterTelemetryBearerToken": "$(DARKMATTER_OTLP_BEARER_TOKEN)",
+            "DarkmatterAuditLogBearerToken": "$(DARKMATTER_AUDIT_LOG_BEARER_TOKEN)",
+            "CFBundleShortVersionString": "1.2.3",
+            "CFBundleVersion": "45"
+        ], environment: [
+            "OTLP_TOKEN_DARKMATTER_IOS": "otlp-env-token",
+            "AUDIT_LOG_TOKEN_DARKMATTER_IOS": "audit-env-token"
+        ])
+
+        #expect(config.bearerToken == "otlp-env-token")
+        #expect(config.auditLogBearerToken == "audit-env-token")
+        #expect(config.auditTrackerConfig().authorizationBearerToken == "audit-env-token")
+    }
+
+    @Test func auditTokenStaysNilWhenOnlyOtlpTokenIsConfigured() {
+        let config = TelemetryBuildConfig.current(infoDictionary: [
+            "DarkmatterTelemetryBearerToken": "$(DARKMATTER_OTLP_BEARER_TOKEN)",
+            "DarkmatterAuditLogBearerToken": "$(DARKMATTER_AUDIT_LOG_BEARER_TOKEN)",
+            "CFBundleShortVersionString": "1.2.3",
+            "CFBundleVersion": "45"
+        ], environment: [
+            "OTLP_TOKEN_DARKMATTER_IOS": "otlp-env-token"
+        ])
+
+        // No dedicated audit token => audit uploads stay unconfigured rather than
+        // borrowing the OTLP token and authenticating against the wrong API.
+        #expect(config.bearerToken == "otlp-env-token")
+        #expect(config.auditLogBearerToken == nil)
+        #expect(config.auditTrackerConfig().authorizationBearerToken == nil)
     }
 }
 
