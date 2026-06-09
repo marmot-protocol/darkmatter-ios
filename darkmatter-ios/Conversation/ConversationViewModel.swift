@@ -67,6 +67,9 @@ final class ConversationViewModel {
     private var optimisticReactionRemovals: Set<ReactionRemoval> = []
     /// Live agent-stream watch tasks, keyed by stream id.
     private var streamWatchTasks: [String: Task<Void, Never>] = [:]
+    /// Guards a concurrent "latest" (nil stream id) watch from racing past the
+    /// post-await duplicate guard and opening an orphaned subscription (#48).
+    private var latestStreamWatchInFlight = false
     /// Accumulated text per live stream, keyed by stream id.
     private var streamText: [String: String] = [:]
     /// Streams whose final anchor message has arrived. Once finalized, the
@@ -538,6 +541,12 @@ final class ConversationViewModel {
         replyTargetByMessageId[appRecord.messageIdHex] = record.replyToMessageIdHex
         replyPreviewsByMessageId[appRecord.messageIdHex] = record.replyPreview
         projectedReactionSummaries[appRecord.messageIdHex] = record.reactions
+        reactionRecords = Self.prunedConfirmedOptimisticReactions(
+            reactionRecords,
+            target: appRecord.messageIdHex,
+            summary: record.reactions,
+            me: myAccountId ?? ""
+        )
         if record.deleted {
             projectedDeletedMessageIds.insert(record.messageIdHex)
         } else {
@@ -806,6 +815,34 @@ final class ConversationViewModel {
         reactions = result
     }
 
+    /// Drop optimistic reaction placeholders that the server projection has now
+    /// confirmed (same target + emoji + sender). Without this, `reactionRecords`
+    /// keeps every optimistic entry for the life of the conversation even after
+    /// the authoritative projection arrives (#47). The displayed tally is
+    /// unaffected because the confirmed reaction still comes from the summary.
+    nonisolated static func prunedConfirmedOptimisticReactions(
+        _ records: [String: AppMessageRecordFfi],
+        target: String,
+        summary: TimelineReactionSummaryFfi,
+        me: String
+    ) -> [String: AppMessageRecordFfi] {
+        guard !me.isEmpty else { return records }
+        let confirmedEmoji = Set(
+            summary.byEmoji
+                .filter { $0.senders.contains(me) }
+                .map(\.emoji)
+        )
+        guard !confirmedEmoji.isEmpty else { return records }
+        return records.filter { _, record in
+            guard record.sender == me,
+                  confirmedEmoji.contains(record.plaintext),
+                  case .reaction(let recordTarget) = MessageSemantics.classify(record),
+                  recordTarget == target
+            else { return true }
+            return false
+        }
+    }
+
     /// Prefer the event's own `recordedAt` so the timeline sorts by send time;
     /// fall back to `now` only when the FFI omitted it (zero sentinel).
     static func receivedToRecord(_ r: RuntimeMessageReceivedFfi, now: UInt64) -> AppMessageRecordFfi {
@@ -960,6 +997,10 @@ final class ConversationViewModel {
               let appState,
               let accountRef = appState.activeAccountRef else { return }
 
+        // Defense-in-depth: clamp to the protocol's max length so an oversized
+        // paste can't bypass the composer's cap (#54).
+        let outgoing = Self.cappedOutgoingText(trimmed)
+
         let replyTargetId = replyTargetMessageId()
         let tempId = UUID().uuidString
         let now = UInt64(Date().timeIntervalSince1970)
@@ -976,7 +1017,7 @@ final class ConversationViewModel {
             direction: "sent",
             groupIdHex: group.groupIdHex,
             sender: appState.activeAccount?.accountIdHex ?? "",
-            plaintext: trimmed,
+            plaintext: outgoing,
             kind: MessageSemantics.kindChat,
             tags: optimisticTags,
             recordedAt: now,
@@ -994,13 +1035,13 @@ final class ConversationViewModel {
                     accountRef: accountRef,
                     groupIdHex: group.groupIdHex,
                     targetMessageId: replyTargetId,
-                    text: trimmed
+                    text: outgoing
                 )
             } else {
                 summary = try await appState.marmot.sendText(
                     accountRef: accountRef,
                     groupIdHex: group.groupIdHex,
-                    text: trimmed
+                    text: outgoing
                 )
             }
             confirmSent(tempId: tempId, record: optimistic, messageId: summary.messageIds.first)
@@ -1106,7 +1147,13 @@ final class ConversationViewModel {
     /// otherwise fall back to the latest live stream in this group.
     private func startWatching(sender: String, streamIdHex: String?) async {
         guard let appState, let accountRef = appState.activeAccountRef else { return }
-        if let streamIdHex, streamWatchTasks[streamIdHex] != nil { return }
+        if let streamIdHex {
+            if streamWatchTasks[streamIdHex] != nil { return }
+        } else if latestStreamWatchInFlight {
+            return
+        }
+        if streamIdHex == nil { latestStreamWatchInFlight = true }
+        defer { if streamIdHex == nil { latestStreamWatchInFlight = false } }
         do {
             let insecureLocal = AgentStreamSecurity.insecureLocalEnabled(
                 developerMode: appState.developerMode
@@ -1170,6 +1217,11 @@ final class ConversationViewModel {
             return text
         }
         return String(text.prefix(ProfileSanitizer.maxMessageLength))
+    }
+
+    /// Clamp outbound message text to the protocol's max length (#54).
+    nonisolated static func cappedOutgoingText(_ text: String) -> String {
+        String(text.prefix(ProfileSanitizer.maxMessageLength))
     }
 
     /// Create or update the synthetic bubble for a live stream (keyed by id).

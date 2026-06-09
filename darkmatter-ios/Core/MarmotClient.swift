@@ -37,6 +37,17 @@ final class MarmotClient {
         try MarmotClient(rootPath: rootPath, relayUrls: relayUrls)
     }
 
+    /// Lists local accounts off the main actor. `Marmot.listAccounts()` is a
+    /// synchronous FFI call that reads Keychain/storage, so running it inline on
+    /// MainActor would block the UI. Encapsulating the offload here lets call
+    /// sites read as a plain `await` instead of an unexplained `Task.detached`
+    /// (#51).
+    func listAccounts() async throws -> [AccountSummaryFfi] {
+        try await Task.detached { [marmot] in
+            try marmot.listAccounts()
+        }.value
+    }
+
     func startRuntime() async throws {
         try await configureTelemetryRuntime()
         try await marmot.start()
@@ -108,9 +119,10 @@ enum RelaySettings {
     }
 
     static func normalizedRelayURLs(_ relays: [String]) -> [String] {
+        var seen = Set<String>()
         var normalized: [String] = []
         for relay in relays {
-            guard let url = normalizedRelayURL(relay), !normalized.contains(url) else { continue }
+            guard let url = normalizedRelayURL(relay), seen.insert(url).inserted else { continue }
             normalized.append(url)
         }
         return normalized

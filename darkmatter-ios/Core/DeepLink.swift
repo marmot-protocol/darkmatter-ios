@@ -55,7 +55,11 @@ enum DeepLink: Equatable {
                 return .profile(npub: memberRef)
             }
         case "chat":
-            if let id = parts.first, isHex(id) { return .chat(groupIdHex: id.lowercased()) }
+            // A Marmot group id is a 32-byte (64-char) hex value. Reject any
+            // other length before routing it to Marmot (#68).
+            if let id = parts.first, let groupId = Hex.normalized32Bytes(id) {
+                return .chat(groupIdHex: groupId)
+            }
         default:
             break
         }
@@ -65,10 +69,6 @@ enum DeepLink: Equatable {
             return .profile(npub: memberRef)
         }
         return nil
-    }
-
-    private static func isHex(_ s: String) -> Bool {
-        !s.isEmpty && s.range(of: "^[0-9a-fA-F]+$", options: .regularExpression) != nil
     }
 
     /// Parse any scanned/pasted string: a deep-link URL, a `nostr:` URI, or a
