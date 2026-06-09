@@ -18,6 +18,11 @@ struct TelemetryBuildConfig: Equatable {
 
     let otlpEndpoint: String
     let bearerToken: String?
+    /// Bearer token for the forensic audit-log tracker (Goggles) upload API.
+    /// Deliberately separate from `bearerToken`: the audit tracker and the OTLP
+    /// metrics collector are different services with different credentials, so
+    /// reusing the OTLP token here would authenticate against the wrong API.
+    let auditLogBearerToken: String?
     let deploymentEnvironment: String
     let serviceVersion: String
     let osVersion: String
@@ -49,6 +54,15 @@ struct TelemetryBuildConfig: Equatable {
                 environmentKeys: [
                     "DARKMATTER_OTLP_BEARER_TOKEN",
                     "OTLP_TOKEN_DARKMATTER_IOS"
+                ],
+                environment: environment
+            ),
+            auditLogBearerToken: stringValue(
+                for: "DarkmatterAuditLogBearerToken",
+                in: info,
+                environmentKeys: [
+                    "DARKMATTER_AUDIT_LOG_BEARER_TOKEN",
+                    "AUDIT_LOG_TOKEN_DARKMATTER_IOS"
                 ],
                 environment: environment
             ),
@@ -85,7 +99,7 @@ struct TelemetryBuildConfig: Equatable {
     func auditTrackerConfig() -> AuditLogTrackerConfigFfi {
         AuditLogTrackerConfigFfi(
             endpoint: nil,
-            authorizationBearerToken: bearerToken,
+            authorizationBearerToken: auditLogBearerToken,
             source: AuditLogUploadSourceFfi(
                 accountLabel: nil,
                 deviceLabel: deviceModelIdentifier,

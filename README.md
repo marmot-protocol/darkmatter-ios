@@ -92,8 +92,9 @@ Telemetry is compiled into the vendored MarmotKit bundle with the `otlp-export` 
 - `DARKMATTER_OTLP_ENDPOINT` - default `https://otlp.ipf.dev/v1/metrics`
 - `DARKMATTER_OTLP_BEARER_TOKEN` - defaults to `$(OTLP_TOKEN_DARKMATTER_IOS)`; supply `OTLP_TOKEN_DARKMATTER_IOS` from CI or your local shell, or override this build setting directly; do not commit the token
 - `DARKMATTER_TELEMETRY_ENVIRONMENT` - `staging` or `production`; TestFlight builds are staging
+- `DARKMATTER_AUDIT_LOG_BEARER_TOKEN` - defaults to `$(AUDIT_LOG_TOKEN_DARKMATTER_IOS)`; supply `AUDIT_LOG_TOKEN_DARKMATTER_IOS` from CI or your local shell, or override this build setting directly; do not commit the token
 
-Audit-log tracker uploads use the endpoint compiled into the vendored MarmotKit bundle.
+Audit-log tracker uploads use the endpoint compiled into the vendored MarmotKit bundle and the dedicated `DARKMATTER_AUDIT_LOG_BEARER_TOKEN` (separate from the OTLP token, since Goggles is a different service). Uploads only run once audit logging is enabled in Settings.
 
 ## Notifications
 
