@@ -83,7 +83,6 @@ final class AppState {
     let notifications: AppNotifications
     let toastState = ToastState()
     let navigation = NavigationState()
-    let profileCache = ProfileCache()
     private let notificationDriver = NotificationDriver()
     private var foregroundActivationTask: Task<Void, Never>?
     private var nativePushRegistrationTask: Task<Void, Never>?
@@ -98,18 +97,7 @@ final class AppState {
     private(set) var isAppSceneActive = true
     private(set) var runtimeSuspendedForBackground = false
     private(set) var runtimeGeneration = 0
-
-    /// Cache of best-known display names keyed by account id hex. Derived
-    /// from `profiles` when available. Read-only from view code.
-    var displayNames: [String: String] { profileCache.displayNames }
-
-    /// Cache of full Nostr kind:0 profiles keyed by account id hex. Populated
-    /// on demand via `profile(forAccountIdHex:)`. Read-only from view code.
-    var profiles: [String: UserProfileMetadataFfi] { profileCache.profiles }
-
-    /// Cache of npub (bech32) forms keyed by account id hex. Conversion is
-    /// deterministic and offline, so these never go stale.
-    var npubs: [String: String] { profileCache.npubs }
+    private(set) var profileRefreshGeneration = 0
 
     /// Most recent transient banner. View code reads this via the
     /// `.toastHost()` modifier on the root view.
@@ -130,6 +118,9 @@ final class AppState {
         client?.telemetryConfig ?? TelemetryBuildConfig.current()
     }
     var notificationSubscriptionActive: Bool { notificationDriver.isRunning }
+    var canRefreshProfiles: Bool {
+        isAppSceneActive && !runtimeSuspendedForBackground && !isRuntimeSuspending
+    }
 
     private static let activeAccountKey = "marmot.activeAccountRef"
     private static let developerModeKey = "marmot.developerMode"
@@ -154,6 +145,14 @@ final class AppState {
         self.init(client: client, notifications: .shared)
     }
 
+    deinit {
+        profileFetchQueueTask?.cancel()
+    }
+
+    func noteProfileRefreshCompleted() {
+        profileRefreshGeneration += 1
+    }
+
     /// Production entry point. Builds a keychain-backed client; if secure
     /// storage or a durable on-disk root can't be initialized the app can't run
     /// safely, so we trap with a clear message rather than fall back to insecure
@@ -162,12 +161,11 @@ final class AppState {
         do {
             self.init(client: try MarmotClient())
         } catch {
-            fatalError("Failed to initialize durable Marmot storage: \(error)")
+            // Don't interpolate the error: its description can carry internal
+            // Keychain/storage details into crash logs (#21). The type alone is
+            // enough to triage which failure mode trapped.
+            fatalError("Failed to initialize durable Marmot storage (\(type(of: error)))")
         }
-    }
-
-    deinit {
-        profileFetchQueueTask?.cancel()
     }
 
     /// Convenience accessor for the underlying FFI handle.
@@ -183,7 +181,9 @@ final class AppState {
         do {
             return try runtimeClient().marmot
         } catch {
-            fatalError("Failed to rebuild Keychain-backed Marmot runtime: \(error)")
+            // See init(): keep internal Keychain/storage error details out of
+            // crash logs (#21); the error type is enough to triage.
+            fatalError("Failed to rebuild Keychain-backed Marmot runtime (\(type(of: error)))")
         }
     }
 
@@ -374,7 +374,6 @@ final class AppState {
     @MainActor
     func signOut() async {
         guard let signingOut = activeAccountRef else { return }
-        cancelProfileFetchQueue()
         try? await marmot.clearPushRegistration(accountRef: signingOut)
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
@@ -450,6 +449,10 @@ final class AppState {
             do {
                 _ = try await syncNativePushRegistration(accountRef: accountRef)
             } catch NotificationSettingsActionError.missingApnsToken {
+                return
+            } catch is CancellationError {
+                // Cancellation (backgrounding, account switch) isn't a real
+                // failure, so it must not reach the error toast below (#76).
                 return
             } catch {
                 lastError = error
@@ -572,7 +575,6 @@ final class AppState {
     func prepareForBackgroundSuspension() async {
         defer { runtimeSuspensionTask = nil }
         isAppSceneActive = false
-        cancelProfileFetchQueue()
         await cancelForegroundMaintenance()
         guard phase == .ready,
               !runtimeSuspendedForBackground,
@@ -684,8 +686,11 @@ final class AppState {
         nativePushRegistrationTask = nil
         pushTask?.cancel()
 
+        let profileTask = cancelProfileFetchQueue()
+
         await foregroundTask?.value
         await pushTask?.value
+        await profileTask?.value
     }
 
     private func nativePushEnabledAccountRefs() -> [String] {
@@ -696,10 +701,7 @@ final class AppState {
 
     @MainActor
     private func refreshAccounts() async throws {
-        let listed = try await Task.detached { [marmot] in
-            try marmot.listAccounts()
-        }.value
-        accounts = listed
+        accounts = try await runtimeClient().listAccounts()
     }
 
     // MARK: - Identity management

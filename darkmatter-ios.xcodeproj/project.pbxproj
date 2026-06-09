@@ -526,7 +526,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DARKMATTER_OTLP_BEARER_TOKEN = "$(OTLP_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_ENDPOINT = "https://otlp.ipf.dev/v1/metrics";
 				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
@@ -583,7 +583,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "darkmatter-ios/darkmatter-ios.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DARKMATTER_OTLP_BEARER_TOKEN = "$(OTLP_TOKEN_DARKMATTER_IOS)";
 				DARKMATTER_OTLP_ENDPOINT = "https://otlp.ipf.dev/v1/metrics";
 				DARKMATTER_PUSH_RELAY_HINT = "wss://relay.primal.net";
@@ -739,7 +739,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = NotificationServiceExtension/NotificationServiceExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = V8U75D7Q49;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;
@@ -773,7 +773,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = NotificationServiceExtension/NotificationServiceExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = V8U75D7Q49;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NotificationServiceExtension/Info.plist;

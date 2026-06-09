@@ -553,13 +553,11 @@ struct ConversationView: View {
     }
 
     private func jumpToBottom(proxy: ScrollViewProxy) {
-        scrollToBottom(proxy: proxy, animated: false)
-        DispatchQueue.main.async {
-            scrollToBottom(proxy: proxy, animated: false)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            scrollToBottom(proxy: proxy, animated: false)
-        }
+        // The scroll-to-bottom button is a user action, so animate it for a
+        // fluid feel instead of the old instant triple-dispatch jump. The
+        // ScrollView's .defaultScrollAnchor(.bottom) keeps the view pinned once
+        // we arrive, so a single animated scroll lands reliably (#44).
+        scrollToBottom(proxy: proxy, animated: true)
     }
 
     private func performInitialScrollIfNeeded(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> Bool {
@@ -618,10 +616,14 @@ struct ConversationView: View {
     }
 
     private func send() {
+        // Capture the view model first: clearing the draft before confirming we
+        // have something to send to would silently discard the message if the
+        // view model were nil at dispatch time (#49).
+        guard let viewModel else { return }
         let text = draft
         draft = ""
         Task {
-            await viewModel?.send(text)
+            await viewModel.send(text)
         }
     }
 

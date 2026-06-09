@@ -73,13 +73,19 @@ struct NativePushServerConfig: Equatable {
     let relayHint: String?
 
     static func current(bundle: Bundle = .main) -> NativePushServerConfig? {
-        guard let rawPubkey = bundle.object(forInfoDictionaryKey: serverPubkeyInfoKey) as? String else {
-            return nil
-        }
-        let pubkey = rawPubkey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !pubkey.isEmpty else { return nil }
+        current(
+            rawPubkey: bundle.object(forInfoDictionaryKey: serverPubkeyInfoKey) as? String,
+            rawRelayHint: bundle.object(forInfoDictionaryKey: relayHintInfoKey) as? String
+        )
+    }
 
-        let rawRelayHint = bundle.object(forInfoDictionaryKey: relayHintInfoKey) as? String
+    static func current(rawPubkey: String?, rawRelayHint: String?) -> NativePushServerConfig? {
+        // The push server pubkey must be a 32-byte (64-char) hex string. A
+        // misconfigured build previously passed the raw value straight through
+        // and only failed deep inside push registration (issue #72); reject it
+        // here so the app cleanly behaves as if push were unconfigured.
+        guard let pubkey = Hex.normalized32Bytes(rawPubkey) else { return nil }
+
         let relayHint = rawRelayHint?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty

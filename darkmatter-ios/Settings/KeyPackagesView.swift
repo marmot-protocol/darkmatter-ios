@@ -144,7 +144,7 @@ struct KeyPackagesView: View {
                 }
             }
             if !pkg.sourceRelays.isEmpty {
-                Text(sanitizedRelays(pkg.sourceRelays))
+                Text(Self.sanitizedRelays(pkg.sourceRelays))
                     .font(.caption2.monospaced())
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
@@ -200,18 +200,16 @@ struct KeyPackagesView: View {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
-    /// Strip control characters and cap length on relay-supplied strings.
-    /// Anyone can publish anything to a relay — we only render a small
-    /// preview here, never the raw payload.
-    private func sanitizedRelays(_ relays: [String]) -> String {
-        let trimmed = relays.prefix(4).map { url -> String in
-            let capped = String(url.prefix(120))
-            return capped.filter { scalar in
-                guard let v = scalar.unicodeScalars.first?.value else { return false }
-                return v >= 0x20 && v != 0x7F
-            }
-        }
-        return trimmed.joined(separator: ", ")
+    /// Strip spoofing characters and cap length on relay-supplied strings.
+    /// Anyone can publish anything to a relay — we only render a small preview
+    /// here, never the raw payload. The previous ad-hoc filter only removed
+    /// C0/DEL and let bidi / zero-width codepoints through, so relay URLs could
+    /// be visually spoofed (#53). Reuse ProfileSanitizer.singleLine, the shared
+    /// display-boundary sanitizer.
+    static func sanitizedRelays(_ relays: [String]) -> String {
+        relays.prefix(4)
+            .compactMap { ProfileSanitizer.singleLine($0, maxLength: 120) }
+            .joined(separator: ", ")
     }
 
     // MARK: - Actions

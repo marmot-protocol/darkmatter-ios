@@ -38,12 +38,21 @@ enum SystemEvent: Hashable {
 }
 
 extension TimelineItem {
+    /// Sort key for a message row. Clamped to the earlier of the message's
+    /// claimed send time and our local receive time, so a peer (or a skewed
+    /// clock) can't set a far-future `recordedAt` to pin a message at the bottom
+    /// of every conversation (#61). The bubble still *displays* the record's own
+    /// `recordedAt`, so legitimate timestamps render unchanged.
+    static func sortTimestamp(for record: AppMessageRecordFfi) -> UInt64 {
+        record.receivedAt > 0 ? min(record.recordedAt, record.receivedAt) : record.recordedAt
+    }
+
     static func message(_ record: AppMessageRecordFfi, status: MessageStatus? = nil) -> TimelineItem {
         let resolved = status ?? (record.direction == "sent" ? .sent : .received)
         return TimelineItem(
             id: "msg:\(record.messageIdHex.isEmpty ? UUID().uuidString : record.messageIdHex)",
             kind: .message(record: record, status: resolved),
-            timestamp: record.recordedAt
+            timestamp: sortTimestamp(for: record)
         )
     }
 
@@ -52,7 +61,7 @@ extension TimelineItem {
         TimelineItem(
             id: "msg:\(tempId)",
             kind: .message(record: record, status: .sending),
-            timestamp: record.recordedAt
+            timestamp: sortTimestamp(for: record)
         )
     }
 

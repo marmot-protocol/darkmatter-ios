@@ -146,10 +146,19 @@ struct TelemetryBuildConfig: Equatable {
 
         var systemInfo = utsname()
         uname(&systemInfo)
-        let mirror = Mirror(reflecting: systemInfo.machine)
-        let identifier = mirror.children.reduce(into: "") { result, element in
-            guard let value = element.value as? Int8, value != 0 else { return }
-            result.append(String(UnicodeScalar(UInt8(value))))
+        let bytes = Mirror(reflecting: systemInfo.machine).children.compactMap { $0.value as? Int8 }
+        return machineIdentifier(fromMachineBytes: bytes)
+    }
+
+    /// Decodes the signed `CChar` bytes of `utsname.machine` into a Swift string.
+    ///
+    /// The bytes are `Int8`, so any byte ≥ 0x80 reads back as a negative value.
+    /// `UInt8(_:)` traps on negative input, so the bits must be reinterpreted
+    /// with `UInt8(bitPattern:)` instead. Trailing NUL padding is skipped.
+    nonisolated static func machineIdentifier(fromMachineBytes bytes: [Int8]) -> String? {
+        let identifier = bytes.reduce(into: "") { result, byte in
+            guard byte != 0 else { return }
+            result.append(String(UnicodeScalar(UInt8(bitPattern: byte))))
         }
         return identifier.isEmpty ? nil : identifier
     }

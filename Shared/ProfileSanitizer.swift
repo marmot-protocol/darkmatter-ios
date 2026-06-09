@@ -17,6 +17,7 @@ enum ProfileSanitizer {
     static let maxGroupNameLength = 100
     static let maxAboutLength = 1000
     static let maxMessageLength = 8000
+    static let maxReactionLength = 8
 
     private static let blankLineRunRegex = try! NSRegularExpression(pattern: "\n{3,}")
 
@@ -44,13 +45,29 @@ enum ProfileSanitizer {
     }
 
     /// Multi-line free text (e.g. about): strip control/bidi but keep normal
-    /// newlines/tabs, trim, cap length.
+    /// newlines/tabs, clamp runs of blank lines, trim, cap length.
     static func multilineText(_ raw: String?, maxLength: Int = maxAboutLength) -> String? {
         guard let raw else { return nil }
-        let cleaned = stripUnsafe(raw)
+        // Clamp runs of blank lines so an "about" field can't flood the UI with
+        // vertical whitespace (#60), matching the message-body policy.
+        let cleaned = clampBlankLineRuns(stripUnsafe(raw))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
         return String(cleaned.prefix(maxLength))
+    }
+
+    /// Normalize line endings (CRLF and lone CR → LF) then clamp runs of 3+
+    /// newlines to a single blank line. Normalizing first means `\r\n` and `\r`
+    /// sequences can't slip past the `\n{3,}` clamp.
+    private static func clampBlankLineRuns(_ s: String) -> String {
+        let normalized = s
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        return blankLineRunRegex.stringByReplacingMatches(
+            in: normalized,
+            range: NSRange(normalized.startIndex..., in: normalized),
+            withTemplate: "\n\n"
+        )
     }
 
     /// Message body: multi-line-safe. Strips control/bidi (Trojan-Source
@@ -60,14 +77,19 @@ enum ProfileSanitizer {
     /// length. Returns "" (not nil) so the bubble renders without optional
     /// handling at the call site.
     static func messageBody(_ raw: String) -> String {
-        let stripped = stripUnsafe(raw)
-        let clamped = blankLineRunRegex.stringByReplacingMatches(
-            in: stripped,
-            range: NSRange(stripped.startIndex..., in: stripped),
-            withTemplate: "\n\n"
-        )
-        let trimmed = clamped.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = clampBlankLineRuns(stripUnsafe(raw))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return String(trimmed.prefix(maxMessageLength))
+    }
+
+    /// Reaction "emoji" arrive from peers and may not be emoji at all. Strip
+    /// spoofing characters (bidi / zero-width / control), trim, and cap length
+    /// before display, while preserving legitimate ZWJ and variation-selector
+    /// emoji sequences (#70). Non-optional so the reaction chip renders without
+    /// optional handling.
+    static func reactionEmoji(_ raw: String) -> String {
+        let stripped = stripUnsafe(raw).trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(stripped.prefix(maxReactionLength))
     }
 
     /// Image URL allowlist: only HTTPS with a public host. Rejects data:,
