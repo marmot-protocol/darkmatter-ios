@@ -75,6 +75,9 @@ final class ConversationViewModel {
     private var latestStreamWatchInFlight = false
     /// Accumulated text per live stream, keyed by stream id.
     private var streamText: [String: String] = [:]
+    /// Streams that received a checkpoint snapshot. Their QUIC `.finished`
+    /// text is text-delta-only, so prefer the current preview at close.
+    private var streamsWithCheckpointPreview: Set<String> = []
     /// Streams whose final anchor message has arrived. Once finalized, the
     /// anchor's full text is authoritative and late live updates are ignored.
     private var finalizedStreamIds: Set<String> = []
@@ -800,13 +803,42 @@ final class ConversationViewModel {
         guard let appState, let accountRef = appState.activeAccountRef else {
             throw MediaDataError.missingAccount
         }
+        let downloadableReference = await downloadableMediaReference(for: reference)
         let result = try await appState.marmot.downloadMedia(
             accountRef: accountRef,
             groupIdHex: group.groupIdHex,
-            reference: reference
+            reference: downloadableReference
         )
-        MessageMediaCache.store(result.plaintext, for: reference)
+        MessageMediaCache.store(result.plaintext, for: downloadableReference)
         return result.plaintext
+    }
+
+    private func downloadableMediaReference(for reference: MediaAttachmentReferenceFfi) async -> MediaAttachmentReferenceFfi {
+        guard reference.sourceEpoch == 0 else { return reference }
+        if let mediaRecordReference = mediaRecordReference(matching: reference) {
+            return mediaRecordReference
+        }
+        await refreshMediaRecords()
+        return mediaRecordReference(matching: reference) ?? reference
+    }
+
+    private func mediaRecordReference(matching reference: MediaAttachmentReferenceFfi) -> MediaAttachmentReferenceFfi? {
+        for records in mediaRecordsByMessageId.values {
+            for record in records where Self.sameMediaAttachment(record.reference, reference) {
+                return record.reference
+            }
+        }
+        return nil
+    }
+
+    static func sameMediaAttachment(
+        _ lhs: MediaAttachmentReferenceFfi,
+        _ rhs: MediaAttachmentReferenceFfi
+    ) -> Bool {
+        lhs.version == rhs.version
+            && lhs.plaintextSha256.lowercased() == rhs.plaintextSha256.lowercased()
+            && lhs.ciphertextSha256.lowercased() == rhs.ciphertextSha256.lowercased()
+            && lhs.nonceHex.lowercased() == rhs.nonceHex.lowercased()
     }
 
     private enum MediaDataError: LocalizedError {
@@ -921,6 +953,7 @@ final class ConversationViewModel {
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
         streamText[streamId] = nil
+        streamsWithCheckpointPreview.remove(streamId)
         streamSenderById[streamId] = nil
         removeStreamBubble(streamId: streamId)
     }
@@ -940,6 +973,7 @@ final class ConversationViewModel {
         finalizedStreamIds.insert(streamId)
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
+        streamsWithCheckpointPreview.remove(streamId)
     }
 
     private func resolveFinalizedStream(streamId: String) {
@@ -947,6 +981,7 @@ final class ConversationViewModel {
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
         streamText[streamId] = nil
+        streamsWithCheckpointPreview.remove(streamId)
         streamSenderById[streamId] = nil
         removeStreamBubble(streamId: streamId)
     }
@@ -1483,6 +1518,7 @@ final class ConversationViewModel {
         case .record(_, let recordType, let text):
             switch recordType {
             case AgentTextStreamRecordType.checkpoint:
+                streamsWithCheckpointPreview.insert(streamId)
                 replaceStreamPreviewText(text, to: streamId)
                 upsertStreamBubbleIfNeeded(streamId: streamId, sender: sender, status: .streaming)
             case AgentTextStreamRecordType.abort:
@@ -1497,7 +1533,11 @@ final class ConversationViewModel {
             // the streamed transcript; the authoritative MLS Final anchor will
             // overwrite the same row if it arrives afterwards.
             Self.streamLog.info("finished: streamId=\(streamId, privacy: .public) chunkCount=\(chunkCount) textLen=\(text.count)B hashLen=\(transcriptHashHex.count) — promoting preview to permanent bubble")
-            finalizeStreamBubble(streamId: streamId, sender: sender, text: text)
+            finalizeStreamBubble(
+                streamId: streamId,
+                sender: sender,
+                text: finishedPreviewText(streamId: streamId, text: text)
+            )
         case .failed(let message):
             Self.streamLog.error("failed: streamId=\(streamId, privacy: .public) gotText=\(self.streamText[streamId]?.count ?? 0)B reason=\(message, privacy: .public) — dropping live preview")
             endStream(streamId: streamId)
@@ -1519,6 +1559,16 @@ final class ConversationViewModel {
     private func hasStreamPreviewText(streamId: String) -> Bool {
         guard let text = streamText[streamId] else { return false }
         return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func finishedPreviewText(streamId: String, text: String) -> String {
+        guard streamsWithCheckpointPreview.contains(streamId),
+              let preview = streamText[streamId],
+              !preview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return text
+        }
+        return preview
     }
 
     private static func cappedStreamText(_ text: String) -> String {
