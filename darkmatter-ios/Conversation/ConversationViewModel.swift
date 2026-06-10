@@ -712,7 +712,10 @@ final class ConversationViewModel {
         switch MessageSemantics.classify(record) {
         case .chat, .reply, .media, .streamFinal:
             return TimelineItem.message(record, status: status)
-        case .reaction, .delete, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
+        case .agentActivity, .agentOperation:
+            guard AgentEventPresentation.display(for: record) != nil else { return nil }
+            return TimelineItem.message(record, status: status)
+        case .reaction, .delete, .agentStreamStart, .groupSystem, .unknown:
             guard streamingDebugEnabled else { return nil }
             return TimelineItem.message(record, status: status)
         }

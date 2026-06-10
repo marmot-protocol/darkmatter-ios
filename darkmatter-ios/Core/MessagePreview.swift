@@ -36,7 +36,7 @@ enum MessagePreview {
             }
             return mediaFallback(attachments)
         case .agentActivity, .agentOperation, .groupSystem:
-            return typedEventText(from: record.plaintext) ?? ""
+            return AgentEventPresentation.previewText(from: record.plaintext) ?? ""
         case .chat, .reply, .streamFinal, .reaction, .delete, .agentStreamStart, .unknown:
             // Reply text, stream transcript, and plain chat all live in plaintext.
             return flattenedBody(
@@ -56,7 +56,7 @@ enum MessagePreview {
         }
         if !preview.plaintext.isEmpty {
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
-                return typedEventText(from: preview.plaintext) ?? ""
+                return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
             }
             return flattenedBody(
                 plaintext: preview.plaintext,
@@ -79,7 +79,7 @@ enum MessagePreview {
         }
         if !preview.plaintext.isEmpty {
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
-                return typedEventText(from: preview.plaintext) ?? ""
+                return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
             }
             return flattenedBody(
                 plaintext: preview.plaintext,
@@ -117,15 +117,6 @@ enum MessagePreview {
             return L10n.formatted("📎 %lld attachments", Int64(names.count))
         }
         return "📎 \(L10n.string("Attachment"))"
-    }
-
-    private static func typedEventText(from plaintext: String) -> String? {
-        guard let data = plaintext.data(using: .utf8),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let text = root["text"] as? String
-        else { return nil }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func timelineMediaFileNames(from mediaJson: String) -> [String] {

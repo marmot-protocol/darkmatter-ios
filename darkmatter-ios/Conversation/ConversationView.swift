@@ -526,55 +526,25 @@ struct ConversationView: View {
     private func row(for item: TimelineItem, viewModel: ConversationViewModel) -> some View {
         switch item.kind {
         case .message(let record, let status):
-            let debugStyle = appState.streamingDebugEnabled
-                ? MessageSemantics.debugStyle(for: record)
-                : nil
-            let allowsActions = debugStyle?.isUserVisibleBubble ?? true
-            MessageBubble(
-                record: record,
-                status: status,
-                debugStyle: debugStyle,
-                isDeleted: viewModel.isDeleted(record.messageIdHex),
-                replyPreview: viewModel.replyPreview(for: record),
-                mediaItems: viewModel.mediaItems(for: item),
-                reactions: viewModel.reactions(for: record.messageIdHex),
-                onTapReaction: { emoji in
-                    Task { await viewModel.toggleReaction(emoji, on: record) }
-                    appState.addRecentReaction(emoji)
-                },
-                onLoadMedia: { media in
-                    try await viewModel.data(for: media)
+            if let agentDisplay = AgentEventPresentation.display(for: record) {
+                AgentEventRow(
+                    senderName: appState.displayName(forAccountIdHex: record.sender),
+                    display: agentDisplay,
+                    debugStyle: appState.streamingDebugEnabled
+                        ? MessageSemantics.debugStyle(for: record)
+                        : nil
+                )
+                .id(item.id)
+                .onAppear {
+                    Task { await viewModel.markReadIfVisible(record) }
                 }
-            )
-            .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
-                beginReply(to: record, viewModel: viewModel)
-            }
-            .background(
-                GeometryReader { geo in
-                    Color.clear.preference(
-                        key: RowFramesKey.self,
-                        value: [record.messageIdHex: geo.frame(in: .global)]
-                    )
-                }
-            )
-            .id(item.id)
-            .onLongPressGesture {
-                guard allowsActions,
-                      !record.messageIdHex.isEmpty,
-                      !viewModel.isDeleted(record.messageIdHex) else { return }
-                Haptics.tap()
-                presentActions(for: record)
-            }
-            .popover(
-                isPresented: actionsBinding(for: record),
-                attachmentAnchor: .point(actionsAbove ? .top : .bottom),
-                arrowEdge: actionsAbove ? .bottom : .top
-            ) {
-                actionsMenu(for: record, viewModel: viewModel)
-            }
-            .onAppear {
-                guard allowsActions else { return }
-                Task { await viewModel.markReadIfVisible(record) }
+            } else {
+                agentMessageBubbleRow(
+                    for: item,
+                    record: record,
+                    status: status,
+                    viewModel: viewModel
+                )
             }
         case .systemEvent(let event):
             SystemEventRow(event: event)
@@ -582,6 +552,65 @@ struct ConversationView: View {
         case .streamDebugEvent(let event):
             StreamDebugEventRow(event: event)
                 .id(item.id)
+        }
+    }
+
+    @ViewBuilder
+    private func agentMessageBubbleRow(
+        for item: TimelineItem,
+        record: AppMessageRecordFfi,
+        status: MessageStatus,
+        viewModel: ConversationViewModel
+    ) -> some View {
+        let debugStyle = appState.streamingDebugEnabled
+            ? MessageSemantics.debugStyle(for: record)
+            : nil
+        let allowsActions = debugStyle?.isUserVisibleBubble ?? true
+        MessageBubble(
+            record: record,
+            status: status,
+            debugStyle: debugStyle,
+            isDeleted: viewModel.isDeleted(record.messageIdHex),
+            replyPreview: viewModel.replyPreview(for: record),
+            mediaItems: viewModel.mediaItems(for: item),
+            reactions: viewModel.reactions(for: record.messageIdHex),
+            onTapReaction: { emoji in
+                Task { await viewModel.toggleReaction(emoji, on: record) }
+                appState.addRecentReaction(emoji)
+            },
+            onLoadMedia: { media in
+                try await viewModel.data(for: media)
+            }
+        )
+        .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
+            beginReply(to: record, viewModel: viewModel)
+        }
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: RowFramesKey.self,
+                    value: [record.messageIdHex: geo.frame(in: .global)]
+                )
+            }
+        )
+        .id(item.id)
+        .onLongPressGesture {
+            guard allowsActions,
+                  !record.messageIdHex.isEmpty,
+                  !viewModel.isDeleted(record.messageIdHex) else { return }
+            Haptics.tap()
+            presentActions(for: record)
+        }
+        .popover(
+            isPresented: actionsBinding(for: record),
+            attachmentAnchor: .point(actionsAbove ? .top : .bottom),
+            arrowEdge: actionsAbove ? .bottom : .top
+        ) {
+            actionsMenu(for: record, viewModel: viewModel)
+        }
+        .onAppear {
+            guard allowsActions else { return }
+            Task { await viewModel.markReadIfVisible(record) }
         }
     }
 
