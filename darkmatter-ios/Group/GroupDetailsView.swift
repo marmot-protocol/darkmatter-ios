@@ -24,6 +24,10 @@ struct GroupDetailsView: View {
     @State private var membershipActionInFlight = false
     @State private var showRelays = false
     @State private var actionHelp: GroupActionHelp?
+    @State private var isExportingTranscript = false
+    @State private var transcriptExportURL: URL?
+    @State private var showTranscriptShareSheet = false
+    @State private var transcriptExportError: String?
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var memberCount: Int {
@@ -46,6 +50,7 @@ struct GroupDetailsView: View {
             groupActionsSection
 
             if appState.developerMode {
+                transcriptExportSection
                 developerSection
                 pushNotificationsDeveloperSection
             }
@@ -129,6 +134,22 @@ struct GroupDetailsView: View {
             Button("OK", role: .cancel) { actionHelp = nil }
         } message: {
             Text(actionHelp?.message ?? "")
+        }
+        .alert(
+            "Export failed",
+            isPresented: Binding(
+                get: { transcriptExportError != nil },
+                set: { if !$0 { transcriptExportError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { transcriptExportError = nil }
+        } message: {
+            Text(transcriptExportError ?? "")
+        }
+        .sheet(isPresented: $showTranscriptShareSheet, onDismiss: cleanupTranscriptExportFile) {
+            if let transcriptExportURL {
+                ActivityShareSheet(items: [transcriptExportURL], onComplete: cleanupTranscriptExportFile)
+            }
         }
         .task(id: appState.developerMode) {
             await refreshGroupManagementAndNotify()
@@ -292,6 +313,25 @@ struct GroupDetailsView: View {
             ) {
                 showLeaveConfirm = true
             }
+        }
+    }
+
+    private var transcriptExportSection: some View {
+        Section {
+            Button {
+                Task { await exportConversationTranscript() }
+            } label: {
+                HStack {
+                    Label("Export Conversation Transcript", systemImage: "doc.text")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if isExportingTranscript {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isExportingTranscript || appState.activeAccountRef == nil)
+        } footer: {
+            Text("Exports the raw inner Nostr event history for this group as JSON (kinds 9, 1200–1210, and related metadata), ordered by time. Use Share to copy or save the file.")
         }
     }
 
@@ -835,6 +875,45 @@ struct GroupDetailsView: View {
         if await viewModel.refreshGroupManagement() {
             onGroupChanged(viewModel.group)
         }
+    }
+
+    private func exportConversationTranscript() async {
+        guard !isExportingTranscript,
+              let accountRef = appState.activeAccountRef
+        else { return }
+
+        isExportingTranscript = true
+        defer { isExportingTranscript = false }
+
+        cleanupTranscriptExportFile()
+
+        do {
+            let messages = try ConversationTranscriptExport.fetchAllMessages(
+                marmot: appState.marmot,
+                accountRef: accountRef,
+                groupIdHex: viewModel.group.groupIdHex
+            )
+            let document = ConversationTranscriptExport.makeDocument(
+                group: viewModel.group,
+                messages: messages
+            )
+            let data = try ConversationTranscriptExport.encodeJSON(document)
+            let url = try ConversationTranscriptExport.writeTemporaryFile(
+                data: data,
+                groupIdHex: viewModel.group.groupIdHex
+            )
+            transcriptExportURL = url
+            showTranscriptShareSheet = true
+        } catch {
+            transcriptExportError = error.localizedDescription
+        }
+    }
+
+    private func cleanupTranscriptExportFile() {
+        if let transcriptExportURL {
+            try? FileManager.default.removeItem(at: transcriptExportURL)
+        }
+        transcriptExportURL = nil
     }
 
     private func refreshVisibleDebugState() async {
