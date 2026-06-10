@@ -66,6 +66,11 @@ struct MessageBubble: View {
         debugStyle?.isUserVisibleBubble ?? true
     }
 
+    /// White-on-gradient text is only appropriate for our own user-visible bubbles.
+    private var usesSentBubbleForeground: Bool {
+        isFromMe && showsStandardBody
+    }
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
             if isFromMe { Spacer(minLength: oppositeInset) }
@@ -184,7 +189,7 @@ struct MessageBubble: View {
     private func debugTagsFooter(_ style: MessageDebugStyle) -> some View {
         Text(style.tagsSummary)
             .font(.caption2.monospaced())
-            .foregroundStyle(isFromMe ? Color.white.opacity(0.78) : Color.secondary)
+            .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.78) : Color.secondary)
             .textSelection(.enabled)
             .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
             .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
@@ -194,16 +199,16 @@ struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(style.detailText)
                 .font(.caption.monospaced())
-                .foregroundStyle(isFromMe ? Color.white.opacity(0.95) : Color.primary)
+                .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.95) : Color.primary)
                 .textSelection(.enabled)
             Text(style.tagsSummary)
                 .font(.caption2.monospaced())
-                .foregroundStyle(isFromMe ? Color.white.opacity(0.82) : Color.secondary)
+                .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.82) : Color.secondary)
                 .textSelection(.enabled)
             if !record.messageIdHex.isEmpty {
                 Text("id: \(record.messageIdHex)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(isFromMe ? Color.white.opacity(0.72) : Color.secondary.opacity(0.8))
+                    .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.72) : Color.secondary.opacity(0.8))
                     .textSelection(.enabled)
             }
         }

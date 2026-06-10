@@ -85,6 +85,9 @@ final class ConversationViewModel {
     private var markedReadMessageIds: Set<String> = []
     /// Transient QUIC debug rows keyed by timeline id (streaming debug only).
     private var streamDebugTimelineItems: [String: TimelineItem] = [:]
+    /// Monotonic insert order for QUIC debug rows; zero-padded in ids so
+    /// same-second ties sort correctly.
+    private var streamDebugEventSequence: UInt64 = 0
 
     private var streamingDebugEnabled: Bool {
         appState?.streamingDebugEnabled == true
@@ -687,6 +690,7 @@ final class ConversationViewModel {
     func refreshStreamingDebugPresentation() {
         if !streamingDebugEnabled {
             streamDebugTimelineItems.removeAll()
+            streamDebugEventSequence = 0
         }
         rebuildTimeline()
     }
@@ -1573,9 +1577,11 @@ final class ConversationViewModel {
 
     private func appendStreamDebugEvent(streamId: String, eventKind: String, detail: String) {
         guard streamingDebugEnabled else { return }
+        streamDebugEventSequence += 1
+        let sequence = streamDebugEventSequence
         let now = UInt64(Date().timeIntervalSince1970)
         let item = TimelineItem.streamDebugEvent(
-            id: "dbg:stream:\(streamId):\(now):\(streamDebugTimelineItems.count)",
+            id: "dbg:stream:\(streamId):\(now):\(String(format: "%010llu", sequence))",
             streamId: streamId,
             eventKind: eventKind,
             detail: detail,
