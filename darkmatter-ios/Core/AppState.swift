@@ -2,6 +2,22 @@ import Foundation
 import Observation
 import MarmotKit
 
+struct NativePushDisableCoordinator {
+    let setNativePushEnabled: (Bool) async throws -> NotificationSettingsFfi
+    let clearPushRegistration: () async throws -> Void
+
+    func disable() async throws -> NotificationSettingsFfi {
+        let disabledSettings = try await setNativePushEnabled(false)
+        do {
+            try await clearPushRegistration()
+            return disabledSettings
+        } catch {
+            _ = try? await setNativePushEnabled(true)
+            throw error
+        }
+    }
+}
+
 /// Root observable state for the app.
 ///
 /// Holds the `Marmot` handle, the current set of `AccountSummaryFfi`, and
@@ -390,9 +406,20 @@ final class AppState {
             }
             return settings
         } else {
-            try await marmot.clearPushRegistration(accountRef: accountRef)
-            return try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: false)
+            return try await disableNativePush(accountRef: accountRef)
         }
+    }
+
+    private func disableNativePush(accountRef: String) async throws -> NotificationSettingsFfi {
+        let coordinator = NativePushDisableCoordinator(
+            setNativePushEnabled: { [marmot] enabled in
+                try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: enabled)
+            },
+            clearPushRegistration: { [marmot] in
+                try await marmot.clearPushRegistration(accountRef: accountRef)
+            }
+        )
+        return try await coordinator.disable()
     }
 
     private func enableNotificationsByDefault(for accountRef: String) async {

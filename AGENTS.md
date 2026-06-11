@@ -57,6 +57,7 @@ Rules for notification work:
 - The Notification Service Extension should keep primary and additional local presentations alert-consistent, including `UNNotificationSound.default` when rendering visible message content.
 - Do not abandon additional NSE presentations after `collectNotificationsAfterWake`; those records have already been consumed from Marmot's background notification cursor.
 - Sign-out must cancel and await any in-flight native-push registration sync before clearing the removed account's push registration.
+- Disabling native push must flip the local preference off before clearing the server registration, and roll the preference back on if registration cleanup fails.
 - Main-app local notification presentation must fail open if a settings read throws; only an explicit disabled setting should suppress.
 - Notification subscription retry failures should show at most one generic user-facing banner per outage; do not surface raw backend error descriptions in that toast.
 - The main app should not keep the Marmot runtime alive indefinitely in the background. It suspends the runtime on background and restarts it on foreground.
