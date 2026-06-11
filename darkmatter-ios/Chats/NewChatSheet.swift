@@ -25,6 +25,27 @@ struct NewChatSheet: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    enum PendingMemberAddResult: Equatable {
+        case empty
+        case invalid
+        case duplicate
+        case added([String])
+    }
+
+    static func pendingMemberAddResult(
+        _ raw: String,
+        existingMembers: [String]
+    ) -> PendingMemberAddResult {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+        guard let memberRef = AddMembersPresentation.memberRef(fromScannedPayload: trimmed),
+              !memberRef.isEmpty else {
+            return .invalid
+        }
+        guard !existingMembers.contains(memberRef) else { return .duplicate }
+        return .added(existingMembers + [memberRef])
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -102,18 +123,21 @@ struct NewChatSheet: View {
         }
     }
 
-    private func addPending() {
-        let trimmed = pendingMember.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard let memberRef = AddMembersPresentation.memberRef(fromScannedPayload: trimmed) else {
+    @discardableResult
+    private func addPending() -> Bool {
+        switch Self.pendingMemberAddResult(pendingMember, existingMembers: members) {
+        case .empty, .duplicate:
+            return true
+        case .invalid:
             Haptics.error()
             error = L10n.string("Enter a valid npub, nprofile, Nostr URI, profile link, or hex public key.")
-            return
+            return false
+        case .added(let updatedMembers):
+            members = updatedMembers
+            pendingMember = ""
+            error = nil
+            return true
         }
-        guard !memberRef.isEmpty, !members.contains(memberRef) else { return }
-        members.append(memberRef)
-        pendingMember = ""
-        error = nil
     }
 
     /// Add a recipient from a scanned profile QR code.
@@ -130,7 +154,8 @@ struct NewChatSheet: View {
     @MainActor
     private func create() async {
         guard let accountRef = appState.activeAccountRef else { return }
-        addPending() // in case the user hits Create with text still in the field
+        // Capture text still in the field before creating.
+        guard addPending() else { return }
 
         isCreating = true
         error = nil
