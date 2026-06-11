@@ -1763,7 +1763,7 @@ struct NotificationServiceTests {
         let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
 
         #expect(source.matches(#"@MainActor\s+final class NotificationService"#))
-        #expect(source.matches(#"private func finish\(\)[\s\S]*self\.contentHandler = nil[\s\S]*self\.bestAttemptContent = nil[\s\S]*contentHandler\(bestAttemptContent\)"#))
+        #expect(source.matches(#"private func finish\(applyingFallbackForTimeout: Bool = false\)[\s\S]*self\.contentHandler = nil[\s\S]*self\.bestAttemptContent = nil[\s\S]*contentHandler\(bestAttemptContent\)"#))
     }
 
     @Test func notificationServiceSchedulesAdditionalPresentationsBeforeFinish() throws {
@@ -1779,8 +1779,17 @@ struct NotificationServiceTests {
         #expect(source.matches(#"private var activeMarmot: Marmot\?"#))
         #expect(source.matches(#"activeMarmot = marmot"#))
         #expect(source.matches(#"await marmot\.shutdown\(\)[\s\S]*activeMarmot = nil"#))
-        #expect(source.matches(#"override func serviceExtensionTimeWillExpire\(\)[\s\S]*collectionTask\?\.cancel\(\)[\s\S]*guard let marmot = activeMarmot[\s\S]*activeMarmot = nil[\s\S]*expirationTask = Task[\s\S]*await marmot\.shutdown\(\)[\s\S]*await self\?\.finish\(\)"#))
+        #expect(source.matches(#"override func serviceExtensionTimeWillExpire\(\)[\s\S]*collectionTask\?\.cancel\(\)[\s\S]*guard let marmot = activeMarmot[\s\S]*activeMarmot = nil[\s\S]*expirationTask = Task[\s\S]*await marmot\.shutdown\(\)[\s\S]*await self\?\.finish\(applyingFallbackForTimeout: true\)"#))
         #expect(!source.matches(#"override func serviceExtensionTimeWillExpire\(\)\s*\{\s*collectionTask\?\.cancel\(\)\s*finish\(\)\s*\}"#))
+    }
+
+    @Test func serviceTimeoutAppliesFallbackOnlyBeforeRenderDecision() throws {
+        let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
+
+        #expect(source.matches(#"private var didApplyRenderDecision = false"#))
+        #expect(source.matches(#"override func serviceExtensionTimeWillExpire\(\)[\s\S]*finish\(applyingFallbackForTimeout: true\)"#))
+        #expect(source.matches(#"private func apply\([\s\S]*didApplyRenderDecision = true[\s\S]*switch decision"#))
+        #expect(source.matches(#"private func finish\(applyingFallbackForTimeout: Bool = false\)[\s\S]*if applyingFallbackForTimeout, !didApplyRenderDecision \{[\s\S]*applyFallback\(to: bestAttemptContent\)"#))
     }
 
     private var notificationServiceSourceURL: URL {

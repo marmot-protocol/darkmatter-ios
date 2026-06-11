@@ -9,6 +9,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var collectionTask: Task<Void, Never>?
     private var expirationTask: Task<Void, Never>?
     private var activeMarmot: Marmot?
+    private var didApplyRenderDecision = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
 
     override func didReceive(
@@ -17,6 +18,7 @@ final class NotificationService: UNNotificationServiceExtension {
     ) {
         self.contentHandler = contentHandler
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
+        didApplyRenderDecision = false
 
         collectionTask = Task { [weak self] in
             await self?.collectAndDecorateNotification()
@@ -26,13 +28,13 @@ final class NotificationService: UNNotificationServiceExtension {
     override func serviceExtensionTimeWillExpire() {
         collectionTask?.cancel()
         guard let marmot = activeMarmot else {
-            finish()
+            finish(applyingFallbackForTimeout: true)
             return
         }
         activeMarmot = nil
         expirationTask = Task { [weak self] in
             await marmot.shutdown()
-            await self?.finish()
+            await self?.finish(applyingFallbackForTimeout: true)
         }
     }
 
@@ -75,6 +77,7 @@ final class NotificationService: UNNotificationServiceExtension {
         _ decision: NotificationServiceRenderDecision,
         to content: UNMutableNotificationContent
     ) async {
+        didApplyRenderDecision = true
         switch decision {
         case .decorate(let presentation, let additionalPresentations):
             decorate(content, with: presentation)
@@ -135,12 +138,16 @@ final class NotificationService: UNNotificationServiceExtension {
         }
     }
 
-    private func finish() {
+    private func finish(applyingFallbackForTimeout: Bool = false) {
         guard let contentHandler, let bestAttemptContent else { return }
+        if applyingFallbackForTimeout, !didApplyRenderDecision {
+            applyFallback(to: bestAttemptContent)
+        }
         self.contentHandler = nil
         self.bestAttemptContent = nil
         self.collectionTask = nil
         self.expirationTask = nil
+        self.didApplyRenderDecision = false
         contentHandler(bestAttemptContent)
     }
 }
