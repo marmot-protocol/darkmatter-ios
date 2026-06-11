@@ -1745,24 +1745,24 @@ struct NotificationServiceProjectionTests {
         ))
     }
 
-    @Test func noDataCollectionSuppressesProviderFallback() {
+    @Test func noDataCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .noData,
             notifications: [],
             error: nil
         )
 
-        #expect(NotificationServiceProjection.decision(for: collection) == .suppress)
+        #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
     }
 
-    @Test func selfOnlyCollectionSuppressesProviderFallback() {
+    @Test func selfOnlyCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [notificationUpdate(isFromSelf: true)],
             error: nil
         )
 
-        #expect(NotificationServiceProjection.decision(for: collection) == .suppress)
+        #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
     }
 
     @Test func failedCollectionKeepsGenericFallback() {
@@ -1779,6 +1779,13 @@ struct NotificationServiceProjectionTests {
         let source = try String(contentsOf: notificationServiceProjectionSourceURL, encoding: .utf8)
 
         #expect(!source.matches(#"@MainActor\s+static func decision\("#))
+    }
+
+    @Test func projectionDoesNotAskNSEToSuppressDeliveredAlerts() throws {
+        let source = try String(contentsOf: notificationServiceProjectionSourceURL, encoding: .utf8)
+
+        #expect(!source.contains("case suppress"))
+        #expect(source.contains("An NSE cannot cancel an alerting APNS push after delivery"))
     }
 
     private var notificationServiceProjectionSourceURL: URL {
@@ -1830,6 +1837,13 @@ struct NotificationServiceTests {
         #expect(source.matches(#"override func serviceExtensionTimeWillExpire\(\)[\s\S]*finish\(applyingFallbackForTimeout: true\)"#))
         #expect(source.matches(#"private func apply\([\s\S]*didApplyRenderDecision = true[\s\S]*switch decision"#))
         #expect(source.matches(#"private func finish\(applyingFallbackForTimeout: Bool = false\)[\s\S]*if applyingFallbackForTimeout, !didApplyRenderDecision \{[\s\S]*applyFallback\(to: bestAttemptContent\)"#))
+    }
+
+    @Test func serviceNeverReturnsBlankContentForSuppressDecision() throws {
+        let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
+
+        #expect(!source.contains("bestAttemptContent = UNMutableNotificationContent()"))
+        #expect(source.matches(#"case \.fallback:[\s\S]*applyFallback\(to: content\)"#))
     }
 
     private var notificationServiceSourceURL: URL {

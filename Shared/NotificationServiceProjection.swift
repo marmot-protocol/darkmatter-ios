@@ -3,7 +3,6 @@ import MarmotKit
 
 enum NotificationServiceRenderDecision: Equatable {
     case decorate(LocalNotificationPresentation, additionalPresentations: [LocalNotificationPresentation])
-    case suppress
     case fallback
 }
 
@@ -21,14 +20,16 @@ enum NotificationServiceProjection {
                 .compactMap(LocalNotificationProjection.makePresentation(for:))
             guard let presentation = presentations.first
             else {
-                return .suppress
+                // An NSE cannot cancel an alerting APNS push after delivery; a
+                // generic fallback is safer than handing iOS blank content.
+                return .fallback
             }
             return .decorate(
                 presentation,
                 additionalPresentations: Array(presentations.dropFirst())
             )
         case .noData:
-            return .suppress
+            return .fallback
         case .failed:
             return .fallback
         }

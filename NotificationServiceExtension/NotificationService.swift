@@ -95,8 +95,6 @@ final class NotificationService: UNNotificationServiceExtension {
         case .decorate(let presentation, let additionalPresentations):
             decorate(content, with: presentation)
             await scheduleAdditionalPresentations(additionalPresentations)
-        case .suppress:
-            bestAttemptContent = UNMutableNotificationContent()
         case .fallback:
             applyFallback(to: content)
         }
