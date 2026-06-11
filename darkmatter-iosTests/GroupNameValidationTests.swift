@@ -21,4 +21,19 @@ struct GroupNameValidationTests {
         let description = NewChatSheet.normalizedGroupDescription("  Mission notes  ")
         #expect(description == "Mission notes")
     }
+
+    @Test func newChatPendingRecipientRejectsInvalidInputWithoutChangingMembers() {
+        let existing = String(repeating: "a", count: 64)
+        let result = NewChatSheet.pendingMemberAddResult("not a profile", existingMembers: [existing])
+
+        #expect(result == .invalid)
+    }
+
+    @Test func newChatPendingRecipientAppendsValidInput() {
+        let existing = String(repeating: "a", count: 64)
+        let typed = String(repeating: "b", count: 64)
+        let result = NewChatSheet.pendingMemberAddResult("  \(typed)\n", existingMembers: [existing])
+
+        #expect(result == .added([existing, typed]))
+    }
 }

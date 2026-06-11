@@ -89,6 +89,7 @@ Do not add a second storage path for data Marmot already owns.
 - Route peer-controlled profile and group image URLs through `ProfileSanitizer.imageURL`; it only allows HTTPS public hosts and rejects local/private hosts plus legacy IPv4 literal spellings.
 - Media attachment display IDs must include the owning message or timeline-row identity; do not key SwiftUI media views solely by the encrypted media reference.
 - Build user-visible date formats from localized templates rather than raw `DateFormatter.dateFormat` patterns.
+- When a sheet folds typed pending input into a submit action, abort on invalid pending input before clearing validation errors or starting async work.
 - When synthesizing timeline rows from protocol records, carry the source record timestamp when one is available; use the client wall clock only for local-only UI events or missing timestamp fallbacks.
 - For SwiftUI scroll timing, prefer cancellable main-actor tasks and layout-driven callbacks over `DispatchQueue.main` hop chains.
 - Keep comments short and only where they explain a non-obvious constraint.
