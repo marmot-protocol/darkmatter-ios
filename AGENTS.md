@@ -57,6 +57,10 @@ Rules for notification work:
 
 If notifications are flaky, check token registration, group push-token gossip, relay hints, transponder visibility on the relay, and NSE timeout behavior before changing UI code.
 
+## Remote Image Search
+
+The group image web search is an explicit third-party egress surface. Keep DuckDuckGo requests and result thumbnail fetches on ephemeral, no-cookie/no-cache URL sessions, and keep the in-app disclosure aligned with the actual hosts contacted. Do not use `URLSession.shared` or SwiftUI `AsyncImage` for this search/preview path.
+
 ## Storage
 
 - `UserDefaults` stores app preferences such as active account, developer mode, and recent reactions.
