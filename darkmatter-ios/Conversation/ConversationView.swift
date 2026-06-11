@@ -166,6 +166,7 @@ struct ConversationView: View {
     @State private var composerFocusRequest = 0
     @State private var isAtTimelineBottom = true
     @State private var didPerformInitialBottomScroll = false
+    @State private var initialScrollFollowUpTask: Task<Void, Never>?
     @State private var visibleChatRoute: VisibleChatRoute?
     /// Global Y bounds of the visible timeline (between nav bar and composer).
     /// The bottom shrinks when the keyboard rises, so placement accounts for it.
@@ -520,6 +521,10 @@ struct ConversationView: View {
                             contentBottomY = outer.frame(in: .global).maxY
                             _ = performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel)
                         }
+                        .onDisappear {
+                            initialScrollFollowUpTask?.cancel()
+                            initialScrollFollowUpTask = nil
+                        }
                     }
                 }
             }
@@ -723,18 +728,34 @@ struct ConversationView: View {
             didPerformInitialBottomScroll = true
             isAtTimelineBottom = true
             scrollToBottom(proxy: proxy, animated: false)
-            DispatchQueue.main.async {
-                scrollToBottom(proxy: proxy, animated: false)
-            }
+            scheduleInitialScrollFollowUp(.bottom, proxy: proxy)
         case .item(let itemId):
             didPerformInitialBottomScroll = true
             isAtTimelineBottom = false
             scrollTo(itemId, proxy: proxy, anchor: .center)
-            DispatchQueue.main.async {
+            scheduleInitialScrollFollowUp(.item(itemId), proxy: proxy)
+        }
+        return true
+    }
+
+    private func scheduleInitialScrollFollowUp(
+        _ destination: TimelineInitialDestination,
+        proxy: ScrollViewProxy
+    ) {
+        initialScrollFollowUpTask?.cancel()
+        initialScrollFollowUpTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+
+            switch destination {
+            case .none:
+                break
+            case .bottom:
+                scrollToBottom(proxy: proxy, animated: false)
+            case .item(let itemId):
                 scrollTo(itemId, proxy: proxy, anchor: .center)
             }
         }
-        return true
     }
 
     private func timelineItemId(forMessageIdHex messageIdHex: String, viewModel: ConversationViewModel) -> String? {
