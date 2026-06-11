@@ -306,14 +306,22 @@ final class AppState {
     @MainActor
     private func shouldPresentLocalNotification(_ update: NotificationUpdateFfi) -> Bool {
         LocalNotificationSuppressionPolicy.shouldPresent(
-            localNotificationsEnabled: (try? marmot.notificationSettings(
+            localNotificationsEnabled: localNotificationsEnabledForPresentation(
                 accountRef: update.accountRef
-            ).localNotificationsEnabled) == true,
+            ),
             appSceneActive: isAppSceneActive,
             updateAccountRef: update.accountRef,
             updateGroupIdHex: update.groupIdHex,
             visibleChat: visibleChat
         )
+    }
+
+    private func localNotificationsEnabledForPresentation(accountRef: String) -> Bool {
+        do {
+            return try marmot.notificationSettings(accountRef: accountRef).localNotificationsEnabled
+        } catch {
+            return true
+        }
     }
 
     // MARK: - Notifications

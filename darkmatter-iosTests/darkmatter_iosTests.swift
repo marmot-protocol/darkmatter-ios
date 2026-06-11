@@ -192,6 +192,22 @@ struct AppStateBootstrapTests {
         #expect(!source.matches(oldPresentationPattern))
     }
 
+    @Test func notificationPresentationSettingsReadFailureFailsOpen() throws {
+        let source = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let helperPattern =
+            #"private func localNotificationsEnabledForPresentation\(accountRef: String\) -> Bool \{[\s\S]*"#
+            + #"do \{[\s\S]*return try marmot\.notificationSettings\(accountRef: accountRef\)\.localNotificationsEnabled[\s\S]*"#
+            + #"\} catch \{[\s\S]*return true[\s\S]*\}"#
+        let policyPattern =
+            #"LocalNotificationSuppressionPolicy\.shouldPresent\([\s\S]*"#
+            + #"localNotificationsEnabled: localNotificationsEnabledForPresentation\([\s\S]*"#
+            + #"accountRef: update\.accountRef"#
+
+        #expect(source.matches(helperPattern))
+        #expect(source.matches(policyPattern))
+        #expect(!source.matches(#"localNotificationsEnabled:\s*\(try\? marmot\.notificationSettings"#))
+    }
+
     @Test func visibleChatRouteTracksAccountAndClearsOnlyMatchingRoute() async throws {
         let appState = try testAppState()
         appState.activeAccountRef = "account-a"
