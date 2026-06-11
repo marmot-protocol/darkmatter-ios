@@ -11,11 +11,14 @@ enum NotificationServiceProjection {
     // the notification service extension.
     static let maxWakeWaitMs: UInt32 = 8_000
 
-    static func decision(for collection: BackgroundNotificationCollectionFfi) -> NotificationServiceRenderDecision {
+    static func decision(
+        for collection: BackgroundNotificationCollectionFfi,
+        localNotificationsEnabled: (String) -> Bool = { _ in true }
+    ) -> NotificationServiceRenderDecision {
         switch collection.status {
         case .newData:
             let presentations = collection.notifications
-                .filter({ !$0.isFromSelf })
+                .filter({ !$0.isFromSelf && localNotificationsEnabled($0.accountRef) })
                 .sorted(by: { $0.timestampMs > $1.timestampMs })
                 .compactMap(LocalNotificationProjection.makePresentation(for:))
             guard let presentation = presentations.first

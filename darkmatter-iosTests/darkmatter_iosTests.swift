@@ -1745,6 +1745,64 @@ struct NotificationServiceProjectionTests {
         ))
     }
 
+    @Test func disabledLocalNotificationsAreNotDecoratedByNSE() {
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [
+                notificationUpdate(accountRef: "disabled-account")
+            ],
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(
+            for: collection,
+            localNotificationsEnabled: { _ in false }
+        )
+
+        #expect(decision == .fallback)
+    }
+
+    @Test func disabledLocalNotificationsAreFilteredBeforeChoosingNewestPresentation() {
+        let disabledNewer = notificationUpdate(
+            notificationKey: "disabled-newer",
+            accountRef: "account-disabled",
+            senderName: "Muted",
+            previewText: "private",
+            timestampMs: 3_000
+        )
+        let enabledMiddle = notificationUpdate(
+            notificationKey: "enabled-middle",
+            accountRef: "account-enabled",
+            senderName: "Visible",
+            previewText: "shown",
+            timestampMs: 2_000
+        )
+        let enabledOlder = notificationUpdate(
+            notificationKey: "enabled-older",
+            accountRef: "account-enabled",
+            senderName: "Also visible",
+            previewText: "also shown",
+            timestampMs: 1_000
+        )
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [enabledOlder, disabledNewer, enabledMiddle],
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(
+            for: collection,
+            localNotificationsEnabled: { $0 == "account-enabled" }
+        )
+
+        #expect(decision == .decorate(
+            LocalNotificationProjection.makePresentation(for: enabledMiddle)!,
+            additionalPresentations: [
+                LocalNotificationProjection.makePresentation(for: enabledOlder)!
+            ]
+        ))
+    }
+
     @Test func noDataCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .noData,

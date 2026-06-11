@@ -61,7 +61,15 @@ final class NotificationService: UNNotificationServiceExtension {
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
                 )
-                await apply(NotificationServiceProjection.decision(for: result), to: content)
+                let decision = NotificationServiceProjection.decision(
+                    for: result,
+                    localNotificationsEnabled: { accountRef in
+                        (try? marmot.notificationSettings(
+                            accountRef: accountRef
+                        ).localNotificationsEnabled) == true
+                    }
+                )
+                await apply(decision, to: content)
             } catch {
                 applyFallback(to: content)
             }

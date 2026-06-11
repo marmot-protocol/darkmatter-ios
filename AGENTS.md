@@ -52,6 +52,7 @@ Rules for notification work:
 - Do not include account IDs, group IDs, sender names, message IDs, or plaintext in provider payloads.
 - APNS pushes target the main app bundle ID, not the extension bundle ID.
 - The Notification Service Extension may enrich the visible notification only from local Marmot state after `collectNotificationsAfterWake`.
+- The Notification Service Extension must honor each account's `localNotificationsEnabled` setting before rendering decrypted sender or preview content.
 - The Notification Service Extension cannot suppress an alert that already woke it. If no local presentation exists, deliver the generic fallback content rather than blank content.
 - The main app should not keep the Marmot runtime alive indefinitely in the background. It suspends the runtime on background and restarts it on foreground.
 
