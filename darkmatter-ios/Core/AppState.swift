@@ -686,6 +686,7 @@ final class AppState {
 
         guard isAppSceneActive, !Task.isCancelled else { return }
         await catchUpAfterForegroundActivation()
+        resumeProfileFetchQueueIfNeeded()
     }
 
     private func waitForRuntimeSuspensionToFinish() async {

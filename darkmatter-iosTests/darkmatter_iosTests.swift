@@ -322,6 +322,33 @@ struct AppStateBootstrapTests {
         #expect(!source.matches(#"while\s+isRuntimeSuspending"#))
     }
 
+    @Test func profileFetchQueueLeavesQueuedIDsWhenRefreshBecomesUnavailable() async throws {
+        let appState = try testAppState()
+        let queued = [hex("11"), hex("22")]
+        appState.queuedProfileFetchIDs = queued
+        appState.scheduledProfileFetchIDs = Set(queued)
+        appState.setAppSceneActive(false)
+
+        await appState.runProfileFetchQueueForTesting()
+
+        #expect(appState.queuedProfileFetchIDs == queued)
+        #expect(appState.scheduledProfileFetchIDs == Set(queued))
+        #expect(appState.activeProfileFetchID == nil)
+        #expect(appState.profileFetchQueueTask == nil)
+    }
+
+    @Test func profileFetchQueueRearmsPreservedIDsWhenRefreshIsAllowed() async throws {
+        let appState = try testAppState()
+        let queued = [hex("33")]
+        appState.queuedProfileFetchIDs = queued
+        appState.scheduledProfileFetchIDs = Set(queued)
+
+        appState.resumeProfileFetchQueueIfNeeded()
+        let task = appState.cancelProfileFetchQueue()
+
+        #expect(task != nil)
+    }
+
     @Test func signOutDisablesNativePushAndSwitchesActiveAccount() async throws {
         // Regression for issue #7: signing out must clear the signed-out
         // account's push registration so the push server stops delivering
