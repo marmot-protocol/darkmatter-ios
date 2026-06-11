@@ -1113,7 +1113,7 @@ struct LocalizationCatalogTests {
         }
     }
 
-    @Test func countLocalizationsUseStaticFormatKeysInSource() throws {
+    @Test func dynamicLocalizationsUseStaticFormatKeysInSource() throws {
         let dynamicCountKeys = [
             (
                 "darkmatter-ios/Conversation/ConversationViewModel.swift",
@@ -1138,6 +1138,18 @@ struct LocalizationCatalogTests {
             (
                 "darkmatter-ios/Core/GroupDisplay.swift",
                 #"L10n.string("\(memberCount) person group")"#
+            ),
+            (
+                "Shared/LocalNotificationProjection.swift",
+                #"L10n.string("Invitation to \($0)")"#
+            ),
+            (
+                "Shared/LocalNotificationProjection.swift",
+                #"L10n.string("\(senderName) sent a message")"#
+            ),
+            (
+                "darkmatter-ios/Chats/ChatRow.swift",
+                #"L10n.string("You: \(body)")"#
             ),
         ]
 
@@ -1482,6 +1494,24 @@ struct NotificationPresentationTests {
 
         #expect(presentation?.title == "Project Room")
         #expect(presentation?.body == "Bob: Ship it")
+    }
+
+    @Test func notificationFallbacksUseFormattedLocalizationKeys() {
+        let invite = notificationUpdate(
+            trigger: .groupInvite,
+            isDm: false,
+            groupName: "Project Room",
+            previewText: nil
+        )
+        let groupMessage = notificationUpdate(
+            isDm: false,
+            groupName: nil,
+            senderName: "Bob",
+            previewText: nil
+        )
+
+        #expect(LocalNotificationProjection.makePresentation(for: invite)?.body == L10n.formatted("Invitation to %@", "Project Room"))
+        #expect(LocalNotificationProjection.makePresentation(for: groupMessage)?.body == L10n.formatted("%@ sent a message", "Bob"))
     }
 
     @Test func selfMessagesAreNotPresentedLocally() {
