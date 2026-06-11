@@ -85,54 +85,69 @@ struct EmojiPickerSheet: View {
     let onPick: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
-    private static let emojis: [String] = [
-        "👍", "👎", "❤️", "🔥", "🎉", "😂", "🤣", "😅", "😊", "😍",
-        "😎", "🤔", "🙏", "👏", "🙌", "💪", "🤝", "👀", "😮", "😯",
-        "😢", "😭", "😡", "🤯", "🥳", "😴", "🥲", "💯", "✅", "❌",
-        "⭐️", "🌟", "💜", "💙", "💚", "🧡", "🤍", "🖤", "💔", "✨",
-        "🚀", "👋", "🤙", "🫡", "🫶", "😬", "😇", "🤩", "🥹", "😆"
-    ]
-
-    private let columns = Array(repeating: GridItem(.flexible()), count: 6)
-
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            header
+
+            Divider()
+
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(Self.emojis, id: \.self) { emoji in
+                LazyVGrid(columns: EmojiPickerPresentation.columns, spacing: 16) {
+                    ForEach(EmojiPickerPresentation.options) { option in
                         Button {
-                            onPick(emoji)
+                            onPick(option.emoji)
                             dismiss()
                         } label: {
-                            Text(emoji).font(.largeTitle)
+                            Text(option.emoji)
+                                .font(.largeTitle)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding()
             }
-            .modifier(EmojiPickerNavigationTitle(title: title))
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
         }
         .presentationDetents([.medium, .large])
     }
+
+    private var header: some View {
+        HStack {
+            if let title {
+                Text(title)
+                    .font(.headline)
+            } else {
+                Spacer(minLength: 0)
+            }
+
+            Spacer(minLength: 16)
+
+            Button("Done") { dismiss() }
+                .buttonStyle(.plain)
+                .font(.headline)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+    }
 }
 
-private struct EmojiPickerNavigationTitle: ViewModifier {
-    let title: LocalizedStringKey?
+enum EmojiPickerPresentation {
+    static let columnCount = 6
+    static let columns = Array(
+        repeating: GridItem(.flexible(minimum: 36), spacing: 12),
+        count: columnCount
+    )
+    static let options: [EmojiPickerOption] = [
+        "👍", "👎", "❤️", "🔥", "🎉", "😂", "🤣", "😅", "😊", "😍",
+        "😎", "🤔", "🙏", "👏", "🙌", "💪", "🤝", "👀", "😮", "😯",
+        "😢", "😭", "😡", "🤯", "🥳", "😴", "🥲", "💯", "✅", "❌",
+        "⭐️", "🌟", "💜", "💙", "💚", "🧡", "🤍", "🖤", "💔", "✨",
+        "🚀", "👋", "🤙", "🫡", "🫶", "😬", "😇", "🤩", "🥹", "😆"
+    ].map(EmojiPickerOption.init)
+}
 
-    func body(content: Content) -> some View {
-        if let title {
-            content
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-        } else {
-            content
-                .navigationBarTitleDisplayMode(.inline)
-        }
-    }
+struct EmojiPickerOption: Identifiable, Hashable {
+    let emoji: String
+
+    var id: String { emoji }
 }

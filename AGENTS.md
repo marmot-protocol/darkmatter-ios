@@ -22,6 +22,10 @@ Background task identifiers used during runtime suspension must be owned and
 ended on the MainActor; UIKit expiration and completion paths should share an
 idempotent end helper.
 
+Keep lightweight popovers/sheets, such as the emoji picker, out of navigation
+containers unless they actually need navigation state. Stable option models and
+grid metadata should be precomputed outside `body`.
+
 `Shared/` is compiled into both the main app and the Notification Service Extension. Keep code there extension-safe. Do not use `UIApplication`, app delegates, SwiftUI views, or APIs unavailable to extensions from shared files.
 
 ## Rust Bindings
