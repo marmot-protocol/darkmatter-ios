@@ -14,10 +14,19 @@ struct MessageMediaAttachment: Identifiable, Hashable {
         mediaType.lowercased().hasPrefix("image/")
     }
 
-    static func displayItems(from references: [MediaAttachmentReferenceFfi]) -> [MessageMediaAttachment] {
+    static func displayItems(
+        from references: [MediaAttachmentReferenceFfi],
+        ownerId: String
+    ) -> [MessageMediaAttachment] {
         references.enumerated().map { index, reference in
-            MessageMediaAttachment(
-                id: "\(reference.plaintextSha256):\(reference.sourceEpoch):\(index)",
+            let id = [
+                ownerId,
+                reference.plaintextSha256,
+                String(reference.sourceEpoch),
+                String(index),
+            ].joined(separator: ":")
+            return MessageMediaAttachment(
+                id: id,
                 reference: reference,
                 fileName: reference.fileName,
                 mediaType: reference.mediaType,
