@@ -210,29 +210,54 @@ enum MediaDraftProcessor {
 }
 
 enum MessageMediaCache {
+    private static let protectedAttributes: [FileAttributeKey: Any] = [
+        .protectionKey: FileProtectionType.complete
+    ]
+
     static func cachedData(for reference: MediaAttachmentReferenceFfi) -> Data? {
         guard let url = cacheURL(for: reference) else { return nil }
         return try? Data(contentsOf: url)
     }
 
     static func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) {
-        guard let url = cacheURL(for: reference) else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try? data.write(to: url, options: [.atomic])
+        guard let cachesDirectory = defaultCachesDirectory else { return }
+        store(data, for: reference, cachesDirectory: cachesDirectory)
     }
 
-    private static func cacheURL(for reference: MediaAttachmentReferenceFfi) -> URL? {
+    static func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, cachesDirectory: URL) {
+        guard let url = cacheURL(for: reference, cachesDirectory: cachesDirectory) else { return }
+        let directory = url.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: protectedAttributes
+            )
+            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+        } catch {
+            return
+        }
+    }
+
+    static func cacheURL(for reference: MediaAttachmentReferenceFfi) -> URL? {
+        guard let cachesDirectory = defaultCachesDirectory else { return nil }
+        return cacheURL(for: reference, cachesDirectory: cachesDirectory)
+    }
+
+    static func cacheURL(for reference: MediaAttachmentReferenceFfi, cachesDirectory: URL) -> URL? {
         let hash = reference.plaintextSha256.lowercased()
         guard hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else {
             return nil
         }
-        return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
-            .first?
+        return cachesDirectory
             .appendingPathComponent("EncryptedMedia", isDirectory: true)
             .appendingPathComponent("\(hash).\(fileExtension(for: reference.mediaType))")
+    }
+
+    private static var defaultCachesDirectory: URL? {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
     }
 
     private static func fileExtension(for mediaType: String) -> String {

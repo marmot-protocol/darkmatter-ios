@@ -4109,6 +4109,30 @@ struct MessageSemanticsTests {
         #expect(listedItem.id.hasSuffix(":42:0"))
     }
 
+    @Test func mediaCacheStoresPlaintextWithCompleteFileProtection() throws {
+        let reference = encryptedMediaReference(
+            plaintextByte: "7a",
+            ciphertextByte: "7b",
+            sourceEpoch: 0
+        )
+        let data = Data([0x01, 0x02, 0x03])
+        let cachesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MessageMediaCacheTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cachesDirectory) }
+        let url = try #require(MessageMediaCache.cacheURL(for: reference, cachesDirectory: cachesDirectory))
+
+        MessageMediaCache.store(data, for: reference, cachesDirectory: cachesDirectory)
+
+        #expect(try Data(contentsOf: url) == data)
+
+        let source = try String(contentsOf: messageMediaAttachmentSourceURL, encoding: .utf8)
+        #expect(source.contains(".protectionKey: FileProtectionType.complete"))
+        #expect(source.contains("attributes: protectedAttributes"))
+        #expect(source.contains("setAttributes(protectedAttributes, ofItemAtPath: directory.path)"))
+        #expect(source.contains("data.write(to: url, options: [.atomic, .completeFileProtection])"))
+        #expect(source.contains("setAttributes(protectedAttributes, ofItemAtPath: url.path)"))
+    }
+
     @MainActor
     @Test func conversationDisplayBodyUsesMediaFileNameFallback() throws {
         let nonce = String(repeating: "22", count: 12)
@@ -4125,6 +4149,13 @@ struct MessageSemanticsTests {
         )
 
         #expect(viewModel.displayBody(of: record) == "📎 a.png")
+    }
+
+    private var messageMediaAttachmentSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Conversation/MessageMediaAttachment.swift")
     }
 }
 
