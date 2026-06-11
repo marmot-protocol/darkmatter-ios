@@ -1800,6 +1800,33 @@ struct NotificationServiceTests {
     }
 }
 
+struct ProfileEditViewTests {
+    @Test func profilePictureDraftUsesPublicHTTPSPolicyBeforePublish() throws {
+        let source = try String(contentsOf: profileEditSourceURL, encoding: .utf8)
+
+        #expect(source.contains("pictureURL: ProfileSanitizer.imageURL(picture)"))
+        #expect(source.contains("private var normalizedPictureURL: String?"))
+        #expect(source.contains("ProfileSanitizer.imageURL(trimmedPicture)?.absoluteString"))
+        #expect(source.contains("picture: trimmedPicture.isEmpty ? nil : normalizedPictureURL"))
+        #expect(!source.contains("picture: picture.isEmpty ? nil : picture"))
+    }
+
+    @Test func profileSaveIsDisabledForInvalidPictureDraft() throws {
+        let source = try String(contentsOf: profileEditSourceURL, encoding: .utf8)
+
+        #expect(source.contains(".disabled(saveDisabled)"))
+        #expect(source.matches(#"private var saveDisabled: Bool \{[\s\S]*!trimmedPicture\.isEmpty && normalizedPictureURL == nil"#))
+        #expect(source.contains(#"L10n.string("Only public HTTPS image URLs are allowed.")"#))
+    }
+
+    private var profileEditSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Settings/ProfileEditView.swift")
+    }
+}
+
 @MainActor
 struct ProfileSanitizerTests {
 
