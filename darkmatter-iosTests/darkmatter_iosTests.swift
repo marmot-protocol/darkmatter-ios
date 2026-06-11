@@ -2158,6 +2158,19 @@ struct GroupImageSearchTests {
         #expect(GroupImageURLSheet.validatedImageURL("https://localhost/a.png") == nil)
     }
 
+    @Test func groupImageWebSearchUsesEphemeralNetworking() throws {
+        let source = try String(contentsOf: groupImageURLSheetSourceURL, encoding: .utf8)
+
+        #expect(source.contains("URLSessionConfiguration.ephemeral"))
+        #expect(source.contains("httpCookieAcceptPolicy = .never"))
+        #expect(source.contains("httpShouldSetCookies = false"))
+        #expect(source.contains("requestCachePolicy = .reloadIgnoringLocalCacheData"))
+        #expect(!source.contains("URLSession.shared"))
+        #expect(!source.contains("AsyncImage(url: result.thumbnailURL ?? result.imageURL)"))
+        #expect(source.contains("GroupImageRemoteThumbnail(url: result.thumbnailURL ?? result.imageURL)"))
+        #expect(source.contains("Web search sends your query and IP address to DuckDuckGo and image hosts."))
+    }
+
     @Test func groupDetailsSourceWiresAvatarMutationAndEditor() throws {
         let source = try String(contentsOf: groupDetailsSourceURL, encoding: .utf8)
 
@@ -2174,6 +2187,13 @@ struct GroupImageSearchTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Group/GroupDetailsView.swift")
+    }
+
+    private var groupImageURLSheetSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Group/GroupImageURLSheet.swift")
     }
 }
 

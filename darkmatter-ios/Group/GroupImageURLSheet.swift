@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct GroupImageSearchResult: Identifiable, Equatable {
     let id: String
@@ -8,6 +9,46 @@ struct GroupImageSearchResult: Identifiable, Equatable {
     let thumbnailURL: URL?
     let sourceHost: String?
     let dimensionsLabel: String?
+}
+
+private enum GroupImageRemoteFetch {
+    private static let session = URLSession(configuration: ephemeralConfiguration())
+
+    static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request)
+    }
+
+    static func imageData(for url: URL) async throws -> Data {
+        let request = request(
+            for: url,
+            accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        )
+        let (data, response) = try await data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode)
+        else { throw URLError(.badServerResponse) }
+        return data
+    }
+
+    static func request(for url: URL, accept: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 12
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private static func ephemeralConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        return configuration
+    }
 }
 
 struct DuckDuckGoImageSearchClient {
@@ -88,11 +129,11 @@ struct DuckDuckGoImageSearchClient {
     }
 
     private func data(for url: URL) async throws -> Data {
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 12
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/json,text/html;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let request = GroupImageRemoteFetch.request(
+            for: url,
+            accept: "application/json,text/html;q=0.9,*/*;q=0.8"
+        )
+        let (data, response) = try await GroupImageRemoteFetch.data(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode)
         else { throw DuckDuckGoImageSearchError.badResponse }
@@ -286,6 +327,13 @@ struct GroupImageURLSheet: View {
                 .accessibilityLabel("Search the web")
             }
 
+            Label(
+                L10n.string("Web search sends your query and IP address to DuckDuckGo and image hosts."),
+                systemImage: "lock.shield"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
             if let searchError {
                 Label(searchError, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
@@ -409,23 +457,7 @@ private struct GroupImageResultCell: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(.secondarySystemBackground))
 
-                AsyncImage(url: result.thumbnailURL ?? result.imageURL) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .empty:
-                        ProgressView()
-                            .controlSize(.small)
-                    case .failure:
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    @unknown default:
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                GroupImageRemoteThumbnail(url: result.thumbnailURL ?? result.imageURL)
             }
             .frame(height: 92)
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -446,5 +478,54 @@ private struct GroupImageResultCell: View {
             }
         }
         .contentShape(Rectangle())
+    }
+}
+
+private struct GroupImageRemoteThumbnail: View {
+    let url: URL
+
+    @State private var phase = Phase.loading
+
+    var body: some View {
+        content
+            .task(id: url) {
+                await loadImage()
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch phase {
+        case .loading:
+            ProgressView()
+                .controlSize(.small)
+        case .success(let image):
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        case .failure:
+            Image(systemName: "photo")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func loadImage() async {
+        phase = .loading
+        do {
+            let data = try await GroupImageRemoteFetch.imageData(for: url)
+            guard let image = UIImage(data: data) else {
+                phase = .failure
+                return
+            }
+            phase = .success(image)
+        } catch {
+            phase = .failure
+        }
+    }
+
+    private enum Phase {
+        case loading
+        case success(UIImage)
+        case failure
     }
 }
