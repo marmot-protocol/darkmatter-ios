@@ -112,16 +112,22 @@ extension AppState {
     }
 
     @MainActor
+    func resumeProfileFetchQueueIfNeeded() {
+        guard canRefreshProfiles else { return }
+        startProfileFetchQueueIfNeeded()
+    }
+
+    @MainActor
     private func runProfileFetchQueue() async {
         defer {
             profileFetchQueueTask = nil
             activeProfileFetchID = nil
-            if !queuedProfileFetchIDs.isEmpty {
+            if canRefreshProfiles, !queuedProfileFetchIDs.isEmpty {
                 startProfileFetchQueueIfNeeded()
             }
         }
 
-        while !Task.isCancelled, let id = nextQueuedProfileFetchID() {
+        while !Task.isCancelled, canRefreshProfiles, let id = nextQueuedProfileFetchID() {
             activeProfileFetchID = id
             await refreshProfile(forAccountIdHex: id)
             activeProfileFetchID = nil
@@ -166,4 +172,11 @@ extension AppState {
             noteProfileRefreshCompleted()
         }
     }
+
+    #if DEBUG
+    @MainActor
+    func runProfileFetchQueueForTesting() async {
+        await runProfileFetchQueue()
+    }
+    #endif
 }
