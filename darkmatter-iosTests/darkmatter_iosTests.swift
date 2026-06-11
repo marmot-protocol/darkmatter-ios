@@ -1272,6 +1272,13 @@ struct ToastPresentationTests {
 }
 
 struct DiagnosticsPresentationTests {
+    @Test func diagnosticsStreamRebindsWhenRuntimeGenerationChanges() throws {
+        let source = try String(contentsOf: diagnosticsViewSourceURL, encoding: .utf8)
+
+        #expect(source.contains(".task(id: appState.runtimeGeneration)"))
+        #expect(!source.contains(".task {\n            streaming = true"))
+    }
+
     @Test func messageReceivedDiagnosticRedactsPlaintextButKeepsEventShape() {
         let secret = "secret launch code"
         let sender = hex("11")
@@ -1319,6 +1326,13 @@ struct DiagnosticsPresentationTests {
         #expect(emptyText.contains("[alice] msg from \(IdentityFormatter.short(sender))"))
         #expect(emptyText.contains("(empty)"))
         #expect(!emptyText.contains(secret))
+    }
+
+    private var diagnosticsViewSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Diagnostics/DiagnosticsView.swift")
     }
 }
 

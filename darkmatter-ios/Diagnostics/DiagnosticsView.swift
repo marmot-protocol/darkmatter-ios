@@ -74,7 +74,7 @@ struct DiagnosticsView: View {
         }
         .navigationTitle("Diagnostics")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
+        .task(id: appState.runtimeGeneration) {
             streaming = true
             defer { streaming = false }
             let sub = appState.marmot.subscribeEvents()
