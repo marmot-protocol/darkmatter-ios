@@ -26,6 +26,10 @@ enum AppContainerConfig {
         "wss://relay.us.whitenoise.chat"
     ]
 
+    /// MIP-05 notification-server inbox relay stamped into push registrations.
+    /// Kind-446 triggers publish here; keep aligned with `seedRelays`.
+    static let pushNotificationRelayHint = seedRelays[0]
+
     static func marmotRoot(in baseURL: URL) -> URL {
         baseURL.appendingPathComponent(marmotDirectoryName, isDirectory: true)
     }

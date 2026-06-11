@@ -1371,6 +1371,18 @@ public protocol MarmotProtocol : AnyObject {
     func deleteAccountKeyPackage(accountRef: String, eventIdHex: String, relays: [String]) async throws  -> UInt64
 
     /**
+     * Delete one local JSONL audit log file (e.g. behind a "clear audit log"
+     * button).
+     *
+     * When forensic audit logging is on and a session for the file's account
+     * is live, the recorder rotates to a fresh file and keeps recording, so
+     * the result's `still_recording` is `true`. When audit logging is off, or
+     * no session is recording this file, it is simply removed and
+     * `still_recording` is `false`. Pass a `path` from `audit_log_files()`.
+     */
+    func deleteAuditLogFile(path: String) async throws  -> AuditLogDeleteResultFfi
+
+    /**
      * Mark `target_message_id` deleted for the whole group. This is a
      * tombstone — the original stays in everyone's store; clients render a
      * "message deleted" placeholder.
@@ -1613,8 +1625,12 @@ public protocol MarmotProtocol : AnyObject {
     /**
      * Persist local forensic audit-log recording settings and return the stored
      * value.
+     *
+     * Async because toggling the switch is applied to any already-running
+     * account sessions in place: enabling starts a live recorder, disabling
+     * stops it and closes the file — no session reopen required.
      */
-    func setAuditLogSettings(settings: AuditLogSettingsFfi) throws  -> AuditLogSettingsFfi
+    func setAuditLogSettings(settings: AuditLogSettingsFfi) async throws  -> AuditLogSettingsFfi
 
     /**
      * Supply non-persisted audit tracker upload metadata: optional Goggles
@@ -2086,6 +2102,33 @@ open func deleteAccountKeyPackage(accountRef: String, eventIdHex: String, relays
             completeFunc: ffi_marmot_uniffi_rust_future_complete_u64,
             freeFunc: ffi_marmot_uniffi_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
+     * Delete one local JSONL audit log file (e.g. behind a "clear audit log"
+     * button).
+     *
+     * When forensic audit logging is on and a session for the file's account
+     * is live, the recorder rotates to a fresh file and keeps recording, so
+     * the result's `still_recording` is `true`. When audit logging is off, or
+     * no session is recording this file, it is simply removed and
+     * `still_recording` is `false`. Pass a `path` from `audit_log_files()`.
+     */
+open func deleteAuditLogFile(path: String)async throws  -> AuditLogDeleteResultFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_delete_audit_log_file(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAuditLogDeleteResultFfi.lift,
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
 }
@@ -2941,13 +2984,26 @@ open func setAccountNip65Relays(accountRef: String, relays: [String], bootstrapR
     /**
      * Persist local forensic audit-log recording settings and return the stored
      * value.
+     *
+     * Async because toggling the switch is applied to any already-running
+     * account sessions in place: enabling starts a live recorder, disabling
+     * stops it and closes the file — no session reopen required.
      */
-open func setAuditLogSettings(settings: AuditLogSettingsFfi)throws  -> AuditLogSettingsFfi {
-    return try  FfiConverterTypeAuditLogSettingsFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
-    uniffi_marmot_uniffi_fn_method_marmot_set_audit_log_settings(self.uniffiClonePointer(),
-        FfiConverterTypeAuditLogSettingsFfi.lower(settings),$0
-    )
-})
+open func setAuditLogSettings(settings: AuditLogSettingsFfi)async throws  -> AuditLogSettingsFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_set_audit_log_settings(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeAuditLogSettingsFfi.lower(settings)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAuditLogSettingsFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
 }
 
     /**
@@ -4937,6 +4993,74 @@ public func FfiConverterTypeAppMessageRecordFfi_lift(_ buf: RustBuffer) throws -
 #endif
 public func FfiConverterTypeAppMessageRecordFfi_lower(_ value: AppMessageRecordFfi) -> RustBuffer {
     return FfiConverterTypeAppMessageRecordFfi.lower(value)
+}
+
+
+public struct AuditLogDeleteResultFfi {
+    /**
+     * `true` when a live recorder was rotated and is already recording to a
+     * fresh file; `false` when the file was simply removed (no live recorder,
+     * or audit logging off).
+     */
+    public var stillRecording: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `true` when a live recorder was rotated and is already recording to a
+         * fresh file; `false` when the file was simply removed (no live recorder,
+         * or audit logging off).
+         */stillRecording: Bool) {
+        self.stillRecording = stillRecording
+    }
+}
+
+
+
+extension AuditLogDeleteResultFfi: Equatable, Hashable {
+    public static func ==(lhs: AuditLogDeleteResultFfi, rhs: AuditLogDeleteResultFfi) -> Bool {
+        if lhs.stillRecording != rhs.stillRecording {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(stillRecording)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuditLogDeleteResultFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuditLogDeleteResultFfi {
+        return
+            try AuditLogDeleteResultFfi(
+                stillRecording: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuditLogDeleteResultFfi, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.stillRecording, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditLogDeleteResultFfi_lift(_ buf: RustBuffer) throws -> AuditLogDeleteResultFfi {
+    return try FfiConverterTypeAuditLogDeleteResultFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuditLogDeleteResultFfi_lower(_ value: AuditLogDeleteResultFfi) -> RustBuffer {
+    return FfiConverterTypeAuditLogDeleteResultFfi.lower(value)
 }
 
 
@@ -13459,6 +13583,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_delete_account_key_package() != 19816) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_delete_audit_log_file() != 6934) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_delete_message() != 13951) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -13603,7 +13730,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_account_nip65_relays() != 61454) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_set_audit_log_settings() != 56917) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_set_audit_log_settings() != 36141) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_audit_log_tracker_config() != 30506) {

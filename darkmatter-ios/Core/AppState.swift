@@ -432,8 +432,16 @@ final class AppState {
             platform: .apns,
             rawToken: tokenHex,
             serverPubkeyHex: config.serverPubkeyHex,
-            relayHint: config.relayHint
+            relayHint: Self.pushRegistrationRelayHint(from: config)
         )
+    }
+
+    private static func pushRegistrationRelayHint(from config: NativePushServerConfig) -> String {
+        if let relayHint = config.relayHint,
+           AppContainerConfig.seedRelays.contains(relayHint) {
+            return relayHint
+        }
+        return AppContainerConfig.pushNotificationRelayHint
     }
 
     func syncNativePushRegistrationIfEnabled() async {
@@ -526,13 +534,20 @@ final class AppState {
     @MainActor
     @discardableResult
     func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
-        let settings = try marmot.setAuditLogSettings(settings: AuditLogSettingsFfi(enabled: enabled))
-        try await restartRuntimeForAuditLogSettingsChange()
-        return settings
+        try await marmot.setAuditLogSettings(settings: AuditLogSettingsFfi(enabled: enabled))
     }
 
     func auditLogFiles() throws -> [AuditLogFileFfi] {
         try marmot.auditLogFiles()
+    }
+
+    @MainActor
+    func deleteAllAuditLogFiles() async throws {
+        guard phase == .ready else { return }
+        let files = try auditLogFiles()
+        for file in files {
+            _ = try await marmot.deleteAuditLogFile(path: file.path)
+        }
     }
 
     func catchUpAfterForegroundActivation() async {
@@ -666,34 +681,6 @@ final class AppState {
 
     private func resumeRuntimeSuspensionWaiter(id: UUID) {
         runtimeSuspensionWaiters.removeValue(forKey: id)?.resume()
-    }
-
-    @MainActor
-    private func restartRuntimeForAuditLogSettingsChange() async throws {
-        guard phase == .ready else { return }
-        await cancelForegroundMaintenance()
-        isRuntimeSuspending = true
-        defer { finishRuntimeSuspensionWait() }
-
-        stopNotificationSubscription()
-        await marmot.shutdown()
-        client = nil
-
-        do {
-            let restored = try makeRuntime()
-            client = restored
-            try await restored.startRuntime()
-            runtimeSuspendedForBackground = false
-            runtimeGeneration += 1
-            try await refreshAccounts()
-            if isAppSceneActive {
-                startNotificationSubscription()
-                scheduleNativePushRegistrationIfEnabled()
-            }
-        } catch {
-            phase = .failed(error.localizedDescription)
-            throw error
-        }
     }
 
     private func cancelForegroundMaintenance() async {

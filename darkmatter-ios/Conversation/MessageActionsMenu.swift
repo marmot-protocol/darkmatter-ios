@@ -81,6 +81,7 @@ struct MessageActionsMenu: View {
 
 /// A simple curated emoji grid used as the "full picker" from the actions row.
 struct EmojiPickerSheet: View {
+    var title: LocalizedStringKey? = "React"
     let onPick: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -110,8 +111,7 @@ struct EmojiPickerSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("React")
-            .navigationBarTitleDisplayMode(.inline)
+            .modifier(EmojiPickerNavigationTitle(title: title))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -119,5 +119,20 @@ struct EmojiPickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private struct EmojiPickerNavigationTitle: ViewModifier {
+    let title: LocalizedStringKey?
+
+    func body(content: Content) -> some View {
+        if let title {
+            content
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+        } else {
+            content
+                .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
