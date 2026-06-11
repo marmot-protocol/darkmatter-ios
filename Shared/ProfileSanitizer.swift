@@ -102,7 +102,8 @@ enum ProfileSanitizer {
 
     /// Image URL allowlist: only HTTPS with a public host. Rejects data:,
     /// file:, javascript:, custom schemes, host-less URLs, and local/private
-    /// addresses so `AsyncImage` never dereferences something dangerous.
+    /// addresses (including legacy IPv4 literal spellings) so `AsyncImage`
+    /// never dereferences something dangerous.
     static func imageURL(_ raw: String?) -> URL? {
         guard let raw else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -121,22 +122,35 @@ enum ProfileSanitizer {
         let normalized = host
             .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             .lowercased()
+        let canonical = strippingTrailingRootDots(normalized)
 
-        if normalized == "localhost" || normalized == "::1" {
+        if canonical.isEmpty || canonical == "localhost" || canonical == "::1" {
             return true
         }
 
-        if let octets = ipv4Octets(normalized) {
+        if let octets = ipv4Octets(canonical) {
             return isPrivateOrLoopbackIPv4(octets)
         }
 
-        return isPrivateOrLoopbackIPv6(normalized)
+        if isLegacyIPv4Literal(canonical) {
+            return true
+        }
+
+        return isPrivateOrLoopbackIPv6(canonical)
+    }
+
+    private static func strippingTrailingRootDots(_ host: String) -> String {
+        var canonical = host
+        while canonical.hasSuffix(".") {
+            canonical.removeLast()
+        }
+        return canonical
     }
 
     private static func isPrivateOrLoopbackIPv4(_ octets: [UInt8]) -> Bool {
         guard octets.count == 4 else { return false }
 
-        if octets[0] == 10 || octets[0] == 127 {
+        if octets[0] == 0 || octets[0] == 10 || octets[0] == 127 {
             return true
         }
         if octets[0] == 169 && octets[1] == 254 {
@@ -158,12 +172,49 @@ enum ProfileSanitizer {
         var octets: [UInt8] = []
         for piece in pieces {
             guard !piece.isEmpty,
+                  !hasAmbiguousLeadingZero(piece),
                   piece.unicodeScalars.allSatisfy({ (48...57).contains($0.value) }),
                   let octet = UInt8(String(piece))
             else { return nil }
             octets.append(octet)
         }
         return octets
+    }
+
+    private static func hasAmbiguousLeadingZero(_ value: Substring) -> Bool {
+        value.count > 1 && value.first == "0"
+    }
+
+    private static func isLegacyIPv4Literal(_ host: String) -> Bool {
+        if isIPv4Number(host) {
+            return true
+        }
+
+        let pieces = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard pieces.count > 1 else { return false }
+        return pieces.allSatisfy(isIPv4Number)
+    }
+
+    private static func isIPv4Number(_ value: Substring) -> Bool {
+        isIPv4Number(String(value))
+    }
+
+    private static func isIPv4Number(_ value: String) -> Bool {
+        guard !value.isEmpty else { return false }
+        if value.hasPrefix("0x") {
+            let hex = value.dropFirst(2)
+            return !hex.isEmpty && hex.unicodeScalars.allSatisfy(isASCIIHexDigit)
+        }
+        return value.unicodeScalars.allSatisfy(isASCIIDigit)
+    }
+
+    private static func isASCIIDigit(_ scalar: UnicodeScalar) -> Bool {
+        (48...57).contains(scalar.value)
+    }
+
+    private static func isASCIIHexDigit(_ scalar: UnicodeScalar) -> Bool {
+        (48...57).contains(scalar.value) ||
+            (97...102).contains(scalar.value)
     }
 
     private static func isPrivateOrLoopbackIPv6(_ host: String) -> Bool {

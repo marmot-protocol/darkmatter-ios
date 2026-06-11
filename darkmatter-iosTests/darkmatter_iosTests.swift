@@ -2018,6 +2018,8 @@ struct ProfileSanitizerTests {
     @Test func imageURLRejectsPrivateAndLoopbackHosts() {
         #expect(ProfileSanitizer.imageURL("https://localhost/avatar.png") == nil)
         #expect(ProfileSanitizer.imageURL("https://127.0.0.1/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://0.0.0.0/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://0.1.2.3/avatar.png") == nil)
         #expect(ProfileSanitizer.imageURL("https://10.1.2.3/avatar.png") == nil)
         #expect(ProfileSanitizer.imageURL("https://172.16.0.1/avatar.png") == nil)
         #expect(ProfileSanitizer.imageURL("https://172.31.255.255/avatar.png") == nil)
@@ -2026,6 +2028,15 @@ struct ProfileSanitizerTests {
         #expect(ProfileSanitizer.imageURL("https://[::1]/avatar.png") == nil)
 
         #expect(ProfileSanitizer.imageURL("https://172.32.0.1/avatar.png") != nil)
+    }
+
+    @Test func imageURLRejectsLegacyIPv4LiteralBypasses() {
+        #expect(ProfileSanitizer.imageURL("https://127.0.0.1./avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://2130706433/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://0x7f000001/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://017700000001/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://127.1/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://012.0.0.1/avatar.png") == nil)
     }
 
     @Test func imageURLRejectsIPv4MappedIPv6PrivateAndLoopbackHosts() {
