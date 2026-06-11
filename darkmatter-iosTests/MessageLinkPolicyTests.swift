@@ -3,7 +3,7 @@ import Foundation
 @testable import darkmatter_ios
 
 /// Tap-time routing for links inside message bubbles: in-app destinations
-/// stay in-app, the external allowlist opens via the system, and everything
+/// stay in-app, the external allowlist asks for confirmation, and everything
 /// else is inert.
 struct MessageLinkPolicyTests {
 
@@ -41,10 +41,10 @@ struct MessageLinkPolicyTests {
         #expect(action("nostr:nevent1" + String(repeating: "q", count: 58)) == .blocked)
     }
 
-    @Test func externalSchemesOpenExternally() {
+    @Test func externalSchemesAskForConfirmation() {
         for raw in ["https://example.com/a?b=c", "http://example.com", "mailto:a@b.com", "tel:+15551234567", "whitenoise://x"] {
             let url = URL(string: raw)!
-            #expect(MessageLinkPolicy.action(for: url) == .openExternal(url), "url: \(raw)")
+            #expect(MessageLinkPolicy.action(for: url) == .confirmExternal(url), "url: \(raw)")
         }
     }
 

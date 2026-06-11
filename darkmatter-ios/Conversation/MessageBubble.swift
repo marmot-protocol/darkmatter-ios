@@ -19,6 +19,7 @@ enum MessageBubbleReplyLayout {
 struct MessageBubble: View {
     @Environment(AppState.self) private var appState
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.openURL) private var openURL
     let record: AppMessageRecordFfi
     let status: MessageStatus
     var debugStyle: MessageDebugStyle? = nil
@@ -30,6 +31,7 @@ struct MessageBubble: View {
     var onLoadMedia: (MessageMediaAttachment) async throws -> Data = { _ in Data() }
 
     @State private var mediaGallery: MessageMediaGallery?
+    @State private var pendingExternalLink: PendingMessageExternalLink?
 
     private var isFromMe: Bool { record.direction == "sent" }
 
@@ -112,6 +114,18 @@ struct MessageBubble: View {
             ) {
                 mediaGallery = nil
             }
+        }
+        .alert("Open link?", isPresented: externalLinkConfirmationPresented) {
+            Button("Open") {
+                guard let link = pendingExternalLink else { return }
+                pendingExternalLink = nil
+                openURL(link.url)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingExternalLink = nil
+            }
+        } message: {
+            Text(pendingExternalLink?.displayText ?? "")
         }
     }
 
@@ -313,11 +327,23 @@ struct MessageBubble: View {
         case .openChat(let groupIdHex):
             appState.presentChat(groupIdHex: groupIdHex)
             return .handled
-        case .openExternal(let external):
-            return .systemAction(external)
+        case .confirmExternal(let external):
+            pendingExternalLink = PendingMessageExternalLink(url: external)
+            return .handled
         case .blocked:
             return .discarded
         }
+    }
+
+    private var externalLinkConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { pendingExternalLink != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingExternalLink = nil
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -423,6 +449,17 @@ struct MessageBubble: View {
 
     static func receivedReplyHeaderColor(dark: Bool) -> UIColor {
         dark ? .systemGray4 : .systemGray5
+    }
+}
+
+private struct PendingMessageExternalLink: Equatable {
+    let url: URL
+
+    var displayText: String {
+        if let host = url.host(percentEncoded: false), !host.isEmpty {
+            return "This link opens \(host):\n\(url.absoluteString)"
+        }
+        return "This link opens:\n\(url.absoluteString)"
     }
 }
 
