@@ -989,7 +989,7 @@ final class ConversationViewModel {
         replyTargetId: String?
     ) -> Bool {
         guard case .message(let pending, let status) = item.kind,
-              status == .sending,
+              status == .sending || status == .sent,
               pending.messageIdHex.isEmpty,
               pending.direction == "sent" else {
             return false
