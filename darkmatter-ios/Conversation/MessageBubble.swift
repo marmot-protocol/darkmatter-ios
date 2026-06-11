@@ -660,12 +660,25 @@ private struct MessageMediaGallery: Identifiable {
     }
 }
 
+private enum MediaFullscreenDismiss {
+    static let minimumDistance: CGFloat = 16
+    static let dismissThreshold: CGFloat = 120
+    static let predictedDismissThreshold: CGFloat = 240
+    static let verticalDominance: CGFloat = 1.2
+
+    static func isDownwardVertical(_ translation: CGSize) -> Bool {
+        translation.height > 0
+            && translation.height > abs(translation.width) * verticalDominance
+    }
+}
+
 private struct MessageMediaFullscreenGalleryView: View {
     let gallery: MessageMediaGallery
     let onLoadMedia: (MessageMediaAttachment) async throws -> Data
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
+    @State private var dismissDragOffset: CGFloat = 0
 
     init(
         gallery: MessageMediaGallery,
@@ -720,6 +733,32 @@ private struct MessageMediaFullscreenGalleryView: View {
             .padding(.top, 14)
             .padding(.trailing, 14)
         }
+        .offset(y: dismissDragOffset)
+        .opacity(1 - min(dismissDragOffset / 420, 0.35))
+        .simultaneousGesture(swipeDownToDismissGesture)
+    }
+
+    private var swipeDownToDismissGesture: some Gesture {
+        DragGesture(minimumDistance: MediaFullscreenDismiss.minimumDistance, coordinateSpace: .local)
+            .onChanged { value in
+                guard MediaFullscreenDismiss.isDownwardVertical(value.translation) else { return }
+                dismissDragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard dismissDragOffset > 0
+                    || MediaFullscreenDismiss.isDownwardVertical(value.translation)
+                else { return }
+
+                if dismissDragOffset >= MediaFullscreenDismiss.dismissThreshold
+                    || value.predictedEndTranslation.height >= MediaFullscreenDismiss.predictedDismissThreshold
+                {
+                    onDismiss()
+                } else {
+                    withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                        dismissDragOffset = 0
+                    }
+                }
+            }
     }
 
     private var pageCountLabel: String {

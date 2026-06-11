@@ -226,7 +226,7 @@ struct ConversationView: View {
 
     var body: some View {
         timeline
-            .safeAreaInset(edge: .bottom, spacing: 0) { composerArea }
+            .bottomInputChromeAccessory { composerArea }
             .overlay { centeredActionsOverlay }
             .navigationTitle(conversationChrome.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -313,6 +313,7 @@ struct ConversationView: View {
                 if let visibleChatRoute {
                     appState.endViewingChat(visibleChatRoute)
                 }
+                dismissKeyboard()
             }
     }
 
@@ -335,11 +336,16 @@ struct ConversationView: View {
                 hasAttachments: !mediaDrafts.isEmpty,
                 mediaEnabled: viewModel?.canSendMediaAttachments ?? false,
                 focusRequest: composerFocusRequest,
+                mentionCandidates: viewModel?.mentionCandidates(for: draft) ?? [],
                 onTakePhoto: takePhoto,
                 onPhotoLibrary: openPhotoLibrary,
+                onMentionSelect: { candidate in
+                    viewModel?.applyMentionSelection(candidate, to: &draft)
+                },
                 onSend: send
             )
         }
+        .keyboardAdaptiveBottomPadding()
     }
 
     private func replyBar(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
@@ -471,6 +477,7 @@ struct ConversationView: View {
                             scrollToBottomButton(proxy: proxy)
                         }
                         .defaultScrollAnchor(.bottom)
+                        .compatibleBottomScrollEdgeEffect()
                         .scrollDismissesKeyboard(.interactively)
                         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
                         .onPreferenceChange(RowFramesKey.self) { rowFrames.frames = $0 }
@@ -526,7 +533,16 @@ struct ConversationView: View {
     private func row(for item: TimelineItem, viewModel: ConversationViewModel) -> some View {
         switch item.kind {
         case .message(let record, let status):
-            if let agentDisplay = AgentEventPresentation.display(for: record) {
+            if let groupSystemText = GroupSystemEventPresentation.displayText(
+                for: record,
+                displayName: { appState.displayName(forAccountIdHex: $0) }
+            ) {
+                GroupSystemEventRow(text: groupSystemText)
+                    .id(item.id)
+                    .onAppear {
+                        Task { await viewModel.markReadIfVisible(record) }
+                    }
+            } else if let agentDisplay = AgentEventPresentation.display(for: record) {
                 AgentEventRow(
                     senderName: appState.displayName(forAccountIdHex: record.sender),
                     display: agentDisplay,

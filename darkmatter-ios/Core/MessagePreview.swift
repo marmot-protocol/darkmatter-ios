@@ -35,8 +35,10 @@ enum MessagePreview {
                 )
             }
             return mediaFallback(attachments)
-        case .agentActivity, .agentOperation, .groupSystem:
+        case .agentActivity, .agentOperation:
             return AgentEventPresentation.previewText(from: record.plaintext) ?? ""
+        case .groupSystem:
+            return GroupSystemEventPresentation.displayText(from: record.plaintext) ?? ""
         case .chat, .reply, .streamFinal, .reaction, .delete, .agentStreamStart, .unknown:
             // Reply text, stream transcript, and plain chat all live in plaintext.
             return flattenedBody(
@@ -55,6 +57,9 @@ enum MessagePreview {
             return L10n.string("This message was deleted")
         }
         if !preview.plaintext.isEmpty {
+            if preview.kind == MessageSemantics.kindGroupSystem {
+                return GroupSystemEventPresentation.displayText(from: preview.plaintext) ?? ""
+            }
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
             }
@@ -78,6 +83,9 @@ enum MessagePreview {
             return L10n.string("This message was deleted")
         }
         if !preview.plaintext.isEmpty {
+            if preview.kind == MessageSemantics.kindGroupSystem {
+                return GroupSystemEventPresentation.displayText(from: preview.plaintext) ?? ""
+            }
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
             }

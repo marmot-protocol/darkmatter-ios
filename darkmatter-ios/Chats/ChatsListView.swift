@@ -12,15 +12,15 @@ struct ChatsListView: View {
     @State private var searchEditing = false
     @State private var scope: ChatScope = .active
     @FocusState private var searchFocused: Bool
-
-    private let chatListSearchHorizontalInset: CGFloat = 12
+    @State private var isKeyboardVisible = false
+    @Environment(\.colorScheme) private var colorScheme
 
     private var hasSearchText: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var searchCancellationActive: Bool {
-        searchFocused || searchEditing || hasSearchText
+        isKeyboardVisible || searchFocused || hasSearchText
     }
 
     enum ChatScope: CaseIterable, Hashable {
@@ -73,7 +73,7 @@ struct ChatsListView: View {
                     filterMenu
                 }
             }
-            .chatListBottomAccessory {
+            .bottomInputChromeAccessory {
                 chatListSearchControls
             }
             // Registered at a stable level so navigation works even when the
@@ -104,6 +104,11 @@ struct ChatsListView: View {
                 // event) when returning to the list.
                 Task { await viewModel?.refreshRows() }
             }
+            .onChange(of: path.count) { oldCount, count in
+                if count > 0 || (oldCount > 0 && count == 0) {
+                    dismissSearchKeyboard()
+                }
+            }
         }
         // Warm path: a chat created / deep-linked while the list is on screen.
         .onChange(of: appState.pendingChatId) { _, _ in consumePendingChat() }
@@ -122,8 +127,7 @@ struct ChatsListView: View {
         )
         showNewChat = false
         showSwitcher = false
-        searchFocused = false
-        searchEditing = false
+        dismissSearchKeyboard()
         scope = .active
         path = [target]
         appState.clearPendingChat()
@@ -132,64 +136,81 @@ struct ChatsListView: View {
     // MARK: - Search
 
     private var chatListSearchControls: some View {
-        HStack(spacing: 8) {
-            chatSearchBar
-            searchActionButton
+        HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
+            bottomInputGlassContainer {
+                chatSearchBar
+            }
+            bottomInputGlassContainer {
+                searchActionButton
+            }
         }
-        .padding(.horizontal, chatListSearchHorizontalInset)
-        .padding(.vertical, 8)
+        .keyboardAdaptiveHorizontalPadding(isKeyboardVisible: $isKeyboardVisible)
+        .padding(.top, BottomInputChromeLayout.topInset)
+        .padding(.bottom, BottomInputChromeLayout.bottomInset)
+        .keyboardAdaptiveBottomPadding()
     }
 
     private var chatSearchBar: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "magnifyingglass")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
-
-            TextField("Search", text: $searchText, onEditingChanged: { isEditing in
-                searchEditing = isEditing
-            })
-                .focused($searchFocused)
-                .submitLabel(.search)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .onChange(of: searchFocused) { _, isFocused in
-                    searchEditing = isFocused
-                }
-
-            Button {
-                beginSearchDictation()
-            } label: {
-                Image(systemName: "mic.fill")
-                    .font(.callout.weight(.semibold))
+        HStack(alignment: .bottom, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: BottomInputChromeLayout.inlineAccessoryIconSize, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 36, height: 44)
+
+                ZStack(alignment: .leading) {
+                    if searchText.isEmpty {
+                        Text("Search")
+                            .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                            .foregroundStyle(searchPlaceholderColor)
+                            .allowsHitTesting(false)
+                    }
+
+                    TextField("", text: $searchText, onEditingChanged: { isEditing in
+                        searchEditing = isEditing
+                    })
+                    .focused($searchFocused)
+                    .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                    .submitLabel(.search)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onChange(of: searchFocused) { _, isFocused in
+                        searchEditing = isFocused
+                    }
+                }
             }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .accessibilityLabel("Dictation")
-            .accessibilityHint("Starts dictation in search.")
+            .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
+            .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
+            .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
         }
-        .frame(height: 44)
-        .padding(.leading, 12)
-        .padding(.trailing, 2)
-        .searchDictationBehavior(.inline(activation: .onSelect))
-        .chatSearchFieldChrome()
+        .frame(minHeight: BottomInputChromeLayout.controlSize)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .simultaneousGesture(TapGesture().onEnded { focusSearchField() })
+        .compatibleInputCapsuleChrome(interactive: false)
     }
 
     private var searchActionButton: some View {
         Button(action: searchActionTapped) {
-            Image(systemName: searchCancellationActive ? "xmark" : "square.and.pencil")
-                .font(.system(size: 17, weight: .semibold))
-                .frame(width: 44, height: 44)
-                .contentTransition(.symbolEffect(.replace))
+            Group {
+                if searchCancellationActive {
+                    Image(systemName: "xmark")
+                } else {
+                    Image(systemName: "square.and.pencil")
+                        .offset(x: 0.85, y: -1.25)
+                }
+            }
+            .font(.system(size: BottomInputChromeLayout.sideControlIconSize, weight: .semibold))
+            .foregroundStyle(searchCancellationActive ? Color.secondary : Color.primary)
+            .frame(width: BottomInputChromeLayout.controlSize, height: BottomInputChromeLayout.controlSize)
+            .compatibleInputCircleChrome()
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .chatSearchActionChrome(isClearing: searchCancellationActive)
-        .foregroundStyle(searchCancellationActive ? Color.secondary : Color.accentColor)
         .accessibilityLabel(searchCancellationActive ? "Clear search" : "New chat")
-        .animation(.easeInOut(duration: 0.16), value: searchCancellationActive)
+    }
+
+    private var searchPlaceholderColor: Color {
+        colorScheme == .light ? Color.primary.opacity(0.38) : Color.secondary
     }
 
     private func searchActionTapped() {
@@ -201,22 +222,36 @@ struct ChatsListView: View {
     }
 
     private func focusSearchField() {
-        searchEditing = true
-        searchFocused = true
-        DispatchQueue.main.async {
-            searchEditing = true
+        Task { @MainActor in
+            await Task.yield()
             searchFocused = true
+            searchEditing = true
         }
     }
 
-    private func beginSearchDictation() {
-        focusSearchField()
+    private func dismissSearchKeyboard() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            searchEditing = false
+            searchFocused = false
+        }
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
     }
 
     private func cancelSearch() {
-        searchText = ""
-        searchEditing = false
-        searchFocused = false
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            searchText = ""
+            searchEditing = false
+            searchFocused = false
+        }
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
             to: nil,
@@ -299,6 +334,7 @@ struct ChatsListView: View {
                 }
             }
             .listStyle(.plain)
+            .compatibleBottomScrollEdgeEffect()
             .overlay {
                 if rows.isEmpty { emptyState }
             }
@@ -345,8 +381,7 @@ struct ChatsListView: View {
     }
 
     private func navigate(to item: ChatsListViewModel.Item) {
-        searchFocused = false
-        searchEditing = false
+        dismissSearchKeyboard()
         path.append(
             ChatNavigationTarget(
                 groupIdHex: item.id,
@@ -438,51 +473,6 @@ struct ChatsListView: View {
         } catch {
             Haptics.error()
             appState.present(.error(L10n.string("Couldn't archive chat"), message: error.localizedDescription))
-        }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func chatListBottomAccessory<Accessory: View>(
-        @ViewBuilder accessory: @escaping () -> Accessory
-    ) -> some View {
-        if #available(iOS 26.0, *) {
-            safeAreaBar(edge: .bottom, spacing: 0) {
-                accessory()
-            }
-        } else {
-            safeAreaInset(edge: .bottom, spacing: 0) {
-                accessory()
-                    .background(.regularMaterial)
-            }
-        }
-    }
-
-    @ViewBuilder
-    func chatSearchFieldChrome() -> some View {
-        if #available(iOS 26.0, *) {
-            glassEffect(.regular, in: .rect(cornerRadius: 20))
-        } else {
-            background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.secondarySystemFill))
-            )
-        }
-    }
-
-    @ViewBuilder
-    func chatSearchActionChrome(isClearing: Bool) -> some View {
-        if #available(iOS 26.0, *) {
-            glassEffect(
-                .regular.tint(isClearing ? nil : Color.accentColor.opacity(0.18)),
-                in: Circle()
-            )
-        } else {
-            background(
-                Circle()
-                    .fill(isClearing ? Color(.tertiarySystemFill) : Color.accentColor.opacity(0.14))
-            )
         }
     }
 }

@@ -237,7 +237,7 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
-    @Test func auditLogSettingChangeRestartsReadyRuntimeImmediately() async throws {
+    @Test func auditLogSettingChangeHotSwapsWithoutRestartingRuntime() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
 
@@ -246,7 +246,7 @@ struct AppStateBootstrapTests {
 
         #expect(settings.enabled)
         #expect(try appState.auditLogSettings().enabled)
-        #expect(appState.runtimeGeneration == generation + 1)
+        #expect(appState.runtimeGeneration == generation)
         #expect(appState.phase == .ready)
         #expect(appState.client != nil)
         #expect(!appState.marmot.isStopping())
@@ -858,7 +858,9 @@ struct AppContainerConfigTests {
         let config = NativePushServerConfig.current()
 
         #expect(config?.serverPubkeyHex == "73a4996bd18de19f6ac5f6ad42f5f2671eba6e5b739ea9695f07b00b0693fc04")
-        #expect(config?.relayHint == "wss://relay.primal.net")
+        #expect(config?.relayHint == "wss://relay.eu.whitenoise.chat")
+        #expect(config?.relayHint == AppContainerConfig.pushNotificationRelayHint)
+        #expect(AppContainerConfig.seedRelays.contains(config?.relayHint ?? ""))
     }
 
     @Test func marmotRootUsesStableDirectoryName() {
@@ -2280,20 +2282,22 @@ struct ChatsListProjectionTests {
 
         #expect(source.contains(#".navigationTitle("Chats")"#))
         #expect(source.contains("private var chatSearchBar"))
-        #expect(source.contains("chatListBottomAccessory"))
-        #expect(source.contains("safeAreaBar(edge: .bottom"))
-        #expect(source.contains("safeAreaInset(edge: .bottom"))
-        #expect(source.contains("glassEffect(.regular"))
-        #expect(source.contains("private let chatListSearchHorizontalInset: CGFloat = 12"))
-        #expect(source.contains(".padding(.horizontal, chatListSearchHorizontalInset)"))
-        #expect(source.contains(#"TextField("Search", text: $searchText, onEditingChanged: { isEditing in"#))
-        #expect(source.contains(#"Image(systemName: "mic.fill")"#))
-        #expect(source.contains(".frame(height: 44)"))
+        #expect(source.contains("bottomInputChromeAccessory"))
+        #expect(source.contains("keyboardAdaptiveHorizontalPadding"))
+        #expect(source.contains(".padding(.bottom, BottomInputChromeLayout.bottomInset)"))
+        #expect(source.contains(#"TextField("", text: $searchText, onEditingChanged: { isEditing in"#))
+        #expect(source.contains("searchPlaceholderColor"))
+        #expect(!source.contains(#"Image(systemName: "mic.fill")"#))
+        #expect(!source.contains(".searchDictationBehavior(.inline(activation: .onSelect))"))
         #expect(source.contains("private func focusSearchField()"))
+        #expect(source.contains("simultaneousGesture(TapGesture().onEnded { focusSearchField() })"))
+        #expect(source.contains("compatibleInputCapsuleChrome(interactive: false)"))
+        #expect(source.contains("BottomInputChromeLayout.sideControlIconSize"))
+        #expect(source.contains("keyboardAdaptiveBottomPadding()"))
+        #expect(source.contains("bottomInputGlassContainer"))
         #expect(source.contains("private var searchCancellationActive: Bool"))
-        #expect(source.contains("searchFocused || searchEditing"))
-        #expect(source.contains(".searchDictationBehavior(.inline(activation: .onSelect))"))
-        #expect(source.contains("private func cancelSearch()"))
+        #expect(source.contains("isKeyboardVisible || searchFocused || hasSearchText"))
+        #expect(source.contains("private func dismissSearchKeyboard()"))
         #expect(source.contains("UIApplication.shared.sendAction"))
         #expect(source.contains("private func searchActionTapped()"))
         #expect(source.contains("searchText = \"\""))

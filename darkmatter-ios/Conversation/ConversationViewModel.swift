@@ -197,6 +197,29 @@ final class ConversationViewModel {
         return false
     }
 
+    /// Members eligible for `@` mention autocomplete in the composer.
+    func mentionCandidates(for draft: String) -> [ComposerMentionCandidate] {
+        guard let appState,
+              let session = ComposerMentionQuery.active(in: draft),
+              !ComposerMentionQuery.looksLikeCompleteNpub(session.query)
+        else { return [] }
+        return ComposerMentionQuery.filter(allMentionCandidates(appState: appState), matching: session.query)
+    }
+
+    func applyMentionSelection(_ candidate: ComposerMentionCandidate, to draft: inout String) {
+        guard let session = ComposerMentionQuery.active(in: draft) else { return }
+        draft = ComposerMentionQuery.replacing(session: session, in: draft, with: candidate.npub)
+    }
+
+    private func allMentionCandidates(appState: AppState) -> [ComposerMentionCandidate] {
+        if !groupMemberDetails.isEmpty {
+            return groupMemberDetails
+                .filter { !$0.isSelf }
+                .map { ComposerMentionCandidate(details: $0, appState: appState) }
+        }
+        return members.compactMap { ComposerMentionCandidate(member: $0, appState: appState) }
+    }
+
     func managementAction(for memberIdHex: String) -> GroupMemberActionStateFfi? {
         managementState?.memberActions.first { $0.memberIdHex == memberIdHex }
     }
@@ -562,6 +585,35 @@ final class ConversationViewModel {
         }
     }
 
+    /// Reloads the newest timeline page from Marmot. Group system rows (kind
+    /// 1210) are synthesized locally when commits are processed, so a live
+    /// subscription update can race with group-state refresh — especially after
+    /// catch-up on a second device/simulator.
+    func refreshTimelineTail() async {
+        guard let appState, let accountRef = appState.activeAccountRef else { return }
+        do {
+            let page = try appState.marmot.timelineMessages(
+                accountRef: accountRef,
+                query: TimelineMessageQueryFfi(
+                    groupIdHex: group.groupIdHex,
+                    search: nil,
+                    before: nil,
+                    beforeMessageId: nil,
+                    after: nil,
+                    afterMessageId: nil,
+                    limit: Self.timelinePageLimit
+                )
+            )
+            applyTimelinePage(page, placement: .tail)
+        } catch {
+            // Timeline subscription remains the primary live path.
+        }
+    }
+
+    private func scheduleTimelineTailRefresh() {
+        Task { await refreshTimelineTail() }
+    }
+
     func loadOlderTimelinePage() async {
         guard hasMoreBefore, !isLoadingOlder,
               let cursor = oldestTimelineCursor(),
@@ -715,7 +767,10 @@ final class ConversationViewModel {
         case .agentActivity, .agentOperation:
             guard AgentEventPresentation.display(for: record) != nil else { return nil }
             return TimelineItem.message(record, status: status)
-        case .reaction, .delete, .agentStreamStart, .groupSystem, .unknown:
+        case .groupSystem:
+            guard GroupSystemEventPresentation.isDisplayable(record) else { return nil }
+            return TimelineItem.message(record, status: status)
+        case .reaction, .delete, .agentStreamStart, .unknown:
             guard streamingDebugEnabled else { return nil }
             return TimelineItem.message(record, status: status)
         }
@@ -1133,7 +1188,12 @@ final class ConversationViewModel {
     private func applyGroupUpdate(_ record: AppGroupRecordFfi) async {
         let previousName = group.name
         let wasArchived = group.archived
+        let previousAdmins = Set(group.admins)
         group = record
+
+        if Set(record.admins) != previousAdmins {
+            await refreshTimelineTail()
+        }
 
         if !previousName.isEmpty && previousName != record.name {
             appendSystemEvent(.groupRenamed(record.name))
@@ -1155,6 +1215,12 @@ final class ConversationViewModel {
 
     func applyGroupMutation(_ result: GroupMutationResultFfi) {
         applyGroupDetails(result.details, managementState: result.managementState)
+        // Group system rows for our own commits are persisted in Marmot but
+        // not yet broadcast on the timeline subscription (see darkmatter
+        // remember_published_reports). Reload the tail after every mutation,
+        // and don't rely on admin/member diffs — optimistic UI updates them
+        // before the mutation returns.
+        scheduleTimelineTailRefresh()
     }
 
     func applyOptimisticAdminStatus(memberIdHex: String, isAdmin: Bool) {
@@ -1217,6 +1283,8 @@ final class ConversationViewModel {
         managementState state: GroupManagementStateFfi,
         announceRosterChanges: Bool = false
     ) {
+        let previousAdmins = Set(group.admins)
+        let previousMemberIds = members.map(\.memberIdHex)
         let nextMembers = details.members.map {
             AppGroupMemberRecordFfi(
                 memberIdHex: $0.memberIdHex,
@@ -1224,7 +1292,8 @@ final class ConversationViewModel {
                 local: $0.local
             )
         }
-        if announceRosterChanges && nextMembers.map(\.memberIdHex) != members.map(\.memberIdHex) {
+        let nextMemberIds = nextMembers.map(\.memberIdHex)
+        if announceRosterChanges && nextMemberIds != previousMemberIds {
             appendSystemEvent(.rosterChanged)
             appState?.present(.success(L10n.string("Group membership updated")))
         }
@@ -1232,6 +1301,9 @@ final class ConversationViewModel {
         groupMemberDetails = details.members
         managementState = state
         members = nextMembers
+        if Set(details.group.admins) != previousAdmins || nextMemberIds != previousMemberIds {
+            scheduleTimelineTailRefresh()
+        }
     }
 
     private func appendSystemEvent(_ event: SystemEvent) {

@@ -9,6 +9,8 @@ struct PrivacySecuritySettingsView: View {
     @State private var auditFiles: [AuditLogFileFfi] = []
     @State private var telemetrySaving = false
     @State private var auditSaving = false
+    @State private var auditDeleting = false
+    @State private var showDeleteAuditLogsConfirmation = false
     @State private var filesLoading = false
     @State private var errorMessage: String?
     @State private var savedAt: Date?
@@ -71,12 +73,12 @@ struct PrivacySecuritySettingsView: View {
                 .disabled(auditSaving || auditSettings == nil)
 
                 if auditSaving {
-                    ProgressView("Restarting")
+                    ProgressView("Saving")
                 }
             } header: {
                 Text("Audit Logging")
             } footer: {
-                Text("Writes local audit JSONL files for forensic review. Changing this restarts the local runtime immediately.")
+                Text("Writes local audit JSONL files for forensic review. Toggling applies immediately to running sessions.")
             }
 
             Section {
@@ -94,9 +96,24 @@ struct PrivacySecuritySettingsView: View {
                     ForEach(auditFiles, id: \.path) { file in
                         auditFileRow(file)
                     }
+
+                    Button(role: .destructive) {
+                        showDeleteAuditLogsConfirmation = true
+                    } label: {
+                        Label("Delete All Audit Logs", systemImage: "trash")
+                    }
+                    .disabled(auditDeleting || auditSaving)
+                }
+
+                if auditDeleting {
+                    ProgressView("Deleting audit logs")
                 }
             } header: {
                 Text("Audit Log Files")
+            } footer: {
+                if !auditFiles.isEmpty {
+                    Text("Deletes every local audit JSONL file on this device. Live recorders rotate to fresh files when audit logging is still on.")
+                }
             }
 
             if let errorMessage {
@@ -120,6 +137,17 @@ struct PrivacySecuritySettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
         .refreshable { await reload() }
+        .alert(
+            "Delete all audit logs?",
+            isPresented: $showDeleteAuditLogsConfirmation
+        ) {
+            Button("Delete All Audit Logs", role: .destructive) {
+                Task { await deleteAllAuditLogs() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes every local audit JSONL file on this device.")
+        }
     }
 
     private var telemetryToggleDisabled: Bool {
@@ -192,6 +220,23 @@ struct PrivacySecuritySettingsView: View {
             Haptics.success()
         } catch {
             telemetrySettings = current
+            Haptics.error()
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func deleteAllAuditLogs() async {
+        auditDeleting = true
+        errorMessage = nil
+        defer { auditDeleting = false }
+
+        do {
+            try await appState.deleteAllAuditLogFiles()
+            savedAt = Date()
+            Haptics.success()
+            await reloadAuditFiles()
+        } catch {
             Haptics.error()
             errorMessage = error.localizedDescription
         }
