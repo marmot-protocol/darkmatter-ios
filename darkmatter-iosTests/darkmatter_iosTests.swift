@@ -4342,12 +4342,43 @@ struct MessageSemanticsTests {
         let timelineReference = encryptedMediaReference(sourceEpoch: 0)
         let listedReference = encryptedMediaReference(sourceEpoch: 42)
 
-        let timelineItem = try #require(MessageMediaAttachment.displayItems(from: [timelineReference]).first)
-        let listedItem = try #require(MessageMediaAttachment.displayItems(from: [listedReference]).first)
+        let timelineItem = try #require(
+            MessageMediaAttachment.displayItems(
+                from: [timelineReference],
+                ownerId: "msg-a"
+            ).first
+        )
+        let listedItem = try #require(
+            MessageMediaAttachment.displayItems(
+                from: [listedReference],
+                ownerId: "msg-a"
+            ).first
+        )
 
         #expect(timelineItem.id != listedItem.id)
         #expect(timelineItem.id.hasSuffix(":0:0"))
         #expect(listedItem.id.hasSuffix(":42:0"))
+    }
+
+    @Test func mediaAttachmentIdentityIncludesOwningMessage() throws {
+        let reference = encryptedMediaReference(sourceEpoch: 0)
+
+        let firstItem = try #require(
+            MessageMediaAttachment.displayItems(
+                from: [reference],
+                ownerId: "msg-a"
+            ).first
+        )
+        let secondItem = try #require(
+            MessageMediaAttachment.displayItems(
+                from: [reference],
+                ownerId: "msg-b"
+            ).first
+        )
+
+        #expect(firstItem.id != secondItem.id)
+        #expect(firstItem.id.hasPrefix("msg-a:"))
+        #expect(secondItem.id.hasPrefix("msg-b:"))
     }
 
     @Test func mediaCacheStoresPlaintextWithCompleteFileProtection() throws {

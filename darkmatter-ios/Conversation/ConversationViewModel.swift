@@ -869,20 +869,24 @@ final class ConversationViewModel {
         guard case .message(let record, _) = item.kind else {
             return []
         }
-        return mediaItems(for: record)
+        return mediaItems(for: record, ownerId: item.id)
     }
 
     func mediaItems(for record: AppMessageRecordFfi) -> [MessageMediaAttachment] {
+        mediaItems(for: record, ownerId: record.messageIdHex)
+    }
+
+    private func mediaItems(for record: AppMessageRecordFfi, ownerId: String) -> [MessageMediaAttachment] {
         if let records = mediaRecordsByMessageId[record.messageIdHex], !records.isEmpty {
             let references = records
                 .sorted { $0.attachmentIndex < $1.attachmentIndex }
                 .map(\.reference)
-            return MessageMediaAttachment.displayItems(from: references)
+            return MessageMediaAttachment.displayItems(from: references, ownerId: ownerId)
         }
         guard case .media(let references) = MessageSemantics.classify(record) else {
             return []
         }
-        return MessageMediaAttachment.displayItems(from: references)
+        return MessageMediaAttachment.displayItems(from: references, ownerId: ownerId)
     }
 
     func data(for media: MessageMediaAttachment) async throws -> Data {
