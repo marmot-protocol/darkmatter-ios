@@ -126,8 +126,8 @@ before every release tag.
       account.
 - [ ] Sending a message in a chat that device B is already viewing does not
       show a duplicate local banner while the app is foreground-active.
-- [ ] A generic APNS wake with no local notification update does not leave a
-      visible generic fallback notification behind.
+- [ ] A generic APNS wake with no local notification update shows a coherent
+      generic fallback notification, not a blank title/body.
 
 ## Diagnostics
 
