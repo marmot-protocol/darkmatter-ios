@@ -9,6 +9,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var collectionTask: Task<Void, Never>?
     private var expirationTask: Task<Void, Never>?
     private var activeMarmot: Marmot?
+    private var activeMarmotStarted = false
     private var didApplyRenderDecision = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
 
@@ -18,6 +19,8 @@ final class NotificationService: UNNotificationServiceExtension {
     ) {
         self.contentHandler = contentHandler
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
+        activeMarmot = nil
+        activeMarmotStarted = false
         didApplyRenderDecision = false
 
         collectionTask = Task { [weak self] in
@@ -27,11 +30,10 @@ final class NotificationService: UNNotificationServiceExtension {
 
     override func serviceExtensionTimeWillExpire() {
         collectionTask?.cancel()
-        guard let marmot = activeMarmot else {
+        guard let marmot = takeActiveMarmotForShutdown() else {
             finish(applyingFallbackForTimeout: true)
             return
         }
-        activeMarmot = nil
         expirationTask = Task { [weak self] in
             await marmot.shutdown()
             await self?.finish(applyingFallbackForTimeout: true)
@@ -50,8 +52,11 @@ final class NotificationService: UNNotificationServiceExtension {
                 relayUrls: AppContainerConfig.seedRelays
             )
             activeMarmot = marmot
+            activeMarmotStarted = false
             do {
                 try await marmot.start()
+                guard activeMarmot === marmot else { return }
+                activeMarmotStarted = true
                 let result = try await marmot.collectNotificationsAfterWake(
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
@@ -60,9 +65,8 @@ final class NotificationService: UNNotificationServiceExtension {
             } catch {
                 applyFallback(to: content)
             }
-            await marmot.shutdown()
-            if activeMarmot === marmot {
-                activeMarmot = nil
+            if let marmot = takeActiveMarmotForShutdown(marmot) {
+                await marmot.shutdown()
             }
         } catch {
             // Keep the provider payload generic when collection fails. The main
@@ -71,6 +75,15 @@ final class NotificationService: UNNotificationServiceExtension {
         }
 
         finish()
+    }
+
+    private func takeActiveMarmotForShutdown(_ marmot: Marmot? = nil) -> Marmot? {
+        guard let active = activeMarmot else { return nil }
+        if let marmot, active !== marmot { return nil }
+        activeMarmot = nil
+        defer { activeMarmotStarted = false }
+        guard activeMarmotStarted else { return nil }
+        return active
     }
 
     private func apply(
