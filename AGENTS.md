@@ -58,6 +58,7 @@ Rules for notification work:
 - Do not abandon additional NSE presentations after `collectNotificationsAfterWake`; those records have already been consumed from Marmot's background notification cursor.
 - Sign-out must cancel and await any in-flight native-push registration sync before clearing the removed account's push registration.
 - Main-app local notification presentation must fail open if a settings read throws; only an explicit disabled setting should suppress.
+- Notification subscription retry failures should show at most one generic user-facing banner per outage; do not surface raw backend error descriptions in that toast.
 - The main app should not keep the Marmot runtime alive indefinitely in the background. It suspends the runtime on background and restarts it on foreground.
 
 If notifications are flaky, check token registration, group push-token gossip, relay hints, transponder visibility on the relay, and NSE timeout behavior before changing UI code.

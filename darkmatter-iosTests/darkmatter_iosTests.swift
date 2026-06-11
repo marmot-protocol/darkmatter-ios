@@ -137,6 +137,26 @@ struct AppStateBootstrapTests {
         #expect(appState.toastState.activeToast == nil)
     }
 
+    @Test func notificationSubscriptionErrorsAreDedupedAndRedacted() async throws {
+        let appState = try testAppState()
+        let sensitiveError = SensitiveNotificationSubscriptionError()
+
+        appState.reportNotificationSubscriptionError(sensitiveError)
+        let firstToast = try #require(appState.activeToast)
+        #expect(firstToast.title == "Notifications unavailable")
+        #expect(firstToast.message == "We'll keep trying in the background.")
+        #expect(!(firstToast.message?.contains(sensitiveError.errorDescription ?? "") ?? false))
+
+        appState.reportNotificationSubscriptionError(sensitiveError)
+        #expect(appState.activeToast?.id == firstToast.id)
+
+        appState.noteNotificationSubscriptionDelivery()
+        appState.reportNotificationSubscriptionError(sensitiveError)
+
+        #expect(appState.activeToast?.id != firstToast.id)
+        #expect(appState.activeToast?.message == "We'll keep trying in the background.")
+    }
+
     @Test func toastSleepDurationIsClampedBeforeNanosecondConversion() {
         #expect(ToastState.sleepNanoseconds(forDuration: -1) == 0)
         #expect(ToastState.sleepNanoseconds(forDuration: .nan) == 0)
@@ -5033,6 +5053,12 @@ private actor NotificationSubscriptionProbe {
 
 private enum NotificationSubscriptionTestError: Error {
     case transient
+}
+
+private struct SensitiveNotificationSubscriptionError: LocalizedError {
+    var errorDescription: String? {
+        "relay failed at wss://relay.internal.invalid/path?token=secret"
+    }
 }
 
 private func notificationUpdate(
