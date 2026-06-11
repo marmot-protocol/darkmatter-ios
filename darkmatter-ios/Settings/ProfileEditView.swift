@@ -50,6 +50,11 @@ struct ProfileEditView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
+                if let invalidPictureMessage {
+                    Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
                 TextField("NIP-05 (name@domain)", text: $nip05)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -73,7 +78,7 @@ struct ProfileEditView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(isPublishing || appState.activeAccountRef == nil)
+                .disabled(saveDisabled)
             }
 
             if let error {
@@ -86,6 +91,25 @@ struct ProfileEditView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadExisting() }
+    }
+
+    private var trimmedPicture: String {
+        picture.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedPictureURL: String? {
+        ProfileSanitizer.imageURL(trimmedPicture)?.absoluteString
+    }
+
+    private var saveDisabled: Bool {
+        isPublishing
+            || appState.activeAccountRef == nil
+            || (!trimmedPicture.isEmpty && normalizedPictureURL == nil)
+    }
+
+    private var invalidPictureMessage: String? {
+        guard !trimmedPicture.isEmpty, normalizedPictureURL == nil else { return nil }
+        return L10n.string("Only public HTTPS image URLs are allowed.")
     }
 
     @MainActor
@@ -107,11 +131,19 @@ struct ProfileEditView: View {
         error = nil
         success = false
 
+        let normalizedPictureURL = self.normalizedPictureURL
+        if !trimmedPicture.isEmpty, normalizedPictureURL == nil {
+            Haptics.error()
+            let message = L10n.string("Only public HTTPS image URLs are allowed.")
+            self.error = message
+            isPublishing = false
+            return
+        }
         let metadata = UserProfileMetadataFfi(
             name: displayName.isEmpty ? nil : displayName,
             displayName: displayName.isEmpty ? nil : displayName,
             about: about.isEmpty ? nil : about,
-            picture: picture.isEmpty ? nil : picture,
+            picture: trimmedPicture.isEmpty ? nil : normalizedPictureURL,
             nip05: nip05.isEmpty ? nil : nip05,
             lud16: lud16.isEmpty ? nil : lud16
         )
