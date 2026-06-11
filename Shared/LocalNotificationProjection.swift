@@ -94,7 +94,7 @@ enum LocalNotificationProjection {
         case .groupInvite:
             return (
                 title: L10n.string("Group invite"),
-                body: groupName.map { L10n.string("Invitation to \($0)") }
+                body: groupName.map { L10n.formatted("Invitation to %@", $0) }
                     ?? L10n.string("Open Darkmatter to view the invite")
             )
         case .newMessage:
@@ -104,7 +104,7 @@ enum LocalNotificationProjection {
             return (
                 title: groupName ?? L10n.string("Group message"),
                 body: preview.map { "\(senderName): \($0)" }
-                    ?? L10n.string("\(senderName) sent a message")
+                    ?? L10n.formatted("%@ sent a message", senderName)
             )
         }
     }

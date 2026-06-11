@@ -68,7 +68,7 @@ struct ChatRow: View {
             maxLength: 140
         ) ?? ""
         if latest.sender == appState.activeAccount?.accountIdHex {
-            return body.isEmpty ? L10n.string("You sent a message") : L10n.string("You: \(body)")
+            return body.isEmpty ? L10n.string("You sent a message") : L10n.formatted("You: %@", body)
         }
         return body.isEmpty ? L10n.string("New message") : body
     }
