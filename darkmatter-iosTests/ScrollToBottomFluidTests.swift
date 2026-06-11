@@ -14,14 +14,17 @@ struct ScrollToBottomFluidTests {
             .appendingPathComponent("darkmatter-ios/Conversation/ConversationView.swift")
         let source = try String(contentsOf: url, encoding: .utf8)
 
-        // jumpToBottom must be a single animated scroll with no DispatchQueue hops.
+        // ConversationView scroll plumbing should stay on structured MainActor
+        // tasks rather than reviving the old DispatchQueue timing workaround.
+        #expect(!source.contains("DispatchQueue.main"))
+
+        // jumpToBottom must be a single animated scroll.
         let bodyPattern = #"private func jumpToBottom\(proxy: ScrollViewProxy\) \{[\s\S]*?scrollToBottom\(proxy: proxy, animated: true\)[\s\S]*?\n    \}"#
         guard let range = source.range(of: bodyPattern, options: .regularExpression) else {
             Issue.record("jumpToBottom did not match the expected single animated scroll shape")
             return
         }
         let body = String(source[range])
-        #expect(!body.contains("DispatchQueue.main"))
         #expect(!body.contains("animated: false"))
     }
 }
