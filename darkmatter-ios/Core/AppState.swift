@@ -398,6 +398,7 @@ final class AppState {
     @MainActor
     func signOut() async {
         guard let signingOut = activeAccountRef else { return }
+        await cancelNativePushRegistrationTask()
         try? await marmot.clearPushRegistration(accountRef: signingOut)
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
@@ -418,9 +419,9 @@ final class AppState {
         activeAccountRef = accounts.first?.label
         if activeAccountRef == nil {
             stopNotificationSubscription()
-            nativePushRegistrationTask?.cancel()
-            nativePushRegistrationTask = nil
             phase = .onboarding
+        } else {
+            scheduleNativePushRegistrationIfEnabled()
         }
     }
 
@@ -507,6 +508,13 @@ final class AppState {
             guard let self else { return }
             await syncNativePushRegistrationIfEnabled()
         }
+    }
+
+    private func cancelNativePushRegistrationTask() async {
+        let task = nativePushRegistrationTask
+        nativePushRegistrationTask = nil
+        task?.cancel()
+        await task?.value
     }
 
     func relayTelemetrySettings() throws -> RelayTelemetrySettingsFfi {
