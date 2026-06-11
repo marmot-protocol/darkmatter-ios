@@ -5335,6 +5335,19 @@ private actor NotificationSubscriptionProbe {
     }
 }
 
+struct EmojiPickerPresentationTests {
+
+    @Test func emojiPickerUsesStablePrecomputedOptions() {
+        let options = EmojiPickerPresentation.options
+
+        #expect(options.count == 50)
+        #expect(Set(options.map(\.id)).count == options.count)
+        #expect(options.first?.emoji == "👍")
+        #expect(options.last?.emoji == "😆")
+        #expect(EmojiPickerPresentation.columns.count == EmojiPickerPresentation.columnCount)
+    }
+}
+
 private enum NotificationSubscriptionTestError: Error {
     case transient
 }
