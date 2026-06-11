@@ -107,6 +107,7 @@ final class AppState {
     private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
+    private var notificationSubscriptionFailureToastPresented = false
     private(set) var isAppSceneActive = true
     private(set) var runtimeSuspendedForBackground = false
     private(set) var runtimeGeneration = 0
@@ -268,6 +269,7 @@ final class AppState {
 
     @MainActor
     private func startNotificationSubscription() {
+        notificationSubscriptionFailureToastPresented = false
         let runner = NotificationSubscriptionRunner(
             initialRetryDelayNanoseconds: Self.notificationSubscriptionInitialRetryDelayNanoseconds,
             maximumRetryDelayNanoseconds: Self.notificationSubscriptionMaximumRetryDelayNanoseconds,
@@ -279,7 +281,8 @@ final class AppState {
             present: { [weak self] update in
                 guard let self else { return }
                 let shouldPresent = await MainActor.run {
-                    self.shouldPresentLocalNotification(update)
+                    self.noteNotificationSubscriptionDelivery()
+                    return self.shouldPresentLocalNotification(update)
                 }
                 guard shouldPresent else { return }
                 await self.notifications.present(update: update)
@@ -287,12 +290,7 @@ final class AppState {
             reportError: { [weak self] error in
                 guard let self else { return }
                 await MainActor.run {
-                    self.present(
-                        .error(
-                            L10n.string("Notifications unavailable"),
-                            message: error.localizedDescription
-                        )
-                    )
+                    self.reportNotificationSubscriptionError(error)
                 }
             }
         )
@@ -301,6 +299,24 @@ final class AppState {
 
     private func stopNotificationSubscription() {
         notificationDriver.stop()
+        notificationSubscriptionFailureToastPresented = false
+    }
+
+    @MainActor
+    func reportNotificationSubscriptionError(_: Error) {
+        guard !notificationSubscriptionFailureToastPresented else { return }
+        notificationSubscriptionFailureToastPresented = true
+        present(
+            .error(
+                L10n.string("Notifications unavailable"),
+                message: L10n.string("We'll keep trying in the background.")
+            )
+        )
+    }
+
+    @MainActor
+    func noteNotificationSubscriptionDelivery() {
+        notificationSubscriptionFailureToastPresented = false
     }
 
     @MainActor
