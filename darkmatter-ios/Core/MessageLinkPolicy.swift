@@ -4,13 +4,12 @@ import Foundation
 enum MessageLinkAction: Equatable {
     case openProfile(npub: String)
     case openChat(groupIdHex: String)
-    case openExternal(URL)
+    case confirmExternal(URL)
     case blocked
 }
 
 /// Tap-time gate for message links. The markdown builder already refuses to
-/// attach disallowed schemes at render time; this second gate decides routing
-/// and is the seam for a future confirm-before-open dialog.
+/// attach disallowed schemes at render time; this second gate decides routing.
 enum MessageLinkPolicy {
 
     private static let externalSchemes: Set<String> = [
@@ -32,7 +31,7 @@ enum MessageLinkPolicy {
                 return .blocked
             }
         case _ where externalSchemes.contains(scheme):
-            return .openExternal(url)
+            return .confirmExternal(url)
         default:
             return .blocked
         }
