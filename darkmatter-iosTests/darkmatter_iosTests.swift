@@ -4863,6 +4863,82 @@ struct MessageMediaGridPresentationTests {
 }
 
 @MainActor
+struct MessageMediaGalleryTests {
+
+    @Test func galleryRejectsNonImageInitialItem() {
+        let image = attachment(id: "image", mediaType: "image/png")
+        let document = attachment(id: "document", mediaType: "application/pdf")
+
+        let gallery = MessageMediaGallery(
+            items: [image, document],
+            initialItem: document,
+            initialImageData: Data()
+        )
+
+        #expect(gallery == nil)
+    }
+
+    @Test func galleryKeepsOnlyImagePagesWhenInitialImageIsInList() throws {
+        let image = attachment(id: "image", mediaType: "image/png")
+        let document = attachment(id: "document", mediaType: "application/pdf")
+
+        let gallery = try #require(MessageMediaGallery(
+            items: [image, document],
+            initialItem: image,
+            initialImageData: imageData()
+        ))
+
+        #expect(gallery.items.map(\.id) == ["image"])
+        #expect(gallery.initialItemID == "image")
+    }
+
+    @Test func galleryPrependsMissingImageInitialItem() throws {
+        let initial = attachment(id: "initial", mediaType: "image/png")
+        let otherImage = attachment(id: "other", mediaType: "image/jpeg")
+        let document = attachment(id: "document", mediaType: "application/pdf")
+        let data = imageData()
+
+        let gallery = try #require(MessageMediaGallery(
+            items: [document, otherImage],
+            initialItem: initial,
+            initialImageData: data
+        ))
+
+        #expect(gallery.items.map(\.id) == ["initial", "other"])
+        #expect(gallery.initialData(for: initial) == data)
+        #expect(gallery.initialData(for: otherImage) == nil)
+    }
+
+    @Test func fullscreenInitialDecodeFailureIsExplicit() {
+        #expect(MessageMediaFullscreenPresentation.didFailInitialDecode(Data([0x00])))
+        #expect(!MessageMediaFullscreenPresentation.didFailInitialDecode(nil))
+        #expect(MessageMediaFullscreenPresentation.image(from: imageData()) != nil)
+    }
+
+    private func attachment(
+        id: String,
+        mediaType: String,
+        localData: Data? = nil
+    ) -> MessageMediaAttachment {
+        MessageMediaAttachment(
+            id: id,
+            reference: nil,
+            fileName: "\(id).bin",
+            mediaType: mediaType,
+            dim: nil,
+            localData: localData
+        )
+    }
+
+    private func imageData() -> Data {
+        UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).pngData { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+    }
+}
+
+@MainActor
 struct MessageMediaThumbnailDecoderTests {
 
     @Test func decoderDownsamplesImageToPixelBudget() async throws {

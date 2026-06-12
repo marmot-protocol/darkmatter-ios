@@ -745,17 +745,18 @@ enum MessageMediaThumbnailDecoder {
     }
 }
 
-private struct MessageMediaGallery: Identifiable {
+struct MessageMediaGallery: Identifiable {
     let id = UUID()
     let items: [MessageMediaAttachment]
     let initialItemID: String
     let initialImageData: Data
 
-    init(item: MessageMediaAttachment, imageData: Data) {
+    init?(item: MessageMediaAttachment, imageData: Data) {
         self.init(items: [item], initialItem: item, initialImageData: imageData)
     }
 
-    init(items: [MessageMediaAttachment], initialItem: MessageMediaAttachment, initialImageData: Data) {
+    init?(items: [MessageMediaAttachment], initialItem: MessageMediaAttachment, initialImageData: Data) {
+        guard initialItem.isImage else { return nil }
         let imageItems = items.filter(\.isImage)
         if imageItems.contains(where: { $0.id == initialItem.id }) {
             self.items = imageItems
@@ -771,6 +772,17 @@ private struct MessageMediaGallery: Identifiable {
             return initialImageData
         }
         return item.localData
+    }
+}
+
+enum MessageMediaFullscreenPresentation {
+    static func image(from data: Data?) -> UIImage? {
+        data.flatMap(UIImage.init(data:))
+    }
+
+    static func didFailInitialDecode(_ data: Data?) -> Bool {
+        guard let data else { return false }
+        return image(from: data) == nil
     }
 }
 
@@ -888,6 +900,7 @@ private struct MessageMediaFullscreenPage: View {
     let onLoadMedia: (MessageMediaAttachment) async throws -> Data
 
     @State private var imageData: Data?
+    @State private var image: UIImage?
     @State private var isLoading = false
     @State private var didFail = false
 
@@ -898,14 +911,17 @@ private struct MessageMediaFullscreenPage: View {
     ) {
         self.item = item
         self.onLoadMedia = onLoadMedia
-        _imageData = State(initialValue: initialImageData)
+        let initialImage = MessageMediaFullscreenPresentation.image(from: initialImageData)
+        _imageData = State(initialValue: initialImage == nil ? nil : initialImageData)
+        _image = State(initialValue: initialImage)
+        _didFail = State(initialValue: MessageMediaFullscreenPresentation.didFailInitialDecode(initialImageData))
     }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let imageData, let image = UIImage(data: imageData) {
+            if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
@@ -937,13 +953,23 @@ private struct MessageMediaFullscreenPage: View {
     }
 
     private func loadImageIfNeeded(force: Bool = false) async {
-        guard imageData == nil || force else { return }
+        guard image == nil || force else { return }
         isLoading = true
         didFail = false
         defer { isLoading = false }
         do {
-            imageData = try await onLoadMedia(item)
+            let data = try await onLoadMedia(item)
+            guard let decoded = MessageMediaFullscreenPresentation.image(from: data) else {
+                imageData = nil
+                image = nil
+                didFail = true
+                return
+            }
+            imageData = data
+            image = decoded
         } catch {
+            imageData = nil
+            image = nil
             didFail = true
         }
     }
