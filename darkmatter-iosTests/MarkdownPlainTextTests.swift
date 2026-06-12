@@ -47,6 +47,34 @@ struct MarkdownPlainTextTests {
         #expect(flattened == "Title body let x = 1 let y = 2 item")
     }
 
+    @Test func tablesFlattenHeaderAndRows() {
+        let flattened = MarkdownPlainText.flatten(doc([
+            .table(
+                alignments: [.none, .none],
+                header: [
+                    MarkdownTableCellFfi(inlines: [.text(content: "h1")]),
+                    MarkdownTableCellFfi(inlines: [.text(content: "h2")]),
+                ],
+                rows: [[
+                    MarkdownTableCellFfi(inlines: [.text(content: "a")]),
+                    MarkdownTableCellFfi(inlines: [.text(content: "b")]),
+                ]]
+            )
+        ]))
+        #expect(flattened == "h1 h2 a b")
+    }
+
+    @Test func emptyTableCellsConsumeNodeBudgetBeforeTrailingContent() {
+        let emptyCell = MarkdownTableCellFfi(inlines: [])
+        let rows = Array(repeating: [emptyCell], count: 2500)
+        let flattened = MarkdownPlainText.flatten(doc([
+            .table(alignments: [.none], header: [], rows: rows),
+            .paragraph(inlines: [.text(content: "tail")]),
+        ]))
+
+        #expect(flattened == nil)
+    }
+
     @Test func nostrEntitiesTruncate() {
         let bech32 = "npub1" + String(repeating: "q", count: 58)
         let flattened = MarkdownPlainText.flatten(doc([

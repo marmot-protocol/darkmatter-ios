@@ -116,6 +116,7 @@ Do not add a second storage path for data Marmot already owns.
 - Fullscreen media galleries are image-only. Reject non-image initial items before presentation and surface undecodable image bytes as an explicit failure state rather than an idle spinner.
 - Media downloads should pass through the conversation view model's in-flight store so duplicate thumbnail/gallery requests share one decrypt/download task.
 - Markdown display blocks are cacheable per message content and profile refresh generation; do not call `MarkdownMessageBuilder.displayBlocks` directly from bubble body paths.
+- Markdown preview/plain-text walkers must budget table rows and cells, including empty cells, so hostile ASTs cannot bypass node limits.
 - Build user-visible date formats from localized templates rather than raw `DateFormatter.dateFormat` patterns.
 - When a sheet folds typed pending input into a submit action, abort on invalid pending input before clearing validation errors or starting async work.
 - Recipient-staging sheets should parse with `AddMembersPresentation`, normalize through Marmot to `MemberRefFfi`, and deduplicate staged recipients by `accountIdHex` rather than raw input text.
