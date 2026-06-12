@@ -16,6 +16,46 @@ enum AgentStreamWatchAdmission {
     }
 }
 
+struct MediaDownloadInFlightKey: Hashable {
+    let version: String
+    let plaintextSha256: String
+    let ciphertextSha256: String
+    let nonceHex: String
+
+    init(reference: MediaAttachmentReferenceFfi) {
+        self.version = reference.version
+        self.plaintextSha256 = reference.plaintextSha256.lowercased()
+        self.ciphertextSha256 = reference.ciphertextSha256.lowercased()
+        self.nonceHex = reference.nonceHex.lowercased()
+    }
+}
+
+@MainActor
+final class MediaDownloadInFlightStore {
+    private var tasks: [MediaDownloadInFlightKey: Task<Data, Error>] = [:]
+
+    func data(
+        for key: MediaDownloadInFlightKey,
+        operation: @escaping @MainActor () async throws -> Data
+    ) async throws -> Data {
+        if let task = tasks[key] {
+            return try await task.value
+        }
+        let task = Task { @MainActor in
+            try await operation()
+        }
+        tasks[key] = task
+        do {
+            let data = try await task.value
+            tasks[key] = nil
+            return data
+        } catch {
+            tasks[key] = nil
+            throw error
+        }
+    }
+}
+
 /// Owns the live state of a single conversation: the merged timeline of
 /// message bubbles + system events, aggregated reactions, the group roster,
 /// the in-progress reply, and the send pipeline.
@@ -78,6 +118,7 @@ final class ConversationViewModel {
     private var transientTimelineItems: [String: TimelineItem] = [:]
     private var pendingMediaByRowId: [String: [MessageMediaAttachment]] = [:]
     private var mediaRecordsByMessageId: [String: [MediaRecordFfi]] = [:]
+    @ObservationIgnored private let mediaDownloadInFlight = MediaDownloadInFlightStore()
     /// Optimistic reaction messages by their own temporary id, re-aggregated on change.
     private var reactionRecords: [String: AppMessageRecordFfi] = [:]
     private var optimisticReactionRemovals: Set<ReactionRemoval> = []
@@ -951,13 +992,22 @@ final class ConversationViewModel {
             throw MediaDataError.missingAccount
         }
         let downloadableReference = await downloadableMediaReference(for: reference)
-        let result = try await appState.marmot.downloadMedia(
-            accountRef: accountRef,
-            groupIdHex: group.groupIdHex,
-            reference: downloadableReference
-        )
-        MessageMediaCache.store(result.plaintext, for: downloadableReference)
-        return result.plaintext
+        if let cached = MessageMediaCache.cachedData(for: downloadableReference) {
+            return cached
+        }
+        let groupIdHex = group.groupIdHex
+        let marmot = appState.marmot
+        return try await mediaDownloadInFlight.data(
+            for: MediaDownloadInFlightKey(reference: downloadableReference)
+        ) {
+            let result = try await marmot.downloadMedia(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                reference: downloadableReference
+            )
+            MessageMediaCache.store(result.plaintext, for: downloadableReference)
+            return result.plaintext
+        }
     }
 
     private func downloadableMediaReference(for reference: MediaAttachmentReferenceFfi) async -> MediaAttachmentReferenceFfi {
