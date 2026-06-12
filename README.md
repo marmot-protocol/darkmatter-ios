@@ -1,23 +1,58 @@
-# Dark Matter iOS
+<p align="center">
+  <img src="darkmatter-ios/darkmatter.icon/Assets/noise_1024.png" width="112" alt="Dark Matter app icon" />
+</p>
 
-Dark Matter iOS is a SwiftUI client for the Dark Matter/Marmot secure group messaging stack. The Swift app owns the interface, navigation, notification presentation, and iOS lifecycle. The Rust runtime, exposed through the vendored `MarmotKit` UniFFI package, owns accounts, storage, MLS group state, relay catch-up, and message processing.
+<h1 align="center">Dark Matter iOS</h1>
+
+<p align="center">
+  <strong>Private MLS group messaging for iPhone, powered by the Marmot Rust runtime.</strong>
+</p>
+
+<p align="center">
+  SwiftUI interface. Rust cryptographic core. Generic APNS wakes. Local-first diagnostics.
+</p>
+
+Dark Matter iOS is the native iPhone client for the Dark Matter/Marmot secure messaging stack. The app gives iOS users a polished SwiftUI chat experience while delegating accounts, MLS group state, storage, relay catch-up, message processing, encrypted media, push-token cryptography, telemetry, and audit-log plumbing to the vendored `MarmotKit` UniFFI package.
+
+The project is intentionally split along the platform boundary: Swift owns presentation, navigation, lifecycle, notifications, and Apple integration; Marmot owns protocol state and durable encrypted data.
+
+## What It Does
+
+- End-to-end encrypted MLS group messaging over the Dark Matter/Marmot relay stack.
+- Nostr identity flows: create/import local identities, display npubs, share profile deep links, and scan QR codes.
+- Rich conversations with markdown, replies, reactions, mentions, encrypted image attachments, read state, and group system events.
+- Multi-account chat lists, account switching, group management, profile publishing, and NIP-65/inbox relay editing.
+- Privacy-preserving notifications: APNS carries only a generic wake, while the Notification Service Extension locally catches up Marmot state and renders visible content on device.
+- Developer and forensic tooling: diagnostics, streaming debug rows, telemetry controls, local audit JSONL files, and protected transcript export.
+- Extension-safe shared projection code for local notifications, notification-service rendering, localization, profile sanitization, and app-group configuration.
+
+## Architecture
+
+`darkmatter-ios` is a SwiftUI app wrapped around a Rust runtime:
+
+- SwiftUI owns the app shell, onboarding, settings, chat UI, navigation, sheets, toasts, and foreground/background lifecycle.
+- `AppState` is the observable hub for global app state. It owns the live `MarmotClient`, the active account, pending navigation, visible-chat tracking, notification subscriptions, native push sync, and runtime suspend/resume.
+- `MarmotKit` is generated from the sibling Dark Matter Rust repo. It exposes the Marmot runtime through UniFFI and ships here as a vendored xcframework plus generated Swift bindings.
+- `Shared/` compiles into both the app and the Notification Service Extension, so files there must remain extension-safe.
+- The Notification Service Extension opens the shared Marmot store, runs bounded relay catch-up, and projects local notification content without putting private metadata in the APNS payload.
 
 ## Project Map
 
-- `darkmatter-ios/` - the main SwiftUI app target.
-- `darkmatter-ios/Core/` - app state, Marmot client setup, notifications, routing helpers, and shared UI utilities.
+- `darkmatter-ios/` - main SwiftUI app target.
+- `darkmatter-ios/Core/` - app state, Marmot client setup, lifecycle, notifications, routing, telemetry, diagnostics helpers, and shared UI utilities.
 - `darkmatter-ios/Chats/`, `Conversation/`, `Group/`, `Settings/`, `Profile/`, `Onboarding/` - feature screens and view models.
-- `NotificationServiceExtension/` - the iOS notification service extension used to rewrite generic APNS wakes into local notification content.
-- `Shared/` - Swift code compiled into both the app and extension. Keep this extension-safe.
-- `Vendored/MarmotKit/` - generated UniFFI Swift bindings plus the prebuilt Marmot static library xcframework.
-- `scripts/sync-bindings.sh` - rebuilds and re-vendors `MarmotKit` from the sibling Darkmatter Rust repo.
-- `docs/manual-tests.md` - manual release checks for flows that are hard to automate.
+- `NotificationServiceExtension/` - APNS wake handling and local notification decoration.
+- `Shared/` - extension-safe code shared by the app and notification extension.
+- `Vendored/MarmotKit/` - generated UniFFI Swift bindings and the prebuilt Marmot static library xcframework.
+- `scripts/sync-bindings.sh` - rebuilds and re-vendors `MarmotKit` from the sibling Rust checkout.
+- `docs/manual-tests.md` - release-focused manual checks for flows that are expensive to automate.
+- `AGENTS.md` - canonical coding-agent guidance for this repo.
 
 ## Requirements
 
 - Xcode with iOS 18+ SDK support.
-- A configured Apple developer team for device builds, APNS, App Groups, and the Notification Service Extension.
-- The sibling Darkmatter repo at `../darkmatter` only when regenerating Rust bindings. Normal Swift builds use the vendored `MarmotKit` package.
+- Apple developer signing configured for device builds, APNS, App Groups, and the Notification Service Extension.
+- The sibling Dark Matter Rust repo at `../darkmatter` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
 
 Current identifiers:
 
@@ -61,15 +96,17 @@ xcodebuild build \
   -destination 'generic/platform=iOS'
 ```
 
-If a simulator name is unavailable on your machine, run:
+If a simulator name is unavailable on your machine, list local destinations:
 
 ```sh
-xcodebuild -showdestinations -project darkmatter-ios.xcodeproj -scheme darkmatter-ios
+xcodebuild -showdestinations \
+  -project darkmatter-ios.xcodeproj \
+  -scheme darkmatter-ios
 ```
 
 ## MarmotKit Bindings
 
-`Vendored/MarmotKit/MARMOT_VERSION` records the Darkmatter commit used for the current bindings.
+`Vendored/MarmotKit/MARMOT_VERSION` records the Dark Matter commit used for the current bindings.
 
 Regenerate bindings after changes in `marmot-uniffi` or any Rust crate it depends on:
 
@@ -83,42 +120,34 @@ Use `DARKMATTER_DIR` if the Rust checkout is not the sibling default:
 DARKMATTER_DIR=/path/to/darkmatter ./scripts/sync-bindings.sh
 ```
 
-Do not edit generated files in `Vendored/MarmotKit` by hand. Fix the Rust/UniFFI source, regenerate, then commit the regenerated bundle.
+Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, regenerate, then validate the iOS app.
 
-## Telemetry Build Settings
+## Privacy And Storage
+
+- APNS provider payloads stay generic. Sender names, account IDs, group IDs, message IDs, and plaintext are never sent to Apple.
+- The app and Notification Service Extension share the Marmot root through the App Group container.
+- Marmot stores account secrets in the Keychain.
+- User defaults hold preferences such as active account, developer mode, recent reactions, and diagnostics self-check state.
+- Decrypted media cache files and temporary transcript exports use complete file protection.
+- Remote group-image search is an explicit third-party egress surface and uses ephemeral, no-cookie/no-cache URL sessions.
+
+## Telemetry And Audit Logs
 
 Telemetry is compiled into the vendored MarmotKit bundle with the `otlp-export` feature. The app reads these Xcode build settings through `Info.plist`:
 
 - `DARKMATTER_OTLP_ENDPOINT` - default `https://otlp.ipf.dev/v1/metrics`
-- `DARKMATTER_OTLP_BEARER_TOKEN` - defaults to `$(OTLP_TOKEN_DARKMATTER_IOS)`; supply `OTLP_TOKEN_DARKMATTER_IOS` from CI or your local shell, or override this build setting directly; do not commit the token
+- `DARKMATTER_OTLP_BEARER_TOKEN` - defaults to `$(OTLP_TOKEN_DARKMATTER_IOS)`
 - `DARKMATTER_TELEMETRY_ENVIRONMENT` - `staging` or `production`; TestFlight builds are staging
-- `DARKMATTER_AUDIT_LOG_BEARER_TOKEN` - defaults to `$(AUDIT_LOG_TOKEN_DARKMATTER_IOS)`; supply `AUDIT_LOG_TOKEN_DARKMATTER_IOS` from CI or your local shell, or override this build setting directly; do not commit the token
+- `DARKMATTER_AUDIT_LOG_BEARER_TOKEN` - defaults to `$(AUDIT_LOG_TOKEN_DARKMATTER_IOS)`
 
-Audit-log tracker uploads use the endpoint compiled into the vendored MarmotKit bundle and the dedicated `DARKMATTER_AUDIT_LOG_BEARER_TOKEN` (separate from the OTLP token, since Goggles is a different service). Uploads only run once audit logging is enabled in Settings.
-
-## Notifications
-
-Notification delivery has two paths:
-
-- Local notifications while the app is running.
-- Native APNS wakes through the Notification Service Extension while the app is backgrounded, suspended, or not running.
-
-Native push is privacy-preserving. Darkmatter registers an encrypted platform token with the notification server and sends generic MIP-05 notification wakes. Apple sees the generic APNS payload. The extension opens the shared Marmot store, catches up accounts from relays, projects local notification updates, and rewrites the visible notification on device.
-
-Keep APNS payloads generic. Do not send sender names, account IDs, group IDs, message IDs, or message plaintext to Apple.
-
-## Storage
-
-- `UserDefaults` stores app-level preferences such as the active account, developer mode, and recent reactions.
-- The shared App Group container stores the Marmot root so the main app and Notification Service Extension can read the same local state.
-- Account secrets live in the Keychain through Marmot.
+Put local secrets in `Config/TelemetrySecrets.xcconfig` and do not commit real tokens. Audit-log uploads use the endpoint compiled into MarmotKit and a token separate from OTLP, because the audit tracker and metrics collector are different services.
 
 ## Release Checks
 
 Before a TestFlight build:
 
-1. Run focused tests for any changed behavior.
+1. Run focused tests for the behavior you changed.
 2. Run a Release device build.
 3. Run `git diff --check`.
-4. Walk the relevant items in `docs/manual-tests.md`.
+4. Walk the relevant checks in `docs/manual-tests.md`.
 5. Confirm signing still includes APNS for the app and App Group access for both the app and extension.
