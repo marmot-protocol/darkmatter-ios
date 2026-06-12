@@ -830,39 +830,74 @@ final class ConversationViewModel {
     }
 
     private func normalizeReplyOrdering() {
-        var remainingPasses = timeline.count
-        var moved = true
-        while moved, remainingPasses > 0 {
-            moved = false
-            remainingPasses -= 1
-            let indexByMessageId = timelineMessageIndexById()
-            for childIndex in timeline.indices {
-                guard case .message(let child, _) = timeline[childIndex].kind,
-                      !child.messageIdHex.isEmpty,
-                      let parentId = replyTargetId(for: child),
-                      parentId != child.messageIdHex,
-                      let parentIndex = indexByMessageId[parentId],
-                      parentIndex >= childIndex
-                else { continue }
-
-                let childItem = timeline.remove(at: childIndex)
-                let adjustedParentIndex = parentIndex > childIndex ? parentIndex - 1 : parentIndex
-                timeline.insert(childItem, at: min(adjustedParentIndex + 1, timeline.count))
-                moved = true
-                break
-            }
-        }
+        timeline = Self.normalizedReplyOrdering(
+            timeline,
+            replyTargetId: { replyTargetId(for: $0) }
+        )
     }
 
-    private func timelineMessageIndexById() -> [String: Int] {
-        var indexByMessageId: [String: Int] = [:]
-        for (index, item) in timeline.enumerated() {
-            guard case .message(let record, _) = item.kind,
-                  !record.messageIdHex.isEmpty
-            else { continue }
-            indexByMessageId[record.messageIdHex] = index
+    static func normalizedReplyOrdering(
+        _ items: [TimelineItem],
+        replyTargetId: (AppMessageRecordFfi) -> String?
+    ) -> [TimelineItem] {
+        var messageIds: Set<String> = []
+        for item in items {
+            guard let messageId = messageId(in: item) else { continue }
+            messageIds.insert(messageId)
         }
-        return indexByMessageId
+        guard !messageIds.isEmpty else { return items }
+
+        var ordered: [TimelineItem] = []
+        ordered.reserveCapacity(items.count)
+        var emittedMessageIds: Set<String> = []
+        var deferredRepliesByParentId: [String: [TimelineItem]] = [:]
+
+        func append(_ item: TimelineItem) {
+            ordered.append(item)
+            guard let messageId = Self.messageId(in: item) else { return }
+            emittedMessageIds.insert(messageId)
+
+            let deferredReplies = deferredRepliesByParentId.removeValue(forKey: messageId) ?? []
+            for deferred in deferredReplies {
+                guard let deferredId = Self.messageId(in: deferred),
+                      !emittedMessageIds.contains(deferredId)
+                else { continue }
+                append(deferred)
+            }
+        }
+
+        for item in items {
+            guard case .message(let record, _) = item.kind,
+                  let childId = Self.messageId(in: item),
+                  let parentId = replyTargetId(record),
+                  parentId != childId,
+                  messageIds.contains(parentId),
+                  !emittedMessageIds.contains(parentId)
+            else {
+                append(item)
+                continue
+            }
+
+            deferredRepliesByParentId[parentId, default: []].append(item)
+        }
+
+        if !deferredRepliesByParentId.isEmpty {
+            for item in items {
+                guard let messageId = Self.messageId(in: item),
+                      !emittedMessageIds.contains(messageId)
+                else { continue }
+                append(item)
+            }
+        }
+
+        return ordered
+    }
+
+    private static func messageId(in item: TimelineItem) -> String? {
+        guard case .message(let record, _) = item.kind,
+              !record.messageIdHex.isEmpty
+        else { return nil }
+        return record.messageIdHex
     }
 
     private func replyTargetId(for record: AppMessageRecordFfi) -> String? {
