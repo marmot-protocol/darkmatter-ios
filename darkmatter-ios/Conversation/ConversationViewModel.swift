@@ -129,8 +129,10 @@ final class ConversationViewModel {
     private var latestStreamWatchInFlight = false
     /// Accumulated text per live stream, keyed by stream id.
     private var streamText: [String: String] = [:]
+    private var streamTextLengthById: [String: Int] = [:]
 #if DEBUG
     var streamTextEntryCountForTesting: Int { streamText.count }
+    var streamTextLengthEntryCountForTesting: Int { streamTextLengthById.count }
 #endif
     /// Streams that received a checkpoint snapshot. Their QUIC `.finished`
     /// text is text-delta-only, so prefer the current preview at close.
@@ -1156,7 +1158,7 @@ final class ConversationViewModel {
         finalizedStreamIds.insert(streamId)
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
-        streamText[streamId] = nil
+        clearStreamPreviewText(streamId: streamId)
         streamsWithCheckpointPreview.remove(streamId)
         streamStartedAtById[streamId] = nil
         streamSenderById[streamId] = nil
@@ -1168,7 +1170,7 @@ final class ConversationViewModel {
     /// QUIC `.finished` transcript is a provisional fill if it lands first. Both
     /// key the same `msg:stream:<id>` row, so whichever arrives later wins.
     private func finalizeStreamBubble(streamId: String, sender: String, text: String) {
-        streamText[streamId] = Self.cappedStreamText(text)
+        replaceStreamPreviewText(text, to: streamId)
         guard hasStreamPreviewText(streamId: streamId) else {
             endStream(streamId: streamId)
             return
@@ -1181,14 +1183,14 @@ final class ConversationViewModel {
         streamsWithCheckpointPreview.remove(streamId)
         streamStartedAtById[streamId] = nil
         streamSenderById[streamId] = nil
-        streamText[streamId] = nil
+        clearStreamPreviewText(streamId: streamId)
     }
 
     private func resolveFinalizedStream(streamId: String) {
         finalizedStreamIds.insert(streamId)
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
-        streamText[streamId] = nil
+        clearStreamPreviewText(streamId: streamId)
         streamsWithCheckpointPreview.remove(streamId)
         streamStartedAtById[streamId] = nil
         streamSenderById[streamId] = nil
@@ -1728,7 +1730,7 @@ final class ConversationViewModel {
             if let startedAt, startedAt > 0 {
                 streamStartedAtById[streamId] = startedAt
             }
-            streamText[streamId] = ""
+            resetStreamPreviewText(streamId: streamId)
             streamSenderById[streamId] = sender
             Self.streamLog.info("watch opened: streamId=\(streamId, privacy: .public) developerMode=\(appState.developerMode, privacy: .public); waiting for text preview")
             let task = Task { [weak self] in
@@ -1790,7 +1792,8 @@ final class ConversationViewModel {
             )
         case .failed(let message):
             appendStreamDebugEvent(streamId: streamId, eventKind: "failed", detail: message)
-            Self.streamLog.error("failed: streamId=\(streamId, privacy: .public) gotText=\(self.streamText[streamId]?.count ?? 0)B reason=\(message, privacy: .public) — dropping live preview")
+            let previewLength = streamTextLengthById[streamId] ?? streamText[streamId]?.count ?? 0
+            Self.streamLog.error("failed: streamId=\(streamId, privacy: .public) gotText=\(previewLength)B reason=\(message, privacy: .public) — dropping live preview")
             endStream(streamId: streamId)
         }
     }
@@ -1819,15 +1822,31 @@ final class ConversationViewModel {
     }
 
     private func appendStreamChunk(_ text: String, to streamId: String) {
-        var current = streamText[streamId] ?? ""
-        let remaining = ProfileSanitizer.maxMessageLength - current.count
+        let currentLength = streamTextLengthById[streamId] ?? streamText[streamId]?.count ?? 0
+        let remaining = ProfileSanitizer.maxMessageLength - currentLength
         guard remaining > 0 else { return }
-        current.append(contentsOf: text.prefix(remaining))
+        let cappedChunk = text.prefix(remaining)
+        guard !cappedChunk.isEmpty else { return }
+        var current = streamText[streamId] ?? ""
+        current.append(contentsOf: cappedChunk)
         streamText[streamId] = current
+        streamTextLengthById[streamId] = currentLength + cappedChunk.count
     }
 
     private func replaceStreamPreviewText(_ text: String, to streamId: String) {
-        streamText[streamId] = Self.cappedStreamText(text)
+        let capped = Self.cappedStreamText(text)
+        streamText[streamId] = capped.text
+        streamTextLengthById[streamId] = capped.length
+    }
+
+    private func resetStreamPreviewText(streamId: String) {
+        streamText[streamId] = ""
+        streamTextLengthById[streamId] = 0
+    }
+
+    private func clearStreamPreviewText(streamId: String) {
+        streamText[streamId] = nil
+        streamTextLengthById[streamId] = nil
     }
 
     private func hasStreamPreviewText(streamId: String) -> Bool {
@@ -1845,11 +1864,13 @@ final class ConversationViewModel {
         return preview
     }
 
-    private static func cappedStreamText(_ text: String) -> String {
-        if text.count <= ProfileSanitizer.maxMessageLength {
-            return text
+    private static func cappedStreamText(_ text: String) -> (text: String, length: Int) {
+        let length = text.count
+        if length <= ProfileSanitizer.maxMessageLength {
+            return (text, length)
         }
-        return String(text.prefix(ProfileSanitizer.maxMessageLength))
+        let capped = String(text.prefix(ProfileSanitizer.maxMessageLength))
+        return (capped, ProfileSanitizer.maxMessageLength)
     }
 
     nonisolated static func streamPreviewTimestamp(startedAt: UInt64?, fallback: UInt64) -> UInt64 {
