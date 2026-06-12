@@ -34,6 +34,12 @@ enum MarkdownPlainText {
             nodes >= maxNodes || text.count >= maxCharacters
         }
 
+        mutating func consumeNode() -> Bool {
+            guard !exhausted else { return false }
+            nodes += 1
+            return true
+        }
+
         mutating func append(_ piece: String) {
             let collapsed = piece
                 .components(separatedBy: .whitespacesAndNewlines)
@@ -48,8 +54,7 @@ enum MarkdownPlainText {
     private static func appendBlocks(_ blocks: [MarkdownBlockFfi], to state: inout State, depth: Int) {
         guard depth < MarkdownMessageBuilder.maxRenderDepth else { return }
         for block in blocks {
-            guard !state.exhausted else { return }
-            state.nodes += 1
+            guard state.consumeNode() else { return }
             switch block {
             case .paragraph(let inlines), .heading(_, let inlines):
                 appendInlines(inlines, to: &state, depth: depth)
@@ -59,16 +64,15 @@ enum MarkdownPlainText {
                 appendBlocks(nested, to: &state, depth: depth + 1)
             case .list(_, _, let items):
                 for item in items {
+                    guard !state.exhausted else { return }
                     appendBlocks(item.blocks, to: &state, depth: depth + 1)
                 }
             case .table(_, let header, let rows):
-                for cell in header {
-                    appendInlines(cell.inlines, to: &state, depth: depth)
-                }
+                appendTableRow(header, to: &state, depth: depth)
+                guard !state.exhausted else { return }
                 for row in rows {
-                    for cell in row {
-                        appendInlines(cell.inlines, to: &state, depth: depth)
-                    }
+                    appendTableRow(row, to: &state, depth: depth)
+                    guard !state.exhausted else { return }
                 }
             case .thematicBreak:
                 break
@@ -76,11 +80,18 @@ enum MarkdownPlainText {
         }
     }
 
+    private static func appendTableRow(_ cells: [MarkdownTableCellFfi], to state: inout State, depth: Int) {
+        guard state.consumeNode() else { return }
+        for cell in cells {
+            guard state.consumeNode() else { return }
+            appendInlines(cell.inlines, to: &state, depth: depth)
+        }
+    }
+
     private static func appendInlines(_ inlines: [MarkdownInlineFfi], to state: inout State, depth: Int) {
         guard depth < MarkdownMessageBuilder.maxRenderDepth else { return }
         for inline in inlines {
-            guard !state.exhausted else { return }
-            state.nodes += 1
+            guard state.consumeNode() else { return }
             switch inline {
             case .text(let content), .code(let content), .math(let content):
                 state.append(content)
