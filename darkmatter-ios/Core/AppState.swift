@@ -136,6 +136,12 @@ final class AppState {
     @ObservationIgnored var queuedProfileFetchIDs: [String] = []
     @ObservationIgnored var scheduledProfileFetchIDs: Set<String> = []
     @ObservationIgnored var activeProfileFetchID: String?
+    @ObservationIgnored var profileProjectionCache: [String: ProfileDisplayProjection] = [:]
+    @ObservationIgnored var profileProjectionLoadTask: Task<Void, Never>?
+    @ObservationIgnored var queuedProfileProjectionLoadIDs: [String] = []
+    @ObservationIgnored var scheduledProfileProjectionLoadIDs: Set<String> = []
+    @ObservationIgnored var profileProjectionRefreshAfterLoadIDs: Set<String> = []
+    @ObservationIgnored var profileProjectionLoadVersions: [String: Int] = [:]
     private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var isForegroundCatchUpRunning = false
     private var isRuntimeSuspending = false
@@ -207,6 +213,7 @@ final class AppState {
         runtimeSuspensionTask?.cancel()
         notificationDriver.stop()
         profileFetchQueueTask?.cancel()
+        profileProjectionLoadTask?.cancel()
     }
 
     func noteProfileRefreshCompleted() {
@@ -302,7 +309,7 @@ final class AppState {
                 // Warm the active account's profile (name + avatar) right away
                 // so it's visible without waiting for a screen to request it.
                 if let activeId = activeAccount?.accountIdHex {
-                    _ = profile(forAccountIdHex: activeId)
+                    warmProfileProjection(forAccountIdHex: activeId, refreshAfterLoad: true)
                 }
                 startReadyForegroundMaintenance()
             }
@@ -828,6 +835,8 @@ final class AppState {
     @MainActor
     private func refreshAccounts() async throws {
         accounts = try await runtimeClient().listAccounts()
+        updateProfileProjectionLocalAccountLabels()
+        warmLocalAccountProfileProjections()
     }
 
     // MARK: - Identity management

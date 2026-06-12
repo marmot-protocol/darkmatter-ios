@@ -115,7 +115,9 @@ struct ProfileEditView: View {
     @MainActor
     private func loadExisting() async {
         guard let id = appState.activeAccount?.accountIdHex else { return }
-        guard let profile = appState.profile(forAccountIdHex: id) else { return }
+        let cachedProfile = appState.profile(forAccountIdHex: id)
+        let loadedProfile = await appState.reloadProfileProjection(forAccountIdHex: id)?.profile
+        guard let profile = loadedProfile ?? cachedProfile else { return }
         // Only seed empty fields so we don't clobber in-progress edits.
         if displayName.isEmpty { displayName = profile.displayName ?? profile.name ?? "" }
         if about.isEmpty { about = profile.about ?? "" }
@@ -126,7 +128,9 @@ struct ProfileEditView: View {
 
     @MainActor
     private func publish() async {
-        guard let accountRef = appState.activeAccountRef else { return }
+        guard let accountRef = appState.activeAccountRef,
+              let accountIdHex = appState.activeAccount?.accountIdHex
+        else { return }
         isPublishing = true
         error = nil
         success = false
@@ -157,8 +161,7 @@ struct ProfileEditView: View {
                 defaultRelays: relays,
                 bootstrapRelays: bootstrapRelays
             )
-            // No iOS-side cache to update: publishUserProfile updates Marmot's
-            // own directory, which the editor and chrome read back directly (#17).
+            await appState.reloadProfileProjection(forAccountIdHex: accountIdHex)
             success = true
             Haptics.success()
             appState.present(.success(
