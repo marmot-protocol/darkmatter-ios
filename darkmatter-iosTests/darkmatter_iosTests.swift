@@ -29,6 +29,18 @@ struct AppStateBootstrapTests {
         #expect(appState.accounts.isEmpty)
     }
 
+    @Test func concurrentBootstrapCallsShareOneInFlightRun() async throws {
+        let appState = try testAppState()
+
+        async let first: Void = appState.bootstrap()
+        async let second: Void = appState.bootstrap()
+        await first
+        await second
+
+        #expect(appState.phase == .onboarding)
+        #expect(appState.accounts.isEmpty)
+    }
+
     @Test func telemetryExportSettingPersistsThroughAppState() async throws {
         let appState = try testAppState()
 
@@ -133,6 +145,17 @@ struct AppStateBootstrapTests {
         #expect(source.matches(#"@MainActor\s+func bootstrap\(\) async"#))
         #expect(source.matches(#"@MainActor\s+@discardableResult\s+func createIdentity\(\) async throws -> AccountSummaryFfi"#))
         #expect(source.matches(#"@MainActor\s+@discardableResult\s+func importIdentity\(_ identity: String\) async throws -> AccountSummaryFfi"#))
+    }
+
+    @Test func bootstrapReentryAwaitsInFlightTask() throws {
+        let source = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let bootstrapPattern =
+            #"func bootstrap\(\) async \{[\s\S]*"#
+            + #"if let bootstrapTask \{[\s\S]*await bootstrapTask\.value[\s\S]*return[\s\S]*"#
+            + #"Task \{ @MainActor \[weak self\] in[\s\S]*performBootstrap\(\)"#
+
+        #expect(source.contains("private var bootstrapTask: Task<Void, Never>?"))
+        #expect(source.matches(bootstrapPattern))
     }
 
     @Test func presentingAToastUpdatesActiveToast() async throws {
