@@ -4699,6 +4699,55 @@ struct MessageSemanticsTests {
         #expect(!ConversationViewModel.sameMediaAttachment(differentCiphertext, timelineReference))
     }
 
+    @Test func mediaDownloadInFlightKeyNormalizesCryptoIdentity() {
+        var uppercase = encryptedMediaReference(sourceEpoch: 0)
+        var lowercase = uppercase
+        uppercase.plaintextSha256 = uppercase.plaintextSha256.uppercased()
+        uppercase.ciphertextSha256 = uppercase.ciphertextSha256.uppercased()
+        uppercase.nonceHex = uppercase.nonceHex.uppercased()
+
+        #expect(MediaDownloadInFlightKey(reference: uppercase) == MediaDownloadInFlightKey(reference: lowercase))
+    }
+
+    @MainActor
+    @Test func inFlightMediaDownloadsShareTaskForSameReference() async throws {
+        let store = MediaDownloadInFlightStore()
+        let key = MediaDownloadInFlightKey(reference: encryptedMediaReference(sourceEpoch: 0))
+        let probe = MediaDownloadProbe()
+
+        async let first = store.data(for: key) {
+            await probe.run(returning: Data([1]))
+        }
+        async let second = store.data(for: key) {
+            await probe.run(returning: Data([2]))
+        }
+
+        let results = try await (first, second)
+        #expect(results.0 == Data([1]))
+        #expect(results.1 == Data([1]))
+        #expect(await probe.startCount() == 1)
+    }
+
+    @MainActor
+    @Test func inFlightMediaDownloadsClearCompletedTask() async throws {
+        let store = MediaDownloadInFlightStore()
+        let key = MediaDownloadInFlightKey(reference: encryptedMediaReference(sourceEpoch: 0))
+        var starts = 0
+
+        let first = try await store.data(for: key) {
+            starts += 1
+            return Data([UInt8(starts)])
+        }
+        let second = try await store.data(for: key) {
+            starts += 1
+            return Data([UInt8(starts)])
+        }
+
+        #expect(first == Data([1]))
+        #expect(second == Data([2]))
+        #expect(starts == 2)
+    }
+
     @Test func mediaAttachmentIdentityChangesWhenSourceEpochArrives() throws {
         let timelineReference = encryptedMediaReference(sourceEpoch: 0)
         let listedReference = encryptedMediaReference(sourceEpoch: 42)
@@ -5377,6 +5426,20 @@ private func encryptedMediaReference(
         dim: "640x480",
         thumbhash: nil
     )
+}
+
+private actor MediaDownloadProbe {
+    private var starts = 0
+
+    func run(returning data: Data) async -> Data {
+        starts += 1
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        return data
+    }
+
+    func startCount() -> Int {
+        starts
+    }
 }
 
 private func encryptedMediaComponent() -> AppGroupEncryptedMediaComponentFfi {
