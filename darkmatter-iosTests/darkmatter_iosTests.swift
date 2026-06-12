@@ -1368,29 +1368,29 @@ struct AppearancePreferencesTests {
     }
 
     @Test func languageChangeNotificationCarriesLanguageInUserInfoNotObject() throws {
-        let defaults = AppLanguage.defaults
-        let previousValue = defaults.object(forKey: AppLanguage.storageKey)
-        defer {
-            if let previousValue {
-                defaults.set(previousValue, forKey: AppLanguage.storageKey)
-            } else {
-                defaults.removeObject(forKey: AppLanguage.storageKey)
-            }
-        }
+        let suiteName = "dev.ipf.darkmatter.language-notification-test.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let notificationCenter = NotificationCenter()
 
         var received: Notification?
-        let observer = NotificationCenter.default.addObserver(
+        let observer = notificationCenter.addObserver(
             forName: AppLanguage.didChangeNotification,
             object: nil,
             queue: nil
         ) { notification in
             received = notification
         }
-        defer { NotificationCenter.default.removeObserver(observer) }
+        defer { notificationCenter.removeObserver(observer) }
 
-        AppLanguage.setCurrentRawValue(AppLanguage.french.rawValue)
+        AppLanguage.setCurrentRawValue(
+            AppLanguage.french.rawValue,
+            defaults: defaults,
+            notificationCenter: notificationCenter
+        )
 
         let notification = try #require(received)
+        #expect(defaults.string(forKey: AppLanguage.storageKey) == "fr")
         #expect(notification.object == nil)
         #expect(notification.userInfo?[AppLanguage.didChangeLanguageUserInfoKey] as? String == "fr")
     }
@@ -2444,15 +2444,17 @@ struct GroupDisplayTests {
 
     @MainActor
     @Test func unnamedMultiPersonGroupShowsCount() throws {
-        let appState = AppState(client: try MarmotClient.testClient())
-        let title = GroupDisplay.title(
-            group: group(name: ""),
-            otherMember: hex("22"),
-            memberCount: 3,
-            appState: appState
-        )
+        try withAppLanguage(.english) {
+            let appState = AppState(client: try MarmotClient.testClient())
+            let title = GroupDisplay.title(
+                group: group(name: ""),
+                otherMember: hex("22"),
+                memberCount: 3,
+                appState: appState
+            )
 
-        #expect(title == "3 person group")
+            #expect(title == "3 person group")
+        }
     }
 
     @MainActor
@@ -5144,6 +5146,20 @@ struct SensitiveClipboardTests {
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Onboarding/ImportIdentityView.swift")
     }
+}
+
+func withAppLanguage<T>(_ language: AppLanguage, perform body: () throws -> T) rethrows -> T {
+    let defaults = AppLanguage.defaults
+    let previousValue = defaults.object(forKey: AppLanguage.storageKey)
+    AppLanguage.setCurrentRawValue(language.rawValue)
+    defer {
+        if let previousValue {
+            defaults.set(previousValue, forKey: AppLanguage.storageKey)
+        } else {
+            defaults.removeObject(forKey: AppLanguage.storageKey)
+        }
+    }
+    return try body()
 }
 
 // MARK: - Test scaffolding

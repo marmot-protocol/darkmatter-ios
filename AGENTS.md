@@ -102,6 +102,9 @@ Do not add a second storage path for data Marmot already owns.
 - `AppLanguage.didChangeNotification` carries the selected language in
   `userInfo`; leave `object` nil so future sender-scoped observers keep
   working.
+- AppLanguage uses process-scoped defaults under unit tests. Tests that verify
+  language preference writes should inject isolated `UserDefaults` and
+  `NotificationCenter` instances instead of mutating the shared app preference.
 - Keep pure formatting/projection helpers in `Shared/` only when the extension also needs them.
 - Use `LocalNotificationProjection` for notification title/body/thread/userInfo decisions.
 - Use `LocalNotificationSuppressionPolicy` for foreground suppression decisions.

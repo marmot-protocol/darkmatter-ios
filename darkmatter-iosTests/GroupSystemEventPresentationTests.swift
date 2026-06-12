@@ -18,45 +18,53 @@ struct GroupSystemEventPresentationTests {
     @Test func displayTextResolvesAdminAddedActorAndSubject() {
         let actor = hex("aa")
         let subject = hex("bb")
-        let text = GroupSystemEventPresentation.displayText(
-            from: """
-            {"v":1,"system_type":"admin_added","text":"Admin added","data":{"actor":"\(actor)","subject":"\(subject)"}}
-            """,
-            displayName: testDisplayName
-        )
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: """
+                {"v":1,"system_type":"admin_added","text":"Admin added","data":{"actor":"\(actor)","subject":"\(subject)"}}
+                """,
+                displayName: testDisplayName
+            )
 
-        #expect(text == "Alice made Bob an admin")
+            #expect(text == "Alice made Bob an admin")
+        }
     }
 
     @Test func displayTextUsesSenderWhenActorMissing() {
         let subject = hex("bb")
-        let text = GroupSystemEventPresentation.displayText(
-            from: """
-            {"v":1,"system_type":"admin_added","text":"Admin added","data":{"subject":"\(subject)"}}
-            """,
-            sender: hex("aa"),
-            displayName: testDisplayName
-        )
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: """
+                {"v":1,"system_type":"admin_added","text":"Admin added","data":{"subject":"\(subject)"}}
+                """,
+                sender: hex("aa"),
+                displayName: testDisplayName
+            )
 
-        #expect(text == "Alice made Bob an admin")
+            #expect(text == "Alice made Bob an admin")
+        }
     }
 
     @Test func displayTextSanitizesGroupRenameName() {
-        let text = GroupSystemEventPresentation.displayText(
-            from: #"{"v":1,"system_type":"group_renamed","data":{"name":"Secret\u202Eevil\nClub"}}"#,
-            displayName: testDisplayName
-        )
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: #"{"v":1,"system_type":"group_renamed","data":{"name":"Secret\u202Eevil\nClub"}}"#,
+                displayName: testDisplayName
+            )
 
-        #expect(text == "Group renamed to Secretevil Club")
+            #expect(text == "Group renamed to Secretevil Club")
+        }
     }
 
     @Test func displayTextFallsBackToSystemType() {
-        let text = GroupSystemEventPresentation.displayText(
-            from: #"{"v":1,"system_type":"member_removed"}"#,
-            displayName: testDisplayName
-        )
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: #"{"v":1,"system_type":"member_removed"}"#,
+                displayName: testDisplayName
+            )
 
-        #expect(text == "Member removed")
+            #expect(text == "Member removed")
+        }
     }
 
     @MainActor
