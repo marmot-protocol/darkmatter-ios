@@ -1441,6 +1441,58 @@ struct DiagnosticsPresentationTests {
         #expect(!source.contains(".task {\n            streaming = true"))
     }
 
+    @Test func diagnosticSelfSendReusesStoredGroupOnlyWhenPresentForAccount() throws {
+        let suiteName = "DiagnosticSelfSendTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let storedGroupId = hex("ab")
+        let otherGroupId = hex("cd")
+        DiagnosticSelfSend.remember(
+            groupIdHex: storedGroupId,
+            accountRef: "alice",
+            defaults: defaults
+        )
+        let stored = chatListRow(
+            groupIdHex: storedGroupId,
+            archived: true,
+            title: DiagnosticSelfSend.groupName
+        )
+        let other = chatListRow(
+            groupIdHex: otherGroupId,
+            archived: true,
+            title: DiagnosticSelfSend.groupName
+        )
+
+        #expect(
+            DiagnosticSelfSend.reusableGroup(
+                accountRef: "alice",
+                rows: [other, stored],
+                defaults: defaults
+            )?.groupIdHex == storedGroupId
+        )
+        #expect(
+            DiagnosticSelfSend.reusableGroup(
+                accountRef: "alice",
+                rows: [other],
+                defaults: defaults
+            ) == nil
+        )
+        #expect(
+            DiagnosticSelfSend.reusableGroup(
+                accountRef: "bob",
+                rows: [stored],
+                defaults: defaults
+            ) == nil
+        )
+    }
+
+    @Test func diagnosticSelfSendUsesStableNeutralGroupName() {
+        #expect(DiagnosticSelfSend.groupName == "Self check")
+        #expect(!DiagnosticSelfSend.groupName.localizedCaseInsensitiveContains("diagnostic"))
+        #expect(!DiagnosticSelfSend.groupName.contains("-"))
+    }
+
     @Test func messageReceivedDiagnosticRedactsPlaintextButKeepsEventShape() {
         let secret = "secret launch code"
         let sender = hex("11")

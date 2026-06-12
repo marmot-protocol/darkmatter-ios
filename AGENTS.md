@@ -83,7 +83,7 @@ The group image web search is an explicit third-party egress surface. Keep DuckD
 
 ## Storage
 
-- `UserDefaults` stores app preferences such as active account, developer mode, and recent reactions.
+- `UserDefaults` stores app preferences such as active account, developer mode, recent reactions, and per-account diagnostics self-check group IDs.
 - The shared App Group container stores the Marmot root used by both app and extension.
 - Marmot stores account secrets in the Keychain.
 - Decrypted media cache files under `Caches/EncryptedMedia` must set complete file protection on both the directory and cached plaintext files.

@@ -7,6 +7,7 @@ struct DiagnosticsView: View {
     @Environment(AppState.self) private var appState
     @State private var entries: [LogEntry] = []
     @State private var streaming = false
+    @State private var sendingToSelf = false
 
     struct LogEntry: Identifiable {
         let id = UUID()
@@ -23,6 +24,7 @@ struct DiagnosticsView: View {
                     Label("Send to self", systemImage: "paperplane.fill")
                 }
                 .buttonStyle(.bordered)
+                .disabled(sendingToSelf || appState.activeAccountRef == nil)
 
                 Button {
                     entries.removeAll()
@@ -114,22 +116,94 @@ struct DiagnosticsView: View {
 
     @MainActor
     private func sendToSelf() async {
-        guard let accountRef = appState.activeAccountRef else { return }
+        guard !sendingToSelf, let accountRef = appState.activeAccountRef else { return }
+        sendingToSelf = true
+        defer { sendingToSelf = false }
+
         do {
-            let groupId = try await appState.marmot.createGroup(
-                accountRef: accountRef,
-                name: "diagnostic-\(Int(Date().timeIntervalSince1970))",
-                memberRefs: [],
-                description: nil
-            )
+            let groupId = try await diagnosticGroupId(accountRef: accountRef)
             _ = try await appState.marmot.sendText(
                 accountRef: accountRef,
                 groupIdHex: groupId,
-                text: "ping at \(Date().formatted(date: .omitted, time: .standard))"
+                text: DiagnosticSelfSend.pingText(now: Date())
             )
             append("sent ping to self in \(IdentityFormatter.short(groupId))")
         } catch {
             append("send-to-self failed: \(error.localizedDescription)")
         }
+    }
+
+    private func diagnosticGroupId(accountRef: String) async throws -> String {
+        let rows = try appState.marmot.chatList(accountRef: accountRef, includeArchived: true)
+        if let row = DiagnosticSelfSend.reusableGroup(
+            accountRef: accountRef,
+            rows: rows
+        ) {
+            try archiveDiagnosticGroupIfNeeded(row, accountRef: accountRef)
+            return row.groupIdHex
+        }
+
+        let groupId = try await appState.marmot.createGroup(
+            accountRef: accountRef,
+            name: DiagnosticSelfSend.groupName,
+            memberRefs: [],
+            description: nil
+        )
+        DiagnosticSelfSend.remember(groupIdHex: groupId, accountRef: accountRef)
+        _ = try appState.marmot.setGroupArchived(
+            accountRef: accountRef,
+            groupIdHex: groupId,
+            archived: true
+        )
+        return groupId
+    }
+
+    private func archiveDiagnosticGroupIfNeeded(_ row: ChatListRowFfi, accountRef: String) throws {
+        guard !row.archived else { return }
+        _ = try appState.marmot.setGroupArchived(
+            accountRef: accountRef,
+            groupIdHex: row.groupIdHex,
+            archived: true
+        )
+    }
+}
+
+enum DiagnosticSelfSend {
+    static let groupName = "Self check"
+
+    private static let defaultsKeyPrefix = "marmot.diagnostics.selfGroupId."
+
+    static func reusableGroup(
+        accountRef: String,
+        rows: [ChatListRowFfi],
+        defaults: UserDefaults = .standard
+    ) -> ChatListRowFfi? {
+        guard let storedGroupId = storedGroupId(accountRef: accountRef, defaults: defaults) else {
+            return nil
+        }
+        return rows.first { $0.groupIdHex == storedGroupId }
+    }
+
+    static func remember(
+        groupIdHex: String,
+        accountRef: String,
+        defaults: UserDefaults = .standard
+    ) {
+        defaults.set(groupIdHex, forKey: defaultsKey(accountRef: accountRef))
+    }
+
+    static func pingText(now: Date) -> String {
+        "ping at \(now.formatted(date: .omitted, time: .standard))"
+    }
+
+    private static func storedGroupId(
+        accountRef: String,
+        defaults: UserDefaults
+    ) -> String? {
+        defaults.string(forKey: defaultsKey(accountRef: accountRef))
+    }
+
+    private static func defaultsKey(accountRef: String) -> String {
+        defaultsKeyPrefix + accountRef
     }
 }
