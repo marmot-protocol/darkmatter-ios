@@ -61,7 +61,7 @@ struct GroupNameValidationTests {
     }
 
     @Test func newChatPendingRecipientAcceptsScannedProfileLinks() {
-        let npub = "npub1abcdefghijklmnopqrstuvwxyz"
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
         let accountId = String(repeating: "c", count: 64)
         let added = stagedMember(memberRef: npub, accountIdHex: accountId)
         let result = NewChatSheet.pendingMemberAddResult(

@@ -43,8 +43,17 @@ struct HexValidationTests {
 /// byte-for-byte identical for known references.
 struct Bech32CharsetLookupTests {
 
+    private let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
     private let nprofile = "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p"
     private let nprofileHex = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
+
+    @Test func memberRefAcceptsChecksumValidNpub() {
+        #expect(NostrProfileReference.memberRef(fromReference: npub) == npub)
+    }
+
+    @Test func memberRefRejectsNpubWithBadChecksum() {
+        #expect(NostrProfileReference.memberRef(fromReference: "npub1" + String(repeating: "q", count: 58)) == nil)
+    }
 
     @Test func decodesKnownNprofileToPubkeyHex() {
         #expect(NostrProfileReference.memberRef(fromReference: nprofile) == nprofileHex)
