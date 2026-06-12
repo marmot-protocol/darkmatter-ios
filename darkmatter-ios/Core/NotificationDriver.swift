@@ -70,22 +70,32 @@ struct NotificationSubscriptionRunner {
 
 final class NotificationDriver {
     private var task: Task<Void, Never>?
+    private var taskID = UUID()
 
     var isRunning: Bool { task != nil }
 
     func start(runner: NotificationSubscriptionRunner) {
         stop()
-        task = Task {
+        let id = UUID()
+        taskID = id
+        task = Task { [weak self] in
             await runner.run()
+            self?.clearCompletedTask(id: id)
         }
     }
 
     func stop() {
         task?.cancel()
         task = nil
+        taskID = UUID()
     }
 
     deinit {
         task?.cancel()
+    }
+
+    private func clearCompletedTask(id: UUID) {
+        guard taskID == id else { return }
+        task = nil
     }
 }
