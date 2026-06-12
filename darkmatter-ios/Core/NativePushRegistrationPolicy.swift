@@ -5,9 +5,16 @@ enum NativePushRegistrationPolicy {
         accounts: [AccountSummaryFfi],
         settingsFor: (String) -> NotificationSettingsFfi?
     ) -> [String] {
-        accounts.compactMap { account in
-            guard settingsFor(account.label)?.nativePushEnabled == true else { return nil }
-            return account.label
+        enabledAccountRefs(accountRefs: accounts.map(\.label), settingsFor: settingsFor)
+    }
+
+    static func enabledAccountRefs(
+        accountRefs: [String],
+        settingsFor: (String) -> NotificationSettingsFfi?
+    ) -> [String] {
+        accountRefs.compactMap { accountRef in
+            guard settingsFor(accountRef)?.nativePushEnabled == true else { return nil }
+            return accountRef
         }
     }
 
