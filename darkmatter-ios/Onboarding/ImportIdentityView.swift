@@ -25,6 +25,12 @@ struct ImportIdentityView: View {
         return trimmed.hasPrefix("nsec1") && trimmed.count == 63
     }
 
+    static func consumeIdentityForImport(_ raw: inout String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        raw = ""
+        return trimmed
+    }
+
     var body: some View {
         Form {
             Section {
@@ -70,17 +76,22 @@ struct ImportIdentityView: View {
         .navigationTitle("Import Identity")
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(isImporting)
+        .onDisappear {
+            identity = ""
+        }
     }
 
     @MainActor
     private func runImport() async {
-        let trimmed = identity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.consumeIdentityForImport(&identity)
         isImporting = true
         error = nil
-        defer { SensitiveClipboard.clear(trimmed) }
+        defer {
+            SensitiveClipboard.clear(trimmed)
+            isImporting = false
+        }
         do {
             try await appState.importIdentity(trimmed)
-            identity = ""
             Haptics.success()
             appState.present(.success(L10n.string("Welcome back"), message: L10n.string("Identity imported.")))
             dismiss()
@@ -89,6 +100,5 @@ struct ImportIdentityView: View {
             self.error = error.localizedDescription
             appState.present(.error(L10n.string("Import failed"), message: error.localizedDescription))
         }
-        isImporting = false
     }
 }

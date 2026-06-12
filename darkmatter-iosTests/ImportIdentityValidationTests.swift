@@ -17,4 +17,14 @@ struct ImportIdentityValidationTests {
         #expect(ImportIdentityView.isPlausibleNsec(nsec))
         #expect(ImportIdentityView.isPlausibleNsec("  \(nsec)\n"))
     }
+
+    @Test func consumeIdentityForImportClearsVisibleSecretState() {
+        let nsec = "nsec1" + String(repeating: "a", count: 58)
+        var identity = "  \(nsec)\n"
+
+        let consumed = ImportIdentityView.consumeIdentityForImport(&identity)
+
+        #expect(consumed == nsec)
+        #expect(identity.isEmpty)
+    }
 }

@@ -5115,7 +5115,7 @@ struct SensitiveClipboardTests {
     @Test func importIdentityClearsPastedSecretOnEveryOutcome() throws {
         let source = try String(contentsOf: importIdentityViewSourceURL, encoding: .utf8)
 
-        #expect(source.matches(#"defer\s*\{\s*SensitiveClipboard\.clear\(trimmed\)\s*\}"#))
+        #expect(source.matches(#"defer\s*\{[\s\S]{0,120}SensitiveClipboard\.clear\(trimmed\)"#))
         #expect(!source.matches(#"try await appState\.importIdentity\(trimmed\)[\s\S]{0,200}SensitiveClipboard\.clear\(trimmed\)"#))
     }
 
