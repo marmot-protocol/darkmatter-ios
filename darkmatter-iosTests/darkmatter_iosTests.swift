@@ -4149,6 +4149,19 @@ struct AgentStreamTests {
         #expect(source.contains("receivedAt: timestamp"))
     }
 
+    @Test func streamChunkAppendUsesRunningLengthCounter() throws {
+        let source = try String(contentsOf: conversationViewModelSourceURL, encoding: .utf8)
+        let appendPattern =
+            #"private func appendStreamChunk\(_ text: String, to streamId: String\) \{[\s\S]*"#
+            + #"let currentLength = streamTextLengthById\[streamId\][\s\S]*"#
+            + #"ProfileSanitizer\.maxMessageLength - currentLength[\s\S]*"#
+            + #"streamTextLengthById\[streamId\] = currentLength \+ cappedChunk\.count"#
+
+        #expect(source.contains("private var streamTextLengthById: [String: Int] = [:]"))
+        #expect(source.matches(appendPattern))
+        #expect(!source.matches(#"private func appendStreamChunk[\s\S]*current\.count"#))
+    }
+
     @MainActor
     @Test func historicalStreamStartsRenderNoBlankBubble() throws {
         let viewModel = ConversationViewModel(
@@ -4440,6 +4453,7 @@ struct AgentStreamTests {
         #expect(record.plaintext.hasSuffix("ab"))
         #expect(!record.plaintext.contains("c"))
         #expect(!record.plaintext.contains("late"))
+        #expect(viewModel.streamTextLengthEntryCountForTesting == 1)
     }
 
     @MainActor
@@ -4475,6 +4489,7 @@ struct AgentStreamTests {
         #expect(record.plaintext == "complete")
         #expect(MessagePreview.body(record) == "complete")
         #expect(viewModel.streamTextEntryCountForTesting == 0)
+        #expect(viewModel.streamTextLengthEntryCountForTesting == 0)
     }
 
     @MainActor
