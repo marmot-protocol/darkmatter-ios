@@ -2795,6 +2795,18 @@ struct GroupImageSearchTests {
         #expect(source.contains("Web search sends your query and IP address to DuckDuckGo and image hosts."))
     }
 
+    @Test func groupImageThumbnailsCapBytesAndDownsampleDecode() throws {
+        let source = try String(contentsOf: groupImageURLSheetSourceURL, encoding: .utf8)
+
+        #expect(source.contains("private static let maximumImageBytes = 2 * 1024 * 1024"))
+        #expect(source.contains("session.bytes(for: request)"))
+        #expect(source.contains("response.expectedContentLength > Int64(maximumImageBytes)"))
+        #expect(source.contains("throw URLError(.dataLengthExceedsMaximum)"))
+        #expect(source.contains("CGImageSourceCreateThumbnailAtIndex"))
+        #expect(source.contains("kCGImageSourceThumbnailMaxPixelSize"))
+        #expect(!source.contains("UIImage(data: data)"))
+    }
+
     @Test func groupDetailsSourceWiresAvatarMutationAndEditor() throws {
         let source = try String(contentsOf: groupDetailsSourceURL, encoding: .utf8)
 

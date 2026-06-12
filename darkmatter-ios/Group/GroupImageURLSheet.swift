@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import SwiftUI
 import UIKit
 
@@ -12,6 +13,7 @@ struct GroupImageSearchResult: Identifiable, Equatable {
 }
 
 private enum GroupImageRemoteFetch {
+    private static let maximumImageBytes = 2 * 1024 * 1024
     private static let session = URLSession(configuration: ephemeralConfiguration())
 
     static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -23,10 +25,25 @@ private enum GroupImageRemoteFetch {
             for: url,
             accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
         )
-        let (data, response) = try await data(for: request)
+        let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode)
         else { throw URLError(.badServerResponse) }
+
+        if response.expectedContentLength > Int64(maximumImageBytes) {
+            throw URLError(.dataLengthExceedsMaximum)
+        }
+
+        var data = Data()
+        if response.expectedContentLength > 0 {
+            data.reserveCapacity(Int(min(response.expectedContentLength, Int64(maximumImageBytes))))
+        }
+        for try await byte in bytes {
+            guard data.count < maximumImageBytes else {
+                throw URLError(.dataLengthExceedsMaximum)
+            }
+            data.append(byte)
+        }
         return data
     }
 
@@ -482,6 +499,8 @@ private struct GroupImageResultCell: View {
 }
 
 private struct GroupImageRemoteThumbnail: View {
+    private static let displaySize = CGSize(width: 108, height: 92)
+
     let url: URL
 
     @State private var phase = Phase.loading
@@ -513,7 +532,11 @@ private struct GroupImageRemoteThumbnail: View {
         phase = .loading
         do {
             let data = try await GroupImageRemoteFetch.imageData(for: url)
-            guard let image = UIImage(data: data) else {
+            guard let image = Self.downsampledImage(
+                from: data,
+                maxPixelSize: Self.thumbnailMaxPixelSize(scale: UIScreen.main.scale),
+                scale: UIScreen.main.scale
+            ) else {
                 phase = .failure
                 return
             }
@@ -521,6 +544,27 @@ private struct GroupImageRemoteThumbnail: View {
         } catch {
             phase = .failure
         }
+    }
+
+    private static func thumbnailMaxPixelSize(scale: CGFloat) -> Int {
+        Int(ceil(max(displaySize.width, displaySize.height) * max(scale, 1)))
+    }
+
+    private static func downsampledImage(from data: Data, maxPixelSize: Int, scale: CGFloat) -> UIImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(maxPixelSize, 1),
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage, scale: scale, orientation: .up)
     }
 
     private enum Phase {
