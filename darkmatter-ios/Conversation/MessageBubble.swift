@@ -88,10 +88,22 @@ struct MessageBubble: View {
     /// Body text projected from the decoded unsigned Nostr app event's kind,
     /// tags, and content.
     private var bodyText: String {
-        if !mediaItems.isEmpty {
+        Self.bodyText(
+            for: record,
+            hasMediaItems: !mediaItems.isEmpty,
+            mentionDisplayName: { appState.mentionDisplayName(for: $0) }
+        )
+    }
+
+    static func bodyText(
+        for record: AppMessageRecordFfi,
+        hasMediaItems: Bool,
+        mentionDisplayName: MarkdownMentionResolver? = nil
+    ) -> String {
+        if hasMediaItems {
             return record.plaintext
         }
-        return MessagePreview.body(record)
+        return MessagePreview.body(record, mentionDisplayName: mentionDisplayName)
     }
 
     private var sanitizedBodyText: String {

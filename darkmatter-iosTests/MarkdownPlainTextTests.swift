@@ -97,6 +97,41 @@ struct MarkdownPlainTextTests {
         #expect(flattened == "ping @Jeff")
     }
 
+    @Test func messageBubblePlainFallbackResolvesMentionDisplayNames() {
+        let bech32 = "npub1" + String(repeating: "q", count: 58)
+        let record = AppMessageRecordFfi(
+            messageIdHex: "01",
+            direction: "received",
+            groupIdHex: "aa",
+            sender: "11",
+            plaintext: "nostr:\(bech32)",
+            contentTokens: doc([
+                .paragraph(inlines: [
+                    .nostrMention(
+                        entity: MarkdownNostrEntityFfi(
+                            hrp: .npub,
+                            bech32: bech32
+                        )
+                    )
+                ])
+            ]),
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 1,
+            receivedAt: 1
+        )
+
+        let body = MessageBubble.bodyText(
+            for: record,
+            hasMediaItems: false,
+            mentionDisplayName: { entity in
+                entity.bech32 == bech32 ? "Jeff" : nil
+            }
+        )
+
+        #expect(body == "@Jeff")
+    }
+
     @Test func emptyDocumentsFlattenToNil() {
         #expect(MarkdownPlainText.flatten(MarkdownDocumentFfi.emptyDocument) == nil)
         #expect(MarkdownPlainText.flatten(doc([.paragraph(inlines: [.softBreak])])) == nil)
