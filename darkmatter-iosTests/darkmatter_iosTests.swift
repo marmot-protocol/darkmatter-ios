@@ -2036,6 +2036,31 @@ struct NativePushRegistrationPolicyTests {
         #expect(enabled == ["account-a"])
     }
 
+    @Test func enabledAccountRefsCanUseCapturedAccountLabels() {
+        let settings = [
+            "account-a": Self.settings(nativePushEnabled: true),
+            "account-b": Self.settings(nativePushEnabled: false)
+        ]
+
+        let enabled = NativePushRegistrationPolicy.enabledAccountRefs(
+            accountRefs: ["account-a", "account-b", "account-c"]
+        ) { settings[$0] }
+
+        #expect(enabled == ["account-a"])
+    }
+
+    @Test func nativePushEnabledLookupIsOffloadedBeforeRegistrationSync() throws {
+        let appStateSource = try sourceString("darkmatter-ios/Core/AppState.swift")
+        let marmotClientSource = try sourceString("darkmatter-ios/Core/MarmotClient.swift")
+
+        #expect(appStateSource.contains("let accountRefs = await nativePushEnabledAccountRefs()"))
+        #expect(appStateSource.contains("private func nativePushEnabledAccountRefs() async -> [String]"))
+        #expect(appStateSource.contains("return await client.nativePushEnabledAccountRefs(accountRefs: accountRefs)"))
+        #expect(!appStateSource.contains("guard !nativePushEnabledAccountRefs().isEmpty else { return }"))
+        #expect(marmotClientSource.contains("Task.detached(priority: .utility)"))
+        #expect(marmotClientSource.contains("marmot.notificationSettings(accountRef: accountRef)"))
+    }
+
     @Test func remoteTokenIsRequestedOnlyWhenEnabledAccountsLackAToken() {
         #expect(NativePushRegistrationPolicy.shouldRequestRemoteToken(
             accountRefs: ["account-a"],
@@ -2053,6 +2078,23 @@ struct NativePushRegistrationPolicyTests {
             accountRefs: [],
             currentToken: nil
         ))
+    }
+
+    private static func settings(nativePushEnabled: Bool) -> NotificationSettingsFfi {
+        NotificationSettingsFfi(
+            accountRef: "account",
+            accountIdHex: hex("11"),
+            localNotificationsEnabled: true,
+            nativePushEnabled: nativePushEnabled
+        )
+    }
+
+    private func sourceString(_ relativePath: String) throws -> String {
+        let url = URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(relativePath)
+        return try String(contentsOf: url, encoding: .utf8)
     }
 }
 

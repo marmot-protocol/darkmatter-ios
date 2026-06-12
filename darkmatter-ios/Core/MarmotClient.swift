@@ -48,6 +48,16 @@ final class MarmotClient {
         }.value
     }
 
+    /// Reads notification settings off the main actor before deciding which
+    /// local accounts should refresh native push registration.
+    func nativePushEnabledAccountRefs(accountRefs: [String]) async -> [String] {
+        await Task.detached(priority: .utility) { [marmot, accountRefs] in
+            NativePushRegistrationPolicy.enabledAccountRefs(accountRefs: accountRefs) { accountRef in
+                try? marmot.notificationSettings(accountRef: accountRef)
+            }
+        }.value
+    }
+
     func startRuntime() async throws {
         try await configureTelemetryRuntime()
         try await marmot.start()

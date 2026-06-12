@@ -555,7 +555,7 @@ final class AppState {
               !Task.isCancelled
         else { return }
 
-        let accountRefs = nativePushEnabledAccountRefs()
+        let accountRefs = await nativePushEnabledAccountRefs()
         guard !accountRefs.isEmpty,
               NativePushServerConfig.current() != nil
         else { return }
@@ -599,7 +599,6 @@ final class AppState {
               !runtimeSuspendedForBackground,
               !isRuntimeSuspending
         else { return }
-        guard !nativePushEnabledAccountRefs().isEmpty else { return }
         nativePushRegistrationTask?.cancel()
         nativePushRegistrationTask = Task { [weak self] in
             guard let self else { return }
@@ -816,9 +815,13 @@ final class AppState {
         await profileTask?.value
     }
 
-    private func nativePushEnabledAccountRefs() -> [String] {
-        NativePushRegistrationPolicy.enabledAccountRefs(accounts: accounts) { accountRef in
-            try? marmot.notificationSettings(accountRef: accountRef)
+    private func nativePushEnabledAccountRefs() async -> [String] {
+        let accountRefs = accounts.map(\.label)
+        do {
+            let client = try runtimeClient()
+            return await client.nativePushEnabledAccountRefs(accountRefs: accountRefs)
+        } catch {
+            fatalError("Failed to rebuild Keychain-backed Marmot runtime (\(type(of: error)))")
         }
     }
 
