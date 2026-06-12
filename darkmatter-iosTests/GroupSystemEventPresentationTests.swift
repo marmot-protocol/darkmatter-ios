@@ -15,6 +15,17 @@ struct GroupSystemEventPresentationTests {
         )
     }
 
+    @Test func displayTextSanitizesJsonTextFallback() {
+        let record = groupSystemRecord(
+            plaintext: #"{"v":1,"text":"Spoof\u202Eevil\nrow"}"#
+        )
+
+        #expect(
+            GroupSystemEventPresentation.displayText(for: record, displayName: testDisplayName)
+                == "Spoofevil row"
+        )
+    }
+
     @Test func displayTextResolvesAdminAddedActorAndSubject() {
         let actor = hex("aa")
         let subject = hex("bb")
@@ -64,6 +75,17 @@ struct GroupSystemEventPresentationTests {
             )
 
             #expect(text == "Member removed")
+        }
+    }
+
+    @Test func displayTextSanitizesSystemTypeFallback() {
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: #"{"v":1,"system_type":"custom_\u202Eevil\n_type"}"#,
+                displayName: testDisplayName
+            )
+
+            #expect(text == "Custom evil type")
         }
     }
 

@@ -120,10 +120,11 @@ enum GroupSystemEventPresentation {
                 }
             }
 
-            if let text = trimmed(text) { return text }
-            if let systemType = trimmed(systemType) {
+            if let text = sanitizedFallback(text) { return text }
+            if let systemType = sanitizedFallback(systemType) {
                 let phrase = systemType.replacingOccurrences(of: "_", with: " ")
-                return phrase.prefix(1).uppercased() + phrase.dropFirst()
+                guard let sanitized = sanitizedFallback(phrase) else { return nil }
+                return sanitized.prefix(1).uppercased() + sanitized.dropFirst()
             }
             return nil
         }
@@ -132,6 +133,11 @@ enum GroupSystemEventPresentation {
             guard let value else { return nil }
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
+        }
+
+        private func sanitizedFallback(_ value: String?) -> String? {
+            guard let value = trimmed(value) else { return nil }
+            return ProfileSanitizer.singleLine(value, maxLength: ProfileSanitizer.maxGroupNameLength)
         }
 
         private func normalizedHex(_ value: String?) -> String? {
