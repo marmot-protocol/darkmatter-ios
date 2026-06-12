@@ -3518,6 +3518,64 @@ struct ConversationTimelineProjectionTests {
         #expect(viewModel.record(for: existing.messageIdHex) == nil)
     }
 
+    @Test func multiChangeProjectionPublishesOneProjectionGeneration() throws {
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let existing = timelineRecord(
+            messageIdHex: hex("a1"),
+            groupIdHex: groupIdHex,
+            plaintext: "existing",
+            timelineAt: 10
+        )
+        let first = timelineRecord(
+            messageIdHex: hex("b2"),
+            groupIdHex: groupIdHex,
+            plaintext: "first",
+            timelineAt: 20
+        )
+        let second = timelineRecord(
+            messageIdHex: hex("c3"),
+            groupIdHex: groupIdHex,
+            plaintext: "second",
+            timelineAt: 30
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [existing], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .tail
+        )
+        let generationAfterPage = viewModel.timelineProjectionGeneration
+
+        viewModel.applyTimelineSubscriptionUpdate(
+            .projection(
+                update: RuntimeProjectionUpdateFfi(
+                    accountIdHex: hex("ff"),
+                    accountLabel: "account-a",
+                    update: TimelineProjectionUpdateFfi(
+                        groupIdHex: groupIdHex,
+                        messages: [],
+                        changes: [
+                            .upsert(trigger: .newMessage, message: first),
+                            .upsert(trigger: .newMessage, message: second),
+                        ],
+                        chatListRow: nil,
+                        chatListTrigger: .newLastMessage
+                    )
+                )
+            )
+        )
+
+        #expect(viewModel.timelineProjectionGeneration == generationAfterPage + 1)
+        #expect(messageIds(in: viewModel.timeline) == [
+            existing.messageIdHex,
+            first.messageIdHex,
+            second.messageIdHex,
+        ])
+    }
+
     @Test func projectedOutgoingMessageReplacesMatchingPendingBubble() throws {
         let sender = hex("11")
         let groupIdHex = hex("aa")
@@ -3709,6 +3767,10 @@ struct ConversationTimelineProjectionTests {
         #expect(source.matches(#"private func upsertTimelineItem\("#))
         #expect(!source.matches(#"func applyPendingOutgoingMessage[\s\S]*?rebuildTimeline\("#))
         #expect(!source.matches(#"private func upsertStreamBubble[\s\S]*?rebuildTimeline\("#))
+        #expect(source.contains("@ObservationIgnored private var replyTargetByMessageId"))
+        #expect(source.contains("@ObservationIgnored private var pendingMediaByRowId"))
+        #expect(source.contains("private(set) var timelineProjectionGeneration"))
+        #expect(source.contains("let updateTimelineIncrementally = update.changes.count == 1"))
     }
 
     @Test func conversationViewModelDeclaresMainActorIsolation() throws {
