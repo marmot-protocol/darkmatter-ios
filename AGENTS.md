@@ -2,6 +2,8 @@
 
 This repo is a SwiftUI iOS app around the Darkmatter/Marmot Rust runtime. Read this before changing code.
 
+`AGENTS.md` is the canonical agent guidance file. `CLAUDE.md` should remain a symlink to this file for Claude-based tooling.
+
 ## Start Here
 
 - Main app entry point: `darkmatter-ios/darkmatter_iosApp.swift`
@@ -10,6 +12,8 @@ This repo is a SwiftUI iOS app around the Darkmatter/Marmot Rust runtime. Read t
 - Shared app/extension config: `Shared/AppContainerConfig.swift`
 - Notification projection: `Shared/LocalNotificationProjection.swift`
 - NSE projection policy: `Shared/NotificationServiceProjection.swift`
+- Transcript export: `darkmatter-ios/Core/ConversationTranscriptExport.swift`
+- Media cache and draft image processing: `darkmatter-ios/Conversation/MessageMediaAttachment.swift`
 - Manual release checks: `docs/manual-tests.md`
 
 ## Architecture
@@ -18,6 +22,11 @@ Swift owns UI, app lifecycle, navigation, presentation state, and iOS notificati
 
 `AppState` is the app's observable hub. It owns the `MarmotClient`, active account, phase routing, pending navigation, toasts, visible-chat tracking, notification subscription, native push sync, and runtime suspend/resume around app backgrounding.
 
+Bootstrap retry is user-visible from the startup failure screen and may happen
+after the runtime was released for background suspension. Starting the runtime
+from bootstrap must clear foreground/suspension gates and increment runtime
+generation just like foreground resume.
+
 Background task identifiers used during runtime suspension must be owned and
 ended on the MainActor; UIKit expiration and completion paths should share an
 idempotent end helper.
@@ -25,6 +34,10 @@ idempotent end helper.
 Keep lightweight popovers/sheets, such as the emoji picker, out of navigation
 containers unless they actually need navigation state. Stable option models and
 grid metadata should be precomputed outside `body`.
+
+Conversation initial positioning may hide timeline content until the first
+layout-driven scroll to the bottom or targeted message has settled. Keep that
+path cancellable and tied to scroll/layout callbacks, not fixed delay chains.
 
 Prefer behavior-level regression tests over `String(contentsOf:)` source
 scrapes. When a private SwiftUI or async path needs coverage, extract a small
@@ -88,6 +101,7 @@ The group image web search is an explicit third-party egress surface. Keep DuckD
 - The shared App Group container stores the Marmot root used by both app and extension.
 - Marmot stores account secrets in the Keychain.
 - Decrypted media cache files under `Caches/EncryptedMedia` must set complete file protection on both the directory and cached plaintext files.
+- Temporary transcript export JSON files contain raw conversation event history; write them with complete file protection and remove them after the share sheet completes or dismisses.
 
 Do not add a second storage path for data Marmot already owns.
 
@@ -108,15 +122,19 @@ Do not add a second storage path for data Marmot already owns.
 - Keep pure formatting/projection helpers in `Shared/` only when the extension also needs them.
 - Use `LocalNotificationProjection` for notification title/body/thread/userInfo decisions.
 - Use `LocalNotificationSuppressionPolicy` for foreground suppression decisions.
+- Audit-log settings hot-swap against the running Marmot runtime; do not restart the runtime for a settings toggle.
+- Audit-log uploads and OTLP metrics use separate bearer-token settings. Do not reuse the OTLP token for Goggles audit-log uploads.
 - Normalize optional group metadata before handing it to Marmot; trim descriptions and pass `nil` for blank values.
 - Sanitize peer-controlled group names with `ProfileSanitizer.groupName` before storing or rendering timeline/system-event display strings, and use static `L10n.formatted` keys for dynamic text.
-- Route peer-controlled profile and group image URLs through `ProfileSanitizer.imageURL`; it only allows HTTPS public hosts and rejects local/private hosts plus legacy IPv4 literal spellings.
+- Use `L10n.plural` for dynamic counts and static `L10n.formatted` keys for formatted strings so the string catalog can carry plural variations and translations.
+- Route peer-controlled profile and group image URLs through `ProfileSanitizer.imageURL`; it only allows HTTPS public hosts and rejects local/private IPv4/IPv6 hosts, loopback/unspecified/link-local forms, and legacy IPv4 literal spellings.
 - Media attachment display IDs must include the owning message or timeline-row identity; do not key SwiftUI media views solely by the encrypted media reference.
 - Malformed or unsupported media `imeta` fields must not hide kind-9 messages; degrade to chat text unless a valid encrypted-media reference is available, and keep optional fields such as `thumbhash` bounded and validated.
 - Fullscreen media galleries are image-only. Reject non-image initial items before presentation and surface undecodable image bytes as an explicit failure state rather than an idle spinner.
 - Media downloads should pass through the conversation view model's in-flight store so duplicate thumbnail/gallery requests share one decrypt/download task.
 - Markdown display blocks are cacheable per message content and profile refresh generation; do not call `MarkdownMessageBuilder.displayBlocks` directly from bubble body paths.
 - Markdown preview/plain-text walkers must budget table rows and cells, including empty cells, so hostile ASTs cannot bypass node limits.
+- Developer-mode streaming debug may show agent-stream MLS events and live QUIC update rows in the conversation timeline. Console logs for agent streams should log sizes, counts, hashes, and stream ids rather than plaintext message content.
 - Build user-visible date formats from localized templates rather than raw `DateFormatter.dateFormat` patterns.
 - When a sheet folds typed pending input into a submit action, abort on invalid pending input before clearing validation errors or starting async work.
 - Recipient-staging sheets should parse with `AddMembersPresentation`, normalize through Marmot to `MemberRefFfi`, and deduplicate staged recipients by `accountIdHex` rather than raw input text.

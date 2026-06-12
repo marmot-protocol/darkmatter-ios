@@ -101,17 +101,43 @@ before every release tag.
 
 ## Settings & profile
 
-- [ ] Settings → Profile: filling in display name + about + picture URL
+- [ ] Settings → account row: filling in display name + about + picture URL
       and tapping **Publish to Relays** shows a success toast.
 - [ ] After publish, the profile name appears in conversation sender
       labels for that account on a fresh device.
 - [ ] Settings → Relays: adding `wss://…` or `ws://…` accepts, publishes
       through Marmot, and refreshes the published NIP-65/inbox
       lists; other schemes reject.
-- [ ] Settings → Identity: Share account ID surfaces the system share
-      sheet with the hex id pre-filled.
-- [ ] Sign out only changes the active account locally; identities
-      remain in keychain — verified by switching back from Accounts.
+- [ ] Settings → Identity: tapping the Public key and npub rows copies the
+      full value and shows the inline **Copied** state.
+- [ ] Settings → QR button opens **My Code**; tapping the npub copies it,
+      the share button shares a `darkmatter://profile/<npub>` link, and
+      Scan QR Code routes a valid profile QR to the profile sheet.
+- [ ] Settings → Identity → Sign out removes the active account and its
+      local key material from the device; with multiple accounts, the app
+      switches to the next account, and with one account it returns to
+      onboarding.
+- [ ] Group Details → Set/Edit group image rejects non-HTTPS, localhost,
+      private-address, and invalid URLs; a public HTTPS image URL previews
+      and saves.
+- [ ] Group Details → Set/Edit group image → Search the web shows the
+      DuckDuckGo/image-host disclosure, returns selectable results, and
+      saves the selected public HTTPS result.
+
+## Privacy, audit, and telemetry
+
+- [ ] Settings → Privacy & Security: toggling **Anonymous Telemetry**
+      persists and does not restart or strand the running app.
+- [ ] Settings → Privacy & Security: enabling **Audit Logging**, sending a
+      message, and returning to the screen lists a local audit JSONL file.
+- [ ] Settings → Privacy & Security: **Delete All Audit Logs** clears the
+      listed files; if audit logging remains enabled, new activity rotates
+      into a fresh file.
+- [ ] Settings → Privacy & Security: **Developer mode** reveals Streaming
+      debug and **Open Diagnostics**; disabling it hides those controls.
+- [ ] With Developer mode on, Group Details → Export Conversation
+      Transcript opens the share sheet for a JSON file; dismissing the
+      share sheet removes the temporary export file.
 
 ## Notifications
 
@@ -131,12 +157,12 @@ before every release tag.
 
 ## Diagnostics
 
-- [ ] Settings → Show diagnostics → Diagnostics. **Live** indicator
-      pulses green.
+- [ ] Settings → Privacy & Security → Developer mode → Open Diagnostics.
+      **Live** indicator pulses green.
 - [ ] Send to self creates a 1-member group and logs the send-to-self
       line in the event log.
-- [ ] Clear empties the log; toggling Show diagnostics off hides the
-      Settings entry.
+- [ ] Clear empties the log; turning Developer mode off hides the
+      diagnostics entry.
 
 ## Lifecycle / backgrounding
 
