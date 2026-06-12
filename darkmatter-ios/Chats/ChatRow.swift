@@ -47,7 +47,7 @@ struct ChatRow: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Capsule().fill(Color.accentColor))
-                        .accessibilityLabel("\(item.unreadCount) unread messages")
+                        .accessibilityLabel(L10n.plural("%llu unread messages", UInt64(item.unreadCount)))
                 }
             }
         }

@@ -24,8 +24,56 @@ enum L10n {
         locale: Locale,
         baseBundle: Bundle = .main
     ) -> String {
-        let format = String(localized: value, bundle: bundle(for: locale, in: baseBundle), locale: locale)
+        let format = String(
+            localized: value,
+            bundle: bundle(for: locale, in: baseBundle),
+            locale: locale
+        )
         return String(format: format, locale: locale, arguments: arguments)
+    }
+
+    static func plural(_ value: String.LocalizationValue, _ count: Int64) -> String {
+        let language = AppLanguage.current
+        let locale = language.locale ?? .autoupdatingCurrent
+        return plural(value, count, locale: locale, baseBundle: bundle(for: language))
+    }
+
+    static func plural(_ value: String.LocalizationValue, _ count: UInt64) -> String {
+        let language = AppLanguage.current
+        let locale = language.locale ?? .autoupdatingCurrent
+        return plural(value, count, locale: locale, baseBundle: bundle(for: language))
+    }
+
+    static func plural(
+        _ value: String.LocalizationValue,
+        _ count: Int64,
+        locale: Locale,
+        baseBundle: Bundle = .main
+    ) -> String {
+        let format = String(
+            localized: value,
+            bundle: bundle(for: locale, in: baseBundle),
+            locale: locale
+        )
+        return withVaList([count]) {
+            NSString(format: format, locale: locale, arguments: $0) as String
+        }
+    }
+
+    static func plural(
+        _ value: String.LocalizationValue,
+        _ count: UInt64,
+        locale: Locale,
+        baseBundle: Bundle = .main
+    ) -> String {
+        let format = String(
+            localized: value,
+            bundle: bundle(for: locale, in: baseBundle),
+            locale: locale
+        )
+        return withVaList([count]) {
+            NSString(format: format, locale: locale, arguments: $0) as String
+        }
     }
 
     private static func bundle(for language: AppLanguage, in base: Bundle = .main) -> Bundle {

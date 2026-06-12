@@ -177,7 +177,10 @@ struct NewChatSheet: View {
             Haptics.error()
             if case .MissingKeyPackage(let account) = marmotError {
                 // Soft validation — keep the sheet open and name who can't be added.
-                self.error = L10n.string("\(IdentityFormatter.short(account)) hasn't published a compatible key package, so they can't be added yet.")
+                self.error = L10n.formatted(
+                    "%@ hasn't published a compatible key package, so they can't be added yet.",
+                    IdentityFormatter.short(account)
+                )
             } else {
                 self.error = marmotError.localizedDescription
                 appState.present(.error(L10n.string("Couldn't create chat"), message: marmotError.localizedDescription))

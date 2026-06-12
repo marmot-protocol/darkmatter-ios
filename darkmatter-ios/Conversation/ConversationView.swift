@@ -156,9 +156,7 @@ struct ConversationChromePresentation: Equatable {
 
     static func memberSubtitle(for memberCount: Int) -> String? {
         if memberCount == 0 { return L10n.string("Just you") }
-        return memberCount == 1
-            ? L10n.string("1 member")
-            : L10n.formatted("%lld members", Int64(memberCount))
+        return L10n.plural("%lld members", Int64(memberCount))
     }
 }
 
@@ -379,7 +377,7 @@ struct ConversationView: View {
                 .fill(Color.accentColor)
                 .frame(width: 3, height: 34)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Replying to \(appState.displayName(forAccountIdHex: record.sender))")
+                Text(L10n.formatted("Replying to %@", appState.displayName(forAccountIdHex: record.sender)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
@@ -884,7 +882,7 @@ struct ConversationView: View {
     }
 
     private func presentMaxAttachmentWarning() {
-        appState.present(.warning(L10n.formatted("You can send up to %lld photos at once", Int64(MediaDraftProcessor.maxAttachmentCount))))
+        appState.present(.warning(L10n.plural("You can send up to %lld photos at once", Int64(MediaDraftProcessor.maxAttachmentCount))))
     }
 
     private func dismissKeyboard() {

@@ -368,7 +368,7 @@ struct GroupDetailsView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .accessibilityLabel(L10n.string("\(title) info"))
+            .accessibilityLabel(L10n.formatted("%@ info", title))
         }
     }
 
@@ -462,7 +462,7 @@ struct GroupDetailsView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Copies \(title)")
+        .accessibilityHint(L10n.formatted("Copies %@", title))
     }
 
     private func tokenDebugRow(_ token: GroupPushTokenDebugEntryFfi) -> some View {
@@ -605,9 +605,7 @@ struct GroupDetailsView: View {
             await refreshVisibleDebugState()
             Haptics.success()
             appState.present(.success(
-                refs.count == 1
-                    ? L10n.string("Invited 1 member")
-                    : L10n.formatted("Invited %lld members", Int64(refs.count)),
+                L10n.plural("Invited %lld members", Int64(refs.count)),
                 message: publishMessage(for: result.summary)
             ))
         } catch {
@@ -853,7 +851,10 @@ struct GroupDetailsView: View {
         case .NotAdmin:
             return L10n.string("That member is not an admin.")
         case .MissingKeyPackage(let account):
-            return L10n.string("\(IdentityFormatter.short(account)) hasn't published a compatible key package yet.")
+            return L10n.formatted(
+                "%@ hasn't published a compatible key package yet.",
+                IdentityFormatter.short(account)
+            )
         default:
             return marmotError.localizedDescription
         }
@@ -861,9 +862,7 @@ struct GroupDetailsView: View {
 
     private func publishMessage(for summary: SendSummaryFfi) -> String {
         guard summary.published > 0 else { return L10n.string("Saved locally.") }
-        return summary.published == 1
-            ? L10n.string("Published 1 update.")
-            : L10n.formatted("Published %lld updates.", Int64(clamping: summary.published))
+        return L10n.plural("Published %lld updates.", Int64(clamping: summary.published))
     }
 
     private func refreshAfterFailedMutation() async {
