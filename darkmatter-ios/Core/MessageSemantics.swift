@@ -100,7 +100,7 @@ enum MessageSemantics {
                 return .streamFinal(streamId: streamId)
             }
             if hasTag(imetaTag, in: tags) {
-                guard let media = mediaAttachments(from: tags) else { return .unknown }
+                guard let media = mediaAttachments(from: tags) else { return .chat }
                 return .media(media)
             }
             if hasTag(quoteRefTag, in: tags), let target = firstValue(of: eventRefTag, in: tags) {
@@ -235,9 +235,11 @@ enum MessageSemantics {
             } else if let value = field.dropPrefix("dim ") {
                 dim = value
             } else if let value = field.dropPrefix("thumbhash ") {
-                thumbhash = value
+                let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard isValidMediaThumbhash(candidate) else { return nil }
+                thumbhash = candidate
             } else if field.hasPrefix("blurhash ") {
-                return nil
+                continue
             }
         }
 
@@ -292,6 +294,11 @@ enum MessageSemantics {
 
     private static func isValidMediaDim(_ raw: String) -> Bool {
         raw.range(of: #"^[1-9][0-9]{0,5}x[1-9][0-9]{0,5}$"#, options: .regularExpression) != nil
+    }
+
+    private static func isValidMediaThumbhash(_ raw: String) -> Bool {
+        guard (1...128).contains(raw.count) else { return false }
+        return raw.range(of: #"^[A-Za-z0-9+/_=-]+$"#, options: .regularExpression) != nil
     }
 
     private static func streamStart(from tags: [MessageTagFfi]) -> StreamStart? {

@@ -4626,7 +4626,7 @@ struct MessageSemanticsTests {
         #expect(MessagePreview.body(record) == "📎 2 attachments")
     }
 
-    @Test func malformedMediaReferenceIsNotPreviewable() {
+    @Test func malformedMediaReferenceFallsBackToChat() {
         let record = AppMessageRecordFfi(
             messageIdHex: hex("dd"),
             direction: "received",
@@ -4649,11 +4649,12 @@ struct MessageSemanticsTests {
             receivedAt: 1
         )
 
-        #expect(MessageSemantics.classify(record) == .unknown)
-        #expect(!MessagePreview.isPreviewable(record))
+        #expect(MessageSemantics.classify(record) == .chat)
+        #expect(MessagePreview.isPreviewable(record))
+        #expect(MessagePreview.body(record) == "caption")
     }
 
-    @Test func mediaReferenceRejectsLegacyMip04Fields() {
+    @Test func mediaReferenceRejectsLegacyMip04FieldsWithoutHidingMessage() {
         let nonce = String(repeating: "22", count: 12)
         let record = unsignedEventRecord(
             plaintext: "caption",
@@ -4672,8 +4673,58 @@ struct MessageSemanticsTests {
             ]
         )
 
-        #expect(MessageSemantics.classify(record) == .unknown)
-        #expect(!MessagePreview.isPreviewable(record))
+        #expect(MessageSemantics.classify(record) == .chat)
+        #expect(MessagePreview.isPreviewable(record))
+        #expect(MessagePreview.body(record) == "caption")
+    }
+
+    @Test func unsupportedBlurhashFieldDoesNotRejectValidMediaReference() throws {
+        var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
+        tag.values.append("blurhash LEHV6nWB2yk8pyo0adR*.7kCMdnj")
+        let record = unsignedEventRecord(
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [tag]
+        )
+
+        guard case .media(let info) = MessageSemantics.classify(record) else {
+            #expect(Bool(false), "expected media")
+            return
+        }
+
+        #expect(info.count == 1)
+        #expect(info[0].fileName == "a.png")
+    }
+
+    @Test func validThumbhashIsPreserved() throws {
+        var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
+        tag.values.append("thumbhash Abc123+/=_-")
+        let record = unsignedEventRecord(
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [tag]
+        )
+
+        guard case .media(let info) = MessageSemantics.classify(record) else {
+            #expect(Bool(false), "expected media")
+            return
+        }
+
+        #expect(info[0].thumbhash == "Abc123+/=_-")
+    }
+
+    @Test func invalidThumbhashFallsBackToChat() {
+        var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
+        tag.values.append("thumbhash \(String(repeating: "x", count: 129))")
+        let record = unsignedEventRecord(
+            plaintext: "caption",
+            kind: MessageSemantics.kindChat,
+            tags: [tag]
+        )
+
+        #expect(MessageSemantics.classify(record) == .chat)
+        #expect(MessagePreview.isPreviewable(record))
+        #expect(MessagePreview.body(record) == "caption")
     }
 
     @Test func mediaReferenceWithoutCaptionFallsBackToFileName() {
@@ -4723,8 +4774,7 @@ struct MessageSemanticsTests {
         }
 
         let results = try await (first, second)
-        #expect(results.0 == Data([1]))
-        #expect(results.1 == Data([1]))
+        #expect(results.0 == results.1)
         #expect(await probe.startCount() == 1)
     }
 
