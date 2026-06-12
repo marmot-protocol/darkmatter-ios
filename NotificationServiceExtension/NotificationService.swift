@@ -10,7 +10,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var expirationTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
     private var activeMarmot: Marmot?
-    private var activeMarmotStarted = false
+    private var activeMarmotNeedsShutdown = false
     private var didApplyRenderDecision = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
 
@@ -21,7 +21,7 @@ final class NotificationService: UNNotificationServiceExtension {
         self.contentHandler = contentHandler
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         activeMarmot = nil
-        activeMarmotStarted = false
+        activeMarmotNeedsShutdown = false
         additionalPresentationTask = nil
         didApplyRenderDecision = false
 
@@ -66,11 +66,10 @@ final class NotificationService: UNNotificationServiceExtension {
                 relayUrls: AppContainerConfig.seedRelays
             )
             activeMarmot = marmot
-            activeMarmotStarted = false
+            activeMarmotNeedsShutdown = true
             do {
                 try await marmot.start()
                 guard activeMarmot === marmot else { return }
-                activeMarmotStarted = true
                 let result = try await marmot.collectNotificationsAfterWake(
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
@@ -103,8 +102,8 @@ final class NotificationService: UNNotificationServiceExtension {
         guard let active = activeMarmot else { return nil }
         if let marmot, active !== marmot { return nil }
         activeMarmot = nil
-        defer { activeMarmotStarted = false }
-        guard activeMarmotStarted else { return nil }
+        defer { activeMarmotNeedsShutdown = false }
+        guard activeMarmotNeedsShutdown else { return nil }
         return active
     }
 

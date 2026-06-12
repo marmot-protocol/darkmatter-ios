@@ -2377,18 +2377,19 @@ struct NotificationServiceTests {
         let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
 
         #expect(source.matches(#"private var activeMarmot: Marmot\?"#))
-        #expect(source.matches(#"private var activeMarmotStarted = false"#))
+        #expect(source.matches(#"private var activeMarmotNeedsShutdown = false"#))
         #expect(source.matches(#"activeMarmot = marmot"#))
         #expect(source.matches(#"override func serviceExtensionTimeWillExpire\(\)[\s\S]*collectionTask\?\.cancel\(\)[\s\S]*guard let marmot = takeActiveMarmotForShutdown\(\)[\s\S]*expirationTask = Task[\s\S]*await marmot\.shutdown\(\)[\s\S]*await self\?\.finish\(applyingFallbackForTimeout: true\)"#))
         #expect(!source.matches(#"override func serviceExtensionTimeWillExpire\(\)\s*\{\s*collectionTask\?\.cancel\(\)\s*finish\(\)\s*\}"#))
     }
 
-    @Test func serviceShutdownTakesOnlyStartedOwnedMarmot() throws {
+    @Test func serviceShutdownTakesOwnedMarmotAfterStartIsAttempted() throws {
         let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
 
-        #expect(source.matches(#"try await marmot\.start\(\)[\s\S]*guard activeMarmot === marmot else \{ return \}[\s\S]*activeMarmotStarted = true"#))
+        #expect(source.matches(#"activeMarmot = marmot[\s\S]*activeMarmotNeedsShutdown = true[\s\S]*try await marmot\.start\(\)"#))
+        #expect(!source.matches(#"try await marmot\.start\(\)[\s\S]*activeMarmotNeedsShutdown = true"#))
         #expect(source.contains("if let marmot = takeActiveMarmotForShutdown(marmot)"))
-        #expect(source.matches(#"private func takeActiveMarmotForShutdown\(_ marmot: Marmot\? = nil\) -> Marmot\? \{[\s\S]*guard let active = activeMarmot else \{ return nil \}[\s\S]*if let marmot, active !== marmot \{ return nil \}[\s\S]*activeMarmot = nil[\s\S]*defer \{ activeMarmotStarted = false \}[\s\S]*guard activeMarmotStarted else \{ return nil \}[\s\S]*return active"#))
+        #expect(source.matches(#"private func takeActiveMarmotForShutdown\(_ marmot: Marmot\? = nil\) -> Marmot\? \{[\s\S]*guard let active = activeMarmot else \{ return nil \}[\s\S]*if let marmot, active !== marmot \{ return nil \}[\s\S]*activeMarmot = nil[\s\S]*defer \{ activeMarmotNeedsShutdown = false \}[\s\S]*guard activeMarmotNeedsShutdown else \{ return nil \}[\s\S]*return active"#))
         #expect(!source.matches(#"catch \{[\s\S]*applyFallback\(to: content\)[\s\S]*\}\s*await marmot\.shutdown\(\)"#))
     }
 
