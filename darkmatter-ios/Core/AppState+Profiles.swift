@@ -1,20 +1,47 @@
 import Foundation
 import MarmotKit
 
+struct ProfileProjectionRequest: Equatable, Sendable {
+    var accountIdHex: String
+    var localAccountLabel: String?
+}
+
+struct ProfileDisplayProjection: Equatable {
+    var profile: UserProfileMetadataFfi?
+    var projectedName: String?
+    var localAccountLabel: String?
+
+    var knownDisplayName: String? {
+        AppState.resolvedKnownDisplayName(
+            profile: profile,
+            projectedName: projectedName,
+            localAccountLabel: localAccountLabel
+        )
+    }
+
+    var avatarURL: URL? {
+        ProfileSanitizer.imageURL(profile?.picture)
+    }
+
+    var hasRemoteIdentity: Bool {
+        profile != nil || ProfileSanitizer.displayName(projectedName) != nil
+    }
+
+    func updatingLocalAccountLabel(_ label: String?) -> ProfileDisplayProjection {
+        var updated = self
+        updated.localAccountLabel = label
+        return updated
+    }
+}
+
 extension AppState {
-    /// Full Nostr profile for an account id, read straight from Marmot's
-    /// directory each time. iOS keeps no profile cache of its own; on a miss it
-    /// asks Marmot to refresh that account's kind:0 metadata from relays so
-    /// later reads can hydrate names and avatars.
+    /// Full Nostr profile for an account id from the app-owned projection
+    /// cache. A miss schedules off-main Marmot hydration and one relay refresh
+    /// attempt, keeping SwiftUI row reads cheap and deterministic.
     @MainActor
     @discardableResult
     func profile(forAccountIdHex id: String) -> UserProfileMetadataFfi? {
-        _ = profileRefreshGeneration
-        if let local = (try? marmot.userProfile(accountIdHex: id)) ?? nil {
-            return local
-        }
-        scheduleProfileRefresh(forAccountIdHex: id)
-        return nil
+        cachedProfileProjection(forAccountIdHex: id, refreshAfterLoad: true)?.profile
     }
 
     /// A display name we actually *know* for an account: projected kind:0
@@ -23,11 +50,7 @@ extension AppState {
     /// fallback (e.g. an npub for a DM peer).
     @MainActor
     func knownDisplayName(forAccountIdHex id: String) -> String? {
-        Self.resolvedKnownDisplayName(
-            profile: profile(forAccountIdHex: id),
-            projectedName: marmot.displayName(accountIdHex: id),
-            localAccountLabel: accounts.first(where: { $0.accountIdHex == id })?.label
-        )
+        cachedProfileProjection(forAccountIdHex: id, refreshAfterLoad: true)?.knownDisplayName
     }
 
     /// Pure resolution of the best known display name from its three sources, in
@@ -75,7 +98,7 @@ extension AppState {
     /// Untrusted: only http(s) URLs with a host pass the sanitizer.
     @MainActor
     func avatarURL(forAccountIdHex id: String) -> URL? {
-        ProfileSanitizer.imageURL(profile(forAccountIdHex: id)?.picture)
+        cachedProfileProjection(forAccountIdHex: id, refreshAfterLoad: true)?.avatarURL
     }
 
     /// The `npub...` bech32 form of an account id hex, read from the binding.
@@ -89,6 +112,176 @@ extension AppState {
     @MainActor
     func shortNpub(forAccountIdHex id: String) -> String {
         IdentityFormatter.short(npub(forAccountIdHex: id))
+    }
+
+    @MainActor
+    func warmProfileProjection(forAccountIdHex id: String, refreshAfterLoad: Bool = false) {
+        scheduleProfileProjectionLoad(forAccountIdHex: id, refreshAfterLoad: refreshAfterLoad)
+    }
+
+    @MainActor
+    func warmLocalAccountProfileProjections() {
+        for account in accounts {
+            warmProfileProjection(forAccountIdHex: account.accountIdHex)
+        }
+    }
+
+    @MainActor
+    func updateProfileProjectionLocalAccountLabels() {
+        var localLabelsByID: [String: String] = [:]
+        for account in accounts {
+            localLabelsByID[account.accountIdHex] = account.label
+        }
+
+        var changed = false
+        for (id, label) in localLabelsByID {
+            let existing = profileProjectionCache[id] ?? ProfileDisplayProjection(
+                profile: nil,
+                projectedName: nil,
+                localAccountLabel: nil
+            )
+            let updated = existing.updatingLocalAccountLabel(label)
+            guard updated != existing else { continue }
+            profileProjectionCache[id] = updated
+            changed = true
+        }
+
+        for (id, projection) in profileProjectionCache where localLabelsByID[id] == nil {
+            let updated = projection.updatingLocalAccountLabel(nil)
+            guard updated != projection else { continue }
+            profileProjectionCache[id] = updated
+            changed = true
+        }
+
+        if changed {
+            noteProfileRefreshCompleted()
+        }
+    }
+
+    @MainActor
+    @discardableResult
+    func reloadProfileProjection(forAccountIdHex id: String) async -> ProfileDisplayProjection? {
+        guard !id.isEmpty else { return nil }
+        guard canRefreshProfiles else { return profileProjectionCache[id] }
+
+        let version = bumpProfileProjectionLoadVersion(forAccountIdHex: id)
+        queuedProfileProjectionLoadIDs.removeAll { $0 == id }
+        scheduledProfileProjectionLoadIDs.remove(id)
+        profileProjectionRefreshAfterLoadIDs.remove(id)
+
+        let projection = await loadProfileProjection(forAccountIdHex: id)
+        guard !Task.isCancelled,
+              canRefreshProfiles,
+              profileProjectionLoadVersions[id] == version
+        else { return projection }
+
+        if let projection {
+            applyProfileProjection(projection, forAccountIdHex: id)
+        }
+        return projection
+    }
+
+    @MainActor
+    private func cachedProfileProjection(
+        forAccountIdHex id: String,
+        refreshAfterLoad: Bool
+    ) -> ProfileDisplayProjection? {
+        _ = profileRefreshGeneration
+        if let projection = profileProjectionCache[id] {
+            return projection
+        }
+        scheduleProfileProjectionLoad(forAccountIdHex: id, refreshAfterLoad: refreshAfterLoad)
+        return nil
+    }
+
+    @MainActor
+    private func scheduleProfileProjectionLoad(forAccountIdHex id: String, refreshAfterLoad: Bool) {
+        guard !id.isEmpty, canRefreshProfiles else { return }
+        if refreshAfterLoad {
+            profileProjectionRefreshAfterLoadIDs.insert(id)
+        }
+        guard !scheduledProfileProjectionLoadIDs.contains(id) else { return }
+
+        bumpProfileProjectionLoadVersion(forAccountIdHex: id)
+        scheduledProfileProjectionLoadIDs.insert(id)
+        queuedProfileProjectionLoadIDs.append(id)
+        startProfileProjectionLoadQueueIfNeeded()
+    }
+
+    @MainActor
+    private func startProfileProjectionLoadQueueIfNeeded() {
+        guard profileProjectionLoadTask == nil, !queuedProfileProjectionLoadIDs.isEmpty else { return }
+        profileProjectionLoadTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runProfileProjectionLoadQueue()
+        }
+    }
+
+    @MainActor
+    private func runProfileProjectionLoadQueue() async {
+        defer {
+            profileProjectionLoadTask = nil
+            if canRefreshProfiles, !queuedProfileProjectionLoadIDs.isEmpty {
+                startProfileProjectionLoadQueueIfNeeded()
+            }
+        }
+
+        while !Task.isCancelled, canRefreshProfiles, let id = nextQueuedProfileProjectionLoadID() {
+            let version = profileProjectionLoadVersions[id] ?? 0
+            let projection = await loadProfileProjection(forAccountIdHex: id)
+            guard !Task.isCancelled, canRefreshProfiles else { break }
+            guard profileProjectionLoadVersions[id] == version else { continue }
+
+            scheduledProfileProjectionLoadIDs.remove(id)
+            if let projection {
+                applyProfileProjection(projection, forAccountIdHex: id)
+            }
+
+            let shouldRefresh = profileProjectionRefreshAfterLoadIDs.remove(id) != nil
+            if shouldRefresh, projection?.hasRemoteIdentity != true {
+                scheduleProfileRefresh(forAccountIdHex: id)
+            }
+        }
+    }
+
+    @MainActor
+    private func nextQueuedProfileProjectionLoadID() -> String? {
+        guard !queuedProfileProjectionLoadIDs.isEmpty else { return nil }
+        return queuedProfileProjectionLoadIDs.removeFirst()
+    }
+
+    @MainActor
+    private func loadProfileProjection(forAccountIdHex id: String) async -> ProfileDisplayProjection? {
+        let request = profileProjectionRequest(forAccountIdHex: id)
+        let projections = await MarmotClient.profileProjections(for: [request], marmot: marmot)
+        guard var projection = projections[id] else { return nil }
+        projection.localAccountLabel = localAccountLabel(forAccountIdHex: id)
+        return projection
+    }
+
+    @MainActor
+    private func profileProjectionRequest(forAccountIdHex id: String) -> ProfileProjectionRequest {
+        ProfileProjectionRequest(accountIdHex: id, localAccountLabel: localAccountLabel(forAccountIdHex: id))
+    }
+
+    @MainActor
+    private func localAccountLabel(forAccountIdHex id: String) -> String? {
+        accounts.first(where: { $0.accountIdHex == id })?.label
+    }
+
+    @MainActor
+    private func applyProfileProjection(_ projection: ProfileDisplayProjection, forAccountIdHex id: String) {
+        guard profileProjectionCache[id] != projection else { return }
+        profileProjectionCache[id] = projection
+        noteProfileRefreshCompleted()
+    }
+
+    @MainActor
+    @discardableResult
+    private func bumpProfileProjectionLoadVersion(forAccountIdHex id: String) -> Int {
+        let version = (profileProjectionLoadVersions[id] ?? 0) + 1
+        profileProjectionLoadVersions[id] = version
+        return version
     }
 
     @MainActor
@@ -114,6 +307,7 @@ extension AppState {
     @MainActor
     func resumeProfileFetchQueueIfNeeded() {
         guard canRefreshProfiles else { return }
+        startProfileProjectionLoadQueueIfNeeded()
         startProfileFetchQueueIfNeeded()
     }
 
@@ -144,13 +338,25 @@ extension AppState {
     @MainActor
     @discardableResult
     func cancelProfileFetchQueue() -> Task<Void, Never>? {
+        queuedProfileProjectionLoadIDs.removeAll()
+        scheduledProfileProjectionLoadIDs.removeAll()
+        profileProjectionRefreshAfterLoadIDs.removeAll()
+        let projectionTask = profileProjectionLoadTask
+        profileProjectionLoadTask = nil
+        projectionTask?.cancel()
+
         queuedProfileFetchIDs.removeAll()
         scheduledProfileFetchIDs.removeAll()
         activeProfileFetchID = nil
-        let task = profileFetchQueueTask
+        let fetchTask = profileFetchQueueTask
         profileFetchQueueTask = nil
-        task?.cancel()
-        return task
+        fetchTask?.cancel()
+
+        guard projectionTask != nil || fetchTask != nil else { return nil }
+        return Task {
+            await projectionTask?.value
+            await fetchTask?.value
+        }
     }
 
     @MainActor
@@ -167,10 +373,7 @@ extension AppState {
         }
 
         guard !Task.isCancelled else { return }
-        if ((try? marmot.userProfile(accountIdHex: id)) ?? nil) != nil ||
-            ProfileSanitizer.displayName(marmot.displayName(accountIdHex: id)) != nil {
-            noteProfileRefreshCompleted()
-        }
+        await reloadProfileProjection(forAccountIdHex: id)
     }
 
     #if DEBUG

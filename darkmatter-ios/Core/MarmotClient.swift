@@ -58,6 +58,30 @@ final class MarmotClient {
         }.value
     }
 
+    /// Reads profile/display-name projections off the main actor so SwiftUI row
+    /// rendering can consume an app-owned cache instead of synchronously
+    /// touching Marmot storage.
+    func profileProjections(for requests: [ProfileProjectionRequest]) async -> [String: ProfileDisplayProjection] {
+        await Self.profileProjections(for: requests, marmot: marmot)
+    }
+
+    static func profileProjections(
+        for requests: [ProfileProjectionRequest],
+        marmot: Marmot
+    ) async -> [String: ProfileDisplayProjection] {
+        await Task.detached(priority: .utility) {
+            var projections: [String: ProfileDisplayProjection] = [:]
+            for request in requests {
+                projections[request.accountIdHex] = ProfileDisplayProjection(
+                    profile: (try? marmot.userProfile(accountIdHex: request.accountIdHex)) ?? nil,
+                    projectedName: marmot.displayName(accountIdHex: request.accountIdHex),
+                    localAccountLabel: request.localAccountLabel
+                )
+            }
+            return projections
+        }.value
+    }
+
     func startRuntime() async throws {
         try await configureTelemetryRuntime()
         try await marmot.start()

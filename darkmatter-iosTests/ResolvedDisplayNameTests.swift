@@ -3,8 +3,8 @@ import Foundation
 @testable import darkmatter_ios
 @testable import MarmotKit
 
-/// #17 — with the iOS profile cache removed, display-name resolution is a pure
-/// precedence function over the binding's values: fetched kind:0 profile name →
+/// #158 — SwiftUI rows read cached profile/display-name projections, while
+/// preserving the established precedence: fetched kind:0 profile name →
 /// runtime projected name → local account label.
 @MainActor
 struct ResolvedDisplayNameTests {
@@ -56,14 +56,66 @@ struct ResolvedDisplayNameTests {
         ) == "Alice")
     }
 
-    @Test func profileLookupSchedulesRefreshWhenCacheMisses() throws {
+    @Test func profileProjectionUsesResolvedNameAndAvatar() {
+        let projection = ProfileDisplayProjection(
+            profile: UserProfileMetadataFfi(
+                name: nil,
+                displayName: "Alice",
+                about: nil,
+                picture: "https://example.com/a.png",
+                nip05: nil,
+                lud16: nil
+            ),
+            projectedName: "Projected",
+            localAccountLabel: "Label"
+        )
+
+        #expect(projection.knownDisplayName == "Alice")
+        #expect(projection.avatarURL?.absoluteString == "https://example.com/a.png")
+        #expect(projection.hasRemoteIdentity)
+    }
+
+    @Test func projectionMissDoesNotCountLocalLabelAsRemoteIdentity() {
+        let projection = ProfileDisplayProjection(
+            profile: nil,
+            projectedName: nil,
+            localAccountLabel: "Local"
+        )
+
+        #expect(projection.knownDisplayName == "Local")
+        #expect(!projection.hasRemoteIdentity)
+    }
+
+    @Test func profileHelpersReadProjectionCacheInsteadOfMarmotOnMainActor() throws {
         let source = try sourceString("darkmatter-ios/Core/AppState+Profiles.swift")
 
         #expect(source.range(
-            of: #"func profile\(forAccountIdHex id: String\) -> UserProfileMetadataFfi\? \{[\s\S]*scheduleProfileRefresh\(forAccountIdHex: id\)"#,
+            of: #"func profile\(forAccountIdHex id: String\) -> UserProfileMetadataFfi\? \{\s*cachedProfileProjection\(forAccountIdHex: id, refreshAfterLoad: true\)\?\.profile\s*\}"#,
             options: .regularExpression
         ) != nil)
-        #expect(source.contains("profileRefreshGeneration"))
+        #expect(source.range(
+            of: #"func knownDisplayName\(forAccountIdHex id: String\) -> String\? \{\s*cachedProfileProjection\(forAccountIdHex: id, refreshAfterLoad: true\)\?\.knownDisplayName\s*\}"#,
+            options: .regularExpression
+        ) != nil)
+        #expect(source.range(
+            of: #"func avatarURL\(forAccountIdHex id: String\) -> URL\? \{\s*cachedProfileProjection\(forAccountIdHex: id, refreshAfterLoad: true\)\?\.avatarURL\s*\}"#,
+            options: .regularExpression
+        ) != nil)
+    }
+
+    @Test func cacheMissHydrationIsDedupedBeforeRelayRefresh() throws {
+        let source = try sourceString("darkmatter-ios/Core/AppState+Profiles.swift")
+
+        #expect(source.contains("scheduledProfileProjectionLoadIDs.contains(id)"))
+        #expect(source.contains("profileProjectionRefreshAfterLoadIDs.insert(id)"))
+        #expect(source.contains("if shouldRefresh, projection?.hasRemoteIdentity != true"))
+        #expect(source.contains("scheduleProfileRefresh(forAccountIdHex: id)"))
+    }
+
+    @Test func profilePublishRefreshesProjectionCache() throws {
+        let source = try sourceString("darkmatter-ios/Settings/ProfileEditView.swift")
+
+        #expect(source.contains("await appState.reloadProfileProjection(forAccountIdHex: accountIdHex)"))
     }
 
     private func sourceString(_ relativePath: String) throws -> String {
