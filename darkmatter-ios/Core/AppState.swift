@@ -127,6 +127,8 @@ final class AppState {
     let toastState = ToastState()
     let navigation = NavigationState()
     private let notificationDriver = NotificationDriver()
+    private var bootstrapTask: Task<Void, Never>?
+    private var bootstrapTaskID = UUID()
     private var foregroundActivationTask: Task<Void, Never>?
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var runtimeSuspensionTask: Task<Void, Never>?
@@ -199,6 +201,7 @@ final class AppState {
     }
 
     deinit {
+        bootstrapTask?.cancel()
         foregroundActivationTask?.cancel()
         nativePushRegistrationTask?.cancel()
         runtimeSuspensionTask?.cancel()
@@ -267,6 +270,23 @@ final class AppState {
     /// per app launch.
     @MainActor
     func bootstrap() async {
+        if let bootstrapTask {
+            await bootstrapTask.value
+            return
+        }
+        let id = UUID()
+        bootstrapTaskID = id
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performBootstrap()
+        }
+        bootstrapTask = task
+        await task.value
+        clearCompletedBootstrapTask(id: id)
+    }
+
+    @MainActor
+    private func performBootstrap() async {
         do {
             try await startCurrentRuntime()
             noteRuntimeForegroundReadyAfterSuspension()
@@ -289,6 +309,11 @@ final class AppState {
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    private func clearCompletedBootstrapTask(id: UUID) {
+        guard bootstrapTaskID == id else { return }
+        bootstrapTask = nil
     }
 
     @MainActor
