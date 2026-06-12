@@ -29,11 +29,9 @@ struct MessageLinkPolicyTests {
         #expect(action("nostr:\(validNpub)") == .openProfile(npub: validNpub))
     }
 
-    @Test func nostrNpubRoutesByShapeLikeQrScans() {
-        // DeepLink accepts npub-shaped references without checksum validation
-        // (same as the QR scanner); Marmot validates the reference downstream.
+    @Test func nostrNpubRejectsBadChecksumLikeQrScans() {
         let shapeOnly = "npub1" + String(repeating: "q", count: 58)
-        #expect(action("nostr:\(shapeOnly)") == .openProfile(npub: shapeOnly))
+        #expect(action("nostr:\(shapeOnly)") == .blocked)
     }
 
     @Test func nostrUrisOfOtherKindsStayBlocked() {

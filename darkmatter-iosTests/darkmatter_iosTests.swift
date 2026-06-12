@@ -3592,7 +3592,7 @@ struct GroupManagementPresentationTests {
     }
 
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
-        let npub = "npub1abcdefghijklmnopqrstuvwxyz"
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
         let nprofile = "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p"
         let nprofileHex = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
 
@@ -3617,6 +3617,18 @@ struct GroupManagementPresentationTests {
         #expect(
             NostrProfileReference.memberRef(from: nprofileHex.uppercased()) == nprofileHex
         )
+    }
+
+    @Test func addMembersScannerRejectsCorruptNpubReferences() {
+        let invalidNpub = "npub1abcdefghijklmnopqrstuvwxyz"
+
+        #expect(NostrProfileReference.memberRef(fromReference: invalidNpub) == nil)
+        #expect(AddMembersPresentation.memberRef(fromScannedPayload: invalidNpub) == nil)
+        #expect(AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(invalidNpub)") == nil)
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "darkmatter://profile/\(invalidNpub)") == nil
+        )
+        #expect(DeepLink.parse(string: "nostr:\(invalidNpub)") == nil)
     }
 
     @Test func memberRefRejectsNonASCIIHRPWithoutCrashing() {

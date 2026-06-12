@@ -43,11 +43,7 @@ enum NostrProfileReference {
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = trimmed.lowercased()
         if lower.hasPrefix("npub1") {
-            guard let decoded = bech32Decode(trimmed),
-                  decoded.hrp == "npub",
-                  let bytes = convertBits(decoded.data, from: 5, to: 8, pad: false),
-                  bytes.count == 32
-            else { return nil }
+            guard let bytes = npubPubkeyBytes(trimmed) else { return nil }
             return bytes.map { String(format: "%02x", $0) }.joined()
         }
         if lower.hasPrefix("nprofile1") {
@@ -64,6 +60,7 @@ enum NostrProfileReference {
             return nprofilePubkeyHex(trimmed)
         }
         if lower.hasPrefix("npub1") {
+            guard npubPubkeyBytes(trimmed) != nil else { return nil }
             return trimmed
         }
         if Hex.is32Bytes(trimmed) {
@@ -84,6 +81,15 @@ enum NostrProfileReference {
         default:
             return url.host
         }
+    }
+
+    private static func npubPubkeyBytes(_ raw: String) -> [UInt8]? {
+        guard let decoded = bech32Decode(raw),
+              decoded.hrp == "npub",
+              let bytes = convertBits(decoded.data, from: 5, to: 8, pad: false),
+              bytes.count == 32
+        else { return nil }
+        return bytes
     }
 
     private static func nprofilePubkeyHex(_ raw: String) -> String? {
