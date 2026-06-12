@@ -193,7 +193,7 @@ struct KeyPackagesView: View {
     private func publishedDescription(_ ts: UInt64) -> String? {
         guard ts > 0 else { return nil }
         let date = Date(timeIntervalSince1970: TimeInterval(ts))
-        return L10n.string("Published \(date.formatted(.relative(presentation: .named)))")
+        return L10n.formatted("Published %@", date.formatted(.relative(presentation: .named)))
     }
 
     private func byteCount(_ bytes: UInt64) -> String {

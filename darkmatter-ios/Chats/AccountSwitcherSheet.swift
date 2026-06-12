@@ -100,6 +100,6 @@ struct AccountSwitcherSheet: View {
         let dict = Bundle.main.infoDictionary
         let version = dict?["CFBundleShortVersionString"] as? String ?? "—"
         let build = dict?["CFBundleVersion"] as? String ?? "—"
-        return L10n.string("Version \(version) (\(build))")
+        return L10n.formatted("Version %@ (%@)", version, build)
     }
 }

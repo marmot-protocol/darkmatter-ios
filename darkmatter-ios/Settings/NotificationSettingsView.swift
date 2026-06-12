@@ -38,8 +38,10 @@ struct NotificationSettingsView: View {
                 }
 
                 if let savedAt {
-                    Label("Saved \(savedAt.formatted(.relative(presentation: .named)))",
-                          systemImage: "checkmark.seal.fill")
+                    Label(
+                        L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
+                        systemImage: "checkmark.seal.fill"
+                    )
                     .foregroundStyle(.green)
                     .font(.callout)
                 }

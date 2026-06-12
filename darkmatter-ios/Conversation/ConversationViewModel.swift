@@ -223,9 +223,7 @@ final class ConversationViewModel {
     var displaySubtitle: String {
         let memberCount = displayMemberCount
         if memberCount == 0 { return L10n.string("Just you") }
-        return memberCount == 1
-            ? L10n.string("1 member")
-            : L10n.formatted("%lld members", Int64(memberCount))
+        return L10n.plural("%lld members", Int64(memberCount))
     }
 
     var isSelfAdmin: Bool {

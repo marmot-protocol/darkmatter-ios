@@ -122,7 +122,7 @@ enum MessagePreview {
             return "📎 \(names[0])"
         }
         if names.count > 1 {
-            return L10n.formatted("📎 %lld attachments", Int64(names.count))
+            return L10n.plural("📎 %lld attachments", Int64(names.count))
         }
         return "📎 \(L10n.string("Attachment"))"
     }

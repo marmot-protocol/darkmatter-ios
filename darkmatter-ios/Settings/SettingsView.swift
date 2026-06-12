@@ -100,7 +100,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Built on") {
-                    Text("MarmotKit \(marmotVersion)")
+                    Text(L10n.formatted("MarmotKit %@", marmotVersion))
                         .font(.body.monospaced())
                         .foregroundStyle(.secondary)
                 }

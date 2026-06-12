@@ -163,7 +163,7 @@ struct ProfileEditView: View {
             Haptics.success()
             appState.present(.success(
                 L10n.string("Profile published"),
-                message: L10n.formatted("Your kind:0 metadata is live on %lld relays.", Int64(relays.count))
+                message: L10n.plural("Your kind:0 metadata is live on %lld relays.", Int64(relays.count))
             ))
         } catch {
             Haptics.error()

@@ -126,8 +126,10 @@ struct PrivacySecuritySettingsView: View {
 
             if let savedAt {
                 Section {
-                    Label("Saved \(savedAt.formatted(.relative(presentation: .named)))",
-                          systemImage: "checkmark.seal.fill")
+                    Label(
+                        L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
+                        systemImage: "checkmark.seal.fill"
+                    )
                     .foregroundStyle(.green)
                     .font(.callout)
                 }

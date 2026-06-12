@@ -140,7 +140,10 @@ struct ProfileView: View {
         } catch let marmotError as MarmotKitError {
             Haptics.error()
             if case .MissingKeyPackage = marmotError {
-                self.error = L10n.string("\(title) hasn't published a compatible key package, so they can't be messaged yet.")
+                self.error = L10n.formatted(
+                    "%@ hasn't published a compatible key package, so they can't be messaged yet.",
+                    title
+                )
             } else {
                 self.error = marmotError.localizedDescription
             }

@@ -1190,11 +1190,19 @@ struct LocalizationCatalogTests {
             let entry = try #require(rawEntry as? [String: Any], "Invalid localization entry: \(key)")
             let expectedPlaceholders = placeholders(in: key)
             for locale in expectedLocales {
-                let value = try localizedValue(key, locale: locale, in: strings)
-                if !key.isEmpty {
-                    #expect(!value.isEmpty, "Missing \(locale) value for \(key)")
+                let values = try localizedLeafValues(key, locale: locale, in: strings)
+                for value in values {
+                    if !key.isEmpty {
+                        #expect(!value.isEmpty, "Missing \(locale) value for \(key)")
+                    }
+                    #expect(
+                        placeholders(in: value).sorted() == expectedPlaceholders.sorted(),
+                        "Broken placeholders for \(key) in \(locale)"
+                    )
                 }
-                #expect(placeholders(in: value).sorted() == expectedPlaceholders.sorted(), "Broken placeholders for \(key) in \(locale)")
+                if !key.isEmpty {
+                    #expect(!values.isEmpty, "Missing \(locale) values for \(key)")
+                }
             }
         }
     }
@@ -1246,41 +1254,115 @@ struct LocalizationCatalogTests {
         }
     }
 
+    @Test func visibleSourceLiteralsHaveCatalogCoverage() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let knownDebugOnlyDynamicLiterals: Set<String> = [
+            #"id: \(record.messageIdHex)"#,
+            #"QUIC · \(event.eventKind)"#,
+            #"stream \(shortStreamId(event.streamId))"#,
+            #"leaf \(token.leafIndex)"#
+        ]
+        let patterns = [
+            #"L10n\.string\("((?:[^"\\]|\\.)*)"\)"#,
+            #"L10n\.formatted\("((?:[^"\\]|\\.)*)""#,
+            #"L10n\.plural\("((?:[^"\\]|\\.)*)""#,
+            #"\bText\("((?:[^"\\]|\\.)*)""#,
+            #"\bButton\("((?:[^"\\]|\\.)*)""#,
+            #"\bLabel\("((?:[^"\\]|\\.)*)""#,
+            #"\bSection\("((?:[^"\\]|\\.)*)""#,
+            #"\bPicker\("((?:[^"\\]|\\.)*)""#,
+            #"\bToggle\("((?:[^"\\]|\\.)*)""#,
+            #"\bTextField\("((?:[^"\\]|\\.)*)""#,
+            #"\bSecureField\("((?:[^"\\]|\\.)*)""#,
+            #"\.navigationTitle\("((?:[^"\\]|\\.)*)""#,
+            #"\.alert\("((?:[^"\\]|\\.)*)""#,
+            #"\.confirmationDialog\("((?:[^"\\]|\\.)*)""#,
+            #"\.accessibilityLabel\("((?:[^"\\]|\\.)*)""#,
+            #"\.accessibilityHint\("((?:[^"\\]|\\.)*)""#
+        ].map { try! NSRegularExpression(pattern: $0) }
+
+        for relativePath in try swiftSourcePaths(in: ["darkmatter-ios", "Shared"]) {
+            let source = try readSource(relativePath)
+            let nsRange = NSRange(source.startIndex..<source.endIndex, in: source)
+            for pattern in patterns {
+                for match in pattern.matches(in: source, range: nsRange) {
+                    guard let literalRange = Range(match.range(at: 1), in: source) else { continue }
+                    let literal = unescapedSourceLiteral(String(source[literalRange]))
+                    guard !knownDebugOnlyDynamicLiterals.contains(literal) else { continue }
+                    #expect(strings[literal] != nil, "\(relativePath) uses visible string missing from catalog: \(literal)")
+                }
+            }
+        }
+    }
+
+    @Test func countLocalizationsUsePluralVariations() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let pluralKeys = [
+            "%lld members",
+            "%lld person group",
+            "%llu unread messages",
+            "📎 %lld attachments",
+            "Invited %lld members",
+            "Published %lld updates.",
+            "Your kind:0 metadata is live on %lld relays.",
+            "You can send up to %lld photos at once"
+        ]
+
+        for key in pluralKeys {
+            for locale in ["en"] + expectedLocales {
+                let categories = try pluralCategories(key, locale: locale, in: strings)
+                #expect(categories.contains("other"), "\(key) in \(locale) is missing an `other` plural form")
+                if locale == "ru" {
+                    #expect(categories.isSuperset(of: ["one", "few", "many", "other"]))
+                }
+            }
+        }
+    }
+
     @Test func formattedLocalizationUsesStaticCatalogKeys() {
         #expect(
-            L10n.formatted(
+            L10n.plural(
                 "%lld members",
-                arguments: [Int64(3)],
+                Int64(3),
                 locale: Locale(identifier: "de")
-            ) == "3-Mitglieder"
+            ) == "3 Mitglieder"
         )
         #expect(
-            L10n.formatted(
+            L10n.plural(
                 "Invited %lld members",
-                arguments: [Int64(3)],
+                Int64(3),
                 locale: Locale(identifier: "it")
-            ) == "Membri 3 invitati"
+            ) == "3 membri invitati"
         )
         #expect(
-            L10n.formatted(
+            L10n.plural(
                 "Published %lld updates.",
-                arguments: [Int64(2)],
+                Int64(2),
                 locale: Locale(identifier: "zh-Hans")
-            ) == "已发布 2 更新。"
+            ) == "已发布 2 个更新。"
         )
         #expect(
-            L10n.formatted(
+            L10n.plural(
                 "Your kind:0 metadata is live on %lld relays.",
-                arguments: [Int64(4)],
+                Int64(4),
                 locale: Locale(identifier: "de")
-            ) == "Ihre kind:0-Metadaten sind live auf 4-Relays."
+            ) == "Ihre kind:0-Metadaten sind auf 4 Relays live."
         )
         #expect(
-            L10n.formatted(
+            L10n.plural(
                 "%lld person group",
-                arguments: [Int64(3)],
+                Int64(3),
                 locale: Locale(identifier: "it")
-            ) == "3 gruppo di persone"
+            ) == "Gruppo di 3 persone"
+        )
+        #expect(
+            L10n.plural(
+                "Published %lld updates.",
+                Int64(5),
+                locale: Locale(identifier: "ru")
+            ) == "Опубликовано 5 обновлений."
         )
     }
 
@@ -1327,12 +1409,72 @@ struct LocalizationCatalogTests {
         return try String(contentsOf: url, encoding: .utf8)
     }
 
+    private func swiftSourcePaths(in relativeDirectories: [String]) throws -> [String] {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let repoRoot = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        var paths: [String] = []
+
+        for relativeDirectory in relativeDirectories {
+            let root = repoRoot.appendingPathComponent(relativeDirectory)
+            guard let enumerator = FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: nil
+            ) else { continue }
+            for case let url as URL in enumerator where url.pathExtension == "swift" {
+                paths.append(url.path.replacingOccurrences(of: repoRoot.path + "/", with: ""))
+            }
+        }
+
+        return paths.sorted()
+    }
+
     private func localizedValue(_ key: String, locale: String, in strings: [String: Any]) throws -> String {
         let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
         let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
         let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
         let stringUnit = try #require(localeEntry["stringUnit"] as? [String: Any], "Missing string unit for \(key) in \(locale)")
         return try #require(stringUnit["value"] as? String, "Missing value for \(key) in \(locale)")
+    }
+
+    private func localizedLeafValues(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
+        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
+        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
+
+        if let substitutions = localeEntry["substitutions"] as? [String: Any] {
+            return try substitutions.values.flatMap { rawSubstitution in
+                let substitution = try #require(rawSubstitution as? [String: Any])
+                let variations = try #require(substitution["variations"] as? [String: Any])
+                let plural = try #require(variations["plural"] as? [String: Any])
+                return try plural.values.map { rawForm in
+                    let form = try #require(rawForm as? [String: Any])
+                    let stringUnit = try #require(form["stringUnit"] as? [String: Any])
+                    return try #require(stringUnit["value"] as? String)
+                }
+            }
+        }
+
+        return [try localizedValue(key, locale: locale, in: strings)]
+    }
+
+    private func pluralCategories(_ key: String, locale: String, in strings: [String: Any]) throws -> Set<String> {
+        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
+        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
+        let substitutions = try #require(localeEntry["substitutions"] as? [String: Any])
+        let count = try #require(substitutions["count"] as? [String: Any])
+        let variations = try #require(count["variations"] as? [String: Any])
+        let plural = try #require(variations["plural"] as? [String: Any])
+        return Set(plural.keys)
+    }
+
+    private func unescapedSourceLiteral(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: #"\""#, with: #"""#)
+            .replacingOccurrences(of: #"\n"#, with: "\n")
+            .replacingOccurrences(of: #"\t"#, with: "\t")
     }
 
     private func placeholders(in value: String) -> [String] {

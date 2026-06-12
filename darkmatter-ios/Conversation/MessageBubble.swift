@@ -155,8 +155,8 @@ struct MessageBubble: View {
                 mediaGallery = nil
             }
         }
-        .alert("Open link?", isPresented: externalLinkConfirmationPresented) {
-            Button("Open") {
+        .alert(L10n.string("Open link?"), isPresented: externalLinkConfirmationPresented) {
+            Button(L10n.string("Open")) {
                 guard let link = pendingExternalLink else { return }
                 pendingExternalLink = nil
                 openURL(link.url)
@@ -407,7 +407,7 @@ struct MessageBubble: View {
                     HStack(spacing: 2) {
                         Text(ProfileSanitizer.reactionEmoji(tally.emoji))
                         if tally.count > 1 {
-                            Text("\(tally.count)")
+                            Text(L10n.formatted("%lld", Int64(tally.count)))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -635,7 +635,7 @@ private struct MessageMediaTile: View {
 
             if hiddenCount > 0 {
                 Color.black.opacity(0.48)
-                Text("+\(hiddenCount)")
+                Text(L10n.formatted("+%lld", Int64(hiddenCount)))
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.white)
             }

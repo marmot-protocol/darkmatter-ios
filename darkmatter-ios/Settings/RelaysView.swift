@@ -73,8 +73,10 @@ struct RelaysView: View {
             }
 
             if let savedAt {
-                Label("Saved \(savedAt.formatted(.relative(presentation: .named)))",
-                      systemImage: "checkmark.seal.fill")
+                Label(
+                    L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
+                    systemImage: "checkmark.seal.fill"
+                )
                     .foregroundStyle(.green)
                     .font(.callout)
             }
@@ -100,7 +102,12 @@ struct RelaysView: View {
                 if lists.complete {
                     Text("All relay lists are published.").font(.footnote)
                 } else {
-                    Text("Missing: \(lists.missing.joined(separator: ", ")). Add a relay to publish them.")
+                    Text(
+                        L10n.formatted(
+                            "Missing: %@. Add a relay to publish them.",
+                            lists.missing.joined(separator: ", ")
+                        )
+                    )
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
@@ -129,7 +136,7 @@ struct RelaysView: View {
                     .frame(width: 18)
                 Text(title).font(.callout)
                 Spacer()
-                Text("\(list.relays.count)")
+                Text(L10n.formatted("%lld", Int64(list.relays.count)))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 7)
