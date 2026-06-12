@@ -18,7 +18,10 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     static let didChangeLanguageUserInfoKey = "language"
 
     static var defaults: UserDefaults {
-        UserDefaults(suiteName: AppContainerConfig.appGroupIdentifier) ?? .standard
+        if let testDefaults {
+            return testDefaults
+        }
+        return UserDefaults(suiteName: AppContainerConfig.appGroupIdentifier) ?? .standard
     }
 
     static var supportedAppLanguages: [AppLanguage] {
@@ -56,15 +59,35 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         rawValue.flatMap(AppLanguage.init(rawValue:)) ?? .system
     }
 
-    static func setCurrentRawValue(_ rawValue: String) {
+    static func setCurrentRawValue(
+        _ rawValue: String,
+        defaults: UserDefaults = AppLanguage.defaults,
+        notificationCenter: NotificationCenter = .default
+    ) {
         let resolved = resolved(rawValue: rawValue).rawValue
         defaults.set(resolved, forKey: storageKey)
-        NotificationCenter.default.post(
+        notificationCenter.post(
             name: didChangeNotification,
             object: nil,
             userInfo: [didChangeLanguageUserInfoKey: resolved]
         )
     }
+
+    private static let testDefaults: UserDefaults? = {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+        else { return nil }
+
+        let suiteName = [
+            AppContainerConfig.appGroupIdentifier,
+            "unit-tests",
+            String(ProcessInfo.processInfo.processIdentifier)
+        ].joined(separator: ".")
+        let defaults = UserDefaults(suiteName: suiteName)
+        defaults?.removePersistentDomain(forName: suiteName)
+        return defaults
+    }()
 
     var id: String { rawValue }
 
