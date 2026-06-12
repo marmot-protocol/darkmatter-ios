@@ -5309,6 +5309,22 @@ struct MessageMediaGalleryTests {
         #expect(MessageMediaFullscreenPresentation.image(from: imageData()) != nil)
     }
 
+    @Test func thumbnailCacheRetainsSourceDataForFullscreenReuse() async throws {
+        let data = imageData()
+        let itemID = "cache-warm-image-\(UUID().uuidString)"
+        let decoded = try #require(await MessageMediaThumbnailDecoder.image(
+            data: data,
+            maxPixelSize: 32,
+            scale: 1
+        ))
+
+        MessageMediaThumbnailDecoder.store(decoded, sourceData: data, for: itemID, maxPixelSize: 32)
+
+        let cached = try #require(MessageMediaThumbnailDecoder.cachedThumbnail(for: itemID, maxPixelSize: 32))
+        #expect(cached.sourceData == data)
+        #expect(cached.image.size.width > 0)
+    }
+
     private func attachment(
         id: String,
         mediaType: String,

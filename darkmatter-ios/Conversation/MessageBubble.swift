@@ -716,11 +716,12 @@ private struct MessageMediaTile: View {
         let maxPixelSize = max(1, Int(ceil(sideLength * UIScreen.main.scale)))
         if !force {
             if loadedImageID == item.id, let imageData { return imageData }
-            if let cachedImage = MessageMediaThumbnailDecoder.cachedImage(for: item.id, maxPixelSize: maxPixelSize) {
-                image = cachedImage
+            if let cachedThumbnail = MessageMediaThumbnailDecoder.cachedThumbnail(for: item.id, maxPixelSize: maxPixelSize) {
+                imageData = cachedThumbnail.sourceData
+                image = cachedThumbnail.image
                 loadedImageID = item.id
                 didFail = false
-                return nil
+                return cachedThumbnail.sourceData
             }
         }
         isLoading = true
@@ -743,7 +744,12 @@ private struct MessageMediaTile: View {
             imageData = data
             image = decoded
             loadedImageID = item.id
-            MessageMediaThumbnailDecoder.store(decoded, for: item.id, maxPixelSize: maxPixelSize)
+            MessageMediaThumbnailDecoder.store(
+                decoded,
+                sourceData: data,
+                for: item.id,
+                maxPixelSize: maxPixelSize
+            )
             return data
         } catch {
             imageData = nil
@@ -760,14 +766,35 @@ enum MessageMediaThumbnailDecoder {
         let image: UIImage
     }
 
-    private static let cache = NSCache<NSString, UIImage>()
+    private final class CachedThumbnail: NSObject {
+        let image: UIImage
+        let sourceData: Data
 
-    static func cachedImage(for itemID: String, maxPixelSize: Int) -> UIImage? {
-        cache.object(forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize))
+        init(image: UIImage, sourceData: Data) {
+            self.image = image
+            self.sourceData = sourceData
+        }
     }
 
-    static func store(_ image: UIImage, for itemID: String, maxPixelSize: Int) {
-        cache.setObject(image, forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize))
+    private static let cache: NSCache<NSString, CachedThumbnail> = {
+        let cache = NSCache<NSString, CachedThumbnail>()
+        cache.totalCostLimit = 50 * 1024 * 1024
+        return cache
+    }()
+
+    static func cachedThumbnail(for itemID: String, maxPixelSize: Int) -> (image: UIImage, sourceData: Data)? {
+        guard let cached = cache.object(forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize)) else {
+            return nil
+        }
+        return (cached.image, cached.sourceData)
+    }
+
+    static func store(_ image: UIImage, sourceData: Data, for itemID: String, maxPixelSize: Int) {
+        cache.setObject(
+            CachedThumbnail(image: image, sourceData: sourceData),
+            forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize),
+            cost: sourceData.count
+        )
     }
 
     static func image(data: Data, maxPixelSize: Int, scale: CGFloat) async -> UIImage? {
