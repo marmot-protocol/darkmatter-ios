@@ -358,6 +358,9 @@ final class ConversationViewModel {
         stopLiveSubscriptions()
         resetOptimisticState()
         error = nil
+        if timeline.isEmpty {
+            isLoading = true
+        }
         startLiveTimeline(accountRef: accountRef)
         startLiveGroupState(accountRef: accountRef)
         startDeferredGroupDetails(accountRef: accountRef)
@@ -473,6 +476,7 @@ final class ConversationViewModel {
                     if let snapshot = timelineSub.snapshot() {
                         self?.applyTimelinePage(snapshot, placement: .tail)
                     }
+                    self?.isLoading = false
                     for await update in SubscriptionDriver.timelineMessageUpdates(timelineSub) {
                         guard !Task.isCancelled else { return }
                         retryDelay = Self.liveSubscriptionInitialRetryDelayNanoseconds
@@ -482,6 +486,7 @@ final class ConversationViewModel {
                     return
                 } catch {
                     guard !Task.isCancelled else { return }
+                    self?.isLoading = false
                     self?.error = error.localizedDescription
                 }
                 guard !Task.isCancelled else { return }
@@ -603,6 +608,7 @@ final class ConversationViewModel {
             hasMoreBefore = page.hasMoreBefore
         }
         rebuildProjectedState()
+        isLoading = false
     }
 
     func applyTimelineSubscriptionUpdate(_ update: TimelineSubscriptionUpdateFfi) {

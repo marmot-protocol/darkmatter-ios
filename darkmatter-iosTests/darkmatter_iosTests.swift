@@ -5278,6 +5278,39 @@ struct TimelineBottomTests {
         ) == .none)
     }
 
+    @Test func initialTimelineConcealsOnlyWhilePositioningCanRun() {
+        #expect(TimelineInitialScroll.shouldConcealContent(
+            hasItems: true,
+            didFinishInitialPositioning: false,
+            targetMessageIdHex: nil,
+            targetItemId: nil
+        ))
+        #expect(!TimelineInitialScroll.shouldConcealContent(
+            hasItems: false,
+            didFinishInitialPositioning: false,
+            targetMessageIdHex: nil,
+            targetItemId: nil
+        ))
+        #expect(!TimelineInitialScroll.shouldConcealContent(
+            hasItems: true,
+            didFinishInitialPositioning: true,
+            targetMessageIdHex: nil,
+            targetItemId: nil
+        ))
+        #expect(TimelineInitialScroll.shouldConcealContent(
+            hasItems: true,
+            didFinishInitialPositioning: false,
+            targetMessageIdHex: "message-target",
+            targetItemId: "msg-target"
+        ))
+        #expect(!TimelineInitialScroll.shouldConcealContent(
+            hasItems: true,
+            didFinishInitialPositioning: false,
+            targetMessageIdHex: "message-target",
+            targetItemId: nil
+        ))
+    }
+
     @Test func bottomStateAllowsSmallLayoutDrift() {
         #expect(TimelineBottom.isPinned(bottomY: 1030, viewportBottomY: 1000))
     }
