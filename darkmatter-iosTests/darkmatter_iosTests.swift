@@ -3050,6 +3050,70 @@ struct ConversationTimelineProjectionTests {
         #expect(ids == [approve.messageIdHex, response.messageIdHex])
     }
 
+    @Test func normalizedReplyOrderingMovesNestedRepliesAfterParents() {
+        let parent = timelineRecord(messageIdHex: hex("ff"), timelineAt: 1)
+        let middle = timelineRecord(
+            messageIdHex: hex("bb"),
+            timelineAt: 1,
+            replyToMessageIdHex: parent.messageIdHex
+        )
+        let leaf = timelineRecord(
+            messageIdHex: hex("aa"),
+            timelineAt: 1,
+            replyToMessageIdHex: middle.messageIdHex
+        )
+        let unrelated = timelineRecord(messageIdHex: hex("cc"), timelineAt: 1)
+        let targetById = [
+            middle.messageIdHex: parent.messageIdHex,
+            leaf.messageIdHex: middle.messageIdHex,
+        ]
+        let items = [leaf, middle, unrelated, parent].map {
+            TimelineItem.message(ConversationViewModel.appMessageRecord(from: $0))
+        }
+
+        let ordered = ConversationViewModel.normalizedReplyOrdering(items) {
+            targetById[$0.messageIdHex]
+        }
+
+        #expect(messageIds(in: ordered) == [
+            unrelated.messageIdHex,
+            parent.messageIdHex,
+            middle.messageIdHex,
+            leaf.messageIdHex,
+        ])
+    }
+
+    @Test func normalizedReplyOrderingPreservesEarlySiblingReplyOrder() {
+        let parent = timelineRecord(messageIdHex: hex("ff"), timelineAt: 1)
+        let firstReply = timelineRecord(
+            messageIdHex: hex("aa"),
+            timelineAt: 1,
+            replyToMessageIdHex: parent.messageIdHex
+        )
+        let secondReply = timelineRecord(
+            messageIdHex: hex("bb"),
+            timelineAt: 1,
+            replyToMessageIdHex: parent.messageIdHex
+        )
+        let targetById = [
+            firstReply.messageIdHex: parent.messageIdHex,
+            secondReply.messageIdHex: parent.messageIdHex,
+        ]
+        let items = [firstReply, secondReply, parent].map {
+            TimelineItem.message(ConversationViewModel.appMessageRecord(from: $0))
+        }
+
+        let ordered = ConversationViewModel.normalizedReplyOrdering(items) {
+            targetById[$0.messageIdHex]
+        }
+
+        #expect(messageIds(in: ordered) == [
+            parent.messageIdHex,
+            firstReply.messageIdHex,
+            secondReply.messageIdHex,
+        ])
+    }
+
     @Test func liveTailRefreshPreservesLoadedScrollback() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
@@ -3381,6 +3445,13 @@ struct ConversationTimelineProjectionTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Conversation/ConversationView.swift")
+    }
+
+    private func messageIds(in items: [TimelineItem]) -> [String] {
+        items.compactMap { item -> String? in
+            guard case .message(let record, _) = item.kind else { return nil }
+            return record.messageIdHex
+        }
     }
 
     private func tempIdsWhereTransientTimelinePrefersNewerPendingFirst(
