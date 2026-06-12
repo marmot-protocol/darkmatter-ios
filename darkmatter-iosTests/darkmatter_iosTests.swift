@@ -4451,6 +4451,7 @@ struct AgentStreamTests {
         #expect(status == .received)
         #expect(record.plaintext == "complete")
         #expect(MessagePreview.body(record) == "complete")
+        #expect(viewModel.streamTextEntryCountForTesting == 0)
     }
 
     @MainActor
