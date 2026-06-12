@@ -542,6 +542,29 @@ struct AppStateBootstrapTests {
 }
 
 struct NotificationSubscriptionRetryTests {
+    @Test func driverClearsRunningStateWhenRunnerCompletes() async throws {
+        let driver = NotificationDriver()
+        let runner = NotificationSubscriptionRunner(
+            initialRetryDelayNanoseconds: 1,
+            maximumRetryDelayNanoseconds: 8,
+            subscribe: {
+                AsyncStream { continuation in continuation.finish() }
+            },
+            present: { _ in },
+            reportError: { _ in },
+            sleep: { _ in throw CancellationError() }
+        )
+
+        driver.start(runner: runner)
+        #expect(driver.isRunning)
+
+        for _ in 0..<1000 where driver.isRunning {
+            try await Task.sleep(nanoseconds: 1_000_000)
+        }
+
+        #expect(!driver.isRunning)
+    }
+
     @Test func retriesAfterSubscribeErrorAndDeliversNextNotification() async throws {
         let probe = NotificationSubscriptionProbe(attempts: [
             .failure,
