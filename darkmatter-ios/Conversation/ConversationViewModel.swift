@@ -129,6 +129,9 @@ final class ConversationViewModel {
     private var latestStreamWatchInFlight = false
     /// Accumulated text per live stream, keyed by stream id.
     private var streamText: [String: String] = [:]
+#if DEBUG
+    var streamTextEntryCountForTesting: Int { streamText.count }
+#endif
     /// Streams that received a checkpoint snapshot. Their QUIC `.finished`
     /// text is text-delta-only, so prefer the current preview at close.
     private var streamsWithCheckpointPreview: Set<String> = []
@@ -1178,6 +1181,7 @@ final class ConversationViewModel {
         streamsWithCheckpointPreview.remove(streamId)
         streamStartedAtById[streamId] = nil
         streamSenderById[streamId] = nil
+        streamText[streamId] = nil
     }
 
     private func resolveFinalizedStream(streamId: String) {
