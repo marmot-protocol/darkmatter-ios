@@ -263,8 +263,12 @@ struct AppStateBootstrapTests {
         let source = try String(contentsOf: appStateSourceURL, encoding: .utf8)
         let presentationPattern =
             #"present:\s*\{ \[weak self\] update in[\s\S]*"#
+            + #"let localNotificationsEnabled = await self\.localNotificationsEnabledForPresentation\([\s\S]*"#
+            + #"accountRef: update\.accountRef[\s\S]*"#
             + #"let shouldPresent = await MainActor\.run \{[\s\S]*"#
-            + #"self\.shouldPresentLocalNotification\(update\)[\s\S]*"#
+            + #"self\.noteNotificationSubscriptionDelivery\(\)[\s\S]*"#
+            + #"self\.shouldPresentLocalNotification\([\s\S]*"#
+            + #"localNotificationsEnabled: localNotificationsEnabled[\s\S]*"#
             + #"guard shouldPresent else \{ return \}[\s\S]*"#
             + #"await self\.notifications\.present\(update: update\)"#
         let oldPresentationPattern =
@@ -277,19 +281,26 @@ struct AppStateBootstrapTests {
     }
 
     @Test func notificationPresentationSettingsReadFailureFailsOpen() throws {
-        let source = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let appStateSource = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let marmotClientSource = try String(contentsOf: marmotClientSourceURL, encoding: .utf8)
         let helperPattern =
-            #"private func localNotificationsEnabledForPresentation\(accountRef: String\) -> Bool \{[\s\S]*"#
+            #"@MainActor\s+private func localNotificationsEnabledForPresentation\(accountRef: String\) async -> Bool \{[\s\S]*"#
+            + #"let client = try runtimeClient\(\)[\s\S]*"#
+            + #"return await client\.localNotificationsEnabledForPresentation\(accountRef: accountRef\)"#
+        let clientHelperPattern =
+            #"func localNotificationsEnabledForPresentation\(accountRef: String\) async -> Bool \{[\s\S]*"#
+            + #"Task\.detached\(priority: \.utility\) \{ \[marmot, accountRef\] in[\s\S]*"#
             + #"do \{[\s\S]*return try marmot\.notificationSettings\(accountRef: accountRef\)\.localNotificationsEnabled[\s\S]*"#
             + #"\} catch \{[\s\S]*return true[\s\S]*\}"#
         let policyPattern =
             #"LocalNotificationSuppressionPolicy\.shouldPresent\([\s\S]*"#
-            + #"localNotificationsEnabled: localNotificationsEnabledForPresentation\([\s\S]*"#
-            + #"accountRef: update\.accountRef"#
+            + #"localNotificationsEnabled: localNotificationsEnabled"#
 
-        #expect(source.matches(helperPattern))
-        #expect(source.matches(policyPattern))
-        #expect(!source.matches(#"localNotificationsEnabled:\s*\(try\? marmot\.notificationSettings"#))
+        #expect(appStateSource.matches(helperPattern))
+        #expect(marmotClientSource.matches(clientHelperPattern))
+        #expect(appStateSource.matches(policyPattern))
+        #expect(!appStateSource.contains("return try marmot.notificationSettings(accountRef: accountRef).localNotificationsEnabled"))
+        #expect(!appStateSource.matches(#"localNotificationsEnabled:\s*\(try\? marmot\.notificationSettings"#))
     }
 
     @Test func visibleChatRouteTracksAccountAndClearsOnlyMatchingRoute() async throws {
@@ -592,6 +603,13 @@ struct AppStateBootstrapTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Core/AppState.swift")
+    }
+
+    private var marmotClientSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Core/MarmotClient.swift")
     }
 
     private var appSourceURL: URL {

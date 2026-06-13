@@ -64,6 +64,18 @@ final class MarmotClient {
         }.value
     }
 
+    /// Reads the local-notification preference off the main actor. Presentation
+    /// should fail open if storage is temporarily unavailable.
+    func localNotificationsEnabledForPresentation(accountRef: String) async -> Bool {
+        await Task.detached(priority: .utility) { [marmot, accountRef] in
+            do {
+                return try marmot.notificationSettings(accountRef: accountRef).localNotificationsEnabled
+            } catch {
+                return true
+            }
+        }.value
+    }
+
     func relayTelemetrySettings() async throws -> RelayTelemetrySettingsFfi {
         try await Task.detached(priority: .utility) { [marmot] in
             try marmot.relayTelemetrySettings()
