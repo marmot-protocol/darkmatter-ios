@@ -76,11 +76,11 @@ nonisolated enum DeepLink: Equatable {
     /// formats.
     static func parse(string raw: String) -> DeepLink? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let url = URL(string: trimmed), let link = parse(url) {
-            return link
-        }
         if let memberRef = NostrProfileReference.memberRef(from: trimmed) {
             return .profile(npub: memberRef)
+        }
+        if let url = URL(string: trimmed), let link = parse(url) {
+            return link
         }
         return nil
     }
