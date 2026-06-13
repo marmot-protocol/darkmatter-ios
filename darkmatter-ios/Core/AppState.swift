@@ -367,9 +367,15 @@ final class AppState {
             },
             present: { [weak self] update in
                 guard let self else { return }
+                let localNotificationsEnabled = await self.localNotificationsEnabledForPresentation(
+                    accountRef: update.accountRef
+                )
                 let shouldPresent = await MainActor.run {
                     self.noteNotificationSubscriptionDelivery()
-                    return self.shouldPresentLocalNotification(update)
+                    return self.shouldPresentLocalNotification(
+                        update,
+                        localNotificationsEnabled: localNotificationsEnabled
+                    )
                 }
                 guard shouldPresent else { return }
                 await self.notifications.present(update: update)
@@ -407,11 +413,12 @@ final class AppState {
     }
 
     @MainActor
-    private func shouldPresentLocalNotification(_ update: NotificationUpdateFfi) -> Bool {
+    private func shouldPresentLocalNotification(
+        _ update: NotificationUpdateFfi,
+        localNotificationsEnabled: Bool
+    ) -> Bool {
         LocalNotificationSuppressionPolicy.shouldPresent(
-            localNotificationsEnabled: localNotificationsEnabledForPresentation(
-                accountRef: update.accountRef
-            ),
+            localNotificationsEnabled: localNotificationsEnabled,
             appSceneActive: isAppSceneActive,
             updateAccountRef: update.accountRef,
             updateGroupIdHex: update.groupIdHex,
@@ -419,11 +426,13 @@ final class AppState {
         )
     }
 
-    private func localNotificationsEnabledForPresentation(accountRef: String) -> Bool {
+    @MainActor
+    private func localNotificationsEnabledForPresentation(accountRef: String) async -> Bool {
         do {
-            return try marmot.notificationSettings(accountRef: accountRef).localNotificationsEnabled
+            let client = try runtimeClient()
+            return await client.localNotificationsEnabledForPresentation(accountRef: accountRef)
         } catch {
-            return true
+            fatalError("Failed to rebuild Keychain-backed Marmot runtime (\(type(of: error)))")
         }
     }
 
