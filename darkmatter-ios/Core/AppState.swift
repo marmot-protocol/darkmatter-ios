@@ -211,7 +211,6 @@ final class AppState {
         foregroundActivationTask?.cancel()
         nativePushRegistrationTask?.cancel()
         runtimeSuspensionTask?.cancel()
-        notificationDriver.stop()
         profileFetchQueueTask?.cancel()
         profileProjectionLoadTask?.cancel()
     }

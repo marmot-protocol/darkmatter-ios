@@ -646,6 +646,18 @@ struct NotificationSubscriptionRetryTests {
         #expect(!driver.isRunning)
     }
 
+    @Test func driverStateMutationsStayOnMainActor() throws {
+        let source = try String(contentsOf: notificationDriverSourceURL, encoding: .utf8)
+
+        #expect(source.matches(#"@MainActor\s+final class NotificationDriver"#))
+        #expect(source.matches(
+            #"task = Task \{ \[weak self\] in[\s\S]*"#
+            + #"await runner\.run\(\)[\s\S]*"#
+            + #"await MainActor\.run \{[\s\S]*"#
+            + #"self\?\.clearCompletedTask\(id: id\)"#
+        ))
+    }
+
     @Test func retriesAfterSubscribeErrorAndDeliversNextNotification() async throws {
         let probe = NotificationSubscriptionProbe(attempts: [
             .failure,
@@ -715,6 +727,13 @@ struct NotificationSubscriptionRetryTests {
         #expect(snapshot.presentedNotificationKeys == ["notif-c"])
         #expect(snapshot.errorCount == 3)
         #expect(snapshot.sleepDelays == [1, 2, 2, 1])
+    }
+
+    private var notificationDriverSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Core/NotificationDriver.swift")
     }
 }
 

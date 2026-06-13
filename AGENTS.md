@@ -91,6 +91,7 @@ Rules for notification work:
 - Foreground resume must schedule native-push registration independently from relay catch-up success; catch-up failures are best-effort and must not skip push reconciliation.
 - Main-app and NSE local notification presentation must fail open if a settings read throws; only an explicit disabled setting should suppress.
 - The main-app notification subscription must resolve `localNotificationsEnabled` off the MainActor before running foreground suppression.
+- `NotificationDriver` task state is MainActor-owned; runner completion must hop back to MainActor before clearing task storage.
 - Notification subscription retry failures should show at most one generic user-facing banner per outage; do not surface raw backend error descriptions in that toast.
 - The main app should not keep the Marmot runtime alive indefinitely in the background. It suspends the runtime on background and restarts it on foreground.
 

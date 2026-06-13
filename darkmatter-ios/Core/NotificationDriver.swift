@@ -68,6 +68,7 @@ nonisolated struct NotificationSubscriptionRunner {
     }
 }
 
+@MainActor
 final class NotificationDriver {
     private var task: Task<Void, Never>?
     private var taskID = UUID()
@@ -80,7 +81,9 @@ final class NotificationDriver {
         taskID = id
         task = Task { [weak self] in
             await runner.run()
-            self?.clearCompletedTask(id: id)
+            await MainActor.run {
+                self?.clearCompletedTask(id: id)
+            }
         }
     }
 
