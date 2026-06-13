@@ -288,6 +288,12 @@ nonisolated enum ProfileSanitizer {
             return isPrivateOrLoopbackIPv4(Array(bytes[12..<16]))
         }
 
+        // Deprecated IPv4-compatible IPv6 (`::a.b.c.d`) embeds the IPv4
+        // address in the low 32 bits without the `::ffff:` marker.
+        if bytes[0..<12].allSatisfy({ $0 == 0 }) {
+            return isPrivateOrLoopbackIPv4(Array(bytes[12..<16]))
+        }
+
         return (bytes[0] & 0xfe) == 0xfc || (bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)
     }
 
