@@ -3166,6 +3166,40 @@ struct ChatsListProjectionTests {
         #expect(viewModel.archivedItems.isEmpty)
     }
 
+    @Test func chatListRowUpdatesAreCoalescedBeforePublishing() async throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let older = chatListRow(
+            groupIdHex: hex("e1"),
+            title: "Older",
+            lastMessage: chatListPreview(messageIdHex: hex("f1"), plaintext: "older", timelineAt: 10),
+            updatedAt: 10
+        )
+        let newer = chatListRow(
+            groupIdHex: hex("e2"),
+            title: "Newer",
+            lastMessage: chatListPreview(messageIdHex: hex("f2"), plaintext: "newer", timelineAt: 20),
+            updatedAt: 20
+        )
+
+        viewModel.applyChatListUpdate(.row(trigger: .newLastMessage, row: older))
+        viewModel.applyChatListUpdate(.row(trigger: .newLastMessage, row: newer))
+
+        #expect(viewModel.items.isEmpty)
+        try await waitForExpectation { viewModel.items.count == 2 }
+        #expect(viewModel.items.map(\.id) == [newer.groupIdHex, older.groupIdHex])
+    }
+
+    @Test func chatListViewModelKeepsIncrementalRowCaches() throws {
+        let source = try String(contentsOf: chatsListViewModelSourceURL, encoding: .utf8)
+
+        #expect(source.contains("private var rowByGroupId"))
+        #expect(source.contains("private var itemByGroupId"))
+        #expect(source.contains("private var pendingChatListRowsByGroupId"))
+        #expect(source.contains("flushPendingChatListUpdates()"))
+        #expect(!source.contains("private func recompute()"))
+        #expect(!source.matches(#"private func scheduleAvatarURLRefresh[\s\S]*?avatarURLTask\?\.cancel\(\)"#))
+    }
+
     @Test func chatListItemsDoNotExposeSyntheticGroupRecords() throws {
         let source = try String(contentsOf: chatsListViewModelSourceURL, encoding: .utf8)
 
@@ -6385,6 +6419,19 @@ private func managementState(
         requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave ?? isSelfAdmin,
         memberActions: []
     )
+}
+
+@MainActor
+private func waitForExpectation(
+    pollingIntervalNanoseconds: UInt64 = 5_000_000,
+    attempts: Int = 100,
+    _ predicate: () -> Bool
+) async throws {
+    for _ in 0..<attempts {
+        if predicate() { return }
+        try await Task.sleep(nanoseconds: pollingIntervalNanoseconds)
+    }
+    #expect(predicate())
 }
 
 extension MarmotClient {
