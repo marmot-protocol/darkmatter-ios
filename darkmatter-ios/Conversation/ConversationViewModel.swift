@@ -125,6 +125,7 @@ final class ConversationViewModel {
     @ObservationIgnored private var transientTimelineItems: [String: TimelineItem] = [:]
     @ObservationIgnored private var pendingMediaByRowId: [String: [MessageMediaAttachment]] = [:]
     @ObservationIgnored private var mediaRecordsByMessageId: [String: [MediaRecordFfi]] = [:]
+    @ObservationIgnored private var mediaRecordReferencesByKey: [MediaDownloadInFlightKey: MediaAttachmentReferenceFfi] = [:]
     @ObservationIgnored private let mediaDownloadInFlight = MediaDownloadInFlightStore()
     /// Optimistic reaction messages by their own temporary id, re-aggregated on change.
     @ObservationIgnored private var reactionRecords: [String: AppMessageRecordFfi] = [:]
@@ -1301,12 +1302,7 @@ final class ConversationViewModel {
     }
 
     private func mediaRecordReference(matching reference: MediaAttachmentReferenceFfi) -> MediaAttachmentReferenceFfi? {
-        for records in mediaRecordsByMessageId.values {
-            for record in records where Self.sameMediaAttachment(record.reference, reference) {
-                return record.reference
-            }
-        }
-        return nil
+        mediaRecordReferencesByKey[MediaDownloadInFlightKey(reference: reference)]
     }
 
     static func sameMediaAttachment(
@@ -1333,6 +1329,29 @@ final class ConversationViewModel {
         }
     }
 
+    private func replaceMediaRecordsByMessageId(_ recordsByMessageId: [String: [MediaRecordFfi]]) {
+        mediaRecordsByMessageId = recordsByMessageId
+        rebuildMediaRecordReferenceIndex()
+    }
+
+    @discardableResult
+    private func replaceMediaRecords(_ records: [MediaRecordFfi], forMessageId messageIdHex: String) -> Bool {
+        guard mediaRecordsByMessageId[messageIdHex] != records else { return false }
+        mediaRecordsByMessageId[messageIdHex] = records
+        rebuildMediaRecordReferenceIndex()
+        return true
+    }
+
+    private func rebuildMediaRecordReferenceIndex() {
+        var next: [MediaDownloadInFlightKey: MediaAttachmentReferenceFfi] = [:]
+        for records in mediaRecordsByMessageId.values {
+            for record in records {
+                next[MediaDownloadInFlightKey(reference: record.reference)] = record.reference
+            }
+        }
+        mediaRecordReferencesByKey = next
+    }
+
     private func scheduleMediaRecordsRefresh() {
         mediaRefreshTask?.cancel()
         mediaRefreshTask = Task { [weak self] in
@@ -1357,13 +1376,29 @@ final class ConversationViewModel {
             guard !Task.isCancelled else { return }
             let next = Dictionary(grouping: records, by: \.messageIdHex)
             guard mediaRecordsByMessageId != next else { return }
-            mediaRecordsByMessageId = next
+            replaceMediaRecordsByMessageId(next)
             noteTimelineProjectionChanged()
         } catch {
             // Media rows are a display accelerator for decrypt/download. The
             // timeline remains usable and future updates retry the refresh.
         }
     }
+
+#if DEBUG
+    func replaceMediaRecordsForTesting(_ recordsByMessageId: [String: [MediaRecordFfi]]) {
+        replaceMediaRecordsByMessageId(recordsByMessageId)
+    }
+
+    func mediaRecordReferenceForTesting(
+        matching reference: MediaAttachmentReferenceFfi
+    ) -> MediaAttachmentReferenceFfi? {
+        mediaRecordReference(matching: reference)
+    }
+
+    var mediaRecordReferenceIndexCountForTesting: Int {
+        mediaRecordReferencesByKey.count
+    }
+#endif
 
     @discardableResult
     private func reconcilePendingOutgoingMessage(with record: AppMessageRecordFfi, replyTargetId: String?) -> Bool {
@@ -1940,8 +1975,7 @@ final class ConversationViewModel {
                         receivedAt: now
                     )
                 }
-                if mediaRecordsByMessageId[messageId] != nextRecords {
-                    mediaRecordsByMessageId[messageId] = nextRecords
+                if replaceMediaRecords(nextRecords, forMessageId: messageId) {
                     noteTimelineProjectionChanged()
                 }
             }

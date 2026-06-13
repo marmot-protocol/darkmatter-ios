@@ -5386,6 +5386,38 @@ struct MessageSemanticsTests {
         #expect(!ConversationViewModel.sameMediaAttachment(differentCiphertext, timelineReference))
     }
 
+    @MainActor
+    @Test func mediaRecordReferenceLookupUsesIndexedNormalizedIdentity() throws {
+        var timelineReference = encryptedMediaReference(sourceEpoch: 0)
+        timelineReference.plaintextSha256 = timelineReference.plaintextSha256.uppercased()
+        timelineReference.ciphertextSha256 = timelineReference.ciphertextSha256.uppercased()
+        timelineReference.nonceHex = timelineReference.nonceHex.uppercased()
+        let listedReference = encryptedMediaReference(sourceEpoch: 42)
+        let messageId = hex("dd")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: hex("aa"))
+        )
+        viewModel.replaceMediaRecordsForTesting([
+            messageId: [
+                MediaRecordFfi(
+                    messageIdHex: messageId,
+                    attachmentIndex: 0,
+                    direction: "received",
+                    groupIdHex: hex("aa"),
+                    sender: hex("11"),
+                    reference: listedReference,
+                    caption: nil,
+                    recordedAt: 1,
+                    receivedAt: 1
+                )
+            ]
+        ])
+
+        #expect(viewModel.mediaRecordReferenceIndexCountForTesting == 1)
+        #expect(viewModel.mediaRecordReferenceForTesting(matching: timelineReference) == listedReference)
+    }
+
     @Test func mediaDownloadInFlightKeyNormalizesCryptoIdentity() {
         var uppercase = encryptedMediaReference(sourceEpoch: 0)
         let lowercase = uppercase
