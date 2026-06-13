@@ -680,8 +680,6 @@ final class AppState {
 
         do {
             try await marmot.catchUpAccounts()
-            guard isAppSceneActive, !Task.isCancelled else { return }
-            await syncNativePushRegistrationIfEnabled()
         } catch {
             // Foreground catch-up is a best-effort safety net. The live
             // subscription and NSE path continue to handle notification flow.
@@ -764,6 +762,8 @@ final class AppState {
 
         guard isAppSceneActive, !Task.isCancelled else { return }
         await catchUpAfterForegroundActivation()
+        guard isAppSceneActive, !Task.isCancelled else { return }
+        scheduleNativePushRegistrationIfEnabled()
         resumeProfileFetchQueueIfNeeded()
     }
 
