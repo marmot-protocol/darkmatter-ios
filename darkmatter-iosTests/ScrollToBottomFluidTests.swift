@@ -18,13 +18,15 @@ struct ScrollToBottomFluidTests {
         // tasks rather than reviving the old DispatchQueue timing workaround.
         #expect(!source.contains("DispatchQueue.main"))
 
-        // jumpToBottom must be a single animated scroll.
-        let bodyPattern = #"private func jumpToBottom\(proxy: ScrollViewProxy\) \{[\s\S]*?scrollToBottom\(proxy: proxy, animated: true\)[\s\S]*?\n    \}"#
+        // jumpToBottom must schedule a single animated scroll through the
+        // coordinator, not perform an immediate scroll in the button action.
+        let bodyPattern = #"private func jumpToBottom\(proxy: ScrollViewProxy\) \{[\s\S]*?scheduleScrollToBottom\([\s\S]*?animated: true,[\s\S]*?reason: \.buttonTap[\s\S]*?\n    \}"#
         guard let range = source.range(of: bodyPattern, options: .regularExpression) else {
-            Issue.record("jumpToBottom did not match the expected single animated scroll shape")
+            Issue.record("jumpToBottom did not match the expected deferred animated scroll shape")
             return
         }
         let body = String(source[range])
         #expect(!body.contains("animated: false"))
+        #expect(!body.contains("scrollToBottom(proxy: proxy"))
     }
 }
