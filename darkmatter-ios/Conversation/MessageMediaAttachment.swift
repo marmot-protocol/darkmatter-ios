@@ -37,7 +37,7 @@ struct MessageMediaAttachment: Identifiable, Hashable {
     }
 }
 
-struct MediaDraftAttachment: Identifiable, Hashable {
+nonisolated struct MediaDraftAttachment: Identifiable, Hashable {
     let id: UUID
     let fileName: String
     let mediaType: String
@@ -99,7 +99,7 @@ struct MediaDraftAttachment: Identifiable, Hashable {
     }
 }
 
-enum MediaDraftProcessor {
+nonisolated enum MediaDraftProcessor {
     static let maxAttachmentCount = 10
     static let maxLongEdge: CGFloat = 2048
     static let maxAttachmentBytes = 10 * 1024 * 1024
@@ -120,6 +120,29 @@ enum MediaDraftProcessor {
                 return L10n.string("That image is too large to send.")
             }
         }
+    }
+
+    private struct SendableAttachment: @unchecked Sendable {
+        let attachment: MediaDraftAttachment
+    }
+
+    private struct SendableImage: @unchecked Sendable {
+        let image: UIImage
+    }
+
+    static func preparedAttachment(from data: Data, fileName: String?) async throws -> MediaDraftAttachment {
+        let prepared = try await Task.detached(priority: .userInitiated) { () throws -> SendableAttachment in
+            try SendableAttachment(attachment: attachment(from: data, fileName: fileName))
+        }.value
+        return prepared.attachment
+    }
+
+    static func preparedAttachment(from image: UIImage, fileName: String?) async throws -> MediaDraftAttachment {
+        let sendableImage = SendableImage(image: image)
+        let prepared = try await Task.detached(priority: .userInitiated) { () throws -> SendableAttachment in
+            try SendableAttachment(attachment: attachment(from: sendableImage.image, fileName: fileName))
+        }.value
+        return prepared.attachment
     }
 
     static func attachment(from data: Data, fileName: String?) throws -> MediaDraftAttachment {

@@ -989,10 +989,15 @@ struct ConversationView: View {
     }
 
     private func addCameraImage(_ image: UIImage) {
-        do {
-            try appendMediaDraft(MediaDraftProcessor.attachment(from: image, fileName: nil))
-        } catch {
-            appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+        Task { @MainActor in
+            do {
+                let attachment = try await MediaDraftProcessor.preparedAttachment(from: image, fileName: nil)
+                try appendMediaDraft(attachment)
+            } catch is CancellationError {
+                return
+            } catch {
+                appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+            }
         }
     }
 
@@ -1001,11 +1006,29 @@ struct ConversationView: View {
             appState.present(.warning(L10n.string("Media is not available in this group")))
             return
         }
-        for selection in selections {
-            do {
-                try appendMediaDraft(MediaDraftProcessor.attachment(from: selection.data, fileName: selection.fileName))
-            } catch {
-                appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+        guard remainingMediaDraftSlots > 0 else {
+            presentMaxAttachmentWarning()
+            return
+        }
+
+        let selected = Array(selections.prefix(remainingMediaDraftSlots))
+        if selected.count < selections.count {
+            presentMaxAttachmentWarning()
+        }
+
+        Task { @MainActor in
+            for selection in selected {
+                do {
+                    let attachment = try await MediaDraftProcessor.preparedAttachment(
+                        from: selection.data,
+                        fileName: selection.fileName
+                    )
+                    try appendMediaDraft(attachment)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+                }
             }
         }
     }

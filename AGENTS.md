@@ -132,6 +132,7 @@ Do not add a second storage path for data Marmot already owns.
 - Malformed or unsupported media `imeta` fields must not hide kind-9 messages; degrade to chat text unless a valid encrypted-media reference is available, and keep optional fields such as `thumbhash` bounded and validated.
 - Fullscreen media galleries are image-only. Reject non-image initial items before presentation and surface undecodable image bytes as an explicit failure state rather than an idle spinner.
 - Media downloads should pass through the conversation view model's in-flight store so duplicate thumbnail/gallery requests share one decrypt/download task.
+- Draft photo attachment decoding, downsampling, JPEG encoding, and thumbnail generation should run off the MainActor; hop back to the UI actor only to append prepared drafts or surface errors.
 - Markdown display blocks are cacheable per message content and profile refresh generation; do not call `MarkdownMessageBuilder.displayBlocks` directly from bubble body paths.
 - Markdown preview/plain-text walkers must budget table rows and cells, including empty cells, so hostile ASTs cannot bypass node limits.
 - Developer-mode streaming debug may show agent-stream MLS events and live QUIC update rows in the conversation timeline. Console logs for agent streams should log sizes, counts, hashes, and stream ids rather than plaintext message content.

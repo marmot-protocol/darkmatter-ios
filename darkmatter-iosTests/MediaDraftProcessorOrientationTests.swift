@@ -110,12 +110,32 @@ struct MediaDraftProcessorOrientationTests {
         #expect(largestPixelEdge <= MediaDraftProcessor.draftThumbnailPixelSize)
     }
 
+    @Test func asyncAttachmentPreparationKeepsImageProcessingSemantics() async throws {
+        let attachment = try await MediaDraftProcessor.preparedAttachment(
+            from: cameraStylePortrait(),
+            fileName: "portrait.heic"
+        )
+
+        #expect(attachment.fileName == "portrait.heic.jpg")
+        #expect(attachment.mediaType == "image/jpeg")
+        #expect(attachment.dim == "100x400")
+        #expect(attachment.thumbnail != nil)
+    }
+
     @Test func mediaDraftStripRendersPrecomputedThumbnail() throws {
         let source = try String(contentsOf: mediaComposerViewsSourceURL, encoding: .utf8)
 
         #expect(source.contains("if let thumbnail = attachment.thumbnail"))
         #expect(source.contains("Image(uiImage: thumbnail)"))
         #expect(!source.contains("UIImage(data: attachment.data)"))
+    }
+
+    @Test func conversationViewPreparesMediaDraftsAsynchronouslyBeforeAppending() throws {
+        let source = try String(contentsOf: conversationViewSourceURL, encoding: .utf8)
+
+        #expect(source.contains("try await MediaDraftProcessor.preparedAttachment(from: image, fileName: nil)"))
+        #expect(source.contains("let attachment = try await MediaDraftProcessor.preparedAttachment(\n                        from: selection.data"))
+        #expect(!source.contains("try appendMediaDraft(MediaDraftProcessor.attachment"))
     }
 
     private struct SampledColor {
@@ -158,5 +178,12 @@ struct MediaDraftProcessorOrientationTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Conversation/MediaComposerViews.swift")
+    }
+
+    private var conversationViewSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Conversation/ConversationView.swift")
     }
 }
