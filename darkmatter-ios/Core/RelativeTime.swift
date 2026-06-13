@@ -1,10 +1,12 @@
 import Foundation
 
-/// Compact, glanceable timestamps for the chats list — recent times collapse
-/// to "now"/"4m"/"2h", this week shows the weekday, older shows the date.
+/// Compact, glanceable timestamps for the chats list: recent times collapse
+/// to localized "now"/minute/hour durations, this week shows the weekday,
+/// older shows the date.
 @MainActor
 enum RelativeTime {
     private static var formatterCache: [String: DateFormatter] = [:]
+    private static var durationFormatterCache: [String: DateComponentsFormatter] = [:]
     private static var formatterCacheLocaleIdentifier = Locale.autoupdatingCurrent.identifier
     private static let shortTimeFormatterKey = "style:time:short"
 
@@ -17,9 +19,14 @@ enum RelativeTime {
         let seconds = now.timeIntervalSince(date)
         if seconds < 0 { return L10n.string("now") }
         if seconds < 60 { return L10n.string("now") }
-        if seconds < 3600 { return "\(Int(seconds / 60))m" }
-        if calendar.isDateInToday(date) { return "\(Int(seconds / 3600))h" }
-        if calendar.isDateInYesterday(date) { return L10n.string("Yesterday") }
+        if seconds < 3600 { return abbreviatedDuration(Int(seconds / 60), unit: .minute, locale: locale) }
+        if calendar.isDate(date, inSameDayAs: now) {
+            return abbreviatedDuration(Int(seconds / 3600), unit: .hour, locale: locale)
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return L10n.string("Yesterday")
+        }
 
         if seconds < 7 * 24 * 3600 {
             return formatted(date, "EEEE", locale: locale) // full weekday, e.g. "Monday"
@@ -41,6 +48,49 @@ enum RelativeTime {
         return formatter.string(from: date)
     }
 
+    private static func abbreviatedDuration(_ value: Int, unit: NSCalendar.Unit, locale: Locale) -> String {
+        let formatter = durationFormatter(for: unit, locale: locale)
+        let secondsPerUnit: TimeInterval = unit == .hour ? 3600 : 60
+        let interval = TimeInterval(value) * secondsPerUnit
+        return formatter.string(from: interval) ?? fallbackDuration(value, unit: unit, locale: locale)
+    }
+
+    private static func durationFormatter(
+        for unit: NSCalendar.Unit,
+        locale: Locale
+    ) -> DateComponentsFormatter {
+        let key = unit == .hour ? "duration:hour:abbreviated" : "duration:minute:abbreviated"
+        refreshCachesIfNeeded(locale: locale)
+
+        if let cached = durationFormatterCache[key] {
+            return cached
+        }
+
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.locale = locale
+        formatter.calendar = calendar
+        formatter.allowedUnits = [unit]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 1
+        durationFormatterCache[key] = formatter
+        return formatter
+    }
+
+    private static func fallbackDuration(_ value: Int, unit: NSCalendar.Unit, locale: Locale) -> String {
+        let measurementFormatter = MeasurementFormatter()
+        measurementFormatter.locale = locale
+        measurementFormatter.unitStyle = .short
+
+        let numberFormatter = NumberFormatter()
+        numberFormatter.locale = locale
+        numberFormatter.numberStyle = .decimal
+        measurementFormatter.numberFormatter = numberFormatter
+
+        let durationUnit: UnitDuration = unit == .hour ? .hours : .minutes
+        return measurementFormatter.string(from: Measurement(value: Double(value), unit: durationUnit))
+    }
+
     private static func formatter(for template: String, locale: Locale) -> DateFormatter {
         formatter(for: "template:\(template)", locale: locale) { formatter in
             formatter.setLocalizedDateFormatFromTemplate(template)
@@ -52,11 +102,7 @@ enum RelativeTime {
         locale: Locale,
         configure: (DateFormatter) -> Void
     ) -> DateFormatter {
-        let localeIdentifier = locale.identifier
-        if formatterCacheLocaleIdentifier != localeIdentifier {
-            formatterCache.removeAll()
-            formatterCacheLocaleIdentifier = localeIdentifier
-        }
+        refreshCachesIfNeeded(locale: locale)
 
         if let cached = formatterCache[key] {
             return cached
@@ -69,14 +115,28 @@ enum RelativeTime {
         return formatter
     }
 
+    private static func refreshCachesIfNeeded(locale: Locale) {
+        let localeIdentifier = locale.identifier
+        if formatterCacheLocaleIdentifier != localeIdentifier {
+            formatterCache.removeAll()
+            durationFormatterCache.removeAll()
+            formatterCacheLocaleIdentifier = localeIdentifier
+        }
+    }
+
     #if DEBUG
     static func resetFormatterCacheForTesting() {
         formatterCache.removeAll()
+        durationFormatterCache.removeAll()
         formatterCacheLocaleIdentifier = Locale.autoupdatingCurrent.identifier
     }
 
     static var formatterCacheCountForTesting: Int {
         formatterCache.count
+    }
+
+    static var durationFormatterCacheCountForTesting: Int {
+        durationFormatterCache.count
     }
 
     static var formatterCacheLocaleIdentifierForTesting: String {
