@@ -64,4 +64,15 @@ struct Bech32CharsetLookupTests {
         // must fail the lookup and decode to nil rather than misindex.
         #expect(NostrProfileReference.memberRef(fromReference: "nprofile1bbbbbb") == nil)
     }
+
+    @Test func rejectsOverlongBech32ReferencesBeforeDecode() {
+        let overlongNpub = "npub1" + String(repeating: "q", count: 300)
+        let overlongNprofile = "nprofile1" + String(repeating: "q", count: 300)
+
+        #expect(NostrProfileReference.memberRef(fromReference: overlongNpub) == nil)
+        #expect(NostrProfileReference.pubkeyHex(fromBech32: overlongNpub) == nil)
+        #expect(NostrProfileReference.memberRef(from: "nostr:\(overlongNprofile)") == nil)
+        #expect(DeepLink.parse(string: overlongNpub) == nil)
+        #expect(DeepLink.parse(string: "darkmatter://profile/\(overlongNprofile)") == nil)
+    }
 }

@@ -147,6 +147,7 @@ Do not add a second storage path for data Marmot already owns.
 - Do not use `abs` on wrapped or peer-influenced integer hashes; use magnitude or unsigned modulo helpers that are safe for `Int.min`.
 - Import identity flows should consume and clear pasted nsec state before awaiting Marmot, while still clearing matching pasteboard contents on every outcome.
 - Profile edits must normalize and length-bound outgoing kind:0 metadata before publishing: display names and about text go through `ProfileSanitizer`, picture URLs must be public HTTPS, and NIP-05/lud16 drafts must validate as address-shaped values before async publish starts.
+- Pasted, scanned, and deep-linked profile references must reject overlong bech32 inputs before lowercasing, URL parsing, checksum verification, or TLV conversion.
 - Profile references from QR scans, deep links, and pasted input must be validated before routing or staging: `npub` and `nprofile` need valid bech32 checksums, and hex public keys should be normalized to lowercase.
 - Conversation reply-order normalization runs during timeline rebuilds and single-row inserts; keep it linear over the timeline and avoid fixpoint loops that rebuild message indexes per pass.
 - Profile refresh queue drains must leave queued IDs intact when `canRefreshProfiles` is false, then re-arm when foreground/runtime state allows refresh again.

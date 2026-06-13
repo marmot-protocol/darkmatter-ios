@@ -2,6 +2,7 @@ import Foundation
 
 nonisolated enum NostrProfileReference {
     private static let bech32Charset = Array("qpzry9x8gf2tvdw0s3jn54khce6mua7l")
+    private static let maxBech32ReferenceUTF8Bytes = 256
     /// O(1) reverse lookup for `bech32Charset`, built once. Decoding scans every
     /// character of every reference, so a linear `firstIndex(of:)` per character
     /// was O(n) per lookup (issue #33).
@@ -24,13 +25,17 @@ nonisolated enum NostrProfileReference {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        if let reference = reference(fromDarkMatterURLString: trimmed) {
-            return memberRef(fromReference: reference)
+        if looksLikeProfileReference(trimmed) {
+            return memberRef(fromReference: trimmed)
         }
 
-        if trimmed.lowercased().hasPrefix("nostr:") {
+        if hasCaseInsensitivePrefix(trimmed, "nostr:") {
             let rest = String(trimmed.dropFirst("nostr:".count))
             return memberRef(fromReference: rest)
+        }
+
+        if let reference = reference(fromDarkMatterURLString: trimmed) {
+            return memberRef(fromReference: reference)
         }
 
         return memberRef(fromReference: trimmed)
@@ -41,12 +46,11 @@ nonisolated enum NostrProfileReference {
     /// keep their bech32 fallback.
     static func pubkeyHex(fromBech32 reference: String) -> String? {
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = trimmed.lowercased()
-        if lower.hasPrefix("npub1") {
+        if hasCaseInsensitivePrefix(trimmed, "npub1") {
             guard let bytes = npubPubkeyBytes(trimmed) else { return nil }
             return bytes.map { String(format: "%02x", $0) }.joined()
         }
-        if lower.hasPrefix("nprofile1") {
+        if hasCaseInsensitivePrefix(trimmed, "nprofile1") {
             return nprofilePubkeyHex(trimmed)
         }
         return nil
@@ -54,17 +58,16 @@ nonisolated enum NostrProfileReference {
 
     static func memberRef(fromReference reference: String) -> String? {
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lower = trimmed.lowercased()
 
-        if lower.hasPrefix("nprofile1") {
+        if hasCaseInsensitivePrefix(trimmed, "nprofile1") {
             return nprofilePubkeyHex(trimmed)
         }
-        if lower.hasPrefix("npub1") {
+        if hasCaseInsensitivePrefix(trimmed, "npub1") {
             guard npubPubkeyBytes(trimmed) != nil else { return nil }
             return trimmed
         }
         if Hex.is32Bytes(trimmed) {
-            return lower
+            return trimmed.lowercased()
         }
         return nil
     }
@@ -114,7 +117,26 @@ nonisolated enum NostrProfileReference {
         return nil
     }
 
+    private static func looksLikeProfileReference(_ raw: String) -> Bool {
+        hasCaseInsensitivePrefix(raw, "npub1")
+            || hasCaseInsensitivePrefix(raw, "nprofile1")
+            || Hex.is32Bytes(raw)
+    }
+
+    private static func hasCaseInsensitivePrefix(_ raw: String, _ prefix: String) -> Bool {
+        raw.prefix(prefix.count).lowercased() == prefix
+    }
+
+    private static func isWithinBech32ReferenceLimit(_ raw: String) -> Bool {
+        raw.utf8.index(
+            raw.utf8.startIndex,
+            offsetBy: maxBech32ReferenceUTF8Bytes + 1,
+            limitedBy: raw.utf8.endIndex
+        ) == nil
+    }
+
     private static func bech32Decode(_ raw: String) -> (hrp: String, data: [UInt8])? {
+        guard isWithinBech32ReferenceLimit(raw) else { return nil }
         let lower = raw.lowercased()
         guard raw == lower || raw == raw.uppercased(),
               let separator = lower.lastIndex(of: "1")
