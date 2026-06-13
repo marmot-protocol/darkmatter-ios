@@ -36,6 +36,56 @@ nonisolated enum ComposerInputChrome {
     }
 }
 
+nonisolated enum ComposerSideIconTone: Equatable {
+    case primary
+    case disabled
+
+    var color: Color {
+        switch self {
+        case .primary:
+            Color.primary
+        case .disabled:
+            Color.secondary.opacity(0.45)
+        }
+    }
+}
+
+nonisolated enum ComposerAttachmentButtonTapBehavior: Equatable {
+    case showOptions
+    case showUnavailableTooltip
+}
+
+nonisolated struct ComposerAttachmentButtonAppearance: Equatable {
+    let iconTone: ComposerSideIconTone
+    let chromeInteractive: Bool
+    let controlOpacity: Double
+    let tapBehavior: ComposerAttachmentButtonTapBehavior
+
+    static func mediaAvailability(_ mediaEnabled: Bool) -> ComposerAttachmentButtonAppearance {
+        if mediaEnabled {
+            return ComposerAttachmentButtonAppearance(
+                iconTone: .primary,
+                chromeInteractive: true,
+                controlOpacity: 1,
+                tapBehavior: .showOptions
+            )
+        }
+        return ComposerAttachmentButtonAppearance(
+            iconTone: .disabled,
+            chromeInteractive: false,
+            controlOpacity: 0.72,
+            tapBehavior: .showUnavailableTooltip
+        )
+    }
+}
+
+private enum ComposerAttachmentPopover: String, Identifiable {
+    case options
+    case unavailable
+
+    var id: String { rawValue }
+}
+
 /// Telegram-style composer: attachment + pill input (emoji + send inside) + mic slot.
 struct ComposerBar: View {
     @Binding var draft: String
@@ -50,7 +100,7 @@ struct ComposerBar: View {
     let onSend: () -> Void
     @FocusState private var focused: Bool
     @State private var isKeyboardVisible = false
-    @State private var showAttachmentOptions = false
+    @State private var attachmentPopover: ComposerAttachmentPopover?
     @State private var showEmojiPicker = false
 
     private var controlSize: CGFloat { BottomInputChromeLayout.controlSize }
@@ -90,22 +140,26 @@ struct ComposerBar: View {
     }
 
     private var attachmentButton: some View {
-        Button {
-            showAttachmentOptions = true
+        let appearance = ComposerAttachmentButtonAppearance.mediaAvailability(mediaEnabled)
+
+        return Button {
+            handleAttachmentTap(appearance.tapBehavior)
         } label: {
             sideCircleIcon(
                 "paperclip",
                 weight: .medium,
-                size: BottomInputChromeLayout.sideControlIconSize
+                size: BottomInputChromeLayout.sideControlIconSize,
+                tone: appearance.iconTone,
+                interactive: appearance.chromeInteractive
             )
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .disabled(!mediaEnabled)
-        .opacity(mediaEnabled ? 1 : 0.45)
+        .opacity(appearance.controlOpacity)
         .accessibilityLabel("Add attachment")
+        .accessibilityHint(mediaEnabled ? "" : L10n.string("Media is not available in this group"))
         .popover(
-            isPresented: $showAttachmentOptions,
+            item: $attachmentPopover,
             attachmentAnchor: .rect(.rect(CGRect(
                 x: controlSize / 2,
                 y: -BottomInputChromeLayout.attachmentMenuAnchorLift,
@@ -113,17 +167,22 @@ struct ComposerBar: View {
                 height: 0
             ))),
             arrowEdge: .bottom
-        ) {
-            ComposerAttachmentMenu(
-                onPhotoLibrary: {
-                    showAttachmentOptions = false
-                    onPhotoLibrary()
-                },
-                onTakePhoto: {
-                    showAttachmentOptions = false
-                    onTakePhoto()
-                }
-            )
+        ) { popover in
+            switch popover {
+            case .options:
+                ComposerAttachmentMenu(
+                    onPhotoLibrary: {
+                        attachmentPopover = nil
+                        onPhotoLibrary()
+                    },
+                    onTakePhoto: {
+                        attachmentPopover = nil
+                        onTakePhoto()
+                    }
+                )
+            case .unavailable:
+                ComposerAttachmentUnavailableTooltip()
+            }
         }
     }
 
@@ -221,11 +280,12 @@ struct ComposerBar: View {
         _ name: String,
         weight: Font.Weight,
         size: CGFloat,
+        tone: ComposerSideIconTone = .primary,
         interactive: Bool = true
     ) -> some View {
         Image(systemName: name)
             .font(.system(size: size, weight: weight))
-            .foregroundStyle(.primary)
+            .foregroundStyle(tone.color)
             .frame(width: controlSize, height: controlSize)
             .compatibleInputCircleChrome(interactive: interactive)
     }
@@ -252,11 +312,34 @@ struct ComposerBar: View {
         onSend()
     }
 
+    private func handleAttachmentTap(_ behavior: ComposerAttachmentButtonTapBehavior) {
+        switch behavior {
+        case .showOptions:
+            attachmentPopover = .options
+        case .showUnavailableTooltip:
+            attachmentPopover = .unavailable
+        }
+    }
+
     private func focusComposer() {
         Task { @MainActor in
             await Task.yield()
             focused = true
         }
+    }
+}
+
+private struct ComposerAttachmentUnavailableTooltip: View {
+    var body: some View {
+        Text(L10n.string("Media is not available in this group"))
+            .font(.footnote.weight(.medium))
+            .foregroundStyle(.primary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: 220)
+            .fixedSize(horizontal: false, vertical: true)
+            .presentationCompactAdaptation(.popover)
     }
 }
 

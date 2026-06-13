@@ -5664,6 +5664,20 @@ struct MediaComposerAvailabilityTests {
 
         #expect(!viewModel.canSendMediaAttachments)
     }
+
+    @Test func attachmentButtonUsesDisabledAppearanceWhenMediaIsUnavailable() {
+        let enabled = ComposerAttachmentButtonAppearance.mediaAvailability(true)
+        let disabled = ComposerAttachmentButtonAppearance.mediaAvailability(false)
+
+        #expect(enabled.iconTone == .primary)
+        #expect(enabled.chromeInteractive)
+        #expect(enabled.controlOpacity == 1)
+        #expect(enabled.tapBehavior == .showOptions)
+        #expect(disabled.iconTone == .disabled)
+        #expect(!disabled.chromeInteractive)
+        #expect(disabled.controlOpacity < enabled.controlOpacity)
+        #expect(disabled.tapBehavior == .showUnavailableTooltip)
+    }
 }
 
 struct PhotoLibrarySelectionOrderingTests {
