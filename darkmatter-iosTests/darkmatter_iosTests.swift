@@ -5775,6 +5775,27 @@ struct TimelineBottomTests {
         #expect(result.targetID == "message-b")
     }
 
+    @Test func userInitiatedBottomScrollWinsPendingAutomaticFollowUps() {
+        let viewportChange = TimelineBottomScrollRequest(
+            animated: false,
+            reason: .viewportChange,
+            targetID: "message-a"
+        )
+        let buttonTap = TimelineBottomScrollRequest(
+            animated: true,
+            reason: .buttonTap,
+            targetID: "message-b"
+        )
+
+        let userWins = TimelineBottomScrollCoordinator.coalesced(viewportChange, with: buttonTap)
+        let automaticDoesNotOverrideUser = TimelineBottomScrollCoordinator.coalesced(buttonTap, with: viewportChange)
+
+        #expect(userWins.animated)
+        #expect(userWins.reason == .buttonTap)
+        #expect(userWins.targetID == "message-b")
+        #expect(automaticDoesNotOverrideUser == buttonTap)
+    }
+
     @Test func timelineScrollRequestsSkipAlreadyHandledTarget() {
         #expect(TimelineBottomScrollCoordinator.shouldSkipTimelineChangeScroll(
             lastAutomaticTargetID: "message-a",
@@ -5797,6 +5818,7 @@ struct TimelineBottomTests {
         #expect(source.contains("private func scheduleScrollToBottom"))
         #expect(source.contains("TimelineBottomScrollCoordinator.shouldSkipTimelineChangeScroll"))
         #expect(source.contains("private func scheduleKeyboardDismiss"))
+        #expect(source.contains("reason: .buttonTap"))
         #expect(source.contains("cancelPendingTimelineFollowUpWork()"))
         #expect(source.contains(".simultaneousGesture(TapGesture().onEnded { scheduleKeyboardDismiss() })"))
     }

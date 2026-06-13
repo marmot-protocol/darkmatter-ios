@@ -63,6 +63,11 @@ enum TimelineBottomScrollReason: Equatable {
     case contentGrowth
     case timelineChange
     case viewportChange
+    case buttonTap
+
+    var isUserInitiated: Bool {
+        self == .buttonTap
+    }
 }
 
 struct TimelineBottomScrollRequest: Equatable {
@@ -71,7 +76,13 @@ struct TimelineBottomScrollRequest: Equatable {
     let targetID: String?
 
     func coalesced(with next: TimelineBottomScrollRequest) -> TimelineBottomScrollRequest {
-        TimelineBottomScrollRequest(
+        if next.reason.isUserInitiated {
+            return next
+        }
+        if reason.isUserInitiated {
+            return self
+        }
+        return TimelineBottomScrollRequest(
             animated: animated && next.animated,
             reason: next.reason,
             targetID: next.targetID ?? targetID
@@ -854,12 +865,16 @@ struct ConversationView: View {
     }
 
     private func jumpToBottom(proxy: ScrollViewProxy) {
-        // The scroll-to-bottom button is a user action, so animate it for a
-        // fluid feel instead of the old instant triple-dispatch jump. The
-        // ScrollView's .defaultScrollAnchor(.bottom) keeps the view pinned once
-        // we arrive, so a single animated scroll lands reliably (#44).
+        // Keep the button as one animated scroll, but defer it through the same
+        // coalescer as automatic follow-ups so it doesn't stack in the current
+        // SwiftUI transaction (#44, #161).
         cancelPendingBottomScroll()
-        scrollToBottom(proxy: proxy, animated: true)
+        scheduleScrollToBottom(
+            proxy: proxy,
+            animated: true,
+            reason: .buttonTap,
+            targetID: viewModel?.timeline.last?.id
+        )
     }
 
     private func performInitialScrollIfNeeded(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> Bool {
