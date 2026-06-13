@@ -2826,7 +2826,7 @@ struct GroupImageSearchTests {
     }
 
     @Test func groupImageWebSearchUsesEphemeralNetworking() throws {
-        let source = try String(contentsOf: groupImageURLSheetSourceURL, encoding: .utf8)
+        let source = try groupImageURLSheetSource()
 
         #expect(source.contains("URLSessionConfiguration.ephemeral"))
         #expect(source.contains("httpCookieAcceptPolicy = .never"))
@@ -2839,9 +2839,9 @@ struct GroupImageSearchTests {
     }
 
     @Test func groupImageThumbnailsCapBytesAndDownsampleDecode() throws {
-        let source = try String(contentsOf: groupImageURLSheetSourceURL, encoding: .utf8)
+        let source = try groupImageURLSheetSource()
 
-        #expect(source.contains("private static let maximumImageBytes = 2 * 1024 * 1024"))
+        #expect(source.contains("static let maximumImageBytes = 2 * 1024 * 1024"))
         #expect(source.contains("session.bytes(for: request)"))
         #expect(source.contains("response.expectedContentLength > Int64(maximumImageBytes)"))
         #expect(source.contains("throw URLError(.dataLengthExceedsMaximum)"))
@@ -2873,6 +2873,19 @@ struct GroupImageSearchTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("darkmatter-ios/Group/GroupImageURLSheet.swift")
+    }
+
+    private var remoteImageLoaderSourceURL: URL {
+        URL(filePath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("darkmatter-ios/Core/RemoteImageLoader.swift")
+    }
+
+    private func groupImageURLSheetSource() throws -> String {
+        try String(contentsOf: groupImageURLSheetSourceURL, encoding: .utf8)
+            + "\n"
+            + String(contentsOf: remoteImageLoaderSourceURL, encoding: .utf8)
     }
 }
 

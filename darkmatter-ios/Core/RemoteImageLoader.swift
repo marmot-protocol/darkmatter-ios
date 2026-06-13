@@ -1,0 +1,127 @@
+import Foundation
+import ImageIO
+import UIKit
+
+nonisolated enum RemoteImageFetch {
+    static let maximumImageBytes = 2 * 1024 * 1024
+
+    private static let session = URLSession(configuration: ephemeralConfiguration())
+
+    static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request)
+    }
+
+    static func imageData(for url: URL) async throws -> Data {
+        let request = request(
+            for: url,
+            accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        )
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode)
+        else { throw URLError(.badServerResponse) }
+
+        if response.expectedContentLength > Int64(maximumImageBytes) {
+            throw URLError(.dataLengthExceedsMaximum)
+        }
+
+        var data = Data()
+        if response.expectedContentLength > 0 {
+            data.reserveCapacity(Int(min(response.expectedContentLength, Int64(maximumImageBytes))))
+        }
+        for try await byte in bytes {
+            guard data.count < maximumImageBytes else {
+                throw URLError(.dataLengthExceedsMaximum)
+            }
+            data.append(byte)
+        }
+        return data
+    }
+
+    static func request(for url: URL, accept: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 12
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private static func ephemeralConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.httpShouldSetCookies = false
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        return configuration
+    }
+}
+
+nonisolated enum RemoteImageDecoder {
+    private struct SendableImage: @unchecked Sendable {
+        let image: UIImage
+    }
+
+    static func downsampledImage(from data: Data, maxPixelSize: Int, scale: CGFloat) async -> UIImage? {
+        let targetPixelSize = max(maxPixelSize, 1)
+        let imageScale = max(scale, 1)
+        let decoded = await Task.detached(priority: .utility) { () -> SendableImage? in
+            let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+            guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+                return nil
+            }
+            let options = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: targetPixelSize,
+            ] as CFDictionary
+            guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+                return nil
+            }
+            return SendableImage(image: UIImage(cgImage: cgImage, scale: imageScale, orientation: .up))
+        }.value
+        return decoded?.image
+    }
+}
+
+@MainActor
+enum RemoteAvatarImageLoader {
+    private final class CachedImage: NSObject {
+        let image: UIImage
+
+        init(image: UIImage) {
+            self.image = image
+        }
+    }
+
+    private static let cache: NSCache<NSString, CachedImage> = {
+        let cache = NSCache<NSString, CachedImage>()
+        cache.totalCostLimit = 20 * 1024 * 1024
+        return cache
+    }()
+
+    static func image(for url: URL, maxPixelSize: Int, scale: CGFloat) async throws -> UIImage {
+        let targetPixelSize = max(maxPixelSize, 1)
+        let key = cacheKey(for: url, maxPixelSize: targetPixelSize)
+        if let cached = cache.object(forKey: key)?.image {
+            return cached
+        }
+
+        let data = try await RemoteImageFetch.imageData(for: url)
+        guard let image = await RemoteImageDecoder.downsampledImage(
+            from: data,
+            maxPixelSize: targetPixelSize,
+            scale: scale
+        ) else { throw URLError(.cannotDecodeContentData) }
+
+        cache.setObject(CachedImage(image: image), forKey: key, cost: data.count)
+        return image
+    }
+
+    private static func cacheKey(for url: URL, maxPixelSize: Int) -> NSString {
+        "\(url.absoluteString):\(maxPixelSize)" as NSString
+    }
+}

@@ -1,5 +1,4 @@
 import Foundation
-import ImageIO
 import SwiftUI
 import UIKit
 
@@ -10,62 +9,6 @@ struct GroupImageSearchResult: Identifiable, Equatable {
     let thumbnailURL: URL?
     let sourceHost: String?
     let dimensionsLabel: String?
-}
-
-private enum GroupImageRemoteFetch {
-    private static let maximumImageBytes = 2 * 1024 * 1024
-    private static let session = URLSession(configuration: ephemeralConfiguration())
-
-    static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await session.data(for: request)
-    }
-
-    static func imageData(for url: URL) async throws -> Data {
-        let request = request(
-            for: url,
-            accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-        )
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode)
-        else { throw URLError(.badServerResponse) }
-
-        if response.expectedContentLength > Int64(maximumImageBytes) {
-            throw URLError(.dataLengthExceedsMaximum)
-        }
-
-        var data = Data()
-        if response.expectedContentLength > 0 {
-            data.reserveCapacity(Int(min(response.expectedContentLength, Int64(maximumImageBytes))))
-        }
-        for try await byte in bytes {
-            guard data.count < maximumImageBytes else {
-                throw URLError(.dataLengthExceedsMaximum)
-            }
-            data.append(byte)
-        }
-        return data
-    }
-
-    static func request(for url: URL, accept: String) -> URLRequest {
-        var request = URLRequest(url: url)
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.timeoutInterval = 12
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-        request.setValue(accept, forHTTPHeaderField: "Accept")
-        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        return request
-    }
-
-    private static func ephemeralConfiguration() -> URLSessionConfiguration {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieAcceptPolicy = .never
-        configuration.httpShouldSetCookies = false
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        return configuration
-    }
 }
 
 struct DuckDuckGoImageSearchClient {
@@ -146,11 +89,11 @@ struct DuckDuckGoImageSearchClient {
     }
 
     private func data(for url: URL) async throws -> Data {
-        let request = GroupImageRemoteFetch.request(
+        let request = RemoteImageFetch.request(
             for: url,
             accept: "application/json,text/html;q=0.9,*/*;q=0.8"
         )
-        let (data, response) = try await GroupImageRemoteFetch.data(for: request)
+        let (data, response) = try await RemoteImageFetch.data(for: request)
         guard let http = response as? HTTPURLResponse,
               (200..<300).contains(http.statusCode)
         else { throw DuckDuckGoImageSearchError.badResponse }
@@ -531,8 +474,8 @@ private struct GroupImageRemoteThumbnail: View {
     private func loadImage() async {
         phase = .loading
         do {
-            let data = try await GroupImageRemoteFetch.imageData(for: url)
-            guard let image = Self.downsampledImage(
+            let data = try await RemoteImageFetch.imageData(for: url)
+            guard let image = await RemoteImageDecoder.downsampledImage(
                 from: data,
                 maxPixelSize: Self.thumbnailMaxPixelSize(scale: UIScreen.main.scale),
                 scale: UIScreen.main.scale
@@ -548,23 +491,6 @@ private struct GroupImageRemoteThumbnail: View {
 
     private static func thumbnailMaxPixelSize(scale: CGFloat) -> Int {
         Int(ceil(max(displaySize.width, displaySize.height) * max(scale, 1)))
-    }
-
-    private static func downsampledImage(from data: Data, maxPixelSize: Int, scale: CGFloat) -> UIImage? {
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
-            return nil
-        }
-        let options = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(maxPixelSize, 1),
-        ] as CFDictionary
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage, scale: scale, orientation: .up)
     }
 
     private enum Phase {
