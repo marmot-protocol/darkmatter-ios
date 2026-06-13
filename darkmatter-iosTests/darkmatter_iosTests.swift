@@ -390,6 +390,27 @@ struct AppStateBootstrapTests {
         #expect(!source.matches(#"while\s+isRuntimeSuspending"#))
     }
 
+    @Test func foregroundResumeSchedulesNativePushAfterBestEffortCatchUp() throws {
+        let source = try String(contentsOf: appStateSourceURL, encoding: .utf8)
+        let catchUpStart = try #require(source.range(of: "func catchUpAfterForegroundActivation() async {"))
+        let catchUpEnd = try #require(source.range(of: "func setAppSceneActive(_ active: Bool)"))
+        let catchUpBody = source[catchUpStart.lowerBound..<catchUpEnd.lowerBound]
+
+        #expect(catchUpBody.contains("try await marmot.catchUpAccounts()"))
+        #expect(!catchUpBody.contains("syncNativePushRegistrationIfEnabled()"))
+
+        let resumeStart = try #require(source.range(of: "func resumeAfterForegroundActivation() async {"))
+        let resumeEnd = try #require(source.range(of: "private func noteRuntimeForegroundReadyAfterSuspension()"))
+        let resumeBody = source[resumeStart.lowerBound..<resumeEnd.lowerBound]
+
+        #expect(String(resumeBody).matches(
+            #"await catchUpAfterForegroundActivation\(\)\s+"#
+                + #"guard isAppSceneActive, !Task\.isCancelled else \{ return \}\s+"#
+                + #"scheduleNativePushRegistrationIfEnabled\(\)\s+"#
+                + #"resumeProfileFetchQueueIfNeeded\(\)"#
+        ))
+    }
+
     @Test func profileFetchQueueLeavesQueuedIDsWhenRefreshBecomesUnavailable() async throws {
         let appState = try testAppState()
         let queued = [hex("11"), hex("22")]
