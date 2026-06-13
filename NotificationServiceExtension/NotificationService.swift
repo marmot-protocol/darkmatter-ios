@@ -77,9 +77,11 @@ final class NotificationService: UNNotificationServiceExtension {
                 let decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: { accountRef in
-                        (try? marmot.notificationSettings(
-                            accountRef: accountRef
-                        ).localNotificationsEnabled) == true
+                        NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+                            try marmot.notificationSettings(
+                                accountRef: accountRef
+                            ).localNotificationsEnabled
+                        }
                     }
                 )
                 await apply(decision, to: content)

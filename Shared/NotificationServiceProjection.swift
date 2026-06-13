@@ -6,6 +6,16 @@ enum NotificationServiceRenderDecision: Equatable {
     case fallback
 }
 
+nonisolated enum NotificationServiceSettingsReadPolicy {
+    static func localNotificationsEnabled(readSetting: () throws -> Bool) -> Bool {
+        do {
+            return try readSetting()
+        } catch {
+            return true
+        }
+    }
+}
+
 nonisolated enum NotificationServiceProjection {
     // Keep room for extension startup and fallback delivery before iOS expires
     // the notification service extension.
