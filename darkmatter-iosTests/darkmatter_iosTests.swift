@@ -880,6 +880,28 @@ struct RelativeTimeTests {
         #expect(RelativeTime.formatterCacheCountForTesting == 1)
     }
 
+    @Test func shortReusesCachedDurationFormattersForRecentRows() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let minutesAgo = now.addingTimeInterval(-4 * 60)
+        let hoursAgo = now.addingTimeInterval(-2 * 3600)
+
+        RelativeTime.resetFormatterCacheForTesting()
+        defer { RelativeTime.resetFormatterCacheForTesting() }
+
+        for _ in 0..<50 {
+            _ = RelativeTime.short(minutesAgo, now: now, calendar: calendar)
+        }
+        #expect(RelativeTime.durationFormatterCacheCountForTesting == 1)
+
+        for _ in 0..<50 {
+            _ = RelativeTime.short(hoursAgo, now: now, calendar: calendar)
+        }
+        #expect(RelativeTime.durationFormatterCacheCountForTesting == 2)
+        #expect(RelativeTime.formatterCacheCountForTesting == 0)
+    }
+
     @Test func shortRefreshesFormatterCacheWhenLocaleIdentifierChanges() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -899,6 +921,36 @@ struct RelativeTimeTests {
 
         #expect(RelativeTime.formatterCacheCountForTesting == 1)
         #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == Locale.autoupdatingCurrent.identifier)
+    }
+
+    @Test func shortUsesLocalizedAbbreviatedDurationsForRecentRows() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let locale = Locale(identifier: "ar_EG")
+
+        RelativeTime.resetFormatterCacheForTesting()
+        defer { RelativeTime.resetFormatterCacheForTesting() }
+
+        let minuteLabel = RelativeTime.short(
+            now.addingTimeInterval(-4 * 60),
+            now: now,
+            calendar: calendar,
+            locale: locale
+        )
+        let hourLabel = RelativeTime.short(
+            now.addingTimeInterval(-2 * 3600),
+            now: now,
+            calendar: calendar,
+            locale: locale
+        )
+
+        let expectedMinute = try expectedAbbreviatedDuration(4, unit: .minute, locale: locale)
+        let expectedHour = try expectedAbbreviatedDuration(2, unit: .hour, locale: locale)
+        #expect(minuteLabel == expectedMinute)
+        #expect(hourLabel == expectedHour)
+        #expect(minuteLabel != "4m")
+        #expect(hourLabel != "2h")
     }
 
     @Test func shortUsesLocalizedDateTemplateOrderingForOlderDates() throws {
@@ -942,6 +994,23 @@ struct RelativeTimeTests {
         }
 
         #expect(RelativeTime.formatterCacheCountForTesting == 1)
+    }
+
+    private func expectedAbbreviatedDuration(
+        _ value: Int,
+        unit: NSCalendar.Unit,
+        locale: Locale
+    ) throws -> String {
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar.autoupdatingCurrent
+        calendar.locale = locale
+        formatter.calendar = calendar
+        formatter.allowedUnits = [unit]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 1
+
+        let secondsPerUnit: TimeInterval = unit == .hour ? 3600 : 60
+        return try #require(formatter.string(from: TimeInterval(value) * secondsPerUnit))
     }
 }
 
