@@ -2487,6 +2487,21 @@ struct NotificationServiceProjectionTests {
         ))
     }
 
+    @Test func settingsReadPolicySuppressesOnlyExplicitFalse() {
+        #expect(NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+            true
+        })
+        #expect(!NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+            false
+        })
+    }
+
+    @Test func settingsReadPolicyFailsOpenOnReadError() {
+        #expect(NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+            throw NotificationServiceSettingsReadPolicyTestError.unavailable
+        })
+    }
+
     @Test func noDataCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .noData,
@@ -2536,6 +2551,10 @@ struct NotificationServiceProjectionTests {
             .deletingLastPathComponent()
             .appendingPathComponent("Shared/NotificationServiceProjection.swift")
     }
+}
+
+private enum NotificationServiceSettingsReadPolicyTestError: Error {
+    case unavailable
 }
 
 struct NotificationServiceTests {
@@ -2615,6 +2634,13 @@ struct NotificationServiceTests {
 
         #expect(!source.contains("bestAttemptContent = UNMutableNotificationContent()"))
         #expect(source.matches(#"case \.fallback:[\s\S]*applyFallback\(to: content\)"#))
+    }
+
+    @Test func notificationServiceSettingsReadFailureFailsOpen() throws {
+        let source = try String(contentsOf: notificationServiceSourceURL, encoding: .utf8)
+
+        #expect(source.contains("NotificationServiceSettingsReadPolicy.localNotificationsEnabled"))
+        #expect(!source.contains("(try? marmot.notificationSettings"))
     }
 
     private var notificationServiceSourceURL: URL {
