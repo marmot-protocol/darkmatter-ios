@@ -24,6 +24,8 @@ struct TimelineItem: Identifiable, Hashable {
     let id: String
     let kind: Kind
     let timestamp: UInt64
+
+    var rowFrameKey: String { id }
 }
 
 /// A live QUIC agent-stream update surfaced in streaming-debug mode.

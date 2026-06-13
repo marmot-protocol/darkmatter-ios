@@ -730,7 +730,7 @@ struct ConversationView: View {
             GeometryReader { geo in
                 Color.clear.preference(
                     key: RowFramesKey.self,
-                    value: [record.messageIdHex: geo.frame(in: .global)]
+                    value: [item.rowFrameKey: geo.frame(in: .global)]
                 )
             }
         )
@@ -740,7 +740,7 @@ struct ConversationView: View {
                   !record.messageIdHex.isEmpty,
                   !viewModel.isDeleted(record.messageIdHex) else { return }
             Haptics.tap()
-            presentActions(for: record)
+            presentActions(for: record, rowFrameKey: item.rowFrameKey)
         }
         .popover(
             isPresented: actionsBinding(for: record),
@@ -1110,8 +1110,8 @@ struct ConversationView: View {
     /// Decide where the actions menu opens for the long-pressed bubble: below it
     /// (default), flipped above it (no room below), or centered over it (the
     /// bubble is so tall neither end has room — a popover would land off-screen).
-    private func presentActions(for record: AppMessageRecordFfi) {
-        let frame = rowFrames.frames[record.messageIdHex]
+    private func presentActions(for record: AppMessageRecordFfi, rowFrameKey: String) {
+        let frame = rowFrames.frames[rowFrameKey]
         let spaceBelow = contentBottomY - (frame?.maxY ?? 0)
         let spaceAbove = (frame?.minY ?? 0) - contentTopY
         let fitsBelow = spaceBelow >= Self.actionsMenuEstimate
