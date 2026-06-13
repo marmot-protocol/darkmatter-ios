@@ -2771,6 +2771,17 @@ struct ProfileSanitizerTests {
         #expect(ProfileSanitizer.imageURL("https://[::ffff:8.8.8.8]/avatar.png") != nil)
     }
 
+    @Test func imageURLRejectsIPv4CompatibleIPv6PrivateAndLoopbackHosts() {
+        #expect(ProfileSanitizer.imageURL("https://[::127.0.0.1]/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://[::10.1.2.3]/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://[::172.16.0.1]/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://[::192.168.1.10]/avatar.png") == nil)
+        #expect(ProfileSanitizer.imageURL("https://[::169.254.169.254]/latest/meta-data/") == nil)
+        #expect(ProfileSanitizer.imageURL("https://[0:0:0:0:0:0:c0a8:010a]/avatar.png") == nil)
+
+        #expect(ProfileSanitizer.imageURL("https://[::8.8.8.8]/avatar.png") != nil)
+    }
+
     @Test func profileAddressNormalizesSimpleAddressFields() {
         #expect(ProfileSanitizer.profileAddress(" Alice+Tips@Example.COM ") == "alice+tips@example.com")
         #expect(ProfileSanitizer.profileAddress("alice@example.com") == "alice@example.com")

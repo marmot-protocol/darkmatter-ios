@@ -133,7 +133,7 @@ Do not add a second storage path for data Marmot already owns.
 - Sanitize peer-controlled group names with `ProfileSanitizer.groupName` before storing or rendering timeline/system-event display strings, and use static `L10n.formatted` keys for dynamic text.
 - Use `L10n.plural` for dynamic counts and static `L10n.formatted` keys for formatted strings so the string catalog can carry plural variations and translations.
 - Chat-list relative time labels must use localized duration/date formatters; do not hand-build minute/hour suffixes or date patterns. If `RelativeTime.short` receives an injected `now`, today/yesterday bucketing must compare against that value rather than the device wall clock.
-- Route peer-controlled profile and group image URLs through `ProfileSanitizer.imageURL`; it only allows HTTPS public hosts and rejects local/private IPv4/IPv6 hosts, loopback/unspecified/link-local forms, and legacy IPv4 literal spellings.
+- Route peer-controlled profile and group image URLs through `ProfileSanitizer.imageURL`; it only allows HTTPS public hosts and rejects local/private IPv4/IPv6 hosts, loopback/unspecified/link-local forms, IPv4-mapped and IPv4-compatible IPv6 embeddings, and legacy IPv4 literal spellings.
 - External markdown-link confirmations must render bounded, sanitized URL text and explicitly flag IDN/punycode hosts; do not show unbounded peer URL strings verbatim.
 - Media attachment display IDs must include the owning message or timeline-row identity; do not key SwiftUI media views solely by the encrypted media reference.
 - Timeline row geometry preferences must be keyed by `TimelineItem.rowFrameKey`/row identity, not `messageIdHex`, because pending, failed, and live stream rows can have empty message IDs.
