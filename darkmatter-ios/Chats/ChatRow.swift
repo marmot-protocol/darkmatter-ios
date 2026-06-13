@@ -1,5 +1,6 @@
 import SwiftUI
 import MarmotKit
+import UIKit
 
 /// One row in the chats list. Renders 2-member groups in "DM" style (other
 /// member's identity in place of group name) and N>2 groups by group name.
@@ -99,24 +100,9 @@ struct AvatarBubble: View {
                 endPoint: .bottomTrailing
             ))
             .overlay {
+                initialsView
                 if let pictureURL {
-                    AsyncImage(url: pictureURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            // Fill the circle edge-to-edge, aspect-preserved
-                            // and center-cropped. The overlay sizes the image
-                            // to the circle's bounds; clipShape crops overflow.
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        case .empty, .failure:
-                            initialsView
-                        @unknown default:
-                            initialsView
-                        }
-                    }
-                } else {
-                    initialsView
+                    AvatarRemoteImage(url: pictureURL)
                 }
             }
             .clipShape(Circle())
@@ -149,4 +135,69 @@ struct AvatarBubble: View {
         precondition(paletteCount > 0)
         return Int(hash.magnitude % UInt(paletteCount))
     }
+}
+
+private struct AvatarRemoteImage: View {
+    let url: URL
+
+    @Environment(\.displayScale) private var displayScale
+    @State private var phase = Phase.loading
+
+    var body: some View {
+        GeometryReader { proxy in
+            let request = AvatarRemoteImageRequest(
+                url: url,
+                maxPixelSize: maxPixelSize(for: proxy.size, scale: displayScale)
+            )
+
+            content(for: request)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task(id: request) {
+                    await load(request)
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for request: AvatarRemoteImageRequest) -> some View {
+        switch phase {
+        case .success(let loadedRequest, let image) where loadedRequest == request:
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        case .loading, .failure, .success:
+            Color.clear
+        }
+    }
+
+    private func load(_ request: AvatarRemoteImageRequest) async {
+        phase = .loading
+        do {
+            let image = try await RemoteAvatarImageLoader.image(
+                for: request.url,
+                maxPixelSize: request.maxPixelSize,
+                scale: displayScale
+            )
+            guard !Task.isCancelled else { return }
+            phase = .success(request, image)
+        } catch {
+            guard !Task.isCancelled else { return }
+            phase = .failure(request)
+        }
+    }
+
+    private func maxPixelSize(for size: CGSize, scale: CGFloat) -> Int {
+        Int(ceil(max(size.width, size.height, 1) * max(scale, 1)))
+    }
+
+    private enum Phase {
+        case loading
+        case success(AvatarRemoteImageRequest, UIImage)
+        case failure(AvatarRemoteImageRequest)
+    }
+}
+
+private struct AvatarRemoteImageRequest: Hashable {
+    let url: URL
+    let maxPixelSize: Int
 }
