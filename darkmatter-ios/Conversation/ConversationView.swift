@@ -4,6 +4,7 @@ import MarmotKit
 
 enum TimelineBottom {
     static let pinnedThreshold: CGFloat = 44
+    static let overscrollRepairThreshold: CGFloat = 8
 
     static func isPinned(bottomY: CGFloat, viewportBottomY: CGFloat) -> Bool {
         bottomY <= viewportBottomY + pinnedThreshold
@@ -35,6 +36,18 @@ enum TimelineBottom {
     ) -> Bool {
         previous.isPinned && current.contentHeight > previous.contentHeight
     }
+
+    static func overscrollPastBottom(
+        contentHeight: CGFloat,
+        visibleBottomY: CGFloat,
+        bottomContentInset: CGFloat = 0
+    ) -> CGFloat {
+        max(0, visibleBottomY - (contentHeight + bottomContentInset))
+    }
+
+    static func shouldRepairBottomOverscroll(_ viewport: TimelineBottomViewport) -> Bool {
+        viewport.overscrollPastBottom > overscrollRepairThreshold
+    }
 }
 
 struct TimelineBottomViewport: Equatable {
@@ -44,6 +57,14 @@ struct TimelineBottomViewport: Equatable {
 
     var distanceToBottom: CGFloat {
         TimelineBottom.distanceToBottom(
+            contentHeight: contentHeight,
+            visibleBottomY: visibleBottomY,
+            bottomContentInset: bottomContentInset
+        )
+    }
+
+    var overscrollPastBottom: CGFloat {
+        TimelineBottom.overscrollPastBottom(
             contentHeight: contentHeight,
             visibleBottomY: visibleBottomY,
             bottomContentInset: bottomContentInset
@@ -235,8 +256,10 @@ struct ConversationView: View {
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
     @State private var mediaDrafts: [MediaDraftAttachment] = []
+    @StateObject private var voiceRecorder = VoiceMessageRecorder()
     @State private var showCameraCapture = false
     @State private var showPhotoLibraryPicker = false
+    @State private var showFileImporter = false
     @State private var showDetails = false
     @State private var actionsTarget: ActionsTarget?
     @State private var emojiPickerTarget: ActionsTarget?
@@ -372,7 +395,7 @@ struct ConversationView: View {
                     selectionLimit: remainingMediaDraftSlots,
                     onSelection: addPhotoLibrarySelections,
                     onError: { error in
-                        appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+                        appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
                     },
                     onDismiss: {
                         showPhotoLibraryPicker = false
@@ -380,6 +403,12 @@ struct ConversationView: View {
                 )
                 .ignoresSafeArea()
             }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: MediaAttachmentPolicy.fileImporterAllowedTypes,
+                allowsMultipleSelection: true,
+                onCompletion: addFileImporterResult
+            )
             .task(id: appState.runtimeGeneration) {
                 if viewModel == nil {
                     viewModel = ConversationViewModel(
@@ -419,20 +448,40 @@ struct ConversationView: View {
             if let viewModel, let replyingTo = viewModel.replyingTo {
                 replyBar(for: replyingTo, viewModel: viewModel)
             }
-            if !mediaDrafts.isEmpty {
-                MediaDraftStrip(attachments: mediaDrafts) { id in
-                    mediaDrafts.removeAll { $0.id == id }
+            let inlineAudioDraft = ComposerMediaDraftPresentation.inlineAudioDraft(in: mediaDrafts)
+            let mentionCandidates = inlineAudioDraft == nil ? (viewModel?.mentionCandidates(for: draft) ?? []) : []
+            let stripAttachments = ComposerMediaDraftPresentation.stripAttachments(from: mediaDrafts)
+            if !stripAttachments.isEmpty {
+                MediaDraftStrip(attachments: stripAttachments) { id in
+                    removeMediaDraft(id)
                 }
+            }
+            if voiceRecorder.isActive {
+                VoiceRecordingBanner(
+                    samples: voiceRecorder.waveformSamples,
+                    durationSeconds: voiceRecorder.durationSeconds,
+                    isLocked: voiceRecorder.isLocked,
+                    onCancel: cancelVoiceRecording,
+                    onStop: stopLockedVoiceRecording
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             ComposerBar(
                 draft: $draft,
                 isSending: viewModel?.sendInFlight ?? false,
                 hasAttachments: !mediaDrafts.isEmpty,
+                audioDraft: inlineAudioDraft,
                 mediaEnabled: viewModel?.canSendMediaAttachments ?? false,
+                voiceRecordingActive: voiceRecorder.isActive,
                 focusRequest: composerFocusRequest,
-                mentionCandidates: viewModel?.mentionCandidates(for: draft) ?? [],
+                mentionCandidates: mentionCandidates,
                 onTakePhoto: takePhoto,
                 onPhotoLibrary: openPhotoLibrary,
+                onAttachFile: openFileImporter,
+                onRemoveAudioDraft: removeMediaDraft,
+                onVoicePressBegan: beginVoicePress,
+                onVoiceDragChanged: updateVoiceDrag,
+                onVoicePressEnded: endVoicePress,
                 onMentionSelect: { candidate in
                     viewModel?.applyMentionSelection(candidate, to: &draft)
                 },
@@ -589,7 +638,15 @@ struct ConversationView: View {
                                 bottomContentInset: geometry.contentInsets.bottom
                             )
                         } action: { previous, current in
-                            if TimelineBottom.shouldPreservePinAfterContentGrowth(
+                            if TimelineBottom.shouldRepairBottomOverscroll(current) {
+                                isAtTimelineBottom = true
+                                scheduleScrollToBottom(
+                                    proxy: proxy,
+                                    animated: false,
+                                    reason: .viewportChange,
+                                    targetID: viewModel.timeline.last?.id
+                                )
+                            } else if TimelineBottom.shouldPreservePinAfterContentGrowth(
                                 previous: previous,
                                 current: current
                             ) {
@@ -1003,6 +1060,11 @@ struct ConversationView: View {
         showPhotoLibraryPicker = true
     }
 
+    private func openFileImporter() {
+        guard canBeginMediaSelection() else { return }
+        showFileImporter = true
+    }
+
     private func addCameraImage(_ image: UIImage) {
         Task { @MainActor in
             do {
@@ -1011,7 +1073,7 @@ struct ConversationView: View {
             } catch is CancellationError {
                 return
             } catch {
-                appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+                appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
             }
         }
     }
@@ -1036,14 +1098,96 @@ struct ConversationView: View {
                 do {
                     let attachment = try await MediaDraftProcessor.preparedAttachment(
                         from: selection.data,
-                        fileName: selection.fileName
+                        fileName: selection.fileName,
+                        typeIdentifier: selection.typeIdentifier
                     )
                     try appendMediaDraft(attachment)
                 } catch is CancellationError {
                     return
                 } catch {
-                    appState.present(.error(L10n.string("Couldn't add photo"), message: error.localizedDescription))
+                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
                 }
+            }
+        }
+    }
+
+    private func addFileImporterResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            addFileAttachments(urls)
+        case .failure(let error):
+            appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+        }
+    }
+
+    private func addFileAttachments(_ urls: [URL]) {
+        guard let viewModel, viewModel.canSendMediaAttachments else {
+            appState.present(.warning(L10n.string("Media is not available in this group")))
+            return
+        }
+        guard remainingMediaDraftSlots > 0 else {
+            presentMaxAttachmentWarning()
+            return
+        }
+        let selected = Array(urls.prefix(remainingMediaDraftSlots))
+        if selected.count < urls.count {
+            presentMaxAttachmentWarning()
+        }
+
+        Task { @MainActor in
+            for url in selected {
+                let isSecurityScoped = url.startAccessingSecurityScopedResource()
+                defer {
+                    if isSecurityScoped {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                do {
+                    let attachment = try await MediaDraftProcessor.preparedAttachment(fromFileURL: url)
+                    try appendMediaDraft(attachment)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                }
+            }
+        }
+    }
+
+    private func beginVoicePress() {
+        guard canBeginMediaSelection() else { return }
+        voiceRecorder.beginPress { error in
+            appState.present(.error(L10n.string("Couldn't record audio"), message: error.localizedDescription))
+        }
+    }
+
+    private func updateVoiceDrag(_ translation: CGSize) {
+        voiceRecorder.updateDrag(translation)
+    }
+
+    private func endVoicePress() {
+        guard let result = voiceRecorder.endPress() else { return }
+        addVoiceRecording(result)
+    }
+
+    private func stopLockedVoiceRecording() {
+        guard let result = voiceRecorder.stopLockedRecording() else { return }
+        addVoiceRecording(result)
+    }
+
+    private func cancelVoiceRecording() {
+        voiceRecorder.cancel()
+    }
+
+    private func addVoiceRecording(_ result: VoiceRecordingResult) {
+        Task { @MainActor in
+            do {
+                let attachment = try await MediaDraftProcessor.preparedVoiceAttachment(from: result)
+                try appendMediaDraft(attachment)
+            } catch is CancellationError {
+                return
+            } catch {
+                appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
             }
         }
     }
@@ -1065,16 +1209,28 @@ struct ConversationView: View {
     }
 
     private func appendMediaDraft(_ attachment: MediaDraftAttachment) throws {
+        if attachment.kind == .audio {
+            mediaDrafts.removeAll { $0.kind == .audio }
+        }
         guard mediaDrafts.count < MediaDraftProcessor.maxAttachmentCount else {
             presentMaxAttachmentWarning()
             return
         }
         mediaDrafts.append(attachment)
+        if attachment.kind == .audio {
+            draft = ""
+            dismissKeyboard()
+            return
+        }
         composerFocusRequest += 1
     }
 
+    private func removeMediaDraft(_ id: MediaDraftAttachment.ID) {
+        mediaDrafts.removeAll { $0.id == id }
+    }
+
     private func presentMaxAttachmentWarning() {
-        appState.present(.warning(L10n.plural("You can send up to %lld photos at once", Int64(MediaDraftProcessor.maxAttachmentCount))))
+        appState.present(.warning(L10n.plural("You can send up to %lld attachments at once", Int64(MediaDraftProcessor.maxAttachmentCount))))
     }
 
     private func dismissKeyboard() {

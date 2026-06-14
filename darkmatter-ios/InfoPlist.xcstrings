@@ -197,6 +197,17 @@
           }
         }
       }
+    },
+    "NSMicrophoneUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark Matter uses the microphone to record encrypted voice messages."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

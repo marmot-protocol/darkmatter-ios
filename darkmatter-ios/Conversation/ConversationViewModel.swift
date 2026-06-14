@@ -109,7 +109,7 @@ final class ConversationViewModel {
     private static let liveSubscriptionInitialRetryDelayNanoseconds: UInt64 = 500_000_000
     private static let liveSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 8_000_000_000
     private static let readMarkCoalescingDelayNanoseconds: UInt64 = 100_000_000
-    static let maxSystemTimelineItems = 64
+    nonisolated static let maxSystemTimelineItems = 64
 
     /// Renderable timeline messages we've loaded by id.
     @ObservationIgnored private var messageById: [String: AppMessageRecordFfi] = [:]

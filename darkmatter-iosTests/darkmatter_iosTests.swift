@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import SwiftUI
 import UIKit
+import AVFoundation
 @testable import darkmatter_ios
 @testable import MarmotKit
 
@@ -5680,6 +5681,150 @@ struct MediaComposerAvailabilityTests {
     }
 }
 
+struct MediaAttachmentPolicyTests {
+
+    @Test func acceptsAudioVideoAndDocumentMediaTypes() {
+        #expect(MediaAttachmentPolicy.isSupported(mediaType: "audio/mp4"))
+        #expect(MediaAttachmentPolicy.isSupported(mediaType: "video/mp4"))
+        #expect(MediaAttachmentPolicy.isSupported(mediaType: "application/pdf"))
+        #expect(MediaAttachmentPolicy.isSupported(mediaType: "text/plain"))
+        #expect(!MediaAttachmentPolicy.isSupported(mediaType: "application/x-msdownload"))
+    }
+
+    @Test func genericDraftPreservesNonImageBytesForUpload() throws {
+        let data = Data("hello".utf8)
+        let attachment = try MediaDraftProcessor.attachment(
+            from: data,
+            fileName: "note.txt",
+            typeIdentifier: "public.plain-text"
+        )
+
+        #expect(attachment.fileName == "note.txt")
+        #expect(attachment.mediaType == "text/plain")
+        #expect(attachment.data == data)
+        #expect(attachment.kind == .document)
+    }
+
+    @Test func voiceGestureOnlyLocksAfterSlideUpThreshold() {
+        #expect(!VoiceRecordingGesturePolicy.shouldLock(translation: CGSize(width: 0, height: -40)))
+        #expect(VoiceRecordingGesturePolicy.shouldLock(translation: CGSize(width: 0, height: -90)))
+    }
+}
+
+struct AudioWaveformPresentationTests {
+
+    @Test func liveRecordingStartsWithBlankWaveform() {
+        let bars = AudioWaveformPresentation.bars(for: [], mode: .liveRecording, count: 5)
+
+        #expect(bars.count == 5)
+        #expect(bars.map(\.isVisible) == Array(repeating: false, count: 5))
+    }
+
+    @Test func liveRecordingAddsSamplesFromTrailingEdge() {
+        let bars = AudioWaveformPresentation.bars(
+            for: [0.2, 0.8],
+            mode: .liveRecording,
+            count: 5
+        )
+
+        #expect(bars.map(\.isVisible) == [false, false, false, true, true])
+        #expect((bars[3].amplitude ?? 0) > 0.45)
+        #expect((bars[4].amplitude ?? 0) > (bars[3].amplitude ?? 0))
+    }
+
+    @Test func liveRecordingKeepsNewestSamplesAfterWaveformFills() {
+        let bars = AudioWaveformPresentation.bars(
+            for: [0.1, 0.2, 0.3, 0.4],
+            mode: .liveRecording,
+            count: 3
+        )
+
+        #expect(bars.map(\.isVisible) == [true, true, true])
+        #expect((bars[0].amplitude ?? 0) > 0.45)
+        #expect((bars[1].amplitude ?? 0) > (bars[0].amplitude ?? 0))
+        #expect((bars[2].amplitude ?? 0) > (bars[1].amplitude ?? 0))
+    }
+
+    @Test func playbackWaveformUsesSameAmplifiedCurveAsRecording() {
+        let playbackBars = AudioWaveformPresentation.bars(for: [0.2, 0.8], mode: .playback, count: 2)
+        let recordingBars = AudioWaveformPresentation.bars(for: [0.2, 0.8], mode: .liveRecording, count: 2)
+
+        #expect(playbackBars.map(\.amplitude) == recordingBars.map(\.amplitude))
+        #expect((playbackBars[0].amplitude ?? 0) > 0.45)
+        #expect((playbackBars[1].amplitude ?? 0) > 0.9)
+    }
+
+    @Test func playbackWaveformStillFallsBackWhenSamplesAreMissing() {
+        let bars = AudioWaveformPresentation.bars(for: [], mode: .playback, count: 5)
+
+        #expect(bars.count == 5)
+        #expect(bars.map(\.isVisible) == Array(repeating: true, count: 5))
+    }
+}
+
+struct ComposerAudioDraftPreviewPresentationTests {
+
+    @Test func sendButtonCentersWithoutBottomOffsetForAudioDrafts() {
+        #expect(ComposerAudioDraftPreviewPresentation.sendButtonBottomPadding(hasAudioDraft: true) == 0)
+        #expect(ComposerAudioDraftPreviewPresentation.sendButtonBottomPadding(hasAudioDraft: false) == 2)
+    }
+
+    @Test func sendButtonGetsStateSpecificVisualNudge() {
+        #expect(ComposerAudioDraftPreviewPresentation.sendButtonOffset(hasAudioDraft: true) == CGSize(width: 3, height: 0))
+        #expect(ComposerAudioDraftPreviewPresentation.sendButtonOffset(hasAudioDraft: false) == CGSize(width: 3, height: 1))
+    }
+
+    @Test func playbackIconReflectsPreviewState() {
+        #expect(ComposerAudioDraftPreviewPresentation.playIconName(isPlaying: false, didFail: false) == "play.fill")
+        #expect(ComposerAudioDraftPreviewPresentation.playIconName(isPlaying: true, didFail: false) == "pause.fill")
+        #expect(ComposerAudioDraftPreviewPresentation.playIconName(isPlaying: false, didFail: true) == "arrow.clockwise")
+    }
+
+    @Test func durationLabelMatchesComposerPreviewFormat() {
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(nil) == "")
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(2.9) == "0:02")
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(65) == "1:05")
+    }
+}
+
+struct ComposerMediaDraftPresentationTests {
+
+    @Test func singleAudioDraftMovesIntoInlineComposerPreview() {
+        let audio = draft(id: UUID(), mediaType: "audio/mp4")
+
+        #expect(ComposerMediaDraftPresentation.inlineAudioDraft(in: [audio])?.id == audio.id)
+        #expect(ComposerMediaDraftPresentation.stripAttachments(from: [audio]).isEmpty)
+    }
+
+    @Test func nonAudioDraftsStayInAttachmentStrip() {
+        let image = draft(id: UUID(), mediaType: "image/jpeg")
+        let document = draft(id: UUID(), mediaType: "application/pdf")
+
+        #expect(ComposerMediaDraftPresentation.inlineAudioDraft(in: [image, document]) == nil)
+        #expect(ComposerMediaDraftPresentation.stripAttachments(from: [image, document]).map(\.id) == [image.id, document.id])
+    }
+
+    @Test func mixedDraftsKeepOnlyAudioInComposerInput() {
+        let image = draft(id: UUID(), mediaType: "image/jpeg")
+        let audio = draft(id: UUID(), mediaType: "audio/mp4")
+
+        #expect(ComposerMediaDraftPresentation.inlineAudioDraft(in: [image, audio])?.id == audio.id)
+        #expect(ComposerMediaDraftPresentation.stripAttachments(from: [image, audio]).map(\.id) == [image.id])
+    }
+
+    private func draft(id: UUID, mediaType: String) -> MediaDraftAttachment {
+        MediaDraftAttachment(
+            id: id,
+            fileName: "\(id.uuidString).bin",
+            mediaType: mediaType,
+            data: Data([0x01]),
+            dim: nil,
+            durationSeconds: mediaType.hasPrefix("audio/") ? 2.4 : nil,
+            waveformSamples: mediaType.hasPrefix("audio/") ? [0.2, 0.8, 0.4] : []
+        )
+    }
+}
+
 struct PhotoLibrarySelectionOrderingTests {
 
     @Test func compactingLoadedSelectionsPreservesPickerOrder() {
@@ -5725,6 +5870,156 @@ struct MessageMediaGridPresentationTests {
         #expect(MessageMediaGridPresentation.rowCount(totalCount: 3) == 2)
         #expect(MessageMediaGridPresentation.columnCount(totalCount: 10) == 2)
         #expect(MessageMediaGridPresentation.rowCount(totalCount: 10) == 2)
+    }
+}
+
+struct MessageVideoBubblePresentationTests {
+
+    @Test func landscapeVideoUsesActualAspectRatio() {
+        let size = MessageVideoBubblePresentation.displaySize(maxWidth: 300, dim: "640x360")
+
+        #expect(size.width == 300)
+        #expect(size.height == 169)
+    }
+
+    @Test func portraitVideoNarrowsInsteadOfCropping() {
+        let size = MessageVideoBubblePresentation.displaySize(maxWidth: 300, dim: "1080x1920")
+
+        #expect(size.width == 228)
+        #expect(size.height == 405)
+    }
+
+    @Test func missingVideoDimensionsUseLandscapeFallback() {
+        let size = MessageVideoBubblePresentation.displaySize(maxWidth: 300, dim: nil)
+
+        #expect(size.width == 300)
+        #expect(size.height == 169)
+    }
+
+    @Test func fullscreenAffordanceUsesTouchableOverlaySize() {
+        #expect(MessageVideoBubblePresentation.fullscreenButtonSize == 36)
+        #expect(MessageVideoBubblePresentation.fullscreenButtonIconSize == 15)
+        #expect(MessageVideoBubblePresentation.fullscreenButtonInset == 8)
+    }
+
+    @Test func thumbnailCacheKeySurvivesSourceEpochRefresh() {
+        let initial = attachment(
+            id: "row:\(hex("33")):0:0",
+            reference: encryptedMediaReference(
+                fileName: "clip.mp4",
+                mediaType: "video/mp4",
+                dim: "640x360",
+                sourceEpoch: 0
+            )
+        )
+        let refreshed = attachment(
+            id: "row:\(hex("33")):42:0",
+            reference: encryptedMediaReference(
+                fileName: "clip.mp4",
+                mediaType: "video/mp4",
+                dim: "640x360",
+                sourceEpoch: 42
+            )
+        )
+
+        #expect(MessageVideoThumbnailPresentation.cacheKey(for: initial) == MessageVideoThumbnailPresentation.cacheKey(for: refreshed))
+    }
+
+    @Test func thumbnailCacheKeyFallsBackToItemIdForLocalVideo() {
+        let local = attachment(id: "local-video", reference: nil)
+
+        #expect(MessageVideoThumbnailPresentation.cacheKey(for: local) == "item:local-video")
+    }
+
+    private func attachment(
+        id: String,
+        reference: MediaAttachmentReferenceFfi?
+    ) -> MessageMediaAttachment {
+        MessageMediaAttachment(
+            id: id,
+            reference: reference,
+            fileName: reference?.fileName ?? "local.mov",
+            mediaType: reference?.mediaType ?? "video/quicktime",
+            dim: reference?.dim,
+            localData: nil
+        )
+    }
+}
+
+struct VideoPreviewOverlayPresentationTests {
+
+    @Test func draftVideoPreviewUsesReadableCompactOverlay() {
+        let diameter = VideoPreviewOverlayPresentation.diameter(for: CGSize(width: 68, height: 68))
+
+        #expect(diameter == VideoPreviewOverlayPresentation.compactDiameter)
+        #expect(VideoPreviewOverlayPresentation.iconFontSize(for: diameter) >= 19)
+    }
+
+    @Test func messageVideoPreviewUsesLargeCenteredOverlay() {
+        let diameter = VideoPreviewOverlayPresentation.diameter(for: CGSize(width: 300, height: 169))
+
+        #expect(diameter == VideoPreviewOverlayPresentation.regularDiameter)
+    }
+
+    @Test func veryLargeVideoPreviewCapsOverlayDiameter() {
+        let diameter = VideoPreviewOverlayPresentation.diameter(for: CGSize(width: 600, height: 400))
+
+        #expect(diameter == VideoPreviewOverlayPresentation.maximumDiameter)
+    }
+}
+
+struct MessageAudioBubblePresentationTests {
+
+    @Test func missingDurationDoesNotReserveLabelSpace() {
+        #expect(MessageAudioBubblePresentation.durationLabel(nil) == nil)
+    }
+
+    @Test func durationLabelMatchesBubbleFormat() {
+        #expect(MessageAudioBubblePresentation.durationLabel(2.9) == "0:02")
+        #expect(MessageAudioBubblePresentation.durationLabel(65) == "1:05")
+    }
+
+    @Test func audioMetadataCacheKeySurvivesSourceEpochRefresh() {
+        let initial = attachment(
+            id: "row:\(hex("33")):0:0",
+            reference: encryptedMediaReference(
+                fileName: "voice.m4a",
+                mediaType: "audio/mp4",
+                dim: nil,
+                sourceEpoch: 0
+            )
+        )
+        let refreshed = attachment(
+            id: "row:\(hex("33")):42:0",
+            reference: encryptedMediaReference(
+                fileName: "voice.m4a",
+                mediaType: "audio/mp4",
+                dim: nil,
+                sourceEpoch: 42
+            )
+        )
+
+        #expect(MessageAudioBubblePresentation.cacheKey(for: initial) == MessageAudioBubblePresentation.cacheKey(for: refreshed))
+    }
+
+    @Test func audioMetadataCacheKeyFallsBackToItemIdForLocalAudio() {
+        let local = attachment(id: "local-audio", reference: nil)
+
+        #expect(MessageAudioBubblePresentation.cacheKey(for: local) == "item:local-audio")
+    }
+
+    private func attachment(
+        id: String,
+        reference: MediaAttachmentReferenceFfi?
+    ) -> MessageMediaAttachment {
+        MessageMediaAttachment(
+            id: id,
+            reference: reference,
+            fileName: reference?.fileName ?? "local.m4a",
+            mediaType: reference?.mediaType ?? "audio/mp4",
+            dim: reference?.dim,
+            localData: nil
+        )
     }
 }
 
@@ -5838,6 +6133,133 @@ struct MessageMediaThumbnailDecoderTests {
         let largestPixelEdge = max(image.size.width * image.scale, image.size.height * image.scale)
 
         #expect(largestPixelEdge <= 48)
+    }
+
+    @Test func videoDecoderExtractsAndCachesPreviewFrame() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MessageVideoThumbnail-\(UUID().uuidString).mov")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await writeTestVideo(to: url, size: CGSize(width: 96, height: 54))
+
+        let image = try #require(await MessageVideoThumbnailDecoder.thumbnail(
+            url: url,
+            maxPixelSize: 48,
+            scale: 1
+        ))
+        let largestPixelEdge = max(image.size.width * image.scale, image.size.height * image.scale)
+        let itemID = "video-thumbnail-\(UUID().uuidString)"
+
+        MessageVideoThumbnailDecoder.store(image, for: itemID, maxPixelSize: 48)
+        let cached = try #require(MessageVideoThumbnailDecoder.cachedThumbnail(for: itemID, maxPixelSize: 48))
+
+        #expect(largestPixelEdge <= 48)
+        #expect(cached.size.width > 0)
+    }
+
+    private func writeTestVideo(to url: URL, size: CGSize) async throws {
+        let width = max(1, Int(size.width.rounded()))
+        let height = max(1, Int(size.height.rounded()))
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        let input = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+            ]
+        )
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else {
+            throw VideoThumbnailFixtureError.cannotAddInput
+        }
+        writer.add(input)
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+            ]
+        )
+        guard writer.startWriting() else {
+            throw writer.error ?? VideoThumbnailFixtureError.writerFailed
+        }
+        writer.startSession(atSourceTime: .zero)
+        for _ in 0..<50 where !input.isReadyForMoreMediaData {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        guard input.isReadyForMoreMediaData else {
+            throw VideoThumbnailFixtureError.inputNotReady
+        }
+        let firstBuffer = try makePixelBuffer(
+            adaptor: adaptor,
+            width: width,
+            height: height
+        )
+        guard adaptor.append(firstBuffer, withPresentationTime: .zero) else {
+            throw writer.error ?? VideoThumbnailFixtureError.writerFailed
+        }
+        let secondBuffer = try makePixelBuffer(
+            adaptor: adaptor,
+            width: width,
+            height: height
+        )
+        guard adaptor.append(secondBuffer, withPresentationTime: CMTime(value: 1, timescale: 30)) else {
+            throw writer.error ?? VideoThumbnailFixtureError.writerFailed
+        }
+        input.markAsFinished()
+        try await withCheckedThrowingContinuation { continuation in
+            writer.finishWriting {
+                if writer.status == .completed {
+                    continuation.resume()
+                } else {
+                    continuation.resume(throwing: writer.error ?? VideoThumbnailFixtureError.writerFailed)
+                }
+            }
+        }
+    }
+
+    private func makePixelBuffer(
+        adaptor: AVAssetWriterInputPixelBufferAdaptor,
+        width: Int,
+        height: Int
+    ) throws -> CVPixelBuffer {
+        guard let pool = adaptor.pixelBufferPool else {
+            throw VideoThumbnailFixtureError.missingPixelBufferPool
+        }
+        var maybeBuffer: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(nil, pool, &maybeBuffer)
+        guard let buffer = maybeBuffer else {
+            throw VideoThumbnailFixtureError.missingPixelBuffer
+        }
+        CVPixelBufferLockBaseAddress(buffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        guard let context = CGContext(
+            data: CVPixelBufferGetBaseAddress(buffer),
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            throw VideoThumbnailFixtureError.missingContext
+        }
+        UIColor.systemTeal.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        UIColor.systemIndigo.setFill()
+        context.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        return buffer
+    }
+
+    private enum VideoThumbnailFixtureError: Error {
+        case cannotAddInput
+        case inputNotReady
+        case missingContext
+        case missingPixelBuffer
+        case missingPixelBufferPool
+        case writerFailed
     }
 }
 
@@ -5971,6 +6393,24 @@ struct TimelineBottomTests {
         )
         #expect(insetAdjustedBottom == 0)
         #expect(!TimelineBottom.shouldShowScrollToBottomButton(distanceToBottom: insetAdjustedBottom))
+    }
+
+    @Test func bottomOverscrollDetectsViewportBelowLegalContentBottom() {
+        let validBottom = TimelineBottomViewport(
+            contentHeight: 1_000,
+            visibleBottomY: 1_050,
+            bottomContentInset: 50
+        )
+        let belowContent = TimelineBottomViewport(
+            contentHeight: 1_000,
+            visibleBottomY: 1_120,
+            bottomContentInset: 50
+        )
+
+        #expect(validBottom.overscrollPastBottom == 0)
+        #expect(!TimelineBottom.shouldRepairBottomOverscroll(validBottom))
+        #expect(belowContent.overscrollPastBottom == 70)
+        #expect(TimelineBottom.shouldRepairBottomOverscroll(belowContent))
     }
 
     @Test func pinnedContentGrowthKeepsTimelinePinned() {
@@ -6352,6 +6792,8 @@ private func encryptedMediaReference(
     plaintextByte: String = "33",
     ciphertextByte: String = "44",
     nonce: String = String(repeating: "22", count: 12),
+    mediaType: String = "image/jpeg",
+    dim: String? = "640x480",
     sourceEpoch: UInt64
 ) -> MediaAttachmentReferenceFfi {
     MediaAttachmentReferenceFfi(
@@ -6360,10 +6802,10 @@ private func encryptedMediaReference(
         plaintextSha256: hex(plaintextByte),
         nonceHex: nonce,
         fileName: fileName,
-        mediaType: "image/jpeg",
+        mediaType: mediaType,
         version: MessageSemantics.encryptedMediaVersion,
         sourceEpoch: sourceEpoch,
-        dim: "640x480",
+        dim: dim,
         thumbhash: nil
     )
 }
