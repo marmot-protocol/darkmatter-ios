@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 nonisolated enum ComposerInputChrome {
@@ -86,16 +87,45 @@ private enum ComposerAttachmentPopover: String, Identifiable {
     var id: String { rawValue }
 }
 
+nonisolated enum ComposerAudioDraftPreviewPresentation {
+    static func sendButtonBottomPadding(hasAudioDraft: Bool) -> CGFloat {
+        hasAudioDraft ? 0 : 2
+    }
+
+    static func sendButtonOffset(hasAudioDraft: Bool) -> CGSize {
+        CGSize(width: 3, height: hasAudioDraft ? 0 : 1)
+    }
+
+    static func playIconName(isPlaying: Bool, didFail: Bool) -> String {
+        if isPlaying { return "pause.fill" }
+        if didFail { return "arrow.clockwise" }
+        return "play.fill"
+    }
+
+    static func durationLabel(_ duration: Double?) -> String {
+        guard let duration else { return "" }
+        let total = max(0, Int(duration.rounded(.down)))
+        return "\(total / 60):\(String(format: "%02d", total % 60))"
+    }
+}
+
 /// Telegram-style composer: attachment + pill input (emoji + send inside) + mic slot.
 struct ComposerBar: View {
     @Binding var draft: String
     let isSending: Bool
     let hasAttachments: Bool
+    let audioDraft: MediaDraftAttachment?
     let mediaEnabled: Bool
+    let voiceRecordingActive: Bool
     let focusRequest: Int
     let mentionCandidates: [ComposerMentionCandidate]
     let onTakePhoto: () -> Void
     let onPhotoLibrary: () -> Void
+    let onAttachFile: () -> Void
+    let onRemoveAudioDraft: (MediaDraftAttachment.ID) -> Void
+    let onVoicePressBegan: () -> Void
+    let onVoiceDragChanged: (CGSize) -> Void
+    let onVoicePressEnded: () -> Void
     let onMentionSelect: (ComposerMentionCandidate) -> Void
     let onSend: () -> Void
     @FocusState private var focused: Bool
@@ -178,6 +208,10 @@ struct ComposerBar: View {
                     onTakePhoto: {
                         attachmentPopover = nil
                         onTakePhoto()
+                    },
+                    onAttachFile: {
+                        attachmentPopover = nil
+                        onAttachFile()
                     }
                 )
             case .unavailable:
@@ -187,32 +221,45 @@ struct ComposerBar: View {
     }
 
     private var inputCapsule: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            TextField("Message", text: $draft, axis: .vertical)
-                .focused($focused)
-                .lineLimit(1...5)
-                .font(.system(size: BottomInputChromeLayout.fieldFontSize))
-                .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
-                .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
-                .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .simultaneousGesture(TapGesture().onEnded { focusComposer() })
-                .submitLabel(.send)
-                .onSubmit(triggerSend)
-                .onChange(of: focusRequest) { _, _ in focusComposer() }
-                .onAppear {
-                    if focusRequest > 0 {
-                        focusComposer()
+        HStack(alignment: audioDraft == nil ? .bottom : .center, spacing: 0) {
+            if let audioDraft {
+                ComposerAudioDraftInput(
+                    attachment: audioDraft,
+                    onRemove: { onRemoveAudioDraft(audioDraft.id) }
+                )
+                .transition(.opacity)
+            } else {
+                TextField("Message", text: $draft, axis: .vertical)
+                    .focused($focused)
+                    .lineLimit(1...5)
+                    .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                    .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
+                    .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
+                    .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(TapGesture().onEnded { focusComposer() })
+                    .submitLabel(.send)
+                    .onSubmit(triggerSend)
+                    .onChange(of: focusRequest) { _, _ in focusComposer() }
+                    .onAppear {
+                        if focusRequest > 0 {
+                            focusComposer()
+                        }
                     }
-                }
 
-            emojiButton
+                emojiButton
+            }
 
             if showsSend {
                 inlineSendButton
                     .padding(.trailing, 4)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, ComposerAudioDraftPreviewPresentation.sendButtonBottomPadding(
+                        hasAudioDraft: audioDraft != nil
+                    ))
+                    .offset(ComposerAudioDraftPreviewPresentation.sendButtonOffset(
+                        hasAudioDraft: audioDraft != nil
+                    ))
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -262,12 +309,15 @@ struct ComposerBar: View {
     @ViewBuilder
     private var micSlot: some View {
         if showsMic {
-            Button {
-                // Voice messages — wired in a follow-up.
-            } label: {
-                sideCircleIcon("mic.fill", weight: .semibold, size: BottomInputChromeLayout.sideControlIconSize)
-            }
-            .buttonStyle(.plain)
+            sideCircleIcon(
+                "mic.fill",
+                weight: .semibold,
+                size: BottomInputChromeLayout.sideControlIconSize,
+                tone: voiceRecordingActive ? .primary : .primary
+            )
+            .scaleEffect(voiceRecordingActive ? 1.08 : 1)
+            .contentShape(Circle())
+            .gesture(voiceGesture)
             .accessibilityLabel("Voice message")
             .transition(.asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -303,7 +353,20 @@ struct ComposerBar: View {
     }
 
     private var showsMic: Bool {
-        !hasSendableContent && !isSending
+        (!hasSendableContent && !isSending) || voiceRecordingActive
+    }
+
+    private var voiceGesture: some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .global)
+            .onChanged { value in
+                if !voiceRecordingActive {
+                    onVoicePressBegan()
+                }
+                onVoiceDragChanged(value.translation)
+            }
+            .onEnded { _ in
+                onVoicePressEnded()
+            }
     }
 
     private func triggerSend() {
@@ -322,10 +385,154 @@ struct ComposerBar: View {
     }
 
     private func focusComposer() {
+        guard audioDraft == nil else { return }
         Task { @MainActor in
             await Task.yield()
             focused = true
         }
+    }
+}
+
+private struct ComposerAudioDraftInput: View {
+    let attachment: MediaDraftAttachment
+    let onRemove: () -> Void
+
+    @State private var player: AVAudioPlayer?
+    @State private var isPlaying = false
+    @State private var progress: CGFloat = 0
+    @State private var isLoading = false
+    @State private var didFail = false
+    @State private var progressTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Color.primary.opacity(0.10), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove attachment")
+
+            Button(action: togglePlayback) {
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: ComposerAudioDraftPreviewPresentation.playIconName(
+                            isPlaying: isPlaying,
+                            didFail: didFail
+                        ))
+                        .font(.system(size: 13, weight: .bold))
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Color.accentColor, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
+
+            AudioWaveformView(
+                samples: attachment.waveformSamples,
+                progress: progress,
+                barColor: Color.accentColor.opacity(0.88),
+                playedColor: Color.accentColor
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+
+            Text(ComposerAudioDraftPreviewPresentation.durationLabel(attachment.durationSeconds))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 42, alignment: .trailing)
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: BottomInputChromeLayout.controlSize)
+        .onChange(of: attachment.id) { _, _ in
+            stopPlayback()
+            progress = 0
+            didFail = false
+        }
+        .onDisappear {
+            stopPlayback()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Voice message")
+    }
+
+    private func togglePlayback() {
+        if isPlaying {
+            player?.pause()
+            isPlaying = false
+            return
+        }
+        if player == nil || didFail {
+            loadAndPlay()
+        } else {
+            playLoadedAudio()
+        }
+    }
+
+    private func loadAndPlay() {
+        isLoading = true
+        didFail = false
+        do {
+            let next = try AVAudioPlayer(data: attachment.data)
+            next.prepareToPlay()
+            player = next
+            isLoading = false
+            playLoadedAudio()
+        } catch {
+            isLoading = false
+            didFail = true
+            isPlaying = false
+        }
+    }
+
+    private func playLoadedAudio() {
+        guard let player else { return }
+        if player.currentTime >= player.duration {
+            player.currentTime = 0
+            progress = 0
+        }
+        player.play()
+        isPlaying = true
+        startProgressLoop()
+    }
+
+    private func startProgressLoop() {
+        progressTask?.cancel()
+        progressTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard let player else { return }
+                let duration = max(0.01, player.duration)
+                progress = min(1, max(0, CGFloat(player.currentTime / duration)))
+                if !player.isPlaying {
+                    isPlaying = false
+                    if progress >= 0.995 {
+                        progress = 0
+                        player.currentTime = 0
+                    }
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopPlayback() {
+        progressTask?.cancel()
+        progressTask = nil
+        player?.stop()
+        player = nil
+        isPlaying = false
     }
 }
 
@@ -346,12 +553,15 @@ private struct ComposerAttachmentUnavailableTooltip: View {
 private struct ComposerAttachmentMenu: View {
     let onPhotoLibrary: () -> Void
     let onTakePhoto: () -> Void
+    let onAttachFile: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
+            actionRow("Take Photo", systemImage: "camera", action: onTakePhoto)
+            Divider()
             actionRow("Photo Library", systemImage: "photo.on.rectangle", action: onPhotoLibrary)
             Divider()
-            actionRow("Take Photo", systemImage: "camera", action: onTakePhoto)
+            actionRow("Attach File", systemImage: "doc.badge.plus", action: onAttachFile)
         }
         .frame(width: 220)
         .presentationCompactAdaptation(.popover)

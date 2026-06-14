@@ -2,6 +2,8 @@ import SwiftUI
 import UIKit
 import MarmotKit
 import ImageIO
+import AVFoundation
+import AVKit
 
 enum MessageBubbleReplyLayout {
     static let bodyHorizontalInset: CGFloat = 14
@@ -248,7 +250,7 @@ struct MessageBubble: View {
     @ViewBuilder
     private var mediaMessageContent: some View {
         VStack(alignment: isFromMe ? .trailing : .leading, spacing: 6) {
-            MessageMediaGrid(
+            MessageMediaAttachmentContent(
                 items: mediaItems,
                 isFromMe: isFromMe,
                 maxWidth: mediaGridWidth,
@@ -688,6 +690,108 @@ private struct MessageMediaGrid: View {
     }
 }
 
+private struct MessageMediaAttachmentContent: View {
+    let items: [MessageMediaAttachment]
+    let isFromMe: Bool
+    let maxWidth: CGFloat
+    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onOpenImage: (MessageMediaAttachment, Data) -> Void
+
+    private var usesVisualGrid: Bool {
+        !items.isEmpty && items.allSatisfy { $0.isImage || $0.isVideo }
+    }
+
+    private var singleVideo: MessageMediaAttachment? {
+        items.count == 1 && items[0].isVideo ? items[0] : nil
+    }
+
+    var body: some View {
+        if let singleVideo {
+            MessageSingleVideoBubble(
+                item: singleVideo,
+                isFromMe: isFromMe,
+                maxWidth: maxWidth,
+                onLoadMedia: onLoadMedia
+            )
+        } else if usesVisualGrid {
+            MessageMediaGrid(
+                items: items,
+                isFromMe: isFromMe,
+                maxWidth: maxWidth,
+                onLoadMedia: onLoadMedia,
+                onOpenImage: onOpenImage
+            )
+        } else {
+            VStack(alignment: isFromMe ? .trailing : .leading, spacing: 6) {
+                ForEach(items) { item in
+                    switch item.kind {
+                    case .image:
+                        MessageMediaTile(
+                            item: item,
+                            isFromMe: isFromMe,
+                            sideLength: maxWidth,
+                            hiddenCount: 0,
+                            onLoadMedia: onLoadMedia,
+                            onOpenImage: onOpenImage
+                        )
+                        .clipShape(.rect(cornerRadius: 14))
+                    case .video:
+                        MessageSingleVideoBubble(
+                            item: item,
+                            isFromMe: isFromMe,
+                            maxWidth: maxWidth,
+                            onLoadMedia: onLoadMedia
+                        )
+                    case .audio:
+                        MessageAudioAttachmentView(
+                            item: item,
+                            isFromMe: isFromMe,
+                            width: maxWidth,
+                            onLoadMedia: onLoadMedia
+                        )
+                    case .document, .unsupported:
+                        MessageDocumentAttachmentView(
+                            item: item,
+                            isFromMe: isFromMe,
+                            width: maxWidth,
+                            onLoadMedia: onLoadMedia
+                        )
+                    }
+                }
+            }
+            .frame(width: maxWidth, alignment: .leading)
+        }
+    }
+}
+
+private struct MessageSingleVideoBubble: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let maxWidth: CGFloat
+    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+
+    private let cornerRadius: CGFloat = 14
+
+    private var size: CGSize {
+        MessageVideoBubblePresentation.displaySize(maxWidth: maxWidth, dim: item.dim)
+    }
+
+    var body: some View {
+        MessageVideoAttachmentView(
+            item: item,
+            isFromMe: isFromMe,
+            width: size.width,
+            height: size.height,
+            onLoadMedia: onLoadMedia
+        )
+        .clipShape(.rect(cornerRadius: cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(Color.primary.opacity(isFromMe ? 0.16 : 0.08), lineWidth: 1)
+        }
+    }
+}
+
 enum MessageMediaGridPresentation {
     static let maxVisibleItems = 4
 
@@ -707,6 +811,86 @@ enum MessageMediaGridPresentation {
         if totalCount <= 2 { return 1 }
         return 2
     }
+}
+
+nonisolated enum MessageVideoBubblePresentation {
+    private static let fallbackAspectRatio: CGFloat = 16.0 / 9.0
+    private static let maximumHeightRatio: CGFloat = 1.35
+    static let fullscreenButtonSize: CGFloat = 36
+    static let fullscreenButtonIconSize: CGFloat = 15
+    static let fullscreenButtonInset: CGFloat = 8
+
+    static func aspectRatio(dim: String?) -> CGFloat {
+        guard let dim else { return fallbackAspectRatio }
+        let parts = dim
+            .lowercased()
+            .split(separator: "x", maxSplits: 1)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard parts.count == 2,
+              let width = Double(parts[0]),
+              let height = Double(parts[1]),
+              width > 0,
+              height > 0
+        else {
+            return fallbackAspectRatio
+        }
+        let aspectRatio = CGFloat(width / height)
+        guard aspectRatio.isFinite else { return fallbackAspectRatio }
+        return min(4, max(0.25, aspectRatio))
+    }
+
+    static func displaySize(maxWidth: CGFloat, dim: String?) -> CGSize {
+        let boundedMaxWidth = max(1, maxWidth)
+        let aspectRatio = aspectRatio(dim: dim)
+        if aspectRatio >= 1 {
+            return roundedSize(width: boundedMaxWidth, height: boundedMaxWidth / aspectRatio)
+        }
+
+        let maxHeight = boundedMaxWidth * maximumHeightRatio
+        let height = min(boundedMaxWidth / aspectRatio, maxHeight)
+        return roundedSize(width: min(boundedMaxWidth, height * aspectRatio), height: height)
+    }
+
+    private static func roundedSize(width: CGFloat, height: CGFloat) -> CGSize {
+        CGSize(
+            width: max(1, width.rounded(.toNearestOrAwayFromZero)),
+            height: max(1, height.rounded(.toNearestOrAwayFromZero))
+        )
+    }
+}
+
+nonisolated enum MessageVideoThumbnailPresentation {
+    static func cacheKey(for item: MessageMediaAttachment) -> String {
+        if let hash = item.reference?.plaintextSha256.lowercased(),
+           hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
+        {
+            return "sha256:\(hash)"
+        }
+        return "item:\(item.id)"
+    }
+}
+
+nonisolated enum MessageAudioBubblePresentation {
+    static func cacheKey(for item: MessageMediaAttachment) -> String {
+        if let hash = item.reference?.plaintextSha256.lowercased(),
+           hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
+        {
+            return "sha256:\(hash)"
+        }
+        return "item:\(item.id)"
+    }
+
+    static func durationLabel(_ duration: Double?) -> String? {
+        guard let duration else { return nil }
+        let total = max(0, Int(duration.rounded(.down)))
+        return "\(total / 60):\(String(format: "%02d", total % 60))"
+    }
+}
+
+private struct MessageFullscreenVideo: Identifiable {
+    let id: String
+    let item: MessageMediaAttachment
+    let url: URL
 }
 
 private struct MessageMediaTile: View {
@@ -733,6 +917,14 @@ private struct MessageMediaTile: View {
                     .clipped()
             } else if item.isImage {
                 imagePlaceholder
+            } else if item.isVideo {
+                MessageVideoAttachmentView(
+                    item: item,
+                    isFromMe: isFromMe,
+                    width: sideLength,
+                    height: sideLength,
+                    onLoadMedia: onLoadMedia
+                )
             } else {
                 filePlaceholder
             }
@@ -751,6 +943,7 @@ private struct MessageMediaTile: View {
             _ = await loadImageIfNeeded()
         }
         .onTapGesture {
+            guard item.isImage else { return }
             if didFail {
                 Task { await loadImageIfNeeded(force: true) }
             } else if let imageData {
@@ -850,6 +1043,733 @@ private struct MessageMediaTile: View {
             didFail = true
             return nil
         }
+    }
+}
+
+private struct MessageVideoAttachmentView: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let width: CGFloat
+    let height: CGFloat
+    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+
+    @State private var player: AVPlayer?
+    @State private var playbackURL: URL?
+    @State private var previewThumbnail: UIImage?
+    @State private var fullscreenVideo: MessageFullscreenVideo?
+    @State private var isLoading = false
+    @State private var isLoadingPreview = false
+    @State private var isLoadingFullscreen = false
+    @State private var didFail = false
+
+    private var overlayDiameter: CGFloat {
+        VideoPreviewOverlayPresentation.diameter(for: CGSize(width: width, height: height))
+    }
+
+    private var maxThumbnailPixelSize: Int {
+        max(1, Int(ceil(max(width, height) * UIScreen.main.scale)))
+    }
+
+    private var thumbnailCacheKey: String {
+        MessageVideoThumbnailPresentation.cacheKey(for: item)
+    }
+
+    private var displayThumbnail: UIImage? {
+        item.thumbnail
+            ?? previewThumbnail
+            ?? MessageVideoThumbnailDecoder.cachedThumbnail(
+                for: thumbnailCacheKey,
+                maxPixelSize: maxThumbnailPixelSize
+            )
+    }
+
+    var body: some View {
+        ZStack {
+            if let player {
+                VideoPlayer(player: player)
+                    .frame(width: width, height: height)
+                    .background(Color.black)
+            } else if let thumbnail = displayThumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width, height: height)
+                    .clipped()
+            } else {
+                videoPlaceholder
+            }
+
+            if player == nil {
+                if isLoading || (isLoadingPreview && displayThumbnail == nil) {
+                    ProgressView()
+                        .controlSize(
+                            overlayDiameter >= VideoPreviewOverlayPresentation.regularDiameter ? .regular : .small
+                        )
+                        .tint(.white)
+                        .frame(width: overlayDiameter, height: overlayDiameter)
+                        .background(Color.black.opacity(0.5), in: Circle())
+                } else {
+                    VideoPreviewPlayOverlay(
+                        systemName: didFail ? "arrow.clockwise" : "play.fill",
+                        diameter: overlayDiameter
+                    )
+                }
+            }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        Task { await openFullscreen() }
+                    } label: {
+                        Group {
+                            if isLoadingFullscreen {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                    .font(.system(
+                                        size: MessageVideoBubblePresentation.fullscreenButtonIconSize,
+                                        weight: .bold
+                                    ))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .frame(
+                            width: MessageVideoBubblePresentation.fullscreenButtonSize,
+                            height: MessageVideoBubblePresentation.fullscreenButtonSize
+                        )
+                        .background(Color.black.opacity(0.48), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoadingFullscreen)
+                    .accessibilityLabel("Open video fullscreen")
+                }
+                Spacer()
+            }
+            .padding(MessageVideoBubblePresentation.fullscreenButtonInset)
+        }
+        .frame(width: width, height: height)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            Task { await loadAndPlay() }
+        }
+        .task(id: item.id) {
+            await loadPreviewThumbnailIfNeeded()
+        }
+        .onChange(of: item.id) { _, _ in
+            player?.pause()
+            player = nil
+            playbackURL = nil
+            previewThumbnail = nil
+            fullscreenVideo = nil
+            isLoading = false
+            isLoadingPreview = false
+            isLoadingFullscreen = false
+            didFail = false
+        }
+        .onDisappear {
+            player?.pause()
+        }
+        .fullScreenCover(item: $fullscreenVideo) { video in
+            MessageFullscreenVideoPlayerView(video: video) {
+                fullscreenVideo = nil
+            }
+        }
+        .accessibilityLabel("Video attachment")
+    }
+
+    private var videoPlaceholder: some View {
+        ZStack {
+            Color(.tertiarySystemFill)
+            Image(systemName: "play.rectangle")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func loadPreviewThumbnailIfNeeded() async {
+        guard item.thumbnail == nil,
+              previewThumbnail == nil,
+              !isLoadingPreview else { return }
+        if let cached = MessageVideoThumbnailDecoder.cachedThumbnail(
+            for: thumbnailCacheKey,
+            maxPixelSize: maxThumbnailPixelSize
+        ) {
+            previewThumbnail = cached
+            return
+        }
+        isLoadingPreview = true
+        defer { isLoadingPreview = false }
+        do {
+            let url = try await playbackFileURL()
+            await loadPreviewThumbnail(from: url)
+        } catch {
+            // Thumbnail fetch is opportunistic; tapping the video can still retry.
+        }
+    }
+
+    private func loadAndPlay() async {
+        if let player {
+            player.play()
+            return
+        }
+        isLoading = true
+        didFail = false
+        defer { isLoading = false }
+        do {
+            let url = try await playbackFileURL()
+            await loadPreviewThumbnail(from: url)
+            let next = AVPlayer(url: url)
+            player = next
+            next.play()
+        } catch {
+            didFail = true
+        }
+    }
+
+    private func openFullscreen() async {
+        player?.pause()
+        if let playbackURL {
+            fullscreenVideo = MessageFullscreenVideo(id: item.id, item: item, url: playbackURL)
+            return
+        }
+
+        isLoadingFullscreen = true
+        didFail = false
+        defer { isLoadingFullscreen = false }
+        do {
+            let url = try await playbackFileURL()
+            await loadPreviewThumbnail(from: url)
+            fullscreenVideo = MessageFullscreenVideo(id: item.id, item: item, url: url)
+        } catch {
+            didFail = true
+        }
+    }
+
+    private func playbackFileURL() async throws -> URL {
+        if let playbackURL {
+            return playbackURL
+        }
+        let data = try await onLoadMedia(item)
+        guard let url = MediaPlaybackFileStore.fileURL(for: item, data: data) else {
+            throw MessageVideoAttachmentError.playbackFileUnavailable
+        }
+        playbackURL = url
+        return url
+    }
+
+    private func loadPreviewThumbnail(from url: URL) async {
+        guard item.thumbnail == nil, previewThumbnail == nil else { return }
+        if let cached = MessageVideoThumbnailDecoder.cachedThumbnail(
+            for: thumbnailCacheKey,
+            maxPixelSize: maxThumbnailPixelSize
+        ) {
+            previewThumbnail = cached
+            return
+        }
+        guard let thumbnail = await MessageVideoThumbnailDecoder.thumbnail(
+            url: url,
+            maxPixelSize: maxThumbnailPixelSize,
+            scale: UIScreen.main.scale
+        ) else {
+            return
+        }
+        previewThumbnail = thumbnail
+        MessageVideoThumbnailDecoder.store(
+            thumbnail,
+            for: thumbnailCacheKey,
+            maxPixelSize: maxThumbnailPixelSize
+        )
+    }
+}
+
+private enum MessageVideoAttachmentError: Error {
+    case playbackFileUnavailable
+}
+
+private struct MessageFullscreenVideoPlayerView: View {
+    let video: MessageFullscreenVideo
+    let onDismiss: () -> Void
+
+    @State private var player: AVPlayer
+    @State private var dismissDragOffset: CGFloat = 0
+
+    init(video: MessageFullscreenVideo, onDismiss: @escaping () -> Void) {
+        self.video = video
+        self.onDismiss = onDismiss
+        _player = State(initialValue: AVPlayer(url: video.url))
+    }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            VideoPlayer(player: player)
+                .ignoresSafeArea()
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+            .padding(.top, 14)
+            .padding(.trailing, 14)
+        }
+        .offset(y: dismissDragOffset)
+        .opacity(1 - min(dismissDragOffset / 420, 0.35))
+        .simultaneousGesture(swipeDownToDismissGesture)
+        .onAppear {
+            player.play()
+        }
+        .onDisappear {
+            player.pause()
+        }
+    }
+
+    private var swipeDownToDismissGesture: some Gesture {
+        DragGesture(minimumDistance: MediaFullscreenDismiss.minimumDistance, coordinateSpace: .local)
+            .onChanged { value in
+                guard MediaFullscreenDismiss.isDownwardVertical(value.translation) else { return }
+                dismissDragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard dismissDragOffset > 0
+                    || MediaFullscreenDismiss.isDownwardVertical(value.translation)
+                else { return }
+
+                if dismissDragOffset >= MediaFullscreenDismiss.dismissThreshold
+                    || value.predictedEndTranslation.height >= MediaFullscreenDismiss.predictedDismissThreshold
+                {
+                    onDismiss()
+                } else {
+                    withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                        dismissDragOffset = 0
+                    }
+                }
+            }
+    }
+}
+
+private struct MessageAudioAttachmentView: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let width: CGFloat
+    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+
+    @State private var player: AVAudioPlayer?
+    @State private var isLoading = false
+    @State private var didFail = false
+    @State private var isPlaying = false
+    @State private var progress: CGFloat = 0
+    @State private var durationSeconds: Double?
+    @State private var waveformSamples: [CGFloat]
+    @State private var speedIndex = 0
+    @State private var progressTask: Task<Void, Never>?
+
+    private let speeds: [Float] = [1, 1.5, 2]
+    private var metadataCacheKey: String {
+        MessageAudioBubblePresentation.cacheKey(for: item)
+    }
+
+    init(
+        item: MessageMediaAttachment,
+        isFromMe: Bool,
+        width: CGFloat,
+        onLoadMedia: @escaping (MessageMediaAttachment) async throws -> Data
+    ) {
+        self.item = item
+        self.isFromMe = isFromMe
+        self.width = width
+        self.onLoadMedia = onLoadMedia
+        _durationSeconds = State(initialValue: item.durationSeconds)
+        _waveformSamples = State(initialValue: item.waveformSamples.isEmpty ? MediaWaveformAnalyzer.fallback() : item.waveformSamples)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button(action: togglePlayback) {
+                Group {
+                    if isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: isPlaying ? "pause.fill" : didFail ? "arrow.clockwise" : "play.fill")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                }
+                .frame(width: 36, height: 36)
+                .foregroundStyle(isFromMe ? Color.accentColor : Color.white)
+                .background(isFromMe ? Color.white.opacity(0.95) : Color.accentColor, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
+
+            VStack(alignment: .leading, spacing: 5) {
+                AudioWaveformView(
+                    samples: waveformSamples,
+                    progress: progress,
+                    barColor: isFromMe ? Color.white.opacity(0.58) : Color.secondary.opacity(0.45),
+                    playedColor: isFromMe ? Color.white : Color.accentColor
+                )
+                .frame(height: 28)
+                if let durationLabel = MessageAudioBubblePresentation.durationLabel(durationSeconds ?? item.durationSeconds) {
+                    Text(durationLabel)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(isFromMe ? Color.white.opacity(0.75) : Color.secondary)
+                }
+            }
+
+            Button(action: cycleSpeed) {
+                Text(speedLabel)
+                    .font(.caption.weight(.bold))
+                    .frame(width: 38, height: 28)
+                    .background(isFromMe ? Color.white.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(isFromMe ? Color.white : Color.primary)
+            .accessibilityLabel("Playback speed")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: width)
+        .frame(minHeight: 68)
+        .background(isFromMe ? Color.accentColor : Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Color.primary.opacity(isFromMe ? 0.12 : 0.08), lineWidth: 1)
+        }
+        .onDisappear {
+            stopPlayback()
+        }
+        .task(id: metadataCacheKey) {
+            await loadMetadataIfNeeded()
+        }
+    }
+
+    private var speedLabel: String {
+        switch speeds[speedIndex] {
+        case 1: "1x"
+        case 1.5: "1.5x"
+        default: "2x"
+        }
+    }
+
+    private func togglePlayback() {
+        if isPlaying {
+            player?.pause()
+            isPlaying = false
+            return
+        }
+        if player == nil || didFail {
+            Task { await loadAndPlay() }
+        } else {
+            playLoadedAudio()
+        }
+    }
+
+    private func cycleSpeed() {
+        speedIndex = (speedIndex + 1) % speeds.count
+        player?.rate = speeds[speedIndex]
+        if isPlaying {
+            player?.play()
+            player?.rate = speeds[speedIndex]
+        }
+    }
+
+    private func loadAndPlay() async {
+        isLoading = true
+        didFail = false
+        defer { isLoading = false }
+        do {
+            let data = try await onLoadMedia(item)
+            let metadata = await audioMetadata(from: data)
+            let next = try AVAudioPlayer(data: data)
+            next.enableRate = true
+            next.prepareToPlay()
+            player = next
+            let playableMetadata = MessageAudioMetadata(
+                durationSeconds: metadata.durationSeconds ?? next.duration,
+                samples: metadata.samples
+            )
+            MessageAudioMetadataCache.store(playableMetadata, for: metadataCacheKey)
+            applyMetadata(playableMetadata)
+            playLoadedAudio()
+        } catch {
+            didFail = true
+            isPlaying = false
+        }
+    }
+
+    private func loadMetadataIfNeeded() async {
+        if let cached = MessageAudioMetadataCache.metadata(for: metadataCacheKey) {
+            applyMetadata(cached)
+            return
+        }
+
+        if let embedded = embeddedMetadata {
+            MessageAudioMetadataCache.store(embedded, for: metadataCacheKey)
+            applyMetadata(embedded)
+            return
+        }
+
+        do {
+            let data = try await onLoadMedia(item)
+            let metadata = await audioMetadata(from: data)
+            applyMetadata(metadata)
+        } catch {
+            // Playback still gets its own retry path when the user taps play.
+        }
+    }
+
+    private var embeddedMetadata: MessageAudioMetadata? {
+        guard item.durationSeconds != nil, !item.waveformSamples.isEmpty else {
+            return nil
+        }
+        return MessageAudioMetadata(
+            durationSeconds: item.durationSeconds,
+            samples: MediaWaveformAnalyzer.normalized(item.waveformSamples)
+        )
+    }
+
+    private func audioMetadata(from data: Data) async -> MessageAudioMetadata {
+        if let cached = MessageAudioMetadataCache.metadata(for: metadataCacheKey) {
+            return cached
+        }
+
+        let analyzed = await Task.detached(priority: .utility) {
+            MediaWaveformAnalyzer.metadata(from: data, mediaType: item.mediaType)
+        }.value
+        let duration = analyzed.durationSeconds ?? (try? AVAudioPlayer(data: data).duration)
+        let metadata = MessageAudioMetadata(
+            durationSeconds: duration,
+            samples: MediaWaveformAnalyzer.normalized(analyzed.samples)
+        )
+        MessageAudioMetadataCache.store(metadata, for: metadataCacheKey)
+        return metadata
+    }
+
+    private func applyMetadata(_ metadata: MessageAudioMetadata) {
+        durationSeconds = metadata.durationSeconds
+        waveformSamples = MediaWaveformAnalyzer.normalized(metadata.samples)
+    }
+
+    private func playLoadedAudio() {
+        guard let player else { return }
+        if player.currentTime >= player.duration {
+            player.currentTime = 0
+        }
+        player.enableRate = true
+        player.rate = speeds[speedIndex]
+        player.play()
+        player.rate = speeds[speedIndex]
+        isPlaying = true
+        startProgressLoop()
+    }
+
+    private func startProgressLoop() {
+        progressTask?.cancel()
+        progressTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                guard let player else { return }
+                let duration = max(0.01, player.duration)
+                progress = min(1, max(0, CGFloat(player.currentTime / duration)))
+                if !player.isPlaying {
+                    isPlaying = false
+                    if progress >= 0.995 {
+                        progress = 0
+                        player.currentTime = 0
+                    }
+                    return
+                }
+            }
+        }
+    }
+
+    private func stopPlayback() {
+        progressTask?.cancel()
+        progressTask = nil
+        player?.stop()
+        isPlaying = false
+    }
+
+}
+
+private struct MessageAudioMetadata: Sendable {
+    let durationSeconds: Double?
+    let samples: [CGFloat]
+}
+
+private enum MessageAudioMetadataCache {
+    private final class CachedMetadata: NSObject {
+        let durationSeconds: Double?
+        let samples: [CGFloat]
+
+        init(_ metadata: MessageAudioMetadata) {
+            durationSeconds = metadata.durationSeconds
+            samples = metadata.samples
+        }
+
+        var metadata: MessageAudioMetadata {
+            MessageAudioMetadata(durationSeconds: durationSeconds, samples: samples)
+        }
+    }
+
+    private static let cache: NSCache<NSString, CachedMetadata> = {
+        let cache = NSCache<NSString, CachedMetadata>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    static func metadata(for key: String) -> MessageAudioMetadata? {
+        cache.object(forKey: key as NSString)?.metadata
+    }
+
+    static func store(_ metadata: MessageAudioMetadata, for key: String) {
+        cache.setObject(CachedMetadata(metadata), forKey: key as NSString)
+    }
+}
+
+private struct MessageDocumentAttachmentView: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let width: CGFloat
+    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+
+    @State private var isLoading = false
+    @State private var didFail = false
+    @State private var shareItem: MessageDocumentShareItem?
+
+    var body: some View {
+        Button {
+            Task { await openDocument() }
+        } label: {
+            HStack(spacing: 11) {
+                Image(systemName: item.kind.systemImageName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isFromMe ? Color.white : Color.accentColor)
+                    .frame(width: 38, height: 38)
+                    .background(isFromMe ? Color.white.opacity(0.15) : Color.accentColor.opacity(0.10), in: .rect(cornerRadius: 8))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.fileName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(fileDetail)
+                        .font(.caption2)
+                        .foregroundStyle(isFromMe ? Color.white.opacity(0.74) : Color.secondary)
+                }
+                Spacer(minLength: 0)
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(isFromMe ? .white : .accentColor)
+                } else if didFail {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+            }
+            .foregroundStyle(isFromMe ? Color.white : Color.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(width: width)
+            .frame(minHeight: 66)
+            .background(isFromMe ? Color.accentColor : Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.primary.opacity(isFromMe ? 0.12 : 0.08), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open attachment")
+        .sheet(item: $shareItem) { shareItem in
+            MessageDocumentShareSheet(url: shareItem.url)
+        }
+    }
+
+    private var fileDetail: String {
+        MediaAttachmentPolicy.canonicalMediaType(item.mediaType)
+    }
+
+    private func openDocument() async {
+        isLoading = true
+        didFail = false
+        defer { isLoading = false }
+        do {
+            let data = try await onLoadMedia(item)
+            guard let url = MediaPlaybackFileStore.fileURL(for: item, data: data) else {
+                didFail = true
+                return
+            }
+            shareItem = MessageDocumentShareItem(url: url)
+        } catch {
+            didFail = true
+        }
+    }
+}
+
+private struct MessageDocumentShareItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct MessageDocumentShareSheet: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+enum MessageVideoThumbnailDecoder {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = 50 * 1024 * 1024
+        return cache
+    }()
+
+    static func cachedThumbnail(for itemID: String, maxPixelSize: Int) -> UIImage? {
+        cache.object(forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize))
+    }
+
+    static func store(_ image: UIImage, for itemID: String, maxPixelSize: Int) {
+        let pixelCost = max(1, Int(image.size.width * image.scale * image.size.height * image.scale * 4))
+        cache.setObject(
+            image,
+            forKey: cacheKey(for: itemID, maxPixelSize: maxPixelSize),
+            cost: pixelCost
+        )
+    }
+
+    static func thumbnail(url: URL, maxPixelSize: Int, scale: CGFloat) async -> UIImage? {
+        let asset = AVURLAsset(url: url)
+        let boundedSize = max(1, maxPixelSize)
+        let imageScale = max(1, scale)
+        return await withCheckedContinuation { continuation in
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: boundedSize, height: boundedSize)
+            generator.generateCGImageAsynchronously(for: .zero) { image, _, error in
+                guard let image, error == nil else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: UIImage(cgImage: image, scale: imageScale, orientation: .up))
+            }
+        }
+    }
+
+    private static func cacheKey(for itemID: String, maxPixelSize: Int) -> NSString {
+        "\(itemID):\(max(1, maxPixelSize))" as NSString
     }
 }
 
