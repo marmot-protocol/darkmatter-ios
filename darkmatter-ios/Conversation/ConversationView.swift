@@ -614,6 +614,7 @@ struct ConversationView: View {
                                         row(for: item, viewModel: viewModel)
                                     }
                                     .padding(.bottom, 4)
+                                    newerTimelineTrigger(viewModel: viewModel)
                                 }
                                 timelineBottomSentinel
                             }
@@ -621,7 +622,7 @@ struct ConversationView: View {
                             .padding(.bottom, 2)
                         }
                         .overlay(alignment: .bottomTrailing) {
-                            scrollToBottomButton(proxy: proxy)
+                            scrollToBottomButton(proxy: proxy, viewModel: viewModel)
                         }
                         .opacity(concealInitialTimeline ? 0 : 1)
                         .allowsHitTesting(!concealInitialTimeline)
@@ -837,12 +838,42 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
-    private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        if !isAtTimelineBottom {
+    private func newerTimelineTrigger(viewModel: ConversationViewModel) -> some View {
+        if viewModel.hasMoreAfter || viewModel.isLoadingNewer {
+            HStack {
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(viewModel.isLoadingNewer ? 1 : 0.01)
+                Spacer()
+            }
+            .frame(height: 28)
+            .onAppear {
+                guard viewModel.hasMoreAfter else { return }
+                Task { await viewModel.loadNewerTimelinePage() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func scrollToBottomButton(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> some View {
+        if !isAtTimelineBottom || viewModel.hasMoreAfter {
             Button {
                 Haptics.tap()
-                isAtTimelineBottom = TimelineBottom.pinnedStateAfterScrollButtonTap(currentIsPinned: isAtTimelineBottom)
-                jumpToBottom(proxy: proxy)
+                if viewModel.hasMoreAfter {
+                    Task { @MainActor in
+                        await viewModel.loadNewerTimelinePage()
+                        isAtTimelineBottom = TimelineBottom.pinnedStateAfterScrollButtonTap(
+                            currentIsPinned: isAtTimelineBottom
+                        )
+                        jumpToBottom(proxy: proxy)
+                    }
+                } else {
+                    isAtTimelineBottom = TimelineBottom.pinnedStateAfterScrollButtonTap(
+                        currentIsPinned: isAtTimelineBottom
+                    )
+                    jumpToBottom(proxy: proxy)
+                }
             } label: {
                 Image(systemName: "arrow.down")
                     .font(.system(size: 18, weight: .bold))

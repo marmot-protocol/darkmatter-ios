@@ -61,7 +61,7 @@ struct AgentEventPresentationTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [operation], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         #expect(viewModel.timeline.count == 1)

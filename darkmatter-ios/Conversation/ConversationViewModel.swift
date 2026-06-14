@@ -85,7 +85,9 @@ final class ConversationViewModel {
     /// Coarse invalidation token for projection data read through methods.
     private(set) var timelineProjectionGeneration = 0
     private(set) var hasMoreBefore = false
+    private(set) var hasMoreAfter = false
     private(set) var isLoadingOlder = false
+    private(set) var isLoadingNewer = false
     private(set) var isLoading = false
     private(set) var sendInFlight = false
     private(set) var error: String?
@@ -120,7 +122,7 @@ final class ConversationViewModel {
     @ObservationIgnored private var markdownDisplayProjectionsByRowId: [String: MessageMarkdownDisplayProjection] = [:]
     @ObservationIgnored private var projectedDeletedMessageIds: Set<String> = []
     @ObservationIgnored private var optimisticDeletedMessageIds: Set<String> = []
-    private var loadedOlderTimelinePages = false
+    @ObservationIgnored private var timelineSubscription: TimelineMessagesSubscription?
     @ObservationIgnored private var systemTimelineItems: [TimelineItem] = []
     @ObservationIgnored private var transientTimelineItems: [String: TimelineItem] = [:]
     @ObservationIgnored private var pendingMediaByRowId: [String: [MessageMediaAttachment]] = [:]
@@ -173,8 +175,8 @@ final class ConversationViewModel {
     )
 
     enum TimelinePagePlacement {
-        case tail
-        case older
+        case window
+        case tailRefresh
     }
 
     private struct ReactionRemoval: Hashable {
@@ -548,6 +550,7 @@ final class ConversationViewModel {
     private func stopLiveSubscriptions() {
         timelineTask?.cancel()
         timelineTask = nil
+        timelineSubscription = nil
         groupStateTask?.cancel()
         groupStateTask = nil
         groupDetailsTask?.cancel()
@@ -583,6 +586,16 @@ final class ConversationViewModel {
         }
     }
 
+    private func installTimelineSubscription(_ subscription: TimelineMessagesSubscription) {
+        timelineSubscription = subscription
+    }
+
+    private func clearTimelineSubscription(_ subscription: TimelineMessagesSubscription) {
+        if timelineSubscription === subscription {
+            timelineSubscription = nil
+        }
+    }
+
 #if DEBUG
     func resetOptimisticStateForTesting() {
         resetOptimisticState()
@@ -604,14 +617,16 @@ final class ConversationViewModel {
                     )
                     guard !Task.isCancelled else { return }
                     self?.error = nil
+                    self?.installTimelineSubscription(timelineSub)
+                    defer { self?.clearTimelineSubscription(timelineSub) }
                     if let snapshot = timelineSub.snapshot() {
-                        self?.applyTimelinePage(snapshot, placement: .tail)
+                        self?.applyTimelinePage(snapshot, placement: .window)
                     }
                     self?.isLoading = false
-                    for await update in SubscriptionDriver.timelineMessageUpdates(timelineSub) {
+                    for await page in SubscriptionDriver.timelineMessages(timelineSub) {
                         guard !Task.isCancelled else { return }
                         retryDelay = Self.liveSubscriptionInitialRetryDelayNanoseconds
-                        self?.applyTimelineSubscriptionUpdate(update)
+                        self?.applyTimelinePage(page, placement: .window)
                     }
                 } catch is CancellationError {
                     return
@@ -728,19 +743,46 @@ final class ConversationViewModel {
     }
 
     func applyTimelinePage(_ page: TimelinePageFfi, placement: TimelinePagePlacement) {
-        recordFinalizedStreams(in: page.messages)
+        switch placement {
+        case .window:
+            applyTimelineWindowPage(page)
+        case .tailRefresh:
+            applyTimelineTailRefreshPage(page)
+        }
+    }
+
+    private func applyTimelineWindowPage(_ page: TimelinePageFfi) {
+        let incomingMessageIds = Set(page.messages.map(\.messageIdHex).filter { !$0.isEmpty })
         var projectionChanged = false
+        for messageId in Array(messageById.keys) where !incomingMessageIds.contains(messageId) {
+            projectionChanged = removeTimelineRecord(
+                messageIdHex: messageId,
+                updateTimeline: false
+            ) || projectionChanged
+        }
+        recordFinalizedStreams(in: page.messages)
         for record in page.messages {
             projectionChanged = applyTimelineRecord(record) || projectionChanged
         }
-        switch placement {
-        case .tail:
-            if !loadedOlderTimelinePages {
-                hasMoreBefore = page.hasMoreBefore
-            }
-        case .older:
-            loadedOlderTimelinePages = true
+        hasMoreBefore = page.hasMoreBefore
+        hasMoreAfter = page.hasMoreAfter
+        rebuildProjectedState(projectionChanged: projectionChanged)
+        isLoading = false
+    }
+
+    private func applyTimelineTailRefreshPage(_ page: TimelinePageFfi) {
+        let existingMessageIds = Set(messageById.keys)
+        let records = hasMoreAfter
+            ? page.messages.filter { existingMessageIds.contains($0.messageIdHex) }
+            : page.messages
+        recordFinalizedStreams(in: records)
+        var projectionChanged = false
+        for record in records {
+            projectionChanged = applyTimelineRecord(record) || projectionChanged
+        }
+        if !hasMoreAfter {
             hasMoreBefore = page.hasMoreBefore
+            hasMoreAfter = page.hasMoreAfter
         }
         rebuildProjectedState(projectionChanged: projectionChanged)
         isLoading = false
@@ -749,7 +791,7 @@ final class ConversationViewModel {
     func applyTimelineSubscriptionUpdate(_ update: TimelineSubscriptionUpdateFfi) {
         switch update {
         case .page(let page):
-            applyTimelinePage(page, placement: .tail)
+            applyTimelinePage(page, placement: .window)
         case .projection(let runtimeUpdate):
             applyTimelineProjectionUpdate(runtimeUpdate.update)
         }
@@ -819,7 +861,7 @@ final class ConversationViewModel {
                 )
             )
             guard !Task.isCancelled else { return }
-            applyTimelinePage(page, placement: .tail)
+            applyTimelinePage(page, placement: .tailRefresh)
         } catch {
             // Timeline subscription remains the primary live path.
         }
@@ -830,29 +872,28 @@ final class ConversationViewModel {
     }
 
     func loadOlderTimelinePage() async {
-        guard hasMoreBefore, !isLoadingOlder,
-              let cursor = oldestTimelineCursor(),
-              let appState, let accountRef = appState.activeAccountRef
-        else { return }
+        guard hasMoreBefore, !isLoadingOlder, let timelineSubscription else { return }
 
         isLoadingOlder = true
         defer { isLoadingOlder = false }
         do {
-            let client = try appState.currentMarmotClient()
-            let page = try await client.timelineMessages(
-                accountRef: accountRef,
-                query: TimelineMessageQueryFfi(
-                    groupIdHex: group.groupIdHex,
-                    search: nil,
-                    before: cursor.timelineAt,
-                    beforeMessageId: cursor.messageIdHex,
-                    after: nil,
-                    afterMessageId: nil,
-                    limit: Self.timelinePageLimit
-                )
-            )
+            let page = try await timelineSubscription.paginateBackwards(count: Self.timelinePageLimit)
             guard !Task.isCancelled else { return }
-            applyTimelinePage(page, placement: .older)
+            applyTimelinePage(page, placement: .window)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    func loadNewerTimelinePage() async {
+        guard hasMoreAfter, !isLoadingNewer, let timelineSubscription else { return }
+
+        isLoadingNewer = true
+        defer { isLoadingNewer = false }
+        do {
+            let page = try await timelineSubscription.paginateForwards(count: Self.timelinePageLimit)
+            guard !Task.isCancelled else { return }
+            applyTimelinePage(page, placement: .window)
         } catch {
             self.error = error.localizedDescription
         }
@@ -925,18 +966,6 @@ final class ConversationViewModel {
             ? removeTimelineItem(id: "msg:\(messageIdHex)")
             : false
         return existed || timelineChanged
-    }
-
-    private func oldestTimelineCursor() -> (messageIdHex: String, timelineAt: UInt64)? {
-        messageById.values
-            .filter { !$0.messageIdHex.isEmpty }
-            .min {
-                if $0.recordedAt == $1.recordedAt {
-                    return $0.messageIdHex < $1.messageIdHex
-                }
-                return $0.recordedAt < $1.recordedAt
-            }
-            .map { ($0.messageIdHex, $0.recordedAt) }
     }
 
     static func appMessageRecord(from record: TimelineMessageRecordFfi) -> AppMessageRecordFfi {

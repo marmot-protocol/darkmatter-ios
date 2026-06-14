@@ -461,7 +461,7 @@ struct ChatsListView: View {
     private func setArchived(groupIdHex: String, archived: Bool) async {
         guard let ref = appState.activeAccountRef else { return }
         do {
-            let updated = try appState.marmot.setGroupArchived(
+            let updated = try await appState.marmot.setGroupArchived(
                 accountRef: ref,
                 groupIdHex: groupIdHex,
                 archived: archived

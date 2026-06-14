@@ -105,7 +105,7 @@ struct GroupSystemEventPresentationTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [row], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         #expect(viewModel.timeline.count == 1)
