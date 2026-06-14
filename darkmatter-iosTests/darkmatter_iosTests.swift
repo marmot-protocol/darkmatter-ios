@@ -3533,7 +3533,7 @@ struct ConversationTimelineProjectionTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [parent, reply, deleted], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         #expect(viewModel.timeline.count == 3)
@@ -3578,7 +3578,7 @@ struct ConversationTimelineProjectionTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [response, approve], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         let ids = viewModel.timeline.compactMap { item -> String? in
@@ -3610,7 +3610,7 @@ struct ConversationTimelineProjectionTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [approve], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
         viewModel.applyTimelineSubscriptionUpdate(.projection(update: RuntimeProjectionUpdateFfi(
             accountIdHex: hex("22"),
@@ -3695,45 +3695,61 @@ struct ConversationTimelineProjectionTests {
         ])
     }
 
-    @Test func liveTailRefreshPreservesLoadedScrollback() throws {
+    @Test func timelineWindowPageReplacesRowsOutsideAuthoritativeWindow() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: group(name: "")
         )
         let latest = timelineRecord(messageIdHex: hex("f2"), plaintext: "latest", timelineAt: 20)
         let older = timelineRecord(messageIdHex: hex("e1"), plaintext: "older", timelineAt: 10)
-        let latestWithReaction = timelineRecord(
-            messageIdHex: latest.messageIdHex,
-            plaintext: latest.plaintext,
-            timelineAt: latest.timelineAt,
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [latest], hasMoreBefore: true, hasMoreAfter: false),
+            placement: .window
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [older], hasMoreBefore: false, hasMoreAfter: true),
+            placement: .window
+        )
+
+        #expect(messageIds(in: viewModel.timeline) == [older.messageIdHex])
+        #expect(viewModel.record(for: latest.messageIdHex) == nil)
+        #expect(!viewModel.hasMoreBefore)
+        #expect(viewModel.hasMoreAfter)
+    }
+
+    @Test func tailRefreshWhileDetachedOnlyUpdatesLoadedRows() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "")
+        )
+        let loaded = timelineRecord(messageIdHex: hex("e1"), plaintext: "loaded", timelineAt: 10)
+        let loadedWithReaction = timelineRecord(
+            messageIdHex: loaded.messageIdHex,
+            plaintext: loaded.plaintext,
+            timelineAt: loaded.timelineAt,
             reactions: TimelineReactionSummaryFfi(
                 byEmoji: [TimelineReactionEmojiFfi(emoji: "🔥", senders: [hex("33")])],
                 userReactions: []
             )
         )
+        let newHead = timelineRecord(messageIdHex: hex("f2"), plaintext: "new head", timelineAt: 20)
 
         viewModel.applyTimelinePage(
-            TimelinePageFfi(messages: [latest], hasMoreBefore: true, hasMoreAfter: false),
-            placement: .tail
+            TimelinePageFfi(messages: [loaded], hasMoreBefore: false, hasMoreAfter: true),
+            placement: .window
         )
         viewModel.applyTimelinePage(
-            TimelinePageFfi(messages: [older], hasMoreBefore: false, hasMoreAfter: true),
-            placement: .older
-        )
-        viewModel.applyTimelinePage(
-            TimelinePageFfi(messages: [latestWithReaction], hasMoreBefore: true, hasMoreAfter: false),
-            placement: .tail
+            TimelinePageFfi(messages: [loadedWithReaction, newHead], hasMoreBefore: true, hasMoreAfter: false),
+            placement: .tailRefresh
         )
 
-        let messageIds = viewModel.timeline.compactMap { item -> String? in
-            guard case .message(let record, _) = item.kind else { return nil }
-            return record.messageIdHex
-        }
-        #expect(messageIds == [older.messageIdHex, latest.messageIdHex])
-        #expect(viewModel.reactions(for: latest.messageIdHex) == [
+        #expect(messageIds(in: viewModel.timeline) == [loaded.messageIdHex])
+        #expect(viewModel.reactions(for: loaded.messageIdHex) == [
             ConversationViewModel.ReactionTally(emoji: "🔥", count: 1, mine: false)
         ])
         #expect(!viewModel.hasMoreBefore)
+        #expect(viewModel.hasMoreAfter)
     }
 
     @Test func projectionDeltaMergesTimelineAndForwardsChatListRow() throws {
@@ -3756,7 +3772,7 @@ struct ConversationTimelineProjectionTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [existing], hasMoreBefore: true, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
         viewModel.applyTimelineSubscriptionUpdate(
             .projection(
@@ -3792,7 +3808,7 @@ struct ConversationTimelineProjectionTests {
         let existing = timelineRecord(messageIdHex: hex("a1"), plaintext: "existing", timelineAt: 10)
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [existing], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         viewModel.applyTimelineSubscriptionUpdate(
@@ -3842,7 +3858,7 @@ struct ConversationTimelineProjectionTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [existing], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
         let generationAfterPage = viewModel.timelineProjectionGeneration
 
@@ -4072,6 +4088,7 @@ struct ConversationTimelineProjectionTests {
 
     @Test func synchronousConversationMarmotReadsUseAsyncClientWrappers() throws {
         let source = try String(contentsOf: conversationViewModelSourceURL, encoding: .utf8)
+        let viewSource = try String(contentsOf: conversationViewSourceURL, encoding: .utf8)
         let clientSource = try String(contentsOf: marmotClientSourceURL, encoding: .utf8)
 
         #expect(source.contains("pendingReadMessageIds"))
@@ -4080,6 +4097,13 @@ struct ConversationTimelineProjectionTests {
         #expect(source.contains("try await client.initializeChatReadState("))
         #expect(source.contains("try await client.timelineMessages("))
         #expect(source.contains("try await client.listMedia("))
+        #expect(source.contains("@ObservationIgnored private var timelineSubscription"))
+        #expect(source.contains("SubscriptionDriver.timelineMessages(timelineSub)"))
+        #expect(source.contains("timelineSubscription.paginateBackwards"))
+        #expect(source.contains("timelineSubscription.paginateForwards"))
+        #expect(source.contains("private(set) var hasMoreAfter"))
+        #expect(viewSource.contains("newerTimelineTrigger(viewModel: viewModel)"))
+        #expect(viewSource.contains("viewModel.loadNewerTimelinePage()"))
         #expect(!source.contains("appState.marmot.markTimelineMessageRead("))
         #expect(!source.contains("appState.marmot.initializeChatReadState("))
         #expect(!source.contains("appState.marmot.timelineMessages("))
@@ -4661,7 +4685,7 @@ struct AgentStreamTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [start], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         #expect(viewModel.timeline.isEmpty)
@@ -4694,7 +4718,7 @@ struct AgentStreamTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [final], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         #expect(viewModel.timeline.count == 1)

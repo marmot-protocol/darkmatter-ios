@@ -101,7 +101,7 @@ struct MarkdownTokenThreadingTests {
 
         viewModel.applyTimelinePage(
             TimelinePageFfi(messages: [record], hasMoreBefore: false, hasMoreAfter: false),
-            placement: .tail
+            placement: .window
         )
 
         let item = try #require(viewModel.timeline.first)

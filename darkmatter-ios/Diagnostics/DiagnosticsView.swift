@@ -139,7 +139,7 @@ struct DiagnosticsView: View {
             accountRef: accountRef,
             rows: rows
         ) {
-            try archiveDiagnosticGroupIfNeeded(row, accountRef: accountRef)
+            try await archiveDiagnosticGroupIfNeeded(row, accountRef: accountRef)
             return row.groupIdHex
         }
 
@@ -150,7 +150,7 @@ struct DiagnosticsView: View {
             description: nil
         )
         DiagnosticSelfSend.remember(groupIdHex: groupId, accountRef: accountRef)
-        _ = try appState.marmot.setGroupArchived(
+        _ = try await appState.marmot.setGroupArchived(
             accountRef: accountRef,
             groupIdHex: groupId,
             archived: true
@@ -158,9 +158,9 @@ struct DiagnosticsView: View {
         return groupId
     }
 
-    private func archiveDiagnosticGroupIfNeeded(_ row: ChatListRowFfi, accountRef: String) throws {
+    private func archiveDiagnosticGroupIfNeeded(_ row: ChatListRowFfi, accountRef: String) async throws {
         guard !row.archived else { return }
-        _ = try appState.marmot.setGroupArchived(
+        _ = try await appState.marmot.setGroupArchived(
             accountRef: accountRef,
             groupIdHex: row.groupIdHex,
             archived: true

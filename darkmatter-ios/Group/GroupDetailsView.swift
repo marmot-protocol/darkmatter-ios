@@ -763,7 +763,7 @@ struct GroupDetailsView: View {
     private func setArchived(_ archived: Bool) async {
         guard let accountRef = appState.activeAccountRef else { return }
         do {
-            let record = try appState.marmot.setGroupArchived(
+            let record = try await appState.marmot.setGroupArchived(
                 accountRef: accountRef,
                 groupIdHex: viewModel.group.groupIdHex,
                 archived: archived
