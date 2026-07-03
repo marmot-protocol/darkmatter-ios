@@ -46,7 +46,7 @@ final class ChatsListViewModel {
             AppGroupRecordFfi(
                 groupIdHex: row.groupIdHex,
                 endpoint: "",
-                name: ProfileSanitizer.groupName(row.groupName) ?? title,
+                name: ContentSanitizer.groupName(row.groupName) ?? title,
                 description: "",
                 admins: [],
                 relays: [],
@@ -70,8 +70,8 @@ final class ChatsListViewModel {
         }
 
         static func sanitizedTitle(for row: ChatListRowFfi) -> String {
-            if let name = ProfileSanitizer.groupName(row.groupName) { return name }
-            if let name = ProfileSanitizer.groupName(row.title) { return name }
+            if let name = ContentSanitizer.groupName(row.groupName) { return name }
+            if let name = ContentSanitizer.groupName(row.title) { return name }
             return IdentityFormatter.short(row.groupIdHex)
         }
 
@@ -80,7 +80,7 @@ final class ChatsListViewModel {
             mentionDisplayName: MarkdownMentionResolver?
         ) -> String? {
             preview.flatMap {
-                ProfileSanitizer.singleLine(
+                ContentSanitizer.singleLine(
                     MessagePreview.body($0, mentionDisplayName: mentionDisplayName),
                     maxLength: 140
                 )
@@ -316,7 +316,7 @@ final class ChatsListViewModel {
         row.pendingConfirmation = record.pendingConfirmation
         row.groupName = record.name
         row.avatarUrl = record.avatarUrl
-        if let name = ProfileSanitizer.groupName(record.name) {
+        if let name = ContentSanitizer.groupName(record.name) {
             row.title = name
         }
         avatarURLByGroupId[record.groupIdHex] = record.avatarUrl
@@ -382,7 +382,7 @@ final class ChatsListViewModel {
         for row: ChatListRowFfi,
         details: GroupDetailsFfi?
     ) -> (title: String, avatarURL: URL?) {
-        let fallbackAvatarURL = ProfileSanitizer.imageURL(row.avatarUrl ?? avatarURLByGroupId[row.groupIdHex])
+        let fallbackAvatarURL = ContentSanitizer.imageURL(row.avatarUrl ?? avatarURLByGroupId[row.groupIdHex])
         guard let details, let appState else {
             return (title: Item.sanitizedTitle(for: row), avatarURL: fallbackAvatarURL)
         }
@@ -431,7 +431,7 @@ final class ChatsListViewModel {
     }
 
     private static func rowNeedsDisplayEnrichment(_ row: ChatListRowFfi) -> Bool {
-        ProfileSanitizer.groupName(row.groupName) == nil
+        ContentSanitizer.groupName(row.groupName) == nil
     }
 
     private func publishItems() {
@@ -561,7 +561,7 @@ final class ChatsListViewModel {
     }
 
     private static func row(from group: AppGroupRecordFfi) -> ChatListRowFfi {
-        let title = ProfileSanitizer.groupName(group.name) ?? IdentityFormatter.short(group.groupIdHex)
+        let title = ContentSanitizer.groupName(group.name) ?? IdentityFormatter.short(group.groupIdHex)
         return ChatListRowFfi(
             groupIdHex: group.groupIdHex,
             archived: group.archived,

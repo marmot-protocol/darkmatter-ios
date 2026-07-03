@@ -352,7 +352,7 @@ final class StreamWatcher {
 
     private func appendStreamChunk(_ text: String, to streamId: String) {
         let currentLength = streamTextLengthById[streamId] ?? streamText[streamId]?.count ?? 0
-        let remaining = ProfileSanitizer.maxMessageLength - currentLength
+        let remaining = ContentSanitizer.maxMessageLength - currentLength
         guard remaining > 0 else { return }
         let cappedChunk = text.prefix(remaining)
         guard !cappedChunk.isEmpty else { return }
@@ -395,11 +395,11 @@ final class StreamWatcher {
 
     static func cappedStreamText(_ text: String) -> (text: String, length: Int) {
         let length = text.count
-        if length <= ProfileSanitizer.maxMessageLength {
+        if length <= ContentSanitizer.maxMessageLength {
             return (text, length)
         }
-        let capped = String(text.prefix(ProfileSanitizer.maxMessageLength))
-        return (capped, ProfileSanitizer.maxMessageLength)
+        let capped = String(text.prefix(ContentSanitizer.maxMessageLength))
+        return (capped, ContentSanitizer.maxMessageLength)
     }
 
     nonisolated static func streamPreviewTimestamp(startedAt: UInt64?, fallback: UInt64) -> UInt64 {

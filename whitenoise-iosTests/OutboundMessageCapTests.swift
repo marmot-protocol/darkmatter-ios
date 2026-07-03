@@ -6,13 +6,13 @@ import Testing
 struct OutboundMessageCapTests {
 
     @Test func clampsOversizedTextToMaxMessageLength() {
-        let huge = String(repeating: "x", count: ProfileSanitizer.maxMessageLength + 250)
-        #expect(ConversationViewModel.cappedOutgoingText(huge).count == ProfileSanitizer.maxMessageLength)
+        let huge = String(repeating: "x", count: ContentSanitizer.maxMessageLength + 250)
+        #expect(ConversationViewModel.cappedOutgoingText(huge).count == ContentSanitizer.maxMessageLength)
     }
 
     @Test func leavesTextWithinLimitUnchanged() {
         #expect(ConversationViewModel.cappedOutgoingText("hello") == "hello")
-        let exact = String(repeating: "y", count: ProfileSanitizer.maxMessageLength)
+        let exact = String(repeating: "y", count: ContentSanitizer.maxMessageLength)
         #expect(ConversationViewModel.cappedOutgoingText(exact) == exact)
     }
 }

@@ -80,7 +80,7 @@ struct DuckDuckGoImageSearchClient {
             let thumbnailURL = sanitizedImageURL(raw.thumbnail)
             return GroupImageSearchResult(
                 id: imageURL.absoluteString,
-                title: ProfileSanitizer.singleLine(raw.title, maxLength: maximumResultTitleLength) ?? "",
+                title: ContentSanitizer.singleLine(raw.title, maxLength: maximumResultTitleLength) ?? "",
                 imageURL: imageURL,
                 thumbnailURL: thumbnailURL,
                 sourceHost: sourceHost(for: raw.sourceURL ?? raw.image),
@@ -96,7 +96,7 @@ struct DuckDuckGoImageSearchClient {
         if candidate.hasPrefix("//") {
             candidate = "https:" + candidate
         }
-        return ProfileSanitizer.imageURL(candidate)
+        return ContentSanitizer.imageURL(candidate)
     }
 
     private func data(for url: URL) async throws -> Data {
@@ -379,7 +379,7 @@ struct GroupImageURLSheet: View {
     }
 
     static func validatedImageURL(_ draft: String?) -> URL? {
-        ProfileSanitizer.imageURL(draft)
+        ContentSanitizer.imageURL(draft)
     }
 
     static func preparedSearchQuery(

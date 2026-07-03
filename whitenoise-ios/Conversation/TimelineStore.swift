@@ -143,7 +143,7 @@ final class TimelineStore {
         }
         if let preview = replyPreviewsByMessageId[record.messageIdHex] {
             let name = appState?.displayName(forAccountIdHex: preview.sender) ?? L10n.string("Unknown")
-            let text = ProfileSanitizer.singleLine(
+            let text = ContentSanitizer.singleLine(
                 MessagePreview.body(preview, mentionDisplayName: mentionDisplayNameResolver),
                 maxLength: 120
             ) ?? ""
@@ -153,7 +153,7 @@ final class TimelineStore {
             return nil
         }
         let name = appState?.displayName(forAccountIdHex: target.sender) ?? L10n.string("Unknown")
-        let text = ProfileSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
+        let text = ContentSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
         return (name, text)
     }
 

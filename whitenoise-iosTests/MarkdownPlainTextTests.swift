@@ -152,7 +152,6 @@ struct MarkdownPlainTextTests {
     }
 
     @Test func flattenedOutputComposesWithSingleLineSanitizer() throws {
-        // Exactly the ChatRow pipeline: flatten → ProfileSanitizer.singleLine.
         let flattened = MarkdownPlainText.flatten(doc([
             .paragraph(inlines: [
                 .strong(children: [.text(content: "bidi\u{202E}safe")]),
@@ -160,13 +159,11 @@ struct MarkdownPlainTextTests {
                 .text(content: String(repeating: "x", count: 300)),
             ])
         ]))
-        let result = try #require(ProfileSanitizer.singleLine(flattened, maxLength: 140))
+        let result = try #require(ContentSanitizer.singleLine(flattened, maxLength: 140))
         #expect(result.hasPrefix("bidisafe x"))
         #expect(result.count == 140)
         #expect(!result.contains("\u{202E}"))
     }
-
-    // MARK: - MessagePreview integration
 
     @Test func previewBodyFlattensWhenTokensPresent() {
         let preview = ChatListMessagePreviewFfi(

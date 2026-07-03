@@ -34,15 +34,15 @@ extension AppState {
         projectedName: String?,
         localAccountLabel: String?
     ) -> String? {
-        if let profile, let name = ProfileSanitizer.displayName(profile.displayName ?? profile.name) {
+        if let profile, let name = ContentSanitizer.displayName(profile.displayName ?? profile.name) {
             return name
         }
-        if let name = ProfileSanitizer.displayName(projectedName) {
+        if let name = ContentSanitizer.displayName(projectedName) {
             return name
         }
         // Sanitize the local label too: a whitespace/control-only label would
         // otherwise render blank and suppress the npub fallback.
-        if let label = ProfileSanitizer.displayName(localAccountLabel) {
+        if let label = ContentSanitizer.displayName(localAccountLabel) {
             return label
         }
         return nil
