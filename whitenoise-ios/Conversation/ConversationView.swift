@@ -268,8 +268,8 @@ nonisolated struct ConversationChromePresentation: Equatable {
         initialMemberCount: Int?
     ) -> ConversationChromePresentation {
         ConversationChromePresentation(
-            title: ProfileSanitizer.groupName(initialTitle)
-                ?? ProfileSanitizer.groupName(chat.name)
+            title: ContentSanitizer.groupName(initialTitle)
+                ?? ContentSanitizer.groupName(chat.name)
                 ?? IdentityFormatter.short(chat.groupIdHex),
             subtitle: initialMemberCount.flatMap(memberSubtitle)
         )
@@ -649,7 +649,7 @@ struct ConversationView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
-                Text(ProfileSanitizer.singleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
+                Text(ContentSanitizer.singleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

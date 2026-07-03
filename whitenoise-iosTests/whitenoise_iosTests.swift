@@ -14,6 +14,7 @@ private let notificationDefaultsTestGate = AsyncTestGate()
 /// `marmot-uniffi`'s Rust integration tests). These tests just exercise the
 /// boundary between MarmotKit and the iOS code, plus pure-Swift helpers.
 @MainActor
+@Suite(.serialized)
 struct AppStateBootstrapTests {
 
     @Test func freshAppStateStartsBootstrapping() async throws {
@@ -3266,7 +3267,7 @@ struct ProfileEditViewTests {
         let draft = ProfileEditMetadataDraft(
             name: " alice\u{202E}\n ",
             displayName: " Alice\u{202E}\nEvil ",
-            about: String(repeating: "a", count: ProfileSanitizer.maxAboutLength + 25),
+            about: String(repeating: "a", count: ContentSanitizer.maxAboutLength + 25),
             nip05: " ALICE@Example.COM ",
             preservedPicture: nil,
             preservedLud16: nil
@@ -3276,7 +3277,7 @@ struct ProfileEditViewTests {
 
         #expect(metadata.name == "alice")
         #expect(metadata.displayName == "Alice Evil")
-        #expect(metadata.about?.count == ProfileSanitizer.maxAboutLength)
+        #expect(metadata.about?.count == ContentSanitizer.maxAboutLength)
         #expect(metadata.nip05 == "alice@example.com")
     }
 
@@ -3311,181 +3312,181 @@ struct ProfileEditViewTests {
 }
 
 @MainActor
-struct ProfileSanitizerTests {
+struct ContentSanitizerTests {
 
     @Test func stripsBidiOverrideFromName() {
         // Trojan-Source-style: an RLO (U+202E) can reverse rendering to spoof.
         let spoofed = "alice\u{202E}evil"
-        let safe = ProfileSanitizer.displayName(spoofed)
+        let safe = ContentSanitizer.displayName(spoofed)
         #expect(safe == "aliceevil")
         #expect(!(safe?.unicodeScalars.contains { $0.value == 0x202E } ?? false))
     }
 
     @Test func collapsesNewlinesInName() {
         let multiline = "line one\nline two\t\tmore"
-        let safe = ProfileSanitizer.displayName(multiline)
+        let safe = ContentSanitizer.displayName(multiline)
         #expect(safe == "line one line two more")
     }
 
     @Test func capsNameLength() {
         let long = String(repeating: "a", count: 500)
-        let safe = ProfileSanitizer.displayName(long)
-        #expect((safe?.count ?? 0) <= ProfileSanitizer.maxNameLength)
+        let safe = ContentSanitizer.displayName(long)
+        #expect((safe?.count ?? 0) <= ContentSanitizer.maxNameLength)
     }
 
     @Test func emptyAfterStrippingReturnsNil() {
-        #expect(ProfileSanitizer.displayName("\u{202E}\u{200B}") == nil)
-        #expect(ProfileSanitizer.displayName("   ") == nil)
-        #expect(ProfileSanitizer.displayName(nil) == nil)
+        #expect(ContentSanitizer.displayName("\u{202E}\u{200B}") == nil)
+        #expect(ContentSanitizer.displayName("   ") == nil)
+        #expect(ContentSanitizer.displayName(nil) == nil)
     }
 
     @Test func imageURLAllowsHttps() {
-        #expect(ProfileSanitizer.imageURL("https://example.com/a.png") != nil)
-        #expect(ProfileSanitizer.imageURL("http://example.com/a.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://example.com/a.png") != nil)
+        #expect(ContentSanitizer.imageURL("http://example.com/a.png") == nil)
     }
 
     @Test func imageURLRejectsOverLengthStrings() {
         // Peer-controlled fields (kind:0 `picture`, group `avatarUrl`, DuckDuckGo
         // results) are unbounded; reject before parsing past the length cap (#381).
-        let cap = ProfileSanitizer.maxImageURLLength
+        let cap = ContentSanitizer.maxImageURLLength
         let prefix = "https://example.com/"
         // A well-formed HTTPS URL at exactly the cap is still accepted.
         let atCap = prefix + String(repeating: "a", count: cap - prefix.count)
         #expect(atCap.count == cap)
-        #expect(ProfileSanitizer.imageURL(atCap) != nil)
+        #expect(ContentSanitizer.imageURL(atCap) != nil)
         // One character over the cap is rejected outright, even though the URL
         // is otherwise valid (HTTPS, public host).
         let overCap = atCap + "a"
         #expect(overCap.count == cap + 1)
-        #expect(ProfileSanitizer.imageURL(overCap) == nil)
+        #expect(ContentSanitizer.imageURL(overCap) == nil)
         // A multi-megabyte hostile value is rejected without parsing it.
         let huge = prefix + String(repeating: "a", count: 4_000_000)
-        #expect(ProfileSanitizer.imageURL(huge) == nil)
+        #expect(ContentSanitizer.imageURL(huge) == nil)
         // Leading/trailing whitespace is trimmed before the length check, so a
         // valid URL padded with whitespace still passes.
-        #expect(ProfileSanitizer.imageURL("  https://example.com/a.png  ") != nil)
+        #expect(ContentSanitizer.imageURL("  https://example.com/a.png  ") != nil)
     }
 
     @Test func imageURLRejectsDangerousSchemes() {
-        #expect(ProfileSanitizer.imageURL("data:image/png;base64,AAAA") == nil)
-        #expect(ProfileSanitizer.imageURL("file:///etc/passwd") == nil)
-        #expect(ProfileSanitizer.imageURL("javascript:alert(1)") == nil)
-        #expect(ProfileSanitizer.imageURL("ftp://example.com/x") == nil)
-        #expect(ProfileSanitizer.imageURL("https://") == nil) // no host
-        #expect(ProfileSanitizer.imageURL("not a url") == nil)
+        #expect(ContentSanitizer.imageURL("data:image/png;base64,AAAA") == nil)
+        #expect(ContentSanitizer.imageURL("file:///etc/passwd") == nil)
+        #expect(ContentSanitizer.imageURL("javascript:alert(1)") == nil)
+        #expect(ContentSanitizer.imageURL("ftp://example.com/x") == nil)
+        #expect(ContentSanitizer.imageURL("https://") == nil) // no host
+        #expect(ContentSanitizer.imageURL("not a url") == nil)
     }
 
     @Test func imageURLRejectsPrivateAndLoopbackHosts() {
-        #expect(ProfileSanitizer.imageURL("https://localhost/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://127.0.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://0.0.0.0/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://0.1.2.3/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://10.1.2.3/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://172.16.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://172.31.255.255/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://192.168.1.10/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://169.254.169.254/latest/meta-data/") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[0:0:0:0:0:0:0:0]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://localhost/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://127.0.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://0.0.0.0/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://0.1.2.3/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://10.1.2.3/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://172.16.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://172.31.255.255/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://192.168.1.10/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://169.254.169.254/latest/meta-data/") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[0:0:0:0:0:0:0:0]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::1]/avatar.png") == nil)
 
-        #expect(ProfileSanitizer.imageURL("https://172.32.0.1/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://172.32.0.1/avatar.png") != nil)
     }
 
     @Test func imageURLRejectsSharedAddressSpaceAndOtherReservedIPv4() {
         // RFC 6598 Carrier-Grade-NAT / shared address space (100.64.0.0/10).
-        #expect(ProfileSanitizer.imageURL("https://100.64.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://100.64.0.0/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://100.100.50.25/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://100.127.255.255/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://100.64.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://100.64.0.0/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://100.100.50.25/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://100.127.255.255/avatar.png") == nil)
         // RFC 6890 IETF protocol assignments (192.0.0.0/24).
-        #expect(ProfileSanitizer.imageURL("https://192.0.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://192.0.0.255/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://192.0.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://192.0.0.255/avatar.png") == nil)
         // Multicast (224.0.0.0/4) and reserved/future-use (240.0.0.0/4).
-        #expect(ProfileSanitizer.imageURL("https://224.0.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://239.255.255.255/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://240.0.0.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://255.255.255.255/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://224.0.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://239.255.255.255/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://240.0.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://255.255.255.255/avatar.png") == nil)
 
         // Boundaries just outside the blocked ranges remain reachable.
-        #expect(ProfileSanitizer.imageURL("https://100.63.255.255/avatar.png") != nil)
-        #expect(ProfileSanitizer.imageURL("https://100.128.0.1/avatar.png") != nil)
-        #expect(ProfileSanitizer.imageURL("https://192.0.1.1/avatar.png") != nil)
-        #expect(ProfileSanitizer.imageURL("https://223.255.255.255/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://100.63.255.255/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://100.128.0.1/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://192.0.1.1/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://223.255.255.255/avatar.png") != nil)
     }
 
     @Test func imageURLRejectsLegacyIPv4LiteralBypasses() {
-        #expect(ProfileSanitizer.imageURL("https://127.0.0.1./avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://2130706433/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://0x7f000001/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://017700000001/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://127.1/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://012.0.0.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://127.0.0.1./avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://2130706433/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://0x7f000001/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://017700000001/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://127.1/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://012.0.0.1/avatar.png") == nil)
     }
 
     @Test func imageURLRejectsIPv4MappedIPv6PrivateAndLoopbackHosts() {
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:127.0.0.1]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:10.1.2.3]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:172.16.0.1]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:192.168.1.10]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:c0a8:010a]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[0:0:0:0:0:ffff:169.254.169.254]/latest/meta-data/") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:127.0.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:10.1.2.3]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:172.16.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:192.168.1.10]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:c0a8:010a]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[0:0:0:0:0:ffff:169.254.169.254]/latest/meta-data/") == nil)
 
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:8.8.8.8]/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:8.8.8.8]/avatar.png") != nil)
     }
 
     @Test func imageURLRejectsIPv4CompatibleIPv6PrivateAndLoopbackHosts() {
-        #expect(ProfileSanitizer.imageURL("https://[::127.0.0.1]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::10.1.2.3]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::172.16.0.1]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::192.168.1.10]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::169.254.169.254]/latest/meta-data/") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[0:0:0:0:0:0:c0a8:010a]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::127.0.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::10.1.2.3]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::172.16.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::192.168.1.10]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::169.254.169.254]/latest/meta-data/") == nil)
+        #expect(ContentSanitizer.imageURL("https://[0:0:0:0:0:0:c0a8:010a]/avatar.png") == nil)
 
-        #expect(ProfileSanitizer.imageURL("https://[::8.8.8.8]/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://[::8.8.8.8]/avatar.png") != nil)
     }
 
     @Test func imageURLRejectsSIITAndNAT64IPv4Embeddings() {
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:0:127.0.0.1]/avatar.png") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:0:169.254.169.254]/latest/meta-data/") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[64:ff9b::a9fe:a9fe]/latest/meta-data/") == nil)
-        #expect(ProfileSanitizer.imageURL("https://[64:ff9b::127.0.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:0:127.0.0.1]/avatar.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:0:169.254.169.254]/latest/meta-data/") == nil)
+        #expect(ContentSanitizer.imageURL("https://[64:ff9b::a9fe:a9fe]/latest/meta-data/") == nil)
+        #expect(ContentSanitizer.imageURL("https://[64:ff9b::127.0.0.1]/avatar.png") == nil)
 
-        #expect(ProfileSanitizer.imageURL("https://[::ffff:0:8.8.8.8]/avatar.png") != nil)
-        #expect(ProfileSanitizer.imageURL("https://[64:ff9b::808:808]/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://[::ffff:0:8.8.8.8]/avatar.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://[64:ff9b::808:808]/avatar.png") != nil)
     }
 
     @Test func profileAddressNormalizesSimpleAddressFields() {
-        #expect(ProfileSanitizer.profileAddress(" Alice+Tips@Example.COM ") == "alice+tips@example.com")
-        #expect(ProfileSanitizer.profileAddress("alice@example.com") == "alice@example.com")
+        #expect(ContentSanitizer.profileAddress(" Alice+Tips@Example.COM ") == "alice+tips@example.com")
+        #expect(ContentSanitizer.profileAddress("alice@example.com") == "alice@example.com")
     }
 
     @Test func profileAddressRejectsMalformedOrOversizedValues() {
-        #expect(ProfileSanitizer.profileAddress("alice") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@localhost") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@-example.com") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@example-.com") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@exa_mple.com") == nil)
-        #expect(ProfileSanitizer.profileAddress("a b@example.com") == nil)
-        #expect(ProfileSanitizer.profileAddress(String(repeating: "a", count: 65) + "@example.com") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@" + String(repeating: "a", count: 250) + ".com") == nil)
+        #expect(ContentSanitizer.profileAddress("alice") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@localhost") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@-example.com") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@example-.com") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@exa_mple.com") == nil)
+        #expect(ContentSanitizer.profileAddress("a b@example.com") == nil)
+        #expect(ContentSanitizer.profileAddress(String(repeating: "a", count: 65) + "@example.com") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@" + String(repeating: "a", count: 250) + ".com") == nil)
     }
 
     @Test func profileAddressRejectsIPLiteralAndNumericDomains() {
-        #expect(ProfileSanitizer.profileAddress("alice@127.0.0.1") == nil)
-        #expect(ProfileSanitizer.profileAddress("bob@10.0.0.1") == nil)
-        #expect(ProfileSanitizer.profileAddress("x@169.254.169.254") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@8.8.8.8") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@0x7f.0.0.1") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@123.456") == nil)
-        #expect(ProfileSanitizer.profileAddress("alice@example.123") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@127.0.0.1") == nil)
+        #expect(ContentSanitizer.profileAddress("bob@10.0.0.1") == nil)
+        #expect(ContentSanitizer.profileAddress("x@169.254.169.254") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@8.8.8.8") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@0x7f.0.0.1") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@123.456") == nil)
+        #expect(ContentSanitizer.profileAddress("alice@example.123") == nil)
     }
 
     // MARK: - Message bodies
 
     @Test func messageBodyStripsBidiButKeepsNewlines() {
         let raw = "first line\u{202E}spoof\nsecond line"
-        let safe = ProfileSanitizer.messageBody(raw)
+        let safe = ContentSanitizer.messageBody(raw)
         #expect(!safe.unicodeScalars.contains { $0.value == 0x202E })
         #expect(safe.contains("\n"))            // newline preserved
         #expect(safe == "first linespoof\nsecond line")
@@ -3493,35 +3494,35 @@ struct ProfileSanitizerTests {
 
     @Test func messageBodyClampsBlankLineFlooding() {
         let raw = "top\n\n\n\n\n\n\n\nbottom"
-        let safe = ProfileSanitizer.messageBody(raw)
+        let safe = ContentSanitizer.messageBody(raw)
         #expect(safe == "top\n\nbottom")        // 3+ blank lines → 2
     }
 
     @Test func messageBodyCapsLength() {
-        let raw = String(repeating: "x", count: ProfileSanitizer.maxMessageLength + 500)
-        #expect(ProfileSanitizer.messageBody(raw).count == ProfileSanitizer.maxMessageLength)
+        let raw = String(repeating: "x", count: ContentSanitizer.maxMessageLength + 500)
+        #expect(ContentSanitizer.messageBody(raw).count == ContentSanitizer.maxMessageLength)
     }
 
     @Test func messageBodyTrimsOuterWhitespace() {
-        #expect(ProfileSanitizer.messageBody("  \n hello \n  ") == "hello")
+        #expect(ContentSanitizer.messageBody("  \n hello \n  ") == "hello")
     }
 
     // MARK: - Group names
 
     @Test func groupNameSingleLinesAndStripsBidi() {
         let raw = "Secret\u{202E}evil\nClub"
-        let safe = ProfileSanitizer.groupName(raw)
+        let safe = ContentSanitizer.groupName(raw)
         #expect(safe == "Secretevil Club")      // bidi gone, newline → space
     }
 
     @Test func groupNameCaps() {
         let raw = String(repeating: "g", count: 400)
-        #expect((ProfileSanitizer.groupName(raw)?.count ?? 0) <= ProfileSanitizer.maxGroupNameLength)
+        #expect((ContentSanitizer.groupName(raw)?.count ?? 0) <= ContentSanitizer.maxGroupNameLength)
     }
 
     @Test func groupNameEmptyIsNil() {
-        #expect(ProfileSanitizer.groupName("") == nil)
-        #expect(ProfileSanitizer.groupName("\u{202E}\u{200B}") == nil)
+        #expect(ContentSanitizer.groupName("") == nil)
+        #expect(ContentSanitizer.groupName("\u{202E}\u{200B}") == nil)
     }
 }
 
@@ -3549,7 +3550,7 @@ struct GroupDisplayTests {
             memberCount: 2,
             sanitizeGroupName: { raw in
                 sanitizeCalls += 1
-                return ProfileSanitizer.groupName(raw)
+                return ContentSanitizer.groupName(raw)
             }
         )
 
@@ -5738,7 +5739,7 @@ struct AgentStreamTests {
             group: group(name: "")
         )
         let streamId = hex("ab")
-        let almostFull = String(repeating: "a", count: ProfileSanitizer.maxMessageLength - 1)
+        let almostFull = String(repeating: "a", count: ContentSanitizer.maxMessageLength - 1)
 
         viewModel.applyStreamUpdate(
             streamId: streamId,
@@ -5761,7 +5762,7 @@ struct AgentStreamTests {
             return
         }
         #expect(status == .streaming)
-        #expect(record.plaintext.count == ProfileSanitizer.maxMessageLength)
+        #expect(record.plaintext.count == ContentSanitizer.maxMessageLength)
         #expect(record.plaintext.hasSuffix("ab"))
         #expect(!record.plaintext.contains("c"))
         #expect(!record.plaintext.contains("late"))

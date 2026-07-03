@@ -19,11 +19,11 @@ struct NewChatSheet: View {
     }
 
     static func normalizedGroupName(_ raw: String) -> String {
-        ProfileSanitizer.groupName(raw) ?? ""
+        ContentSanitizer.groupName(raw) ?? ""
     }
 
     static func normalizedGroupDescription(_ raw: String) -> String? {
-        ProfileSanitizer.multilineText(raw, maxLength: ProfileSanitizer.maxGroupDescriptionLength)
+        ContentSanitizer.multilineText(raw, maxLength: ContentSanitizer.maxGroupDescriptionLength)
     }
 
     var body: some View {

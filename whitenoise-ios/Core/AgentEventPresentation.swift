@@ -11,7 +11,7 @@ nonisolated enum AgentEventPresentation {
     /// a status/preview sentence (matches the chat-list preview bound of 140);
     /// the secondary line is a short operation/event label.
     static let maxPrimaryTextLength = 140
-    static let maxSecondaryTextLength = ProfileSanitizer.maxNameLength
+    static let maxSecondaryTextLength = ContentSanitizer.maxNameLength
 
     enum RowKind: Equatable {
         case activity
@@ -106,7 +106,7 @@ nonisolated enum AgentEventPresentation {
         }
 
         private func sanitized(_ value: String?) -> String? {
-            ProfileSanitizer.singleLine(value, maxLength: maxPrimaryTextLength)
+            ContentSanitizer.singleLine(value, maxLength: maxPrimaryTextLength)
         }
     }
 
@@ -171,6 +171,6 @@ nonisolated enum AgentEventPresentation {
     /// Sanitize a short peer-derived secondary label: strip bidi/zero-width
     /// spoofing codepoints, collapse whitespace, and cap length.
     private static func sanitizedLabel(_ raw: String?) -> String? {
-        ProfileSanitizer.singleLine(raw, maxLength: maxSecondaryTextLength)
+        ContentSanitizer.singleLine(raw, maxLength: maxSecondaryTextLength)
     }
 }

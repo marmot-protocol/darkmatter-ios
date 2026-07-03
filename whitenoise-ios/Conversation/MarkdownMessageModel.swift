@@ -67,7 +67,7 @@ struct MessageMarkdownDisplayProjection: Equatable {
 /// recursion depth — independent of Rust's own FFI depth cap.
 enum MarkdownMessageBuilder {
 
-    static let maxCharacters = ProfileSanitizer.maxMessageLength
+    static let maxCharacters = ContentSanitizer.maxMessageLength
     static let maxNodes = 2000
     static let maxRenderDepth = 24
     /// Visual indentation stops deepening past this; rendering depth continues
@@ -149,7 +149,7 @@ enum MarkdownMessageBuilder {
     }
 
     static func truncatedBech32(_ bech32: String) -> String {
-        let clean = ProfileSanitizer.textRun(bech32)
+        let clean = ContentSanitizer.textRun(bech32)
         guard clean.count > 16 else { return clean }
         return "\(clean.prefix(8))…\(clean.suffix(4))"
     }
@@ -157,7 +157,7 @@ enum MarkdownMessageBuilder {
     /// Render-side scheme gate for link destinations. Returns nil (no link,
     /// children render as plain text) for disallowed or unparseable URLs.
     static func allowedLinkURL(_ raw: String) -> URL? {
-        let trimmed = ProfileSanitizer.textRun(raw)
+        let trimmed = ContentSanitizer.textRun(raw)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let components = URLComponents(string: trimmed),
@@ -255,7 +255,7 @@ enum MarkdownMessageBuilder {
         to out: inout [MarkdownDisplayBlock],
         budget: inout Budget
     ) {
-        var clean = ProfileSanitizer.textRun(content)
+        var clean = ContentSanitizer.textRun(content)
         while clean.hasSuffix("\n") { clean.removeLast() }
         let piece = String(budget.take(clean))
         guard !piece.isEmpty, piece.contains(where: { !$0.isWhitespace }) else { return }
@@ -518,7 +518,7 @@ enum MarkdownMessageBuilder {
         if context.link == nil {
             switch entity.hrp {
             case .npub, .nprofile:
-                nested.link = allowedLinkURL("nostr:\(ProfileSanitizer.textRun(entity.bech32))")
+                nested.link = allowedLinkURL("nostr:\(ContentSanitizer.textRun(entity.bech32))")
             case .note, .nevent, .naddr, .nrelay:
                 break
             }
@@ -539,7 +539,7 @@ enum MarkdownMessageBuilder {
         budget: inout Budget,
         codeBackground: Bool = false
     ) -> Bool {
-        let piece = String(budget.take(ProfileSanitizer.textRun(raw)))
+        let piece = String(budget.take(ContentSanitizer.textRun(raw)))
         guard !piece.isEmpty else { return false }
         var attributes = AttributeContainer()
         attributes.font = context.font

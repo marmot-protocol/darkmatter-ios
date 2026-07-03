@@ -121,7 +121,7 @@ enum GroupMemberDetailsPresentation {
 
     @MainActor
     static func displayName(for member: GroupMemberDetailsFfi, appState: AppState) -> String {
-        if let name = ProfileSanitizer.displayName(member.displayName) {
+        if let name = ContentSanitizer.displayName(member.displayName) {
             return name
         }
         let accountIdHex = profileAccountIdHex(for: member)

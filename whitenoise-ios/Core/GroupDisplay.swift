@@ -8,7 +8,7 @@ import MarmotKit
 ///   3. an unnamed 2-member group renders as the other person — their known
 ///      display name, or their npub when no profile name is known.
 enum GroupDisplay {
-    /// Cached display inputs for one group render. `ProfileSanitizer.groupName`
+    /// Cached display inputs for one group render. `ContentSanitizer.groupName`
     /// walks peer/admin-controlled Unicode scalars, so resolve once and thread
     /// the sanitized result through title/avatar helpers.
     struct Resolved {
@@ -40,7 +40,7 @@ enum GroupDisplay {
             group: group,
             otherMember: otherMember,
             memberCount: memberCount,
-            sanitizeGroupName: ProfileSanitizer.groupName
+            sanitizeGroupName: ContentSanitizer.groupName
         )
     }
 
@@ -83,7 +83,7 @@ enum GroupDisplay {
         for display: Resolved,
         appState: AppState
     ) -> URL? {
-        if let groupAvatar = ProfileSanitizer.imageURL(display.group.avatarUrl) {
+        if let groupAvatar = ContentSanitizer.imageURL(display.group.avatarUrl) {
             return groupAvatar
         }
         guard display.isDirectMessage,

@@ -68,6 +68,42 @@ struct RelaysViewPresentationTests {
         #expect(rows == ["wss://relay spaced.example"])
     }
 
+    // MARK: - Editable rows
+
+    // #467 — the editable account-relays section is the same relay-influenced
+    // render surface as the published lists, so it must sanitize identically.
+    // It diverges in one way: editableRelayDisplay is strictly 1:1 with its
+    // input (delete-by-index alignment) and never drops an entry, so a fully
+    // stripped entry falls back to a placeholder instead of vanishing.
+
+    @Test func editableRelayDisplayStripsBidiAndZeroWidth() {
+        let rlo = RelaySettings.editableRelayDisplay("wss://relay\u{202E}evil.example")
+        let zwsp = RelaySettings.editableRelayDisplay("wss://a\u{200B}b.example")
+
+        #expect(rlo == "wss://relayevil.example")
+        #expect(zwsp == "wss://ab.example")
+        #expect(!rlo.unicodeScalars.contains { $0.value == 0x202E })
+        #expect(!zwsp.unicodeScalars.contains { $0.value == 0x200B })
+    }
+
+    @Test func editableRelayDisplayStripsResidualInvisibleFormat() {
+        // #306 — ZWNJ, ZWJ, WORD JOINER the shared sanitizer keeps for general
+        // text must still be stripped from a relay host string.
+        let spoofed = "wss://re\u{200C}lay\u{200D}evil\u{2060}.example"
+        #expect(RelaySettings.editableRelayDisplay(spoofed) == "wss://relayevil.example")
+    }
+
+    @Test func editableRelayDisplayKeepsCleanUrlUnchanged() {
+        #expect(RelaySettings.editableRelayDisplay("wss://relay.example") == "wss://relay.example")
+    }
+
+    @Test func editableRelayDisplayFallsBackForFullyStrippedEntry() {
+        // Diverges from publishedRelayRows (which drops these): an editable row
+        // must survive so the user can still delete the junk entry.
+        #expect(RelaySettings.editableRelayDisplay("\u{200B}") == RelaySettings.invalidRelayMessage)
+        #expect(RelaySettings.editableRelayDisplay("\u{FEFF}\u{202E}") == RelaySettings.invalidRelayMessage)
+    }
+
     // MARK: - Missing footer labels
 
     @Test func missingLabelsRenderStableEnumNames() {
