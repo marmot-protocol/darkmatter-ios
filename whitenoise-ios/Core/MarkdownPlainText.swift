@@ -4,7 +4,7 @@ import MarmotKit
 /// Flattens a markdown AST to plain text for one-line surfaces (chat-list
 /// rows, reply quotes): syntax dropped, text kept, links reduced to their
 /// labels. NOT sanitized — every caller already pipes the result through
-/// `ProfileSanitizer.singleLine`, which strips spoofing characters and caps
+/// `ContentSanitizer.singleLine`, which strips spoofing characters and caps
 /// length.
 enum MarkdownPlainText {
 

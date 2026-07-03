@@ -43,7 +43,7 @@ nonisolated enum LocalNotificationProjection {
             isDm: update.isDm,
             isMention: update.isMention,
             senderName: senderName,
-            groupName: ProfileSanitizer.groupName(update.groupName),
+            groupName: ContentSanitizer.groupName(update.groupName),
             preview: preview
         )
 
@@ -119,7 +119,7 @@ nonisolated enum LocalNotificationProjection {
     }
 
     private static func displayName(for user: NotificationUserFfi) -> String {
-        if let name = ProfileSanitizer.displayName(user.displayName) {
+        if let name = ContentSanitizer.displayName(user.displayName) {
             return name
         }
         if user.accountIdHex.isEmpty {
@@ -129,7 +129,7 @@ nonisolated enum LocalNotificationProjection {
     }
 
     private static func sanitizedPreview(_ raw: String?) -> String? {
-        ProfileSanitizer.singleLine(raw, maxLength: maxPreviewLength)
+        ContentSanitizer.singleLine(raw, maxLength: maxPreviewLength)
     }
 
     private static func notificationIdentifier(for update: NotificationUpdateFfi) -> String {

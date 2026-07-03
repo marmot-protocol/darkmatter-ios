@@ -70,7 +70,7 @@ struct MessageBubble: View {
     }
 
     private var sanitizedBodyText: String {
-        ProfileSanitizer.messageBody(bodyText)
+        ContentSanitizer.messageBody(bodyText)
     }
 
     private var hasVisibleBodyText: Bool {
@@ -382,7 +382,7 @@ struct MessageBubble: View {
                     onTapReaction(tally.emoji)
                 } label: {
                     HStack(spacing: 2) {
-                        Text(ProfileSanitizer.reactionEmoji(tally.emoji))
+                        Text(ContentSanitizer.reactionEmoji(tally.emoji))
                         if tally.count > 1 {
                             Text(L10n.formatted("%lld", Int64(tally.count)))
                                 .font(.caption2)
@@ -487,7 +487,7 @@ nonisolated enum MessageExternalLinkConfirmation {
     private static let maxDisplayedURLCharacters = 180
 
     static func displayText(for url: URL) -> String {
-        let displayedURL = elided(ProfileSanitizer.textRun(url.absoluteString), maxCharacters: maxDisplayedURLCharacters)
+        let displayedURL = elided(ContentSanitizer.textRun(url.absoluteString), maxCharacters: maxDisplayedURLCharacters)
         if let host = hostDisplay(for: url) {
             return L10n.formatted("This link opens %@:\n%@", host, displayedURL)
         }
@@ -499,7 +499,7 @@ nonisolated enum MessageExternalLinkConfirmation {
             return nil
         }
 
-        let sanitizedHost = ProfileSanitizer.textRun(rawHost)
+        let sanitizedHost = ContentSanitizer.textRun(rawHost)
 
         // Hosts wider than the display cap are peer-controlled (autolinks in
         // received markdown) and are elided away anyway, so never feed an
@@ -546,7 +546,7 @@ nonisolated enum MessageExternalLinkConfirmation {
         // stricter relay/URL display policy before it is rendered. If nothing
         // renderable survives, fall back to the raw (already-sanitized) host.
         let joined = decodedLabels.joined(separator: ".")
-        let safe = ProfileSanitizer.relayDisplayLine(joined, maxLength: joined.count) ?? host
+        let safe = ContentSanitizer.relayDisplayLine(joined, maxLength: joined.count) ?? host
         return (safe, isInternationalized)
     }
 

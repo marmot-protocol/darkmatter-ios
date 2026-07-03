@@ -142,7 +142,7 @@ enum GroupSystemEventPresentation {
             let subjectHex = normalizedHex(subject)
             let actorName = actorHex.map(displayName)
             let subjectName = subjectHex.map(displayName)
-            let groupName = ProfileSanitizer.groupName(name)
+            let groupName = ContentSanitizer.groupName(name)
 
             if let systemType = trimmed(systemType) {
                 switch systemType {
@@ -215,7 +215,7 @@ enum GroupSystemEventPresentation {
 
         private func sanitizedFallback(_ value: String?) -> String? {
             guard let value = trimmed(value) else { return nil }
-            return ProfileSanitizer.singleLine(value, maxLength: ProfileSanitizer.maxGroupNameLength)
+            return ContentSanitizer.singleLine(value, maxLength: ContentSanitizer.maxGroupNameLength)
         }
 
         private func normalizedHex(_ value: String?) -> String? {

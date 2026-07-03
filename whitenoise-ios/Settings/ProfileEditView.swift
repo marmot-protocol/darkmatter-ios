@@ -17,7 +17,7 @@ struct ProfileEditView: View {
                         title: model.displayName.isEmpty
                             ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
                             : model.displayName,
-                        pictureURL: ProfileSanitizer.imageURL(model.existingPicture)
+                        pictureURL: ContentSanitizer.imageURL(model.existingPicture)
                     )
                     .frame(width: 72, height: 72)
                     .frame(maxWidth: .infinity)
@@ -133,12 +133,12 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
 
     var normalizedMetadata: ProfileEditMetadata? {
         guard validationError == nil else { return nil }
-        let name = ProfileSanitizer.displayName(self.name)
-        let displayName = ProfileSanitizer.displayName(self.displayName)
+        let name = ContentSanitizer.displayName(self.name)
+        let displayName = ContentSanitizer.displayName(self.displayName)
         return ProfileEditMetadata(
             name: name,
             displayName: displayName,
-            about: ProfileSanitizer.multilineText(about),
+            about: ContentSanitizer.multilineText(about),
             picture: preservedPicture,
             nip05: normalizedNip05,
             lud16: preservedLud16
@@ -150,7 +150,7 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
     }
 
     private var normalizedNip05: String? {
-        ProfileSanitizer.profileAddress(trimmedNip05)
+        ContentSanitizer.profileAddress(trimmedNip05)
     }
 }
 

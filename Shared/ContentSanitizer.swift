@@ -1,17 +1,10 @@
 import Foundation
 import Darwin
 
-/// Sanitizes untrusted Nostr profile metadata (kind:0) before it's rendered.
-///
-/// Anyone can publish any profile to a relay, so every name, avatar URL, and
-/// free-text field we display for *another* account is attacker-controlled.
-/// This is the rendering boundary: it strips spoofing characters, enforces a
-/// URL-scheme allowlist for images, and caps lengths.
-///
-/// Local profile and group editors also reuse these bounds before publishing
-/// metadata so malformed local drafts are not propagated to relays.
-nonisolated enum ProfileSanitizer {
-
+/// Sanitizes untrusted, peer- or relay-controlled strings and URLs at the
+/// trust boundary — profile metadata (kind:0), group names/descriptions,
+/// message bodies, reactions, relay URLs, and image URLs.
+nonisolated enum ContentSanitizer {
     static let maxNameLength = 80
     static let maxGroupNameLength = 100
     static let maxGroupDescriptionLength = 280

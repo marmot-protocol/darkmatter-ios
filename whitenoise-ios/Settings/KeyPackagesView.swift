@@ -252,17 +252,9 @@ struct KeyPackagesView: View {
     static func byteCount(_ bytes: UInt64) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file)
     }
-
-    /// Strip spoofing characters and cap length on relay-supplied strings.
-    /// Anyone can publish anything to a relay — we only render a small preview
-    /// here, never the raw payload. The previous ad-hoc filter only removed
-    /// C0/DEL and let bidi / zero-width codepoints through, so relay URLs could
-    /// be visually spoofed (#53). Use ProfileSanitizer.relayDisplayLine, the
-    /// relay/URL display boundary that also removes the residual invisible
-    /// format characters (ZWNJ/ZWJ/WORD JOINER) a host label never needs (#306).
     static func sanitizedRelays(_ relays: [String]) -> String {
         relays.prefix(4)
-            .compactMap { ProfileSanitizer.relayDisplayLine($0, maxLength: 120) }
+            .compactMap { ContentSanitizer.relayDisplayLine($0, maxLength: 120) }
             .joined(separator: ", ")
     }
 

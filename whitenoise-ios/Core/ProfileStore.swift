@@ -20,11 +20,11 @@ struct ProfileDisplayProjection: Equatable {
     }
 
     var avatarURL: URL? {
-        ProfileSanitizer.imageURL(profile?.picture)
+        ContentSanitizer.imageURL(profile?.picture)
     }
 
     var hasRemoteIdentity: Bool {
-        profile != nil || ProfileSanitizer.displayName(projectedName) != nil
+        profile != nil || ContentSanitizer.displayName(projectedName) != nil
     }
 
     func updatingLocalAccountLabel(_ label: String?) -> ProfileDisplayProjection {

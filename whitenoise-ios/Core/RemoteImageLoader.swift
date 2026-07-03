@@ -5,7 +5,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 /// Re-validates every HTTP redirect target through the same SSRF allowlist that
-/// gates the initial URL (`ProfileSanitizer.imageURL`: HTTPS + public host).
+/// gates the initial URL (`ContentSanitizer.imageURL`: HTTPS + public host).
 ///
 /// `URLSession` follows `3xx` redirects automatically, so without this delegate
 /// a peer-controlled allowlisted HTTPS endpoint could `302` the fetch to
@@ -19,7 +19,7 @@ nonisolated final class RemoteImageRedirectGuard: NSObject, URLSessionTaskDelega
     /// host, including legacy IPv4 and IPv4-mapped IPv6 spellings).
     static func isRedirectAllowed(to url: URL?) -> Bool {
         guard let url else { return false }
-        return ProfileSanitizer.imageURL(url.absoluteString) != nil
+        return ContentSanitizer.imageURL(url.absoluteString) != nil
     }
 
     func urlSession(

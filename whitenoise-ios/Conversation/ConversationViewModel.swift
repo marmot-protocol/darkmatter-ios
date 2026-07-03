@@ -250,12 +250,12 @@ final class ConversationViewModel {
     func displayTitle(for groupDisplay: GroupDisplay.Resolved) -> String {
         guard let appState else {
             if let name = groupDisplay.sanitizedName { return name }
-            if let initialTitle = ProfileSanitizer.groupName(initialTitle) { return initialTitle }
+            if let initialTitle = ContentSanitizer.groupName(initialTitle) { return initialTitle }
             return IdentityFormatter.short(group.groupIdHex)
         }
         if members.isEmpty,
            groupMemberDetails.isEmpty,
-           let initialTitle = ProfileSanitizer.groupName(initialTitle),
+           let initialTitle = ContentSanitizer.groupName(initialTitle),
            groupDisplay.sanitizedName == nil {
             return initialTitle
         }
@@ -1242,7 +1242,7 @@ final class ConversationViewModel {
         }
 
         if !previousName.isEmpty && previousName != record.name {
-            appState?.present(.success(L10n.string("Group renamed"), message: ProfileSanitizer.groupName(record.name)))
+            appState?.present(.success(L10n.string("Group renamed"), message: ContentSanitizer.groupName(record.name)))
         }
         if record.archived && !wasArchived {
             appState?.present(.warning(L10n.string("Group archived")))
@@ -1500,7 +1500,7 @@ final class ConversationViewModel {
 
     /// Clamp outbound message text to the protocol's max length (#54).
     nonisolated static func cappedOutgoingText(_ text: String) -> String {
-        String(text.prefix(ProfileSanitizer.maxMessageLength))
+        String(text.prefix(ContentSanitizer.maxMessageLength))
     }
 
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {

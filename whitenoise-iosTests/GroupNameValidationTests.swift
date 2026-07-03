@@ -1,9 +1,6 @@
 import Testing
 @testable import whitenoise_ios
 @testable import MarmotKit
-
-/// #80 — a group rename must reject an empty/whitespace name so the shared group
-/// name can't be silently blanked.
 @MainActor
 struct GroupNameValidationTests {
 
@@ -23,7 +20,7 @@ struct GroupNameValidationTests {
         #expect(sanitized.hasPrefix("Team Rocket"))
         #expect(!sanitized.contains("\u{202E}"))
         #expect(!sanitized.contains("\n"))
-        #expect(sanitized.count == ProfileSanitizer.maxGroupNameLength)
+        #expect(sanitized.count == ContentSanitizer.maxGroupNameLength)
     }
 
     @Test func newChatGroupNameUsesSanitizedEmptyStringSentinel() {
@@ -39,6 +36,6 @@ struct GroupNameValidationTests {
         #expect(description == "Mission\n\nnotes")
 
         let oversized = NewChatSheet.normalizedGroupDescription(String(repeating: "x", count: 500))
-        #expect(oversized?.count == ProfileSanitizer.maxGroupDescriptionLength)
+        #expect(oversized?.count == ContentSanitizer.maxGroupDescriptionLength)
     }
 }
