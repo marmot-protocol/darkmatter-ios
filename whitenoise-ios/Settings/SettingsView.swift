@@ -141,7 +141,7 @@ struct SettingsView: View {
                     .font(.footnote)
             }
         }
-        .navigationTitle("Settings")
+        .localizedNavigationTitle("Settings")
         .task(id: appState.activeAccount?.accountIdHex) {
             guard let id = appState.activeAccount?.accountIdHex else { return }
             await appState.reloadProfileProjection(forAccountIdHex: id)
