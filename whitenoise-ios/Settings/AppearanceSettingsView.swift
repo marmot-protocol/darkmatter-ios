@@ -41,7 +41,7 @@ struct AppearanceSettingsView: View {
                 Text("System follows your device language. Other choices update White Noise immediately.")
             }
         }
-        .navigationTitle("Appearance")
+        .localizedNavigationTitle("Appearance")
         .onAppear {
             languageRawValue = AppLanguage.currentRawValue
         }
