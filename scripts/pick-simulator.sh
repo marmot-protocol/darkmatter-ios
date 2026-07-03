@@ -4,18 +4,24 @@
 # that may not be installed on the runner image.
 set -euo pipefail
 
-udid=$(xcrun simctl list devices available --json | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-best = None
-for runtime in sorted(data["devices"].keys()):
-    if "iOS" not in runtime:
-        continue
-    for d in data["devices"][runtime]:
-        if d.get("isAvailable") and "iPhone" in d.get("name", ""):
-            best = d["udid"]  # sorted runtimes -> last match is newest iOS
-print(best or "")
-')
+command -v jq >/dev/null 2>&1 || { echo "Error: jq not found. Install with 'brew install jq'." >&2; exit 1; }
+
+udid=$(
+  xcrun simctl list devices available --json \
+  | jq -r '
+      [ .devices
+        | to_entries[]
+        | select(.key | test("SimRuntime\\.iOS-[0-9]+-[0-9]+"))
+        | (.key | capture("iOS-(?<maj>[0-9]+)-(?<min>[0-9]+)")) as $v
+        | .value[]
+        | select(.isAvailable and (.name | test("iPhone")))
+        | [ ($v.maj | tonumber), ($v.min | tonumber), .udid ]
+      ]
+      | sort_by(.[0], .[1])
+      | last
+      | .[2] // empty
+    '
+)
 
 if [ -z "$udid" ]; then
   echo "No available iPhone simulator found" >&2

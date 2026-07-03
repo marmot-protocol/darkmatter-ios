@@ -12,6 +12,7 @@ on:
       - "whitenoise-ios.xcodeproj/**"
       - "scripts/test.sh"
       - "scripts/check-coverage.sh"
+      - "scripts/pick-simulator.sh"
       - ".github/workflows/tests.yml"
   push:
     branches: [master]
