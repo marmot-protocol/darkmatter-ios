@@ -8554,7 +8554,8 @@ private func chatListRow(
         firstUnreadMessageIdHex: firstUnreadMessageIdHex,
         lastReadMessageIdHex: lastReadMessageIdHex,
         lastReadTimelineAt: lastReadTimelineAt,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        selfMembership: .member
     )
 }
 

@@ -22,6 +22,7 @@ extension AppGroupRecordFfi {
         encryptedMedia: AppGroupEncryptedMediaComponentFfi,
         archived: Bool,
         pendingConfirmation: Bool,
+        selfMembership: SelfMembershipFfi = .member,
         welcomerAccountIdHex: String?,
         viaWelcomeMessageIdHex: String?
     ) {
@@ -40,6 +41,7 @@ extension AppGroupRecordFfi {
             disappearingMessageSecs: 0,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            selfMembership: selfMembership,
             welcomerAccountIdHex: welcomerAccountIdHex,
             viaWelcomeMessageIdHex: viaWelcomeMessageIdHex
         )

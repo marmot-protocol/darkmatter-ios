@@ -53,7 +53,7 @@ Keep keyboard notification adapters and other SwiftUI/UIKit-only helpers in the 
 
 ## Rust Bindings
 
-The generated Swift bindings and static library live in `Vendored/MarmotKit`. The source of truth is the sibling Darkmatter repo, normally at `/Users/jeff/code/darkmatter`.
+The generated Swift bindings and static library live in `Vendored/MarmotKit`. The source of truth is the sibling mdk repo (formerly darkmatter), normally at `../mdk`.
 
 Regenerate with:
 
@@ -64,7 +64,7 @@ Regenerate with:
 or:
 
 ```sh
-DARKMATTER_DIR=/path/to/whitenoise ./scripts/sync-bindings.sh
+MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
 ```
 
 Do not patch generated binding files directly. Change Rust/UniFFI, regenerate, then validate the iOS app.

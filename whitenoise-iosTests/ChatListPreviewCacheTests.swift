@@ -83,7 +83,8 @@ struct ChatListPreviewCacheTests {
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
-            updatedAt: 1
+            updatedAt: 1,
+            selfMembership: .member
         )
     }
 

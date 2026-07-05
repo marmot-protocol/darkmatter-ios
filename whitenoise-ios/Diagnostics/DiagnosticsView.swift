@@ -89,6 +89,8 @@ struct DiagnosticsView: View {
             return "[\(label)] error: \(message)"
         case .agentStreamActivity(_, let label):
             return "[\(label)] agent stream activity"
+        case .welcomeDeliveryPending(_, let accountLabel, let groupIdHex, let messageIdHex, let recipientHex):
+            return "[\(accountLabel)] welcome pending → \(IdentityFormatter.short(recipientHex)) in \(IdentityFormatter.short(groupIdHex)) (msg \(IdentityFormatter.short(messageIdHex)))"
         }
     }
 
@@ -122,6 +124,8 @@ struct DiagnosticsView: View {
             return "pending commit recovered"
         case .groupHydrationRecovered:
             return "hydration recovered"
+        case .groupStateInvalidated:
+            return "state invalidated"
         }
     }
 

@@ -222,7 +222,7 @@ enum MarkdownMessageBuilder {
                     out.append(.blockQuote(nested))
                 }
 
-            case .list(let kind, let tight, let items):
+            case .listBlock(let kind, let tight, let items):
                 let displayItems = listItems(
                     kind: kind,
                     items: items,

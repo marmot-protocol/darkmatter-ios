@@ -62,7 +62,7 @@ enum MarkdownPlainText {
                 state.append(content)
             case .blockQuote(let nested):
                 appendBlocks(nested, to: &state, depth: depth + 1)
-            case .list(_, _, let items):
+            case .listBlock(_, _, let items):
                 for item in items {
                     guard state.consumeNode() else { return }
                     appendBlocks(item.blocks, to: &state, depth: depth + 1)

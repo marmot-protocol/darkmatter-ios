@@ -73,7 +73,8 @@ struct AccountUnreadSummaryProjectionTests {
             firstUnreadMessageIdHex: unreadCount > 0 ? "message-\(groupIdHex)" : nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
-            updatedAt: 1
+            updatedAt: 1,
+            selfMembership: .member
         )
     }
 }

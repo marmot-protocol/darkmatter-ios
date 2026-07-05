@@ -40,7 +40,7 @@ struct MarkdownPlainTextTests {
             .paragraph(inlines: [.text(content: "body")]),
             .codeBlock(kind: .fenced, info: "swift", content: "let x = 1\nlet y = 2\n"),
             .thematicBreak,
-            .list(kind: .bullet(marker: "-"), tight: true, items: [
+            .listBlock(kind: .bullet(marker: "-"), tight: true, items: [
                 MarkdownListItemFfi(blocks: [.paragraph(inlines: [.text(content: "item")])], checked: false)
             ]),
         ]))
@@ -82,7 +82,7 @@ struct MarkdownPlainTextTests {
         let emptyItem = MarkdownListItemFfi(blocks: [], checked: false)
         let items = Array(repeating: emptyItem, count: 2500)
         let flattened = MarkdownPlainText.flatten(doc([
-            .list(kind: .bullet(marker: "-"), tight: true, items: items),
+            .listBlock(kind: .bullet(marker: "-"), tight: true, items: items),
             .paragraph(inlines: [.text(content: "tail")]),
         ]))
 

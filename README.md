@@ -48,7 +48,7 @@ The project is intentionally split along the platform boundary: Swift owns prese
 
 - Xcode with iOS 18+ SDK support.
 - Apple developer signing configured for device builds, APNS, App Groups, and the Notification Service Extension.
-- The sibling Dark Matter Rust repo at `../darkmatter` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
+- The sibling mdk Rust repo at `../mdk` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
 
 Production identifiers:
 
@@ -128,10 +128,10 @@ Regenerate bindings after changes in `marmot-uniffi` or any Rust crate it depend
 ./scripts/sync-bindings.sh
 ```
 
-Use `DARKMATTER_DIR` if the Rust checkout is not the sibling default:
+Use `MDK_DIR` if the Rust checkout is not the sibling default:
 
 ```sh
-DARKMATTER_DIR=/path/to/darkmatter ./scripts/sync-bindings.sh
+MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
 ```
 
 Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, regenerate, then validate the iOS app.
