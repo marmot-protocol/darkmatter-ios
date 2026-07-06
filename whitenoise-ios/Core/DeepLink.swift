@@ -37,7 +37,7 @@ nonisolated enum DeepLink: Equatable {
 
     static func isKnownInteropScheme(_ value: String?) -> Bool {
         guard let value else { return false }
-        return knownInteropSchemes.contains(value.lowercased())
+        return isCurrentAppScheme(value) || knownInteropSchemes.contains(value.lowercased())
     }
 
     static func isCurrentAppScheme(_ value: String?) -> Bool {
