@@ -89,6 +89,8 @@ struct DiagnosticsView: View {
             return "[\(label)] error: \(message)"
         case .agentStreamActivity(_, let label):
             return "[\(label)] agent stream activity"
+        case .welcomeDeliveryPending(_, let label, let groupIdHex, let messageIdHex, let recipientHex):
+            return "[\(label)] welcome pending group \(IdentityFormatter.short(groupIdHex)) message \(IdentityFormatter.short(messageIdHex)) recipient \(IdentityFormatter.short(recipientHex))"
         }
     }
 
@@ -116,6 +118,8 @@ struct DiagnosticsView: View {
             return "fork recovered"
         case .commitRolledBack:
             return "commit rolled back"
+        case .groupStateInvalidated:
+            return "state invalidated"
         case .groupUnrecoverable:
             return "unrecoverable"
         case .pendingCommitRecovered:

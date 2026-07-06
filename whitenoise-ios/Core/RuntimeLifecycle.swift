@@ -166,6 +166,7 @@ final class RuntimeLifecycle {
             noteRuntimeForegroundReadyAfterSuspension()
             try await appState.refreshAccounts()
             if appState.accounts.isEmpty {
+                appState.activeAccountRef = nil
                 appState.setPhase(.onboarding)
                 // `.onboarding` now owns a live runtime; re-arm suspension if a
                 // background request landed while bootstrap was awaiting above.

@@ -11,6 +11,12 @@ struct DeepLinkChatGroupIdTests {
         #expect(DeepLink.parse(string: "\(DeepLink.scheme)://chat/\(valid64.uppercased())") == .chat(groupIdHex: valid64))
     }
 
+    @Test func acceptsLegacyWhiteNoiseChatLinks() {
+        for scheme in ["whitenoise", "whitenoise-staging"] {
+            #expect(DeepLink.parse(string: "\(scheme)://chat/\(valid64)") == .chat(groupIdHex: valid64))
+        }
+    }
+
     @Test func rejectsNon64CharOrNonHexGroupId() {
         #expect(DeepLink.parse(string: "\(DeepLink.scheme)://chat/abc") == nil)
         #expect(DeepLink.parse(string: "\(DeepLink.scheme)://chat/\(String(repeating: "a", count: 63))") == nil)

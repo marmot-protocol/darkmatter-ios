@@ -80,7 +80,9 @@ enum MarkdownMessageBuilder {
     /// this allowlist is the render-side gate against javascript:/data:/file:.
     private static let allowedLinkSchemes: Set<String> = [
         "http", "https", "mailto", "tel",
-        "whitenoise", "whitenoise-staging", "nostr",
+        "marmot", "marmot-staging",
+        "whitenoise", "whitenoise-staging",
+        "nostr",
     ]
 
     struct Budget {
@@ -222,7 +224,7 @@ enum MarkdownMessageBuilder {
                     out.append(.blockQuote(nested))
                 }
 
-            case .list(let kind, let tight, let items):
+            case .listBlock(let kind, let tight, let items):
                 let displayItems = listItems(
                     kind: kind,
                     items: items,

@@ -449,7 +449,7 @@ struct MarkdownMessageBuilderTests {
 
     @Test func orderedListsHonorStartAndDelimiterAndTaskItems() throws {
         let blocks = try #require(MarkdownMessageBuilder.displayBlocks(for: doc([
-            .list(
+            .listBlock(
                 kind: .ordered(start: 3, delimiter: ")"),
                 tight: true,
                 items: [
@@ -528,7 +528,7 @@ struct MarkdownMessageBuilderTests {
             ]),
             .codeBlock(kind: .fenced, info: "swift", content: "print(1)\n"),
             .thematicBreak,
-            .list(kind: .bullet(marker: "-"), tight: true, items: [
+            .listBlock(kind: .bullet(marker: "-"), tight: true, items: [
                 MarkdownListItemFfi(blocks: [para([.text(content: "item")])], checked: nil)
             ]),
         ])))

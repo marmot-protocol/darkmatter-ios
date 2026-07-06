@@ -33,6 +33,18 @@ struct AppStateBootstrapTests {
         #expect(appState.accounts.isEmpty)
     }
 
+    @Test func bootstrapWithoutAccountsClearsPersistedActiveAccountRef() async throws {
+        UserDefaults.standard.set("legacy-darkmatter-account", forKey: AccountStore.activeAccountKey)
+        let appState = AppState(client: try MarmotClient.testClient(), notifications: deniedNotifications())
+
+        await appState.bootstrap()
+
+        #expect(appState.phase == .onboarding)
+        #expect(appState.accounts.isEmpty)
+        #expect(appState.activeAccountRef == nil)
+        #expect(UserDefaults.standard.string(forKey: AccountStore.activeAccountKey) == nil)
+    }
+
     @Test func concurrentBootstrapCallsShareOneInFlightRun() async throws {
         let appState = try testAppState()
 
@@ -1698,10 +1710,12 @@ struct AppContainerConfigTests {
         #expect(AppContainerConfig.seedRelays.contains(config.relayHint ?? ""))
     }
 
-    @Test func marmotRootUsesStableDirectoryName() {
+    @Test func marmotRootUsesProductScopedCutoverDirectoryName() {
         let base = URL(fileURLWithPath: "/tmp/WhiteNoise-test", isDirectory: true)
 
-        #expect(AppContainerConfig.marmotRoot(in: base).path == "/tmp/WhiteNoise-test/Marmot")
+        #expect(AppContainerConfig.productDirectoryName == "White Noise")
+        #expect(AppContainerConfig.legacyMarmotDirectoryName == "Marmot")
+        #expect(AppContainerConfig.marmotRoot(in: base).path == "/tmp/WhiteNoise-test/White Noise/Marmot")
     }
 
     @Test func productionRootThrowsWhenAppGroupContainerUnavailable() {
@@ -1728,13 +1742,18 @@ struct AppContainerConfigTests {
 
         let root = try AppContainerConfig.productionMarmotRoot(fileManager: fileManager)
 
-        #expect(root.path == shared.appendingPathComponent("Marmot").path)
+        let expectedRoot = shared
+            .appendingPathComponent("White Noise", isDirectory: true)
+            .appendingPathComponent("Marmot", isDirectory: true)
+        #expect(root.path == expectedRoot.path)
         #expect(fileManager.applicationSupportLookupCount == 0)
     }
 
     @Test func productionRootSurfacesDirectoryCreationFailure() {
         let shared = URL(fileURLWithPath: "/tmp/WhiteNoise-unwritable", isDirectory: true)
-        let root = shared.appendingPathComponent("Marmot", isDirectory: true)
+        let root = shared
+            .appendingPathComponent("White Noise", isDirectory: true)
+            .appendingPathComponent("Marmot", isDirectory: true)
         let creationError = NSError(
             domain: "AppContainerConfigTests",
             code: 13,
@@ -2267,6 +2286,45 @@ struct DiagnosticsPresentationTests {
         #expect(emptyText.contains("[alice] msg from \(IdentityFormatter.short(sender))"))
         #expect(emptyText.contains("(empty)"))
         #expect(!emptyText.contains(secret))
+    }
+
+    @Test func diagnosticTextLabelsWelcomeDeliveryPending() {
+        let groupId = hex("cc")
+        let messageId = hex("dd")
+        let recipient = hex("ee")
+        let event = MarmotEventFfi.welcomeDeliveryPending(
+            accountIdHex: hex("aa"),
+            accountLabel: "alice",
+            groupIdHex: groupId,
+            messageIdHex: messageId,
+            recipientHex: recipient
+        )
+
+        let text = DiagnosticsView.diagnosticText(for: event)
+
+        #expect(text.contains("[alice] welcome pending"))
+        #expect(text.contains(IdentityFormatter.short(groupId)))
+        #expect(text.contains(IdentityFormatter.short(messageId)))
+        #expect(text.contains(IdentityFormatter.short(recipient)))
+    }
+
+    @Test func diagnosticTextLabelsGroupStateInvalidated() {
+        let groupId = hex("cc")
+        let event = MarmotEventFfi.groupEvent(
+            accountIdHex: hex("aa"),
+            accountLabel: "alice",
+            groupIdHex: groupId,
+            event: .groupStateInvalidated(
+                epoch: 2,
+                invalidatedCommitIdHex: hex("dd"),
+                reason: "superseded_by_branch_selection"
+            )
+        )
+
+        let text = DiagnosticsView.diagnosticText(for: event)
+
+        #expect(text.contains("[alice] group event state invalidated"))
+        #expect(text.contains(IdentityFormatter.short(groupId)))
     }
 }
 
@@ -3816,14 +3874,23 @@ struct DeepLinkTests {
     @Test func generatedURLKeepsDelimiterCharactersInsidePathComponent() {
         let profileURL = DeepLink.profile(npub: "npub?query#fragment/child").url
         let chatURL = DeepLink.chat(groupIdHex: "ABC?query#fragment/child").url
+        let expectedScheme = DeepLink.scheme
 
-        #expect(profileURL.absoluteString == "\(DeepLink.scheme)://profile/npub%3Fquery%23fragment%2Fchild")
+        #expect(["marmot", "marmot-staging"].contains(expectedScheme))
+        #expect(profileURL.absoluteString == "\(expectedScheme)://profile/npub%3Fquery%23fragment%2Fchild")
         #expect(profileURL.query == nil)
         #expect(profileURL.fragment == nil)
 
-        #expect(chatURL.absoluteString == "\(DeepLink.scheme)://chat/ABC%3Fquery%23fragment%2Fchild")
+        #expect(chatURL.absoluteString == "\(expectedScheme)://chat/ABC%3Fquery%23fragment%2Fchild")
         #expect(chatURL.query == nil)
         #expect(chatURL.fragment == nil)
+    }
+
+    @Test func legacyWhiteNoiseProfileLinksStillParse() {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        for scheme in ["whitenoise", "whitenoise-staging"] {
+            #expect(DeepLink.parse(string: "\(scheme)://profile/\(npub)") == .profile(npub: npub))
+        }
     }
 }
 
@@ -5100,6 +5167,15 @@ struct GroupManagementPresentationTests {
 
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(npub)") == npub
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "marmot-staging://profile/\(npub)") == npub
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "whitenoise://profile/\(npub)") == npub
+        )
+        #expect(
+            AddMembersPresentation.memberRef(fromScannedPayload: "whitenoise-staging://profile/\(npub)") == npub
         )
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(npub)") == npub

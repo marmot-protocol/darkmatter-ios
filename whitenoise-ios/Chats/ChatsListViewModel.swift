@@ -64,6 +64,7 @@ final class ChatsListViewModel {
                 ),
                 archived: row.archived,
                 pendingConfirmation: row.pendingConfirmation,
+                selfMembership: row.selfMembership,
                 welcomerAccountIdHex: nil,
                 viaWelcomeMessageIdHex: nil
             )
@@ -578,7 +579,8 @@ final class ChatsListViewModel {
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
-            updatedAt: UInt64(Date().timeIntervalSince1970)
+            updatedAt: UInt64(Date().timeIntervalSince1970),
+            selfMembership: group.selfMembership
         )
     }
 }

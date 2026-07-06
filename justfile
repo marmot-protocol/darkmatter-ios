@@ -5,7 +5,7 @@ default:
     @just --list
 
 # The xcframework is git-ignored; this rebuilds it locally from the sibling
-# ../darkmatter Rust repo (needs the toolchain) and stamps provenance. Run on a
+# ../mdk Rust repo (needs the toolchain) and stamps provenance. Run on a
 # fresh clone and after Rust changes.
 sync-bindings:
     @./scripts/sync-bindings.sh

@@ -53,7 +53,7 @@ Keep keyboard notification adapters and other SwiftUI/UIKit-only helpers in the 
 
 ## Rust Bindings
 
-The generated Swift bindings and static library live in `Vendored/MarmotKit`. The source of truth is the sibling Darkmatter repo, normally at `/Users/jeff/code/darkmatter`.
+The generated Swift bindings and static library live in `Vendored/MarmotKit`. The source of truth is the sibling MDK repo, normally at `/Users/jeff/code/mdk`.
 
 Regenerate with:
 
@@ -64,7 +64,7 @@ Regenerate with:
 or:
 
 ```sh
-DARKMATTER_DIR=/path/to/whitenoise ./scripts/sync-bindings.sh
+MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
 ```
 
 Do not patch generated binding files directly. Change Rust/UniFFI, regenerate, then validate the iOS app.
@@ -76,8 +76,10 @@ The app uses privacy-preserving MIP-05 native push.
 - Main app bundle ID: `dev.ipf.whitenoise.ios`
 - NSE bundle ID: `dev.ipf.whitenoise.ios.NotificationService`
 - App Group: `group.dev.ipf.whitenoise.ios`
-- Production URL scheme: `whitenoise`
-- Staging URL scheme: `whitenoise-staging`
+- Production URL scheme: `marmot`
+- Production legacy URL scheme: `whitenoise`
+- Staging URL scheme: `marmot-staging`
+- Staging legacy URL scheme: `whitenoise-staging`
 
 Rules for notification work:
 
@@ -108,7 +110,7 @@ The group image web search is an explicit third-party egress surface. Keep DuckD
 ## Storage
 
 - `UserDefaults` stores app preferences such as active account, developer mode, recent reactions, and per-account diagnostics self-check group IDs.
-- The shared App Group container stores the Marmot root used by both app and extension.
+- The shared App Group container stores the Marmot root used by both app and extension. The MDK cutover root is `White Noise/Marmot`; do not migrate the legacy top-level `Marmot` root or old secure-storage entries into it. Users must re-import their nsec after this cutover.
 - Marmot stores account secrets in the Keychain.
 - Decrypted media cache files under `Caches/EncryptedMedia` must set complete file protection on both the directory and cached plaintext files.
 - Temporary transcript export JSON files contain raw conversation event history; write them with complete file protection and remove them after the share sheet completes or dismisses.

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Full-page shareable identity card: avatar, display name, npub (tap to
-/// copy), and a large QR encoding the `whitenoise://profile/<npub>` deep
+/// copy), and a large QR encoding the `marmot://profile/<npub>` deep
 /// link. A "Scan QR Code" button opens the camera scanner.
 struct ProfileQRView: View {
     @Environment(AppState.self) private var appState

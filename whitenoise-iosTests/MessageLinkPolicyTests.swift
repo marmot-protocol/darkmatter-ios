@@ -15,12 +15,17 @@ struct MessageLinkPolicyTests {
         URL(string: raw).map(MessageLinkPolicy.action(for:))
     }
 
-    @Test func whitenoiseDeepLinksRouteInApp() {
+    @Test func marmotDeepLinksRouteInApp() {
         #expect(action("\(DeepLink.scheme)://profile/\(validNpub)") == .openProfile(npub: validNpub))
         #expect(action("\(DeepLink.scheme)://chat/\(groupIdHex)") == .openChat(groupIdHex: groupIdHex))
     }
 
-    @Test func whitenoiseChatRejectsNonGroupIdPayloads() {
+    @Test func legacyWhiteNoiseDeepLinksRouteInApp() {
+        #expect(action("\(DeepLink.legacyScheme)://profile/\(validNpub)") == .openProfile(npub: validNpub))
+        #expect(action("\(DeepLink.legacyScheme)://chat/\(groupIdHex)") == .openChat(groupIdHex: groupIdHex))
+    }
+
+    @Test func marmotChatRejectsNonGroupIdPayloads() {
         #expect(action("\(DeepLink.scheme)://chat/abc") == .blocked)
         #expect(action("\(DeepLink.scheme)://unknown/route") == .blocked)
     }
@@ -40,15 +45,23 @@ struct MessageLinkPolicyTests {
     }
 
     @Test func externalSchemesAskForConfirmation() {
-        let otherFlavorScheme = DeepLink.scheme == "whitenoise-staging"
-            ? "whitenoise"
-            : "whitenoise-staging"
         for raw in [
             "https://example.com/a?b=c",
             "http://example.com",
             "mailto:a@b.com",
             "tel:+15551234567",
-            "\(otherFlavorScheme)://x",
+        ] {
+            let url = URL(string: raw)!
+            #expect(MessageLinkPolicy.action(for: url) == .confirmExternal(url), "url: \(raw)")
+        }
+    }
+
+    @Test func otherFlavorAppSchemesAskForConfirmation() {
+        let otherMarmotScheme = DeepLink.scheme == "marmot-staging" ? "marmot" : "marmot-staging"
+        let otherLegacyScheme = DeepLink.legacyScheme == "whitenoise-staging" ? "whitenoise" : "whitenoise-staging"
+        for raw in [
+            "\(otherMarmotScheme)://profile/\(validNpub)",
+            "\(otherLegacyScheme)://profile/\(validNpub)",
         ] {
             let url = URL(string: raw)!
             #expect(MessageLinkPolicy.action(for: url) == .confirmExternal(url), "url: \(raw)")
