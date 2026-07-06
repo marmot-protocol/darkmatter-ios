@@ -8,13 +8,13 @@ import PackageDescription
 // The iOS app depends on this package by adding it as a local package
 // reference inside Xcode (File → Add Package Dependencies… → Add Local…).
 //
-// To refresh the bundle from a new darkmatter build:
-//   1) Run `crates/marmot-uniffi/xcframework.sh` in the darkmatter repo.
+// To refresh the bundle from a new MDK build:
+//   1) Run `crates/marmot-uniffi/xcframework.sh` in the MDK repo.
 //   2) Copy `crates/marmot-uniffi/output/MarmotKit.xcframework` into this
 //      directory, replacing the existing one.
 //   3) Copy `crates/marmot-uniffi/output/MarmotKit.swift` into
 //      `Sources/MarmotKit/MarmotKit.swift`.
-//   4) Update `MARMOT_VERSION` with the new darkmatter commit SHA.
+//   4) Update `MARMOT_VERSION` with the new MDK commit SHA.
 
 let package = Package(
     name: "MarmotKit",

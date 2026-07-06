@@ -32,6 +32,8 @@ nonisolated enum AppContainerConfig {
         }
         return identifier
     }()
+    static let productDirectoryName = "White Noise"
+    static let legacyMarmotDirectoryName = "Marmot"
     static let marmotDirectoryName = "Marmot"
     static let seedRelays = [
         "wss://relay.eu.whitenoise.chat",
@@ -43,7 +45,9 @@ nonisolated enum AppContainerConfig {
     static let pushNotificationRelayHint = seedRelays[0]
 
     static func marmotRoot(in baseURL: URL) -> URL {
-        baseURL.appendingPathComponent(marmotDirectoryName, isDirectory: true)
+        baseURL
+            .appendingPathComponent(productDirectoryName, isDirectory: true)
+            .appendingPathComponent(marmotDirectoryName, isDirectory: true)
     }
 
     static func sharedBase(fileManager: FileManager = .default) -> URL? {
@@ -53,10 +57,13 @@ nonisolated enum AppContainerConfig {
     /// Resolves the on-disk root for the production Marmot store.
     ///
     /// The Marmot root lives only in the shared App Group container so the main
-    /// app and the Notification Service Extension read and write one store. If
-    /// that container is unavailable we throw rather than fall back to a
-    /// per-process location: a second path would silently fork runtime data
-    /// between the app and the extension. The caller surfaces a hard failure.
+    /// app and the Notification Service Extension read and write one store. The
+    /// MDK cutover deliberately uses `White Noise/Marmot` instead of migrating
+    /// the legacy top-level `Marmot` store, so users re-import their nsec into
+    /// a clean account home. If that container is unavailable we throw rather
+    /// than fall back to a per-process location: a second path would silently
+    /// fork runtime data between the app and the extension. The caller surfaces
+    /// a hard failure.
     static func productionMarmotRoot(fileManager: FileManager = .default) throws -> URL {
         guard let sharedBase = sharedBase(fileManager: fileManager) else {
             throw AppContainerError.appGroupContainerUnavailable

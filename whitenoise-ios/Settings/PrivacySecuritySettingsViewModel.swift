@@ -16,6 +16,8 @@ final class PrivacySecuritySettingsViewModel {
     var auditDeleting = false
     var showDeleteAuditLogsConfirmation = false
     var filesLoading = false
+    var telemetryErrorMessage: String?
+    var auditErrorMessage: String?
     var errorMessage: String?
     var savedAt: Date?
 
@@ -26,6 +28,8 @@ final class PrivacySecuritySettingsViewModel {
     func reload(using appState: AppState) async {
         filesLoading = true
         errorMessage = nil
+        telemetryErrorMessage = nil
+        auditErrorMessage = nil
         defer { filesLoading = false }
 
         do {
@@ -40,21 +44,21 @@ final class PrivacySecuritySettingsViewModel {
 
     func reloadAuditFiles(using appState: AppState) async {
         filesLoading = true
-        errorMessage = nil
+        auditErrorMessage = nil
         defer { filesLoading = false }
 
         do {
             guard let rows = try await appState.auditLogFileRows() else { return }
             auditFileRows = rows
         } catch {
-            errorMessage = error.localizedDescription
+            auditErrorMessage = error.localizedDescription
         }
     }
 
     func setTelemetryEnabled(_ enabled: Bool, using appState: AppState) async {
         guard let current = telemetrySettings else { return }
         telemetrySaving = true
-        errorMessage = nil
+        telemetryErrorMessage = nil
         telemetrySettings = current.updatingExportEnabled(enabled)
         defer { telemetrySaving = false }
 
@@ -67,13 +71,13 @@ final class PrivacySecuritySettingsViewModel {
         } catch {
             telemetrySettings = current
             Haptics.error()
-            errorMessage = error.localizedDescription
+            telemetryErrorMessage = error.localizedDescription
         }
     }
 
     func deleteAllAuditLogs(using appState: AppState) async {
         auditDeleting = true
-        errorMessage = nil
+        auditErrorMessage = nil
         defer { auditDeleting = false }
 
         do {
@@ -86,14 +90,14 @@ final class PrivacySecuritySettingsViewModel {
             await reloadAuditFiles(using: appState)
         } catch {
             Haptics.error()
-            errorMessage = error.localizedDescription
+            auditErrorMessage = error.localizedDescription
         }
     }
 
     func setAuditEnabled(_ enabled: Bool, using appState: AppState) async {
         guard let current = auditSettings else { return }
         auditSaving = true
-        errorMessage = nil
+        auditErrorMessage = nil
         auditSettings = PrivacyAuditSettingsProjection(enabled: enabled)
         defer { auditSaving = false }
 
@@ -107,7 +111,7 @@ final class PrivacySecuritySettingsViewModel {
         } catch {
             auditSettings = current
             Haptics.error()
-            errorMessage = error.localizedDescription
+            auditErrorMessage = error.localizedDescription
         }
     }
 }
