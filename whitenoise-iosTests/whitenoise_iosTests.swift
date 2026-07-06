@@ -1299,7 +1299,7 @@ struct TelemetryBuildConfigTests {
         #expect(runtime.resource?.serviceVersion == "2.0+9")
         #expect(runtime.resource?.serviceInstanceId == "install-a")
         #expect(runtime.resource?.deploymentEnvironment == "staging")
-        #expect(runtime.resource?.tenant == "WhiteNoise-ios")
+        #expect(runtime.resource?.tenant == "whitenoise-ios")
         #expect(runtime.resource?.osType == "darwin")
         #expect(runtime.resource?.osVersion == "26.0")
         #expect(runtime.resource?.deviceModelIdentifier == "iPhone99,9")
