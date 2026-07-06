@@ -88,7 +88,7 @@ struct TelemetryBuildConfig: Equatable {
                 serviceVersion: serviceVersion,
                 serviceInstanceId: installId,
                 deploymentEnvironment: deploymentEnvironment,
-                tenant: "WhiteNoise-ios",
+                tenant: "whitenoise-ios",
                 osType: "darwin",
                 osVersion: osVersion,
                 deviceModelIdentifier: deviceModelIdentifier
