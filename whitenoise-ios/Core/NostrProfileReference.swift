@@ -81,7 +81,7 @@ nonisolated enum NostrProfileReference {
 
     private static func reference(fromDeepLinkURLString raw: String) -> String? {
         guard let url = URL(string: raw),
-              url.scheme?.lowercased() == DeepLink.scheme
+              DeepLink.isKnownInteropScheme(url.scheme)
         else { return nil }
 
         let parts = url.pathComponents.filter { $0 != "/" }

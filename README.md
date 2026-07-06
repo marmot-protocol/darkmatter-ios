@@ -8,13 +8,13 @@
   SwiftUI interface. Rust cryptographic core. Generic APNS wakes. Local-first diagnostics.
 </p>
 
-White Noise iOS is the native iPhone client for the Dark Matter/Marmot secure messaging stack. The app gives iOS users a polished SwiftUI chat experience while delegating accounts, MLS group state, storage, relay catch-up, message processing, encrypted media, push-token cryptography, telemetry, and audit-log plumbing to the vendored `MarmotKit` UniFFI package.
+White Noise iOS is the native iPhone client for the MDK/Marmot secure messaging stack. The app gives iOS users a polished SwiftUI chat experience while delegating accounts, MLS group state, storage, relay catch-up, message processing, encrypted media, push-token cryptography, telemetry, and audit-log plumbing to the vendored `MarmotKit` UniFFI package.
 
 The project is intentionally split along the platform boundary: Swift owns presentation, navigation, lifecycle, notifications, and Apple integration; Marmot owns protocol state and durable encrypted data.
 
 ## What It Does
 
-- End-to-end encrypted MLS group messaging over the Dark Matter/Marmot relay stack.
+- End-to-end encrypted MLS group messaging over the MDK/Marmot relay stack.
 - Nostr identity flows: create/import local identities, display npubs, share profile deep links, and scan QR codes.
 - Rich conversations with markdown, replies, reactions, mentions, encrypted image attachments, read state, and group system events.
 - Multi-account chat lists, account switching, group management, profile publishing, and NIP-65/inbox relay editing.
@@ -28,7 +28,7 @@ The project is intentionally split along the platform boundary: Swift owns prese
 
 - SwiftUI owns the app shell, onboarding, settings, chat UI, navigation, sheets, toasts, and foreground/background lifecycle.
 - `AppState` is the observable hub for global app state. It owns the live `MarmotClient`, the active account, pending navigation, visible-chat tracking, notification subscriptions, native push sync, and runtime suspend/resume.
-- `MarmotKit` is generated from the sibling Dark Matter Rust repo. It exposes the Marmot runtime through UniFFI and ships here as a vendored xcframework plus generated Swift bindings.
+- `MarmotKit` is generated from the sibling MDK Rust repo. It exposes the Marmot runtime through UniFFI and ships here as a vendored xcframework plus generated Swift bindings.
 - `Shared/` compiles into both the app and the Notification Service Extension, so files there must remain extension-safe.
 - The Notification Service Extension opens the shared Marmot store, runs bounded relay catch-up, and projects local notification content without putting private metadata in the APNS payload.
 
@@ -48,21 +48,23 @@ The project is intentionally split along the platform boundary: Swift owns prese
 
 - Xcode with iOS 18+ SDK support.
 - Apple developer signing configured for device builds, APNS, App Groups, and the Notification Service Extension.
-- The sibling Dark Matter Rust repo at `../darkmatter` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
+- The sibling MDK Rust repo at `../mdk` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
 
 Production identifiers:
 
 - Main app bundle ID: `dev.ipf.whitenoise.ios`
 - Notification Service Extension bundle ID: `dev.ipf.whitenoise.ios.NotificationService`
 - App Group: `group.dev.ipf.whitenoise.ios`
-- URL scheme: `whitenoise`
+- URL scheme: `marmot`
+- Legacy URL scheme: `whitenoise`
 
 Staging identifiers:
 
 - Main app bundle ID: `dev.ipf.whitenoise.ios.staging`
 - Notification Service Extension bundle ID: `dev.ipf.whitenoise.ios.staging.NotificationService`
 - App Group: `group.dev.ipf.whitenoise.ios.staging`
-- URL scheme: `whitenoise-staging`
+- URL scheme: `marmot-staging`
+- Legacy URL scheme: `whitenoise-staging`
 
 ## Build And Test
 
@@ -120,7 +122,7 @@ xcodebuild -showdestinations \
 
 ## MarmotKit Bindings
 
-`Vendored/MarmotKit/MARMOT_VERSION` records the Dark Matter commit used for the current bindings.
+`Vendored/MarmotKit/MARMOT_VERSION` records the MDK commit used for the current bindings.
 
 Regenerate bindings after changes in `marmot-uniffi` or any Rust crate it depends on:
 
@@ -128,10 +130,10 @@ Regenerate bindings after changes in `marmot-uniffi` or any Rust crate it depend
 ./scripts/sync-bindings.sh
 ```
 
-Use `DARKMATTER_DIR` if the Rust checkout is not the sibling default:
+Use `MDK_DIR` if the Rust checkout is not the sibling default:
 
 ```sh
-DARKMATTER_DIR=/path/to/darkmatter ./scripts/sync-bindings.sh
+MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
 ```
 
 Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, regenerate, then validate the iOS app.
@@ -139,7 +141,7 @@ Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, re
 ## Privacy And Storage
 
 - APNS provider payloads stay generic. Sender names, account IDs, group IDs, message IDs, and plaintext are never sent to Apple.
-- The app and Notification Service Extension share the Marmot root through the App Group container.
+- The app and Notification Service Extension share the Marmot root through the App Group container. Current MDK builds use the `White Noise/Marmot` root and intentionally do not migrate the legacy top-level `Marmot` root or old secure-storage entries; users re-import their nsec after the cutover.
 - Marmot stores account secrets in the Keychain.
 - User defaults hold preferences such as active account, developer mode, recent reactions, and diagnostics self-check state.
 - Decrypted media cache files and temporary transcript exports use complete file protection.

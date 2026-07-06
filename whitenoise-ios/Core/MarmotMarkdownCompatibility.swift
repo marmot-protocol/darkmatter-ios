@@ -22,6 +22,7 @@ extension AppGroupRecordFfi {
         encryptedMedia: AppGroupEncryptedMediaComponentFfi,
         archived: Bool,
         pendingConfirmation: Bool,
+        selfMembership: SelfMembershipFfi = .member,
         welcomerAccountIdHex: String?,
         viaWelcomeMessageIdHex: String?
     ) {
@@ -40,8 +41,50 @@ extension AppGroupRecordFfi {
             disappearingMessageSecs: 0,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            selfMembership: selfMembership,
             welcomerAccountIdHex: welcomerAccountIdHex,
             viaWelcomeMessageIdHex: viaWelcomeMessageIdHex
+        )
+    }
+}
+
+extension ChatListRowFfi {
+    init(
+        groupIdHex: String,
+        archived: Bool,
+        pendingConfirmation: Bool,
+        title: String,
+        groupName: String,
+        avatarUrl: String?,
+        avatar: ChatListAvatarFfi?,
+        lastMessage: ChatListMessagePreviewFfi?,
+        unreadCount: UInt64,
+        hasUnread: Bool,
+        unreadMentionCount: UInt64,
+        unreadMention: Bool,
+        firstUnreadMessageIdHex: String?,
+        lastReadMessageIdHex: String?,
+        lastReadTimelineAt: UInt64?,
+        updatedAt: UInt64
+    ) {
+        self.init(
+            groupIdHex: groupIdHex,
+            archived: archived,
+            pendingConfirmation: pendingConfirmation,
+            title: title,
+            groupName: groupName,
+            avatarUrl: avatarUrl,
+            avatar: avatar,
+            lastMessage: lastMessage,
+            unreadCount: unreadCount,
+            hasUnread: hasUnread,
+            unreadMentionCount: unreadMentionCount,
+            unreadMention: unreadMention,
+            firstUnreadMessageIdHex: firstUnreadMessageIdHex,
+            lastReadMessageIdHex: lastReadMessageIdHex,
+            lastReadTimelineAt: lastReadTimelineAt,
+            updatedAt: updatedAt,
+            selfMembership: .member
         )
     }
 }

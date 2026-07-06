@@ -3,7 +3,8 @@
 
 WN_FLAVOR = staging
 WN_DISPLAY_NAME = WN Staging
-WN_URL_SCHEME = whitenoise-staging
+WN_URL_SCHEME = marmot-staging
+WN_LEGACY_URL_SCHEME = whitenoise-staging
 
 PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.whitenoise.ios.staging
 NSE_BUNDLE_IDENTIFIER = dev.ipf.whitenoise.ios.staging.NotificationService

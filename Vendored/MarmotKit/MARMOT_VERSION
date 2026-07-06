@@ -1,7 +1,7 @@
-darkmatter-sha: c38348d
-darkmatter-branch: master
-darkmatter-tag:
-built-at: 2026-06-29T15:27:55Z
+mdk-sha: 3d1f0bf3
+mdk-branch: master
+mdk-tag:
+built-at: 2026-07-06T07:03:16Z
 uniffi-version: 0.28.3
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
@@ -9,5 +9,5 @@ ios-deployment-target: 18.0
 
 Notes:
 - Regenerate with: whitenoise-ios/scripts/sync-bindings.sh
-- A "-dirty" suffix means the darkmatter working tree had uncommitted
+- A "-dirty" suffix means the MDK working tree had uncommitted
   changes when this bundle was built.

@@ -1,5 +1,5 @@
 // App target build settings shared by Debug and Release.
-// Put local secrets in Config/TelemetrySecrets.xcconfig. That file is ignored.
+// Put local secrets in Config/TelemetrySecrets.xcconfig (see TelemetrySecrets.xcconfig.example). That file is ignored.
 
 OTLP_TOKEN_WHITENOISE_IOS =
 AUDIT_LOG_TOKEN_WHITENOISE_IOS =

@@ -19,6 +19,12 @@ struct PrivacySecuritySettingsView: View {
                 if model.telemetrySaving {
                     ProgressView("Saving")
                 }
+
+                if let telemetryErrorMessage = model.telemetryErrorMessage {
+                    Text(telemetryErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             } header: {
                 Text("Telemetry")
             } footer: {
@@ -64,6 +70,12 @@ struct PrivacySecuritySettingsView: View {
 
                 if model.auditSaving {
                     ProgressView("Saving")
+                }
+
+                if let auditErrorMessage = model.auditErrorMessage {
+                    Text(auditErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             } header: {
                 Text("Audit Logging")

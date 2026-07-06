@@ -1,8 +1,8 @@
 import Foundation
 
 /// App deep links. Formats: `<scheme>://profile/<profile-ref>` and
-/// `<scheme>://chat/<groupIdHex>`, where `<scheme>` is the per-flavor URL
-/// scheme (`whitenoise` in production, `whitenoise-staging` in staging).
+/// `<scheme>://chat/<groupIdHex>`, where `<scheme>` is the per-flavor Marmot
+/// interop scheme (`marmot` in production, `marmot-staging` in staging).
 ///
 /// Used both for the QR codes the app generates and for routing inbound
 /// links — whether from the in-app scanner (which reads the raw string) or
@@ -14,14 +14,38 @@ nonisolated enum DeepLink: Equatable {
     case profile(npub: String)
     case chat(groupIdHex: String)
 
-    /// The URL scheme is flavor-specific (`whitenoise` vs.
-    /// `whitenoise-staging`) so side-by-side installs route their own links.
+    /// The URL scheme is flavor-specific (`marmot` vs. `marmot-staging`) so
+    /// side-by-side installs route their own links.
     /// Read from the Info.plist `WNURLScheme` key (`$(WN_URL_SCHEME)`),
     /// falling back to production.
     static let scheme: String =
         (Bundle.main.object(forInfoDictionaryKey: "WNURLScheme") as? String)
             .flatMap { $0.isEmpty ? nil : $0 }
+        ?? "marmot"
+
+    /// Legacy flavor-specific White Noise scheme. Registered so existing
+    /// links continue opening the app, but new generated links use `scheme`.
+    static let legacyScheme: String =
+        (Bundle.main.object(forInfoDictionaryKey: "WNLegacyURLScheme") as? String)
+            .flatMap { $0.isEmpty ? nil : $0 }
         ?? "whitenoise"
+
+    private static let knownInteropSchemes: Set<String> = [
+        "marmot", "marmot-staging",
+        "whitenoise", "whitenoise-staging",
+    ]
+
+    static func isKnownInteropScheme(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return isCurrentAppScheme(value) || knownInteropSchemes.contains(value.lowercased())
+    }
+
+    static func isCurrentAppScheme(_ value: String?) -> Bool {
+        guard let value else { return false }
+        let lowercased = value.lowercased()
+        return lowercased == scheme.lowercased()
+            || lowercased == legacyScheme.lowercased()
+    }
 
     var url: URL {
         switch self {
@@ -38,7 +62,7 @@ nonisolated enum DeepLink: Equatable {
         components.host = host
         components.percentEncodedPath = "/" + encodedPathComponent(pathComponent)
         guard let url = components.url else {
-            assertionFailure("Failed to build White Noise deep link")
+            assertionFailure("Failed to build Marmot deep link")
             return URL(fileURLWithPath: "/")
         }
         return url
@@ -52,9 +76,9 @@ nonisolated enum DeepLink: Equatable {
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     )
 
-    /// Parse a White Noise app URL.
+    /// Parse a Marmot/legacy White Noise app URL.
     static func parse(_ url: URL) -> DeepLink? {
-        guard url.scheme?.lowercased() == scheme else { return nil }
+        guard isKnownInteropScheme(url.scheme) else { return nil }
         let parts = url.pathComponents.filter { $0 != "/" }
         switch url.host?.lowercased() {
         case "profile":

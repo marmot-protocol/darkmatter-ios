@@ -3,7 +3,8 @@
 
 WN_FLAVOR = production
 WN_DISPLAY_NAME = White Noise
-WN_URL_SCHEME = whitenoise
+WN_URL_SCHEME = marmot
+WN_LEGACY_URL_SCHEME = whitenoise
 
 PRODUCT_BUNDLE_IDENTIFIER = dev.ipf.whitenoise.ios
 NSE_BUNDLE_IDENTIFIER = dev.ipf.whitenoise.ios.NotificationService
