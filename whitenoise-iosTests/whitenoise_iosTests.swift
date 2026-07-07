@@ -201,6 +201,15 @@ struct AppStateBootstrapTests {
         appState.reportNotificationSubscriptionError(sensitiveError)
         #expect(appState.activeToast?.id == firstToast.id)
 
+        appState.stopNotificationSubscription()
+        appState.reportNotificationSubscriptionError(sensitiveError)
+        #expect(appState.activeToast?.id == firstToast.id)
+
+        appState.startNotificationSubscription()
+        appState.reportNotificationSubscriptionError(sensitiveError)
+        #expect(appState.activeToast?.id == firstToast.id)
+        appState.stopNotificationSubscription()
+
         appState.noteNotificationSubscriptionDelivery()
         appState.reportNotificationSubscriptionError(sensitiveError)
 
@@ -1335,7 +1344,7 @@ struct NotificationSubscriptionRetryTests {
         #expect(snapshot.sleepDelays == [1, 1])
     }
 
-    @Test func idleSubscriptionResetsBackoffAfterFailures() async throws {
+    @Test func idleSubscriptionDoesNotResetBackoffAfterFailures() async throws {
         let probe = NotificationSubscriptionProbe(attempts: [
             .failure,
             .failure,
@@ -1357,7 +1366,7 @@ struct NotificationSubscriptionRetryTests {
         #expect(snapshot.subscribeAttempts == 4)
         #expect(snapshot.presentedNotificationKeys == ["notif-idle-reset"])
         #expect(snapshot.errorCount == 2)
-        #expect(snapshot.sleepDelays == [1, 2, 1, 1])
+        #expect(snapshot.sleepDelays == [1, 2, 4, 1])
     }
 
     @Test func backsOffConsecutiveFailuresAndResetsAfterNotification() async throws {
