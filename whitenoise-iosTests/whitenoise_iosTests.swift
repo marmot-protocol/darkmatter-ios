@@ -2801,6 +2801,17 @@ struct LocalNotificationSuppressionPolicyTests {
             visibleChat: nil
         ))
     }
+
+    @Test func archivedNotificationsAreNeverPresented() {
+        #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            isArchived: true,
+            appSceneActive: false,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: nil
+        ))
+    }
 }
 
 struct AgentStreamSecurityTests {
@@ -3246,6 +3257,32 @@ struct NotificationServiceProjectionTests {
         ))
     }
 
+    @Test func newDataCollectionShowsSingleRecordOverCapWithoutSummary() {
+        let total = NotificationServiceProjection.maxAdditionalPresentations + 2
+        let updates = (0..<total).map { index in
+            notificationUpdate(
+                notificationKey: "notif-\(index)",
+                previewText: "message-\(index)",
+                timestampMs: Int64(10_000 - index)
+            )
+        }
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: updates.shuffled(),
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(for: collection)
+
+        let expectedPresentations = updates.map {
+            LocalNotificationProjection.makePresentation(for: $0)!
+        }
+        #expect(decision == .decorate(
+            expectedPresentations.first!,
+            additionalPresentations: Array(expectedPresentations.dropFirst())
+        ))
+    }
+
     @Test func newDataCollectionCapsAdditionalPresentationsAndCoalescesOverflow() {
         let cap = NotificationServiceProjection.maxAdditionalPresentations
         let overflow = 5
@@ -3302,6 +3339,68 @@ struct NotificationServiceProjectionTests {
         #expect(summary.route.messageIdHex == nil)
     }
 
+    @Test func overflowSummariesStayOnTheirOwnNotificationRoutes() {
+        let cap = NotificationServiceProjection.maxAdditionalPresentations
+        let primary = notificationUpdate(
+            notificationKey: "primary",
+            accountRef: "account-a",
+            groupIdHex: "group-a",
+            timestampMs: 100_000
+        )
+        let shown = (0..<cap).map { index in
+            notificationUpdate(
+                notificationKey: "shown-\(index)",
+                accountRef: "account-a",
+                groupIdHex: "group-a",
+                timestampMs: Int64(90_000 - index)
+            )
+        }
+        let overflow = [
+            notificationUpdate(
+                notificationKey: "overflow-b-1",
+                conversationKey: "conv-b",
+                accountRef: "account-b",
+                groupIdHex: "group-b",
+                timestampMs: 80_000
+            ),
+            notificationUpdate(
+                notificationKey: "overflow-b-2",
+                conversationKey: "conv-b",
+                accountRef: "account-b",
+                groupIdHex: "group-b",
+                timestampMs: 79_000
+            ),
+            notificationUpdate(
+                notificationKey: "overflow-c-1",
+                conversationKey: "conv-c",
+                accountRef: "account-c",
+                groupIdHex: "group-c",
+                timestampMs: 78_000
+            )
+        ]
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: ([primary] + shown + overflow).shuffled(),
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(for: collection)
+
+        guard case let .decorate(_, additional) = decision else {
+            Issue.record("expected decorate decision, got \(decision)")
+            return
+        }
+
+        let summaries = Array(additional.dropFirst(cap))
+        #expect(summaries.map(\.route.accountRef) == ["account-b", "account-c"])
+        #expect(summaries.map(\.route.groupIdHex) == ["group-b", "group-c"])
+        #expect(summaries.map(\.threadIdentifier) == ["conv-b", "conv-c"])
+        #expect(summaries.map(\.body) == [
+            L10n.plural("%lld more messages", Int64(2)),
+            L10n.plural("%lld more messages", Int64(1))
+        ])
+    }
+
     @Test func boundedAdditionalPresentationsCoalescesOverflowWithoutDroppingRecords() {
         // Unit-level coverage of the bounding helper independent of FFI plumbing.
         let primary = LocalNotificationProjection.makePresentation(
@@ -3343,6 +3442,43 @@ struct NotificationServiceProjectionTests {
         #expect(bounded == additional)
     }
 
+    @Test func equalTimestampsUseStableOrdering() {
+        let updates = [
+            notificationUpdate(
+                notificationKey: "key-b",
+                accountRef: "account-b",
+                groupIdHex: "group-a",
+                timestampMs: 2_000
+            ),
+            notificationUpdate(
+                notificationKey: "key-a",
+                accountRef: "account-a",
+                groupIdHex: "group-z",
+                timestampMs: 2_000
+            ),
+            notificationUpdate(
+                notificationKey: "key-c",
+                accountRef: "account-b",
+                groupIdHex: "group-b",
+                timestampMs: 2_000
+            )
+        ]
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: updates,
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(for: collection)
+
+        guard case let .decorate(primary, additional) = decision else {
+            Issue.record("expected decorate decision, got \(decision)")
+            return
+        }
+        #expect(primary.identifier == "key-a")
+        #expect(additional.map(\.identifier) == ["key-b", "key-c"])
+    }
+
     @Test func disabledLocalNotificationsAreNotDecoratedByNSE() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
@@ -3358,6 +3494,36 @@ struct NotificationServiceProjectionTests {
         )
 
         #expect(decision == .fallback)
+    }
+
+    @Test func archivedNotificationsAreFilteredBeforeChoosingPresentation() {
+        let archivedNewer = notificationUpdate(
+            notificationKey: "archived-newer",
+            accountRef: "account-a",
+            groupIdHex: "group-archived",
+            timestampMs: 3_000
+        )
+        let visibleOlder = notificationUpdate(
+            notificationKey: "visible-older",
+            accountRef: "account-a",
+            groupIdHex: "group-visible",
+            timestampMs: 2_000
+        )
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [archivedNewer, visibleOlder],
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(
+            for: collection,
+            isArchived: { _, groupIdHex in groupIdHex == "group-archived" }
+        )
+
+        #expect(decision == .decorate(
+            LocalNotificationProjection.makePresentation(for: visibleOlder)!,
+            additionalPresentations: []
+        ))
     }
 
     @Test func disabledLocalNotificationsAreFilteredBeforeChoosingNewestPresentation() {

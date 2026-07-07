@@ -30,6 +30,7 @@ struct NotificationContentDecoratorTests {
         #expect(content.title == "Alice")
         #expect(content.body == "hello")
         #expect(content.threadIdentifier == "thread-1")
+        #expect(content.targetContentIdentifier == "id-1")
         #expect(content.sound == UNNotificationSound.default)
         #expect(content.userInfo["existing"] as? String == "keep")
         #expect(content.userInfo["k"] as? String == "v")
@@ -41,6 +42,7 @@ struct NotificationContentDecoratorTests {
         #expect(content.title == "Alice")
         #expect(content.body == "hello")
         #expect(content.threadIdentifier == "thread-1")
+        #expect(content.targetContentIdentifier == "id-1")
         #expect(content.sound == UNNotificationSound.default)
         #expect(content.userInfo["k"] as? String == "v")
     }

@@ -10,6 +10,7 @@ enum NotificationContentDecorator {
         content.body = presentation.body
         content.sound = .default
         content.threadIdentifier = presentation.threadIdentifier
+        content.targetContentIdentifier = presentation.identifier
         var userInfo = content.userInfo
         for (key, value) in presentation.userInfo {
             userInfo[key] = value

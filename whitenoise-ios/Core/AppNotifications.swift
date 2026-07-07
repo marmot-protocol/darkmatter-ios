@@ -130,12 +130,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        let content = UNMutableNotificationContent()
-        content.title = presentation.title
-        content.body = presentation.body
-        content.sound = .default
-        content.threadIdentifier = presentation.threadIdentifier
-        content.userInfo = presentation.userInfo
+        let content = NotificationContentDecorator.makeContent(for: presentation)
 
         let request = UNNotificationRequest(
             identifier: presentation.identifier,
@@ -146,7 +141,10 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         do {
             try await center.add(request)
         } catch {
-            appState?.present(.error(L10n.string("Notification failed"), message: error.localizedDescription))
+            appState?.present(.error(
+                L10n.string("Notification failed"),
+                message: L10n.string("We'll keep trying in the background.")
+            ))
         }
     }
 
@@ -156,11 +154,19 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     ) async -> UNNotificationPresentationOptions {
         if let route = LocalNotificationProjection.route(
             from: notification.request.content.userInfo
-        ), appState?.isViewingNotificationDestination(
-            accountRef: route.accountRef,
-            groupIdHex: route.groupIdHex
-        ) == true {
-            return []
+        ) {
+            let localNotificationsEnabled = await appState?.client?
+                .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
+            guard NotificationPresentationPolicy.shouldPresent(
+                localNotificationsEnabled: localNotificationsEnabled,
+                appSceneActive: appState?.isAppSceneActive ?? true,
+                updateAccountRef: route.accountRef,
+                updateGroupIdHex: route.groupIdHex,
+                visibleAccountRef: appState?.visibleChat?.accountRef,
+                visibleGroupIdHex: appState?.visibleChat?.groupIdHex
+            ) else {
+                return []
+            }
         }
         return [.banner, .list, .sound]
     }

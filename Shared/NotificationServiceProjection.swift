@@ -59,36 +59,18 @@ nonisolated enum NotificationServiceProjection {
     // per record inside the extension's tight time budget risks expiration and floods
     // the user. Mirrors the bounding applied to other large/untrusted collections
     // (e.g. `DuckDuckGoImageSearchClient.maximumResultCount`).
-    static let maxAdditionalPresentations = 8
+    static let maxAdditionalPresentations = NotificationPresentationPolicy.maxAdditionalPresentations
 
     static func decision(
         for collection: BackgroundNotificationCollectionFfi,
-        localNotificationsEnabled: (String) -> Bool = { _ in true }
+        localNotificationsEnabled: (String) -> Bool = { _ in true },
+        isArchived: (String, String) -> Bool = { _, _ in false }
     ) -> NotificationServiceRenderDecision {
-        switch collection.status {
-        case .newData:
-            let presentations = collection.notifications
-                .filter({ !$0.isFromSelf && localNotificationsEnabled($0.accountRef) })
-                .sorted(by: { $0.timestampMs > $1.timestampMs })
-                .compactMap(LocalNotificationProjection.makePresentation(for:))
-            guard let presentation = presentations.first
-            else {
-                // An NSE cannot cancel an alerting APNS push after delivery; a
-                // generic fallback is safer than handing iOS blank content.
-                return .fallback
-            }
-            return .decorate(
-                presentation,
-                additionalPresentations: boundedAdditionalPresentations(
-                    after: presentation,
-                    from: Array(presentations.dropFirst())
-                )
-            )
-        case .noData:
-            return .fallback
-        case .failed:
-            return .fallback
-        }
+        NotificationPresentationPolicy.serviceDecision(
+            for: collection,
+            localNotificationsEnabled: localNotificationsEnabled,
+            isArchived: isArchived
+        )
     }
 
     // Caps how many additional records the NSE adds individually and folds any
@@ -100,40 +82,19 @@ nonisolated enum NotificationServiceProjection {
         after primary: LocalNotificationPresentation,
         from additional: [LocalNotificationPresentation]
     ) -> [LocalNotificationPresentation] {
-        guard additional.count > maxAdditionalPresentations else {
-            return additional
-        }
-
-        let shown = Array(additional.prefix(maxAdditionalPresentations))
-        let overflowCount = additional.count - shown.count
-        guard overflowCount > 0 else { return shown }
-
-        return shown + [summaryPresentation(after: primary, overflowCount: overflowCount)]
+        NotificationPresentationPolicy.boundedAdditionalPresentations(
+            after: primary,
+            from: additional
+        )
     }
 
     static func summaryPresentation(
         after primary: LocalNotificationPresentation,
         overflowCount: Int
     ) -> LocalNotificationPresentation {
-        // Route the summary to the newest conversation so a tap opens somewhere
-        // sane, but give it a distinct synthetic key so it never collides with or
-        // dedupes against a real message presentation. No message content is
-        // included; only a coalesced count, so nothing extra is leaked.
-        let route = LocalNotificationRoute(
-            accountRef: primary.route.accountRef,
-            groupIdHex: primary.route.groupIdHex,
-            notificationKey: "\(primary.route.notificationKey):+\(overflowCount)-more",
-            messageIdHex: nil
-        )
-
-        return LocalNotificationPresentation(
-            identifier: route.notificationKey,
-            threadIdentifier: primary.threadIdentifier,
-            title: L10n.string("White Noise"),
-            body: L10n.plural("%lld more messages", Int64(overflowCount)),
-            route: route,
-            timestamp: primary.timestamp,
-            userInfo: LocalNotificationProjection.userInfo(for: route)
+        NotificationPresentationPolicy.summaryPresentation(
+            after: primary,
+            overflowCount: overflowCount
         )
     }
 }
