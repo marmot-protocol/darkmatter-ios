@@ -250,7 +250,9 @@ nonisolated enum MessageSemantics {
               plaintextSha256.isHexByteString(byteCount: 32),
               nonce.isHexByteString(byteCount: 12),
               !fileName.isEmpty,
+              isWithinByteLimit(fileName, maxImetaFileNameBytes),
               !mediaType.isEmpty,
+              isWithinByteLimit(mediaType, maxImetaMediaTypeBytes),
               version == encryptedMediaVersion,
               dim.map(isValidMediaDim) ?? true
         else { return nil }
@@ -327,6 +329,16 @@ nonisolated enum MessageSemantics {
               (0x31...0x39).contains(first)
         else { return false }
         return bytes.dropFirst().allSatisfy(isAsciiDigit)
+    }
+
+    // UTF-8 byte caps for peer-controlled imeta strings, mirroring the
+    // thumbhash (1...128) / dim bounds. 255 ~ a generous filename; 127 a
+    // generous canonical "type/subtype".
+    static let maxImetaFileNameBytes = 255
+    static let maxImetaMediaTypeBytes = 127
+
+    private static func isWithinByteLimit(_ value: String, _ max: Int) -> Bool {
+        value.utf8.count <= max
     }
 
     private static func isValidMediaThumbhash(_ raw: String) -> Bool {
