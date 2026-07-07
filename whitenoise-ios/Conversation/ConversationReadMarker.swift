@@ -25,6 +25,7 @@ final class ConversationReadMarker {
     private var pendingReadMessageIds: [String] = []
     private var pendingReadMessageIdSet: Set<String> = []
     private var readMarkTask: Task<Void, Never>?
+    private var readMarkTaskID: UUID?
 
     init(
         groupIdHex: String,
@@ -81,7 +82,7 @@ final class ConversationReadMarker {
         var retained = pending
         let remainingCapacity = max(0, boundedLimit - retained.count)
         if remainingCapacity > 0 {
-            for messageId in loaded.subtracting(retained).prefix(remainingCapacity) {
+            for messageId in loaded.subtracting(retained).sorted().prefix(remainingCapacity) {
                 retained.insert(messageId)
             }
         }
@@ -114,21 +115,30 @@ final class ConversationReadMarker {
 
     private func scheduleReadMarkFlush(accountRef: String) {
         guard readMarkTask == nil else { return }
+        let taskID = UUID()
+        readMarkTaskID = taskID
         readMarkTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: Self.readMarkCoalescingDelayNanoseconds)
-            guard !Task.isCancelled else { return }
-            await self?.flushPendingReadMarks(accountRef: accountRef)
+            defer {
+                if self?.readMarkTaskID == taskID {
+                    self?.readMarkTask = nil
+                    self?.readMarkTaskID = nil
+                }
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.readMarkCoalescingDelayNanoseconds)
+                guard !Task.isCancelled else { return }
+                guard await self?.flushPendingReadMarks(accountRef: accountRef) == true else { return }
+            }
         }
     }
 
-    private func flushPendingReadMarks(accountRef: String) async {
-        readMarkTask = nil
+    private func flushPendingReadMarks(accountRef: String) async -> Bool {
         let messageIds = pendingReadMessageIds
         pendingReadMessageIds = []
         guard !messageIds.isEmpty else {
             pendingReadMessageIdSet = []
             pruneMarkedReadMessageIds(force: true)
-            return
+            return false
         }
         defer {
             pendingReadMessageIdSet.subtract(messageIds)
@@ -136,11 +146,11 @@ final class ConversationReadMarker {
         }
         guard let appState, appState.canUseRuntimeForForegroundWork else {
             markedReadMessageIds.subtract(messageIds)
-            return
+            return false
         }
         guard appState.activeAccountRef == accountRef else {
             markedReadMessageIds.subtract(messageIds)
-            return
+            return false
         }
 
         do {
@@ -160,14 +170,13 @@ final class ConversationReadMarker {
             markedReadMessageIds.subtract(messageIds)
         }
 
-        if !pendingReadMessageIds.isEmpty, appState.activeAccountRef == accountRef {
-            scheduleReadMarkFlush(accountRef: accountRef)
-        }
+        return !pendingReadMessageIds.isEmpty && appState.activeAccountRef == accountRef
     }
 
     func cancelPendingReadMarks() {
         readMarkTask?.cancel()
         readMarkTask = nil
+        readMarkTaskID = nil
         if !pendingReadMessageIdSet.isEmpty {
             markedReadMessageIds.subtract(pendingReadMessageIdSet)
         }
