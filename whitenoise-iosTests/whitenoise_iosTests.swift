@@ -620,6 +620,45 @@ struct AppStateBootstrapTests {
         resetPersistedActiveAccountRef()
     }
 
+    /// #473: iOS may fire the background-task expiration handler while Marmot
+    /// teardown is still closing the App Group store. Expiration should keep the
+    /// task tied to suspension completion instead of ending it immediately.
+    @Test func backgroundTaskExpirationWaitsForRuntimeSuspensionBeforeEnding() async throws {
+        let checkpoint = AsyncTestCheckpoint()
+        let taskID = UIBackgroundTaskIdentifier(rawValue: 42)
+        let suspensionTask = Task {
+            await checkpoint.pause()
+        }
+
+        var capturedExpirationHandler: (() -> Void)?
+        var endedTaskIDs: [UIBackgroundTaskIdentifier] = []
+        let backgroundTask = BackgroundRuntimeSuspensionTask(
+            name: "Suspend Marmot runtime",
+            beginBackgroundTask: { name, expirationHandler in
+                #expect(name == "Suspend Marmot runtime")
+                capturedExpirationHandler = expirationHandler
+                return taskID
+            },
+            endBackgroundTask: { endedTaskID in
+                endedTaskIDs.append(endedTaskID)
+            }
+        )
+        backgroundTask.endWhenSuspensionCompletes(suspensionTask)
+        await checkpoint.waitUntilPaused()
+
+        capturedExpirationHandler?()
+        await Task.yield()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(endedTaskIDs.isEmpty)
+
+        await checkpoint.release()
+        await suspensionTask.value
+        try await waitForExpectation {
+            endedTaskIDs == [taskID]
+        }
+    }
+
     @Test func bootstrapWhileSceneInactiveReArmsSuspensionInOnboarding() async throws {
         let appState = try testAppState()
 
