@@ -57,6 +57,12 @@ struct NewChatSheet: View {
                 }
             }
             .interactiveDismissDisabled(model.isCreating)
+            .memberPickerScanner(
+                model: model.memberPicker,
+                scanInvalidMessage: L10n.string("That QR code isn't a White Noise profile."),
+                normalize: { try await appState.currentMarmotClient().normalizeMemberRef(memberRef: $0) },
+                warmProfile: { _ = appState.profile(forAccountIdHex: $0) }
+            )
         }
     }
 }

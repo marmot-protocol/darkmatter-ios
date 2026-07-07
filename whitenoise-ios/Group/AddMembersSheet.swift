@@ -38,6 +38,11 @@ struct AddMembersSheet: View {
                 }
             }
             .interactiveDismissDisabled(model.isInviting)
+            .memberPickerScanner(
+                model: memberPicker,
+                normalize: normalize,
+                warmProfile: { _ = appState.profile(forAccountIdHex: $0) }
+            )
         }
     }
 }

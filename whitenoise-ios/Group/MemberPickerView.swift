@@ -54,7 +54,36 @@ struct MemberPickerView: View {
                 Label("Scan QR code", systemImage: "qrcode.viewfinder")
             }
         }
-        .fullScreenCover(isPresented: $model.showScanner) {
+
+        if let error = model.error {
+            Section {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var warmProfile: MemberPickerViewModel.ProfileWarmup {
+        { _ = appState.profile(forAccountIdHex: $0) }
+    }
+}
+
+extension View {
+    /// Present the member-picker QR scanner from a stable ancestor (e.g.
+    /// `NavigationStack`). Attaching `fullScreenCover` to a `Form` `Section`
+    /// dismisses immediately when the form re-renders (#555).
+    func memberPickerScanner(
+        model: MemberPickerViewModel,
+        scanInvalidMessage: String? = nil,
+        normalize: @escaping MemberPickerViewModel.Normalize,
+        warmProfile: @escaping MemberPickerViewModel.ProfileWarmup
+    ) -> some View {
+        fullScreenCover(
+            isPresented: Binding(
+                get: { model.showScanner },
+                set: { model.showScanner = $0 }
+            )
+        ) {
             ScannerSheet { result in
                 model.showScanner = false
                 Task {
@@ -68,16 +97,5 @@ struct MemberPickerView: View {
             }
             .appAppearance()
         }
-
-        if let error = model.error {
-            Section {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-            }
-        }
-    }
-
-    private var warmProfile: MemberPickerViewModel.ProfileWarmup {
-        { _ = appState.profile(forAccountIdHex: $0) }
     }
 }
