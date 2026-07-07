@@ -284,7 +284,8 @@ final class ConversationViewModel {
             state: managementState,
             members: members,
             groupMemberDetails: groupMemberDetails,
-            myAccountId: myAccountId
+            myAccountId: myAccountId,
+            fallbackSelfMembership: group.selfMembership
         )
     }
 
@@ -475,6 +476,29 @@ final class ConversationViewModel {
         startLiveGroupState(accountRef: accountRef)
         startDeferredGroupDetails(accountRef: accountRef)
         startDeferredReadState()
+    }
+
+    func prepareForLocalGroupRemoval() {
+        stopLiveSubscriptions()
+    }
+
+    func markSelfLeft() {
+        let previousIdentity = groupMlsRefreshIdentity
+        var updatedGroup = group
+        updatedGroup.selfMembership = .left
+        group = updatedGroup
+        if let state = managementState {
+            managementState = GroupManagementStateFfi(
+                myAccountIdHex: state.myAccountIdHex,
+                isSelfAdmin: false,
+                isLastAdmin: false,
+                canInvite: false,
+                canLeave: false,
+                requiresSelfDemoteBeforeLeave: false,
+                memberActions: state.memberActions.filter { !$0.isSelf }
+            )
+        }
+        bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
     }
 
     func markReadIfVisible(_ record: AppMessageRecordFfi) async {

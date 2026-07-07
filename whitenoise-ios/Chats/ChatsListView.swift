@@ -80,7 +80,19 @@ struct ChatsListView: View {
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
                 if let viewModel {
-                    ChatDestination(target: target, viewModel: viewModel, appState: appState)
+                    ChatDestination(
+                        target: target,
+                        viewModel: viewModel,
+                        appState: appState,
+                        onGroupLeft: { groupIdHex in
+                            viewModel.markGroupLeft(groupIdHex: groupIdHex)
+                            path.removeAll { $0.groupIdHex == groupIdHex }
+                        },
+                        onGroupDeleted: { groupIdHex in
+                            viewModel.removeChatListRow(groupIdHex: groupIdHex)
+                            path.removeAll { $0.groupIdHex == groupIdHex }
+                        }
+                    )
                 }
             }
             .sheet(isPresented: $showNewChat) {
@@ -483,8 +495,8 @@ struct ChatsListView: View {
                 groupIdHex: groupIdHex
             )
             // The chats subscription only fires on transport events, not local
-            // projection writes, so drop the left group's row immediately.
-            viewModel?.removeChatListRow(groupIdHex: groupIdHex)
+            // projection writes, so reflect the inactive local-history state.
+            viewModel?.markGroupLeft(groupIdHex: groupIdHex)
             Haptics.warning()
         } catch {
             Haptics.error()
@@ -522,6 +534,8 @@ private struct ChatDestination: View {
     let target: ChatsListView.ChatNavigationTarget
     let viewModel: ChatsListViewModel
     let appState: AppState
+    let onGroupLeft: (String) -> Void
+    let onGroupDeleted: (String) -> Void
     @State private var timedOut = false
 
     private var item: ChatsListViewModel.Item? {
@@ -536,7 +550,9 @@ private struct ChatDestination: View {
                 initialTargetMessageIdHex: target.messageIdHex,
                 initialAppState: appState,
                 onChatListRowUpdated: { viewModel.applyChatListRow($0) },
-                onGroupChanged: { viewModel.applyLocalGroupChange($0) }
+                onGroupChanged: { viewModel.applyLocalGroupChange($0) },
+                onGroupLeft: onGroupLeft,
+                onGroupDeleted: onGroupDeleted
             )
         } else if timedOut {
             // A slow network can take longer than the spin-wait to deliver the

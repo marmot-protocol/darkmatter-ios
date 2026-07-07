@@ -4458,6 +4458,18 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.isActiveMember == false)
     }
 
+    @Test func markGroupLeftPreservesInactiveHistoryRow() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: hex("df"), title: "Left group")
+        viewModel.applyChatListSnapshot([row])
+
+        viewModel.markGroupLeft(groupIdHex: row.groupIdHex)
+
+        #expect(viewModel.items.map(\.id) == [row.groupIdHex])
+        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.isActiveMember == false)
+    }
+
     @Test func chatListRemoveUpdateDropsProjectedRow() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let kept = chatListRow(groupIdHex: hex("d1"), title: "Keep")
@@ -9083,8 +9095,8 @@ private func chatListRow(
         lastMessage: lastMessage,
         unreadCount: unreadCount,
         hasUnread: unreadCount > 0,
-        unreadMentionCount: 0,
-        unreadMention: false,
+        unreadMentionCount: unreadMentionCount,
+        unreadMention: unreadMention,
         firstUnreadMessageIdHex: firstUnreadMessageIdHex,
         lastReadMessageIdHex: lastReadMessageIdHex,
         lastReadTimelineAt: lastReadTimelineAt,

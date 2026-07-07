@@ -33,10 +33,14 @@ final class GroupDetailsViewModel {
     // before any method runs.
     @ObservationIgnored var conversation: ConversationViewModel?
     @ObservationIgnored var onGroupChanged: (AppGroupRecordFfi) -> Void = { _ in }
+    @ObservationIgnored var onGroupLeft: (String) -> Void = { _ in }
+    @ObservationIgnored var onGroupDeleted: (String) -> Void = { _ in }
 #if DEBUG
     @ObservationIgnored var setGroupArchivedForTesting: (@MainActor (String, String, Bool) async throws -> AppGroupRecordFfi)?
     @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupAvatarUrlForTesting: (@MainActor (String, String, String?) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var leaveGroupForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var deleteGroupLocalForTesting: (@MainActor (String, String) async throws -> Bool)?
 #endif
 
     func invite(refs: [String], using appState: AppState) async throws {
@@ -300,7 +304,7 @@ final class GroupDetailsViewModel {
         }
     }
 
-    func leave(using appState: AppState, dismiss: DismissAction) async {
+    func leave(using appState: AppState, dismiss: () -> Void) async {
         guard let conversation, let accountRef = appState.activeAccountRef else { return }
         guard GroupManagementPresentation.canLeave(
             state: conversation.managementState,
@@ -316,6 +320,7 @@ final class GroupDetailsViewModel {
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
         do {
+            let groupIdHex = conversation.group.groupIdHex
             let client = try appState.currentMarmotClient()
             if GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: conversation.managementState) {
                 if let myAccountId = conversation.managementState?.myAccountIdHex {
@@ -330,16 +335,72 @@ final class GroupDetailsViewModel {
                 await refreshVisibleDebugState(using: appState)
             }
             appState.present(.warning(L10n.string("Leaving group…"), message: L10n.string("Publishing group update.")))
+#if DEBUG
+            if let leaveGroupForTesting {
+                _ = try await leaveGroupForTesting(accountRef, groupIdHex)
+            } else {
+                _ = try await client.leaveGroup(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+            }
+#else
             _ = try await client.leaveGroup(
                 accountRef: accountRef,
-                groupIdHex: conversation.group.groupIdHex
+                groupIdHex: groupIdHex
             )
+#endif
+            conversation.markSelfLeft()
+            onGroupChanged(conversation.group)
             Haptics.warning()
             appState.present(.warning(L10n.string("You left the group")))
             dismiss()
+            onGroupLeft(groupIdHex)
         } catch {
             await refreshAfterFailedMutation(using: appState)
             handleActionError(error, title: L10n.string("Couldn't leave group"), using: appState)
+        }
+    }
+
+    func deleteLocal(using appState: AppState, dismiss: () -> Void) async {
+        guard let conversation, let accountRef = appState.activeAccountRef else { return }
+        guard !conversation.canSendMessages else {
+            actionError = "Leave this group before deleting the local copy."
+            return
+        }
+        guard !membershipActionInFlight else { return }
+        let groupIdHex = conversation.group.groupIdHex
+        membershipActionInFlight = true
+        var preparedForRemoval = false
+        defer { membershipActionInFlight = false }
+        do {
+            conversation.prepareForLocalGroupRemoval()
+            preparedForRemoval = true
+#if DEBUG
+            if let deleteGroupLocalForTesting {
+                _ = try await deleteGroupLocalForTesting(accountRef, groupIdHex)
+            } else {
+                let client = try appState.currentMarmotClient()
+                _ = try await client.deleteGroupLocal(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            _ = try await client.deleteGroupLocal(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex
+            )
+#endif
+            Haptics.warning()
+            dismiss()
+            onGroupDeleted(groupIdHex)
+        } catch {
+            if preparedForRemoval {
+                await conversation.start()
+            }
+            handleActionError(error, title: L10n.string("Couldn't delete chat"), using: appState)
         }
     }
 
