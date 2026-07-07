@@ -72,6 +72,39 @@ struct MemberPickerTests {
         #expect(warmedAccounts.isEmpty)
     }
 
+    @Test func blockedPendingInputShowsMessageAndDoesNotStage() async {
+        let picker = MemberPickerViewModel()
+        let account = hex("33")
+        picker.pending = account
+
+        let result = await picker.addPending(
+            excludedAccountIds: [account],
+            excludedMemberMessage: "blocked member",
+            normalize: { stagedMember(accountIdHex: $0) }
+        )
+
+        #expect(!result)
+        #expect(picker.members.isEmpty)
+        #expect(picker.pending == account)
+        #expect(picker.error == "blocked member")
+    }
+
+    @Test func autoStageLeavesBlockedCompleteReferencePendingWithoutError() async {
+        let picker = MemberPickerViewModel()
+        let account = hex("34")
+        picker.pending = account
+
+        await picker.autoStagePendingIfComplete(
+            excludedAccountIds: [account],
+            excludedMemberMessage: "blocked member",
+            normalize: { stagedMember(accountIdHex: $0) }
+        )
+
+        #expect(picker.members.isEmpty)
+        #expect(picker.pending == account)
+        #expect(picker.error == nil)
+    }
+
     @Test func pendingInputDeduplicatesAgainstMembersAddedDuringNormalizeAwait() async {
         let picker = MemberPickerViewModel()
         let account = hex("44")
@@ -161,6 +194,30 @@ struct MemberPickerTests {
         #expect(AddMembersPresentation.canInvite(stagedCount: 1, hasPendingText: false, isInviting: false))
         #expect(!AddMembersPresentation.canInvite(stagedCount: 0, hasPendingText: false, isInviting: false))
         #expect(!AddMembersPresentation.canInvite(stagedCount: 1, hasPendingText: true, isInviting: true))
+    }
+
+    @Test func inviteExclusionsIncludeSelfAndCurrentGroupMembers() {
+        let selfId = hex("11")
+        let appMember = hex("22")
+        let detailMember = hex("33")
+
+        let exclusions = AddMembersPresentation.excludedInviteAccountIds(
+            activeAccountIdHex: selfId,
+            members: [AppGroupMemberRecordFfi(memberIdHex: appMember, account: nil, local: false)],
+            groupMemberDetails: [
+                GroupMemberDetailsFfi(
+                    memberIdHex: detailMember,
+                    account: nil,
+                    local: false,
+                    isAdmin: false,
+                    isSelf: false,
+                    npub: "npub-\(detailMember)",
+                    displayName: nil
+                ),
+            ]
+        )
+
+        #expect(exclusions == [selfId, appMember, detailMember])
     }
 
     @Test func isCompleteReferenceRecognizesFinishedReferences() {

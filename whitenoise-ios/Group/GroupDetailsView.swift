@@ -69,7 +69,13 @@ struct GroupDetailsView: View {
         .sheet(isPresented: $model.showAddMembers) {
             AddMembersSheet(
                 normalize: { try await appState.currentMarmotClient().normalizeMemberRef(memberRef: $0) },
-                onSubmit: { refs in try await model.invite(refs: refs, using: appState) }
+                onSubmit: { refs in try await model.invite(refs: refs, using: appState) },
+                excludedAccountIds: AddMembersPresentation.excludedInviteAccountIds(
+                    activeAccountIdHex: appState.activeAccount?.accountIdHex,
+                    members: viewModel.members,
+                    groupMemberDetails: viewModel.groupMemberDetails
+                ),
+                excludedMemberMessage: AddMembersPresentation.existingMemberMessage
             )
             .appAppearance()
         }
