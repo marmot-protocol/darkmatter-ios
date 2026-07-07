@@ -40,52 +40,6 @@ nonisolated enum NotificationSettingsActionApplyPolicy {
     }
 }
 
-/// Serializes notification settings actions so only one mutating operation runs
-/// at a time. The view disables controls while saving, but each button launches
-/// its own async `Task`, so rapid taps or re-entrant calls can still arrive
-/// concurrently. This gate is the single source of truth for "is an action in
-/// flight": `tryBegin()` returns `false` when one already is, so the caller
-/// returns early instead of starting an overlapping mutation. Extracted as a
-/// small value type so the re-entrancy contract can be unit tested without an
-/// `AppState`.
-@MainActor
-struct NotificationActionGate {
-    private(set) var isRunning = false
-    private var generation = 0
-
-    /// Attempts to claim the gate. Returns `true` and marks it running when no
-    /// action is in flight; returns `false` when one already is (caller must not
-    /// proceed). The check-and-set is a single synchronous step on the MainActor,
-    /// so two concurrent tasks cannot both observe `false` and both begin.
-    mutating func tryBegin() -> Bool {
-        guard !isRunning else { return false }
-        generation += 1
-        isRunning = true
-        return true
-    }
-
-    /// Returns a ticket that lets a reload apply only if no action starts before
-    /// its awaited reads finish. Reloads do not claim the mutating-action gate,
-    /// but stale reload completions are discarded instead of overwriting a newer
-    /// action result. `generation` is intentionally bumped on both `tryBegin()`
-    /// and `end()` so a ticket issued before an action cannot become valid again
-    /// after that action completes.
-    func reloadTicket() -> Int? {
-        guard !isRunning else { return nil }
-        return generation
-    }
-
-    func canApplyReload(startedAt ticket: Int) -> Bool {
-        !isRunning && generation == ticket
-    }
-
-    /// Releases the gate so the next action may begin.
-    mutating func end() {
-        generation += 1
-        isRunning = false
-    }
-}
-
 /// Screen store for `NotificationSettingsView`: owns the notification settings /
 /// push-registration / authorization state and the toggle/refresh/sync actions,
 /// so the view is pure rendering. The push orchestration lives in AppState's
@@ -108,7 +62,7 @@ final class NotificationSettingsViewModel {
     var errorMessage: String?
     var savedAt: Date?
 
-    private var actionGate = NotificationActionGate()
+    private var actionGate = AsyncActionGate()
     private var reloadRequestedAfterAction = false
 
     /// Whether a mutating action is currently in flight. Mirrors the action gate

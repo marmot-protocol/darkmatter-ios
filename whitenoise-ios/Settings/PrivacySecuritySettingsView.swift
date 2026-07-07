@@ -66,7 +66,7 @@ struct PrivacySecuritySettingsView: View {
                 )) {
                     Label("Audit Logging", systemImage: "doc.text.magnifyingglass")
                 }
-                .disabled(model.auditSaving || model.auditSettings == nil)
+                .disabled(model.auditToggleDisabled)
 
                 if model.auditSaving {
                     ProgressView("Saving")
@@ -104,7 +104,7 @@ struct PrivacySecuritySettingsView: View {
                     } label: {
                         Label("Delete All Audit Logs", systemImage: "trash")
                     }
-                    .disabled(model.auditDeleting || model.auditSaving)
+                    .disabled(model.auditDeleteDisabled)
                 }
 
                 if model.auditDeleting {

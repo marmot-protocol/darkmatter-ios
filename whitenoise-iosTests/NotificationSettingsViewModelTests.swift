@@ -5,19 +5,19 @@ import UserNotifications
 @testable import whitenoise_ios
 
 /// Focused coverage for the re-entrancy contract behind `NotificationSettingsViewModel`.
-/// The view model funnels every mutating action through `NotificationActionGate`, so
+/// The view model funnels every mutating action through `AsyncActionGate`, so
 /// these tests pin the gate's serialization guarantee directly — no `AppState` needed.
 @MainActor
-struct NotificationActionGateTests {
+struct AsyncActionGateTests {
     @Test func tryBeginSucceedsWhenIdle() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         #expect(gate.isRunning == false)
         #expect(gate.tryBegin() == true)
         #expect(gate.isRunning == true)
     }
 
     @Test func tryBeginRejectsWhileRunning() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         #expect(gate.tryBegin() == true)
         // A second action arriving while the first is in flight must be rejected,
         // so it cannot start an overlapping mutation.
@@ -26,7 +26,7 @@ struct NotificationActionGateTests {
     }
 
     @Test func endReleasesGateForNextAction() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         #expect(gate.tryBegin() == true)
         gate.end()
         #expect(gate.isRunning == false)
@@ -35,7 +35,7 @@ struct NotificationActionGateTests {
     }
 
     @Test func repeatedRejectionsDoNotReleaseTheGate() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         #expect(gate.tryBegin() == true)
         // Rapid repeated taps each fail and leave the in-flight action's claim intact.
         #expect(gate.tryBegin() == false)
@@ -47,13 +47,13 @@ struct NotificationActionGateTests {
     }
 
     @Test func reloadTicketIsUnavailableWhileActionIsRunning() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         #expect(gate.tryBegin() == true)
         #expect(gate.reloadTicket() == nil)
     }
 
     @Test func actionStartInvalidatesExistingReloadTicket() {
-        var gate = NotificationActionGate()
+        var gate = AsyncActionGate()
         let ticket = gate.reloadTicket()
         #expect(ticket != nil)
         #expect(gate.canApplyReload(startedAt: ticket!) == true)
