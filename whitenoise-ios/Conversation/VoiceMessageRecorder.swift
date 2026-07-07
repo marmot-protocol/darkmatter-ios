@@ -341,8 +341,7 @@ struct VoiceRecordingBanner: View {
     }
 
     private static func durationLabel(_ duration: Double) -> String {
-        let total = max(0, Int(duration.rounded(.down)))
-        return "\(total / 60):\(String(format: "%02d", total % 60))"
+        AudioDurationLabel.label(for: duration)
     }
 }
 

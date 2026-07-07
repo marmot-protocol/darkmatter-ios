@@ -36,7 +36,10 @@ final class ToastState {
     static func sleepNanoseconds(forDuration duration: TimeInterval) -> UInt64 {
         guard !duration.isNaN, duration > 0 else { return 0 }
         guard duration.isFinite else { return UInt64.max }
-        let maximumSeconds = TimeInterval(UInt64.max) / 1_000_000_000
-        return UInt64(min(duration, maximumSeconds) * 1_000_000_000)
+        let nanoseconds = duration * 1_000_000_000
+        guard nanoseconds.isFinite,
+              nanoseconds < TimeInterval(UInt64.max)
+        else { return UInt64.max }
+        return UInt64(nanoseconds)
     }
 }
