@@ -124,6 +124,20 @@ struct MediaImetaProjectionParityTests {
         Case(name: "overlong thumbhash -> nil",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, extra: ["thumbhash \(String(repeating: "x", count: 129))"])],
              sourceEpoch: 1, expected: nil),
+        Case(name: "filename at 255-byte cap -> valid",
+             imeta: [imetaValues(file: String(repeating: "a", count: 255), ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil)],
+             sourceEpoch: 1,
+             expected: [ref(file: String(repeating: "a", count: 255), ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 1, dim: nil)]),
+        Case(name: "filename over 255-byte cap -> nil",
+             imeta: [imetaValues(file: String(repeating: "a", count: 256), ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil)],
+             sourceEpoch: 1, expected: nil),
+        Case(name: "media type at 127-byte cap -> valid",
+             imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/\(String(repeating: "a", count: 121))", dim: nil)],
+             sourceEpoch: 1,
+             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/\(String(repeating: "a", count: 121))", sourceEpoch: 1, dim: nil)]),
+        Case(name: "media type over 127-byte cap -> nil",
+             imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/\(String(repeating: "a", count: 122))", dim: nil)],
+             sourceEpoch: 1, expected: nil),
 
         // --- The all-or-nothing rule across multiple attachments ---
         // INTENTIONAL DIVERGENCE: today's Swift parser returns nil here; the
@@ -190,6 +204,24 @@ struct MediaImetaProjectionParityTests {
         let oneBad = MessageSemantics.mediaAttachments(
             from: [good, bad].map { MessageTagFfi(values: $0) }, sourceEpoch: 1)
         #expect(oneBad == nil)
+    }
+
+    /// Peer-controlled `filename` / `m` are byte-length capped, mirroring the
+    /// thumbhash/dim bounds. A field one byte over its cap degrades the whole
+    /// message to chat text; at the cap it still parses. Guards against
+    /// flood-sized attacker strings entering the model/UI/transcript export.
+    @Test func filenameAndMediaTypeAreByteLengthCapped() {
+        func attachment(filename: String, mediaType: String) -> [MediaAttachmentReferenceFfi]? {
+            let tag = MessageTagFfi(values: imetaValues(
+                file: filename, ciphertext: c, plaintext: p, nonce: n, mediaType: mediaType, dim: nil))
+            return MessageSemantics.mediaAttachments(from: [tag], sourceEpoch: 1)
+        }
+
+        #expect(attachment(filename: String(repeating: "a", count: 255), mediaType: "image/png") != nil)
+        #expect(attachment(filename: String(repeating: "a", count: 256), mediaType: "image/png") == nil)
+
+        #expect(attachment(filename: "a.png", mediaType: "image/\(String(repeating: "a", count: 121))") != nil)
+        #expect(attachment(filename: "a.png", mediaType: "image/\(String(repeating: "a", count: 122))") == nil)
     }
 
     // MARK: - Bindings landed (whitenoise 127fe17): how parity is enforced now
