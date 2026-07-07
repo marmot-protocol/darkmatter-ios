@@ -97,7 +97,13 @@ struct ProfileEditMetadataDraftTests {
         #expect(ProfileEditFieldSeeding.seeded(current: "Al", loaded: "Alice", isNewAccount: false) == "Al")
     }
 
-    @Test func adoptsNewAccountValueEvenWhenFieldIsNonEmpty() {
+    @Test func firstLoadDoesNotCountAsDifferentLoadedAccount() {
+        #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: nil, loading: "account-a"))
+        #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-a"))
+        #expect(ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-b"))
+    }
+
+    @Test func adoptsDifferentAccountValueEvenWhenFieldIsNonEmpty() {
         #expect(ProfileEditFieldSeeding.seeded(current: "Alice", loaded: "Bob", isNewAccount: true) == "Bob")
         #expect(ProfileEditFieldSeeding.seeded(current: "Alice", loaded: "", isNewAccount: true) == "")
     }

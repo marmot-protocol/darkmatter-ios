@@ -91,6 +91,13 @@ struct ProfileEditView: View {
     }
 }
 
+nonisolated enum ProfileEditLoadSeeding {
+    static func isDifferentLoadedAccount(previousAccountId: String?, loading accountId: String) -> Bool {
+        guard let previousAccountId else { return false }
+        return previousAccountId != accountId
+    }
+}
+
 nonisolated enum ProfileEditFieldSeeding {
     /// On a switch to a different account, adopt that account's value; otherwise
     /// only fill an empty field so in-progress edits survive a same-account reload.

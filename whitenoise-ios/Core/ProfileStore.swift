@@ -51,11 +51,13 @@ final class ProfileStore {
     // they had as `@ObservationIgnored var` on AppState before the extraction.
     var profileProjectionCache: [String: ProfileDisplayProjection] = [:]
     var profileProjectionLoadTask: Task<Void, Never>?
+    var profileProjectionLoadTaskID: UUID?
     var queuedProfileProjectionLoadIDs: [String] = []
     var scheduledProfileProjectionLoadIDs: Set<String> = []
     var profileProjectionRefreshAfterLoadIDs: Set<String> = []
     var profileProjectionLoadVersions: [String: Int] = [:]
     var profileFetchQueueTask: Task<Void, Never>?
+    var profileFetchQueueTaskID: UUID?
     var queuedProfileFetchIDs: [String] = []
     var scheduledProfileFetchIDs: Set<String> = []
     var activeProfileFetchID: String?
@@ -150,6 +152,7 @@ final class ProfileStore {
         if activeProfileFetchID == id {
             let fetchTask = profileFetchQueueTask
             profileFetchQueueTask = nil
+            profileFetchQueueTaskID = nil
             activeProfileFetchID = nil
             fetchTask?.cancel()
         }
@@ -215,18 +218,17 @@ final class ProfileStore {
 
     private func startProfileProjectionLoadQueueIfNeeded() {
         guard profileProjectionLoadTask == nil, !queuedProfileProjectionLoadIDs.isEmpty else { return }
+        let taskID = UUID()
+        profileProjectionLoadTaskID = taskID
         profileProjectionLoadTask = Task { [weak self] in
             guard let self else { return }
-            await self.runProfileProjectionLoadQueue()
+            await self.runProfileProjectionLoadQueue(taskID: taskID)
         }
     }
 
-    private func runProfileProjectionLoadQueue() async {
+    private func runProfileProjectionLoadQueue(taskID: UUID) async {
         defer {
-            profileProjectionLoadTask = nil
-            if canRefreshProfiles, !queuedProfileProjectionLoadIDs.isEmpty {
-                startProfileProjectionLoadQueueIfNeeded()
-            }
+            finishProfileProjectionLoadQueue(taskID: taskID)
         }
 
         while !Task.isCancelled, canRefreshProfiles, let id = nextQueuedProfileProjectionLoadID() {
@@ -258,6 +260,15 @@ final class ProfileStore {
             // load/refresh work remains for `id` so the map stays bounded to
             // in-flight work instead of growing per distinct id (#353).
             pruneProfileProjectionLoadVersionIfSettled(forAccountIdHex: id, matching: version)
+        }
+    }
+
+    private func finishProfileProjectionLoadQueue(taskID: UUID) {
+        guard profileProjectionLoadTaskID == taskID else { return }
+        profileProjectionLoadTask = nil
+        profileProjectionLoadTaskID = nil
+        if canRefreshProfiles, !queuedProfileProjectionLoadIDs.isEmpty {
+            startProfileProjectionLoadQueueIfNeeded()
         }
     }
 
@@ -343,9 +354,11 @@ final class ProfileStore {
 
     private func startProfileFetchQueueIfNeeded() {
         guard profileFetchQueueTask == nil, !queuedProfileFetchIDs.isEmpty else { return }
+        let taskID = UUID()
+        profileFetchQueueTaskID = taskID
         profileFetchQueueTask = Task { [weak self] in
             guard let self else { return }
-            await self.runProfileFetchQueue()
+            await self.runProfileFetchQueue(taskID: taskID)
         }
     }
 
@@ -355,13 +368,9 @@ final class ProfileStore {
         startProfileFetchQueueIfNeeded()
     }
 
-    private func runProfileFetchQueue() async {
+    private func runProfileFetchQueue(taskID: UUID) async {
         defer {
-            profileFetchQueueTask = nil
-            activeProfileFetchID = nil
-            if canRefreshProfiles, !queuedProfileFetchIDs.isEmpty {
-                startProfileFetchQueueIfNeeded()
-            }
+            finishProfileFetchQueue(taskID: taskID)
         }
 
         while !Task.isCancelled, canRefreshProfiles, let id = nextQueuedProfileFetchID() {
@@ -369,6 +378,16 @@ final class ProfileStore {
             await refreshProfile(forAccountIdHex: id)
             activeProfileFetchID = nil
             scheduledProfileFetchIDs.remove(id)
+        }
+    }
+
+    private func finishProfileFetchQueue(taskID: UUID) {
+        guard profileFetchQueueTaskID == taskID else { return }
+        profileFetchQueueTask = nil
+        profileFetchQueueTaskID = nil
+        activeProfileFetchID = nil
+        if canRefreshProfiles, !queuedProfileFetchIDs.isEmpty {
+            startProfileFetchQueueIfNeeded()
         }
     }
 
@@ -396,6 +415,7 @@ final class ProfileStore {
         // race a re-bump, clears the map separately in `AppState.signOut()`.
         let projectionTask = profileProjectionLoadTask
         profileProjectionLoadTask = nil
+        profileProjectionLoadTaskID = nil
         projectionTask?.cancel()
 
         queuedProfileFetchIDs.removeAll()
@@ -403,6 +423,7 @@ final class ProfileStore {
         activeProfileFetchID = nil
         let fetchTask = profileFetchQueueTask
         profileFetchQueueTask = nil
+        profileFetchQueueTaskID = nil
         fetchTask?.cancel()
 
         guard projectionTask != nil || fetchTask != nil else { return nil }
@@ -449,7 +470,17 @@ final class ProfileStore {
 
     #if DEBUG
     func runProfileFetchQueueForTesting() async {
-        await runProfileFetchQueue()
+        let taskID = UUID()
+        profileFetchQueueTaskID = taskID
+        await runProfileFetchQueue(taskID: taskID)
+    }
+
+    func finishProfileProjectionLoadQueueForTesting(taskID: UUID) {
+        finishProfileProjectionLoadQueue(taskID: taskID)
+    }
+
+    func finishProfileFetchQueueForTesting(taskID: UUID) {
+        finishProfileFetchQueue(taskID: taskID)
     }
 
     /// Test hook for the post-load version-map eviction (#353). Mirrors the call
