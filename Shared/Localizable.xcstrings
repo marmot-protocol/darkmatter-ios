@@ -27191,61 +27191,61 @@
         }
       }
     },
-    "Swipe a chat to archive it; archived chats stay active and still notify you." : {
+    "Swipe a chat to archive it; archived chats stay active but stay out of unread and notification attention." : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wischen Sie über einen Chat, um ihn zu archivieren. Archivierte Chats bleiben aktiv und benachrichtigen Sie weiterhin."
+            "value" : "Wischen Sie über einen Chat, um ihn zu archivieren. Archivierte Chats bleiben aktiv, erscheinen aber nicht bei ungelesenen Nachrichten oder Benachrichtigungen."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Desliza un chat para archivarlo; los chats archivados permanecen activos y aún así le notifican."
+            "value" : "Desliza un chat para archivarlo; los chats archivados permanecen activos, pero no aparecen en los no leídos ni en las notificaciones."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Faites glisser une discussion pour l'archiver ; les discussions archivées restent actives et vous informent toujours."
+            "value" : "Faites glisser une discussion pour l'archiver ; les discussions archivées restent actives, mais restent hors des éléments non lus et des notifications."
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Scorri una chat per archiviarla; le chat archiviate rimangono attive e ti avvisano comunque."
+            "value" : "Scorri una chat per archiviarla; le chat archiviate rimangono attive ma restano fuori dai non letti e dalle notifiche."
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deslize um bate-papo para arquivá-lo; os bate-papos arquivados permanecem ativos e ainda notificam você."
+            "value" : "Deslize um bate-papo para arquivá-lo; os bate-papos arquivados permanecem ativos, mas ficam fora dos não lidos e das notificações."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Проведите чат, чтобы заархивировать его; заархивированные чаты остаются активными и по-прежнему уведомляют вас."
+            "value" : "Проведите по чату, чтобы заархивировать его; заархивированные чаты остаются активными, но не попадают в непрочитанные и уведомления."
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Arşivlemek için bir sohbeti kaydırın; arşivlenen sohbetler etkin kalır ve size bildirimde bulunmaya devam eder."
+            "value" : "Arşivlemek için bir sohbeti kaydırın; arşivlenen sohbetler etkin kalır ancak okunmamışlarda ve bildirimlerde görünmez."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "滑动聊天即可存档；存档的聊天记录保持活动状态并仍然通知您。"
+            "value" : "滑动聊天即可存档；存档的聊天仍保持活动，但不会出现在未读和通知提醒中。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "滑動聊天即可存檔；存檔的聊天記錄保持活動狀態並仍然通知您。"
+            "value" : "滑動聊天即可存檔；存檔的聊天仍保持活動，但不會出現在未讀和通知提醒中。"
           }
         }
       }
