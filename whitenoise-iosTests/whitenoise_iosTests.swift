@@ -406,6 +406,9 @@ struct AppStateBootstrapTests {
         let auditFiles = try await appState.auditLogFiles()
         let auditRows = try await appState.auditLogFileRows()
         let privacyProjection = try await appState.privacySecuritySettingsProjection()
+        let optimisticMarkdown = await appState.parseMarkdown(text: "**hello**")
+        let nativePushAccountRefs = await appState.notificationCoordinator
+            .nativePushEnabledAccountRefsForTesting(host: appState)
 
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
@@ -417,6 +420,9 @@ struct AppStateBootstrapTests {
         #expect(auditFiles == nil)
         #expect(auditRows == nil)
         #expect(privacyProjection == nil)
+        #expect(optimisticMarkdown.blocks.isEmpty)
+        #expect(!optimisticMarkdown.truncated)
+        #expect(nativePushAccountRefs.isEmpty)
         #expect(appState.client == nil)
         #expect(appState.runtimeSuspendedForBackground)
         #expect(appState.runtimeGeneration == generation)
