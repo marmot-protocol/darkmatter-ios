@@ -24,8 +24,8 @@ struct ProfileEditMetadataDraftTests {
             name: "alice",
             displayName: "Alice 🎉",
             about: "",
+            picture: "",
             nip05: "alice@example.com",
-            preservedPicture: nil,
             preservedLud16: nil
         )
 
@@ -40,14 +40,56 @@ struct ProfileEditMetadataDraftTests {
             name: nil,
             displayName: "Alice 🎉",
             about: "",
+            picture: "",
             nip05: "",
-            preservedPicture: nil,
             preservedLud16: nil
         )
 
         let metadata = try #require(draft.normalizedMetadata)
         #expect(metadata.name == nil)
         #expect(metadata.displayName == "Alice 🎉")
+    }
+
+    @Test func normalizesValidHttpsPictureURL() throws {
+        let draft = ProfileEditMetadataDraft(
+            name: nil,
+            displayName: "Alice",
+            about: "",
+            picture: " https://cdn.example.com/avatar.png ",
+            nip05: "",
+            preservedLud16: nil
+        )
+
+        let metadata = try #require(draft.normalizedMetadata)
+        #expect(metadata.picture == "https://cdn.example.com/avatar.png")
+    }
+
+    @Test func rejectsInvalidPictureURLBeforePublish() {
+        let draft = ProfileEditMetadataDraft(
+            name: nil,
+            displayName: "Alice",
+            about: "",
+            picture: "http://legacy.example/a.png",
+            nip05: "",
+            preservedLud16: nil
+        )
+
+        #expect(draft.validationError == .picture)
+        #expect(draft.normalizedMetadata == nil)
+    }
+
+    @Test func blankPictureClearsPublishedMetadata() throws {
+        let draft = ProfileEditMetadataDraft(
+            name: nil,
+            displayName: "Alice",
+            about: "",
+            picture: "   ",
+            nip05: "",
+            preservedLud16: nil
+        )
+
+        let metadata = try #require(draft.normalizedMetadata)
+        #expect(metadata.picture == nil)
     }
 
     @Test func seedsEmptyFieldOnSameAccountReloadWithoutClobberingEdits() {

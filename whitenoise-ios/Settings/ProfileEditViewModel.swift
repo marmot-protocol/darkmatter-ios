@@ -14,9 +14,9 @@ final class ProfileEditViewModel {
     var existingName: String?
     var displayName = ""
     var about = ""
+    var picture = ""
     var nip05 = ""
-    // Not user-editable here; preserved so a kind:0 republish keeps them.
-    var existingPicture: String?
+    // Not user-editable here; preserved so a kind:0 republish keeps it.
     var existingLud16: String?
 
     var isPublishing = false
@@ -29,17 +29,20 @@ final class ProfileEditViewModel {
             name: existingName,
             displayName: displayName,
             about: about,
+            picture: picture,
             nip05: nip05,
-            preservedPicture: existingPicture,
             preservedLud16: existingLud16
         )
     }
 
+    var invalidPictureMessage: String? { validationMessage(for: .picture) }
     var invalidNip05Message: String? { validationMessage(for: .nip05) }
 
     func validationMessage(for field: ProfileEditMetadataField) -> String? {
         guard currentDraft.validationError == field else { return nil }
         switch field {
+        case .picture:
+            return L10n.string("Only public HTTPS image URLs are allowed.")
         case .nip05:
             return L10n.string("Enter a valid NIP-05 address like name@example.com.")
         }
@@ -56,14 +59,15 @@ final class ProfileEditViewModel {
         let isNewAccount = loadedAccountIdHex != id
         let formFields = ProfileEditFormFields(profile: profile)
         existingName = formFields.name
-        // Carry picture and lud16 forward as-is so saving never wipes them.
-        existingPicture = formFields.picture.isEmpty ? nil : formFields.picture
         existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
         displayName = ProfileEditFieldSeeding.seeded(
             current: displayName, loaded: formFields.displayName, isNewAccount: isNewAccount
         )
         about = ProfileEditFieldSeeding.seeded(
             current: about, loaded: formFields.about, isNewAccount: isNewAccount
+        )
+        picture = ProfileEditFieldSeeding.seeded(
+            current: picture, loaded: formFields.picture, isNewAccount: isNewAccount
         )
         nip05 = ProfileEditFieldSeeding.seeded(
             current: nip05, loaded: formFields.nip05, isNewAccount: isNewAccount

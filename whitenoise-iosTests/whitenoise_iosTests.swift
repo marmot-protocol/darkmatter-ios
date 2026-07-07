@@ -3312,6 +3312,14 @@ struct ProfileEditViewTests {
     @Test func profileSaveIsDisabledForInvalidDraft() {
         let viewModel = ProfileEditViewModel()
 
+        viewModel.picture = "not-a-url"
+        #expect(viewModel.currentDraft.validationError == .picture)
+        #expect(viewModel.invalidPictureMessage == L10n.string("Only public HTTPS image URLs are allowed."))
+
+        viewModel.picture = "https://cdn.example.com/avatar.png"
+        #expect(viewModel.currentDraft.validationError == nil)
+        #expect(viewModel.invalidPictureMessage == nil)
+
         viewModel.nip05 = "alice example.com"
         #expect(viewModel.currentDraft.validationError == .nip05)
         #expect(viewModel.invalidNip05Message == L10n.string("Enter a valid NIP-05 address like name@example.com."))
@@ -3326,8 +3334,8 @@ struct ProfileEditViewTests {
             name: " alice\u{202E}\n ",
             displayName: " Alice\u{202E}\nEvil ",
             about: String(repeating: "a", count: ContentSanitizer.maxAboutLength + 25),
+            picture: "",
             nip05: " ALICE@Example.COM ",
-            preservedPicture: nil,
             preservedLud16: nil
         )
 
@@ -3339,29 +3347,28 @@ struct ProfileEditViewTests {
         #expect(metadata.nip05 == "alice@example.com")
     }
 
-    @Test func profilePreservesExistingPictureAndLud16Verbatim() throws {
-        // Picture and lud16 are not editable here; whatever the profile already
-        // had must round-trip unchanged so a kind:0 replacement never wipes them,
-        // even when the stored value wouldn't pass the editable-field validators.
+    @Test func profilePreservesExistingLud16Verbatim() throws {
+        // lud16 is not editable here; whatever the profile already had must
+        // round-trip unchanged so a kind:0 replacement never wipes it.
         let draft = ProfileEditMetadataDraft(
             name: nil,
             displayName: "Alice",
             about: "",
+            picture: "",
             nip05: "",
-            preservedPicture: "http://legacy.example/a.png",
             preservedLud16: "weird-but-existing"
         )
 
         #expect(draft.validationError == nil)
         let metadata = try #require(draft.normalizedMetadata)
-        #expect(metadata.picture == "http://legacy.example/a.png")
+        #expect(metadata.picture == nil)
         #expect(metadata.lud16 == "weird-but-existing")
     }
 
     @Test func profileMetadataDraftRejectsInvalidNip05BeforePublish() {
         let invalidNip05 = ProfileEditMetadataDraft(
-            name: nil, displayName: "", about: "", nip05: "alice example.com",
-            preservedPicture: nil, preservedLud16: nil
+            name: nil, displayName: "", about: "", picture: "", nip05: "alice example.com",
+            preservedLud16: nil
         )
 
         #expect(invalidNip05.validationError == .nip05)
