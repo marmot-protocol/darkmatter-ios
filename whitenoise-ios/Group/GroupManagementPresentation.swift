@@ -11,6 +11,10 @@ enum GroupMemberManagementAction: Equatable {
 enum GroupManagementPresentation {
     static let inactiveGroupComposerMessage = L10n.string("This group is inactive. You can't send new messages.")
 
+    static func isActiveChatListMember(_ membership: SelfMembershipFfi) -> Bool {
+        membership == .member
+    }
+
     static func memberActions(
         for action: GroupMemberActionStateFfi,
         state: GroupManagementStateFfi?

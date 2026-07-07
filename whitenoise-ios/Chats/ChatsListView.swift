@@ -396,24 +396,34 @@ struct ChatsListView: View {
 
     @ViewBuilder
     private func swipeActions(for item: ChatsListViewModel.Item) -> some View {
-        if item.isArchived {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: item.isArchived,
+            selfMembership: item.selfMembership
+        )
+
+        if actions.contains(.unarchive) {
             Button {
                 Task { await setArchived(groupIdHex: item.id, archived: false) }
             } label: {
                 Label("Unarchive", systemImage: "tray.and.arrow.up")
             }
             .tint(.blue)
+        }
+        if actions.contains(.delete) {
+            Button(role: .destructive) {
+                Task { await deleteLocal(groupIdHex: item.id) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        if actions.contains(.leave) {
             Button(role: .destructive) {
                 Task { await leave(groupIdHex: item.id) }
             } label: {
                 Label("Leave", systemImage: "person.crop.circle.badge.minus")
             }
-        } else {
-            Button(role: .destructive) {
-                Task { await leave(groupIdHex: item.id) }
-            } label: {
-                Label("Leave", systemImage: "person.crop.circle.badge.minus")
-            }
+        }
+        if actions.contains(.archive) {
             Button {
                 Task { await setArchived(groupIdHex: item.id, archived: true) }
             } label: {
@@ -444,6 +454,23 @@ struct ChatsListView: View {
         // preserves the raised, tappable affordance.
         .buttonStyle(.plain)
         .accessibilityLabel("Settings")
+    }
+
+    @MainActor
+    private func deleteLocal(groupIdHex: String) async {
+        guard let ref = appState.activeAccountRef else { return }
+        do {
+            let client = try appState.currentMarmotClient()
+            _ = try await client.deleteGroupLocal(
+                accountRef: ref,
+                groupIdHex: groupIdHex
+            )
+            viewModel?.removeChatListRow(groupIdHex: groupIdHex)
+            Haptics.warning()
+        } catch {
+            Haptics.error()
+            appState.present(.error(L10n.string("Couldn't delete chat"), message: error.localizedDescription))
+        }
     }
 
     @MainActor

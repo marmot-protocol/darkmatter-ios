@@ -414,6 +414,10 @@ final class MarmotClient {
         try await marmot.leaveGroup(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func deleteGroupLocal(accountRef: String, groupIdHex: String) async throws -> Bool {
+        try await marmot.deleteGroupLocal(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
     func groupMembers(accountRef: String, groupIdHex: String) async throws -> [AppGroupMemberRecordFfi] {
         try await marmot.groupMembers(accountRef: accountRef, groupIdHex: groupIdHex)
     }
