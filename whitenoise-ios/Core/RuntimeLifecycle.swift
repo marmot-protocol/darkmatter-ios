@@ -48,6 +48,7 @@ final class RuntimeLifecycle {
 #if DEBUG
     @ObservationIgnored var afterBootstrapRuntimeStartForTesting: (() async -> Void)?
     @ObservationIgnored var afterForegroundRuntimeCreatedForTesting: (() async -> Void)?
+    @ObservationIgnored var beforeForegroundCatchUpForTesting: (() async -> Void)?
 #endif
     /// Observed (like the original AppState stored flag) so the foreground/local
     /// runtime gates that fold it in stay reactive.
@@ -356,11 +357,19 @@ final class RuntimeLifecycle {
         await waitForRuntimeSuspensionToFinish()
         guard phaseOwnsLiveRuntime, ownsForegroundActivation(id: activationID) else { return }
 
-        if runtimeSuspendedForBackground {
+        let isRestartingAfterSuspension = runtimeSuspendedForBackground
+        if isRestartingAfterSuspension {
             isRuntimeWarmingUp = true
-            // Cleared on both the success and failure exits of the restart so a
-            // failed resume doesn't strand the "Connecting…" chrome on.
-            defer { isRuntimeWarmingUp = false }
+        }
+        // Cleared on success, cancellation, and failure exits so a failed
+        // resume doesn't strand the "Connecting…" chrome on.
+        defer {
+            if isRestartingAfterSuspension {
+                isRuntimeWarmingUp = false
+            }
+        }
+
+        if isRestartingAfterSuspension {
             do {
                 let restored = try makeRuntime()
 #if DEBUG
@@ -415,6 +424,11 @@ final class RuntimeLifecycle {
         // `.onboarding`: `catchUpAfterForegroundActivation` is `.ready`-gated by
         // `ForegroundNotificationSyncPolicy`, and the push-registration / profile
         // queue paths find no accounts to act on while onboarding.
+#if DEBUG
+        if let beforeForegroundCatchUpForTesting {
+            await beforeForegroundCatchUpForTesting()
+        }
+#endif
         await catchUpAfterForegroundActivation()
         guard ownsForegroundActivation(id: activationID) else { return }
         appState?.scheduleNativePushRegistrationIfEnabled()

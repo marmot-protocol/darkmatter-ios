@@ -574,6 +574,35 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// #511: the "Connecting…" warm-up flag covers runtime restart plus the
+    /// initial foreground catch-up. It must not clear in the gap between
+    /// `startRuntime()` returning and `catchUpAfterForegroundActivation()`.
+    @Test func runtimeWarmupStaysActiveUntilForegroundCatchUpStarts() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        await appState.startRuntimeSuspension().value
+
+        let checkpoint = AsyncTestCheckpoint()
+        appState.runtimeLifecycle.beforeForegroundCatchUpForTesting = {
+            await checkpoint.pause()
+        }
+
+        let activation = appState.startForegroundActivation()
+        await checkpoint.waitUntilPaused()
+
+        #expect(appState.isRuntimeWarmingUp)
+
+        await checkpoint.release()
+        await activation.value
+        appState.runtimeLifecycle.beforeForegroundCatchUpForTesting = nil
+
+        #expect(!appState.isRuntimeWarmingUp)
+        #expect(!appState.runtimeSuspendedForBackground)
+
+        await stopReadyRuntime(appState)
+    }
+
     /// #445: if the app is backgrounded while `performBootstrap` is still in
     /// flight, the runtime is already started but `phase` is still
     /// `.bootstrapping`, so a suspension that lands during bootstrap fails the
