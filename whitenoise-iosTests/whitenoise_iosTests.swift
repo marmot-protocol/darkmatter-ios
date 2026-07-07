@@ -1569,7 +1569,7 @@ struct RelativeTimeTests {
         _ = RelativeTime.short(weekdayDate, now: now, calendar: calendar)
 
         #expect(RelativeTime.formatterCacheCountForTesting == 1)
-        #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == Locale.autoupdatingCurrent.identifier)
+        #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == AppLanguage.currentLocale.identifier)
     }
 
     @Test func shortUsesLocalizedAbbreviatedDurationsForRecentRows() throws {
@@ -1630,6 +1630,54 @@ struct RelativeTimeTests {
         let rendered = RelativeTime.short(date, now: now, calendar: calendar, locale: locale)
         let expected = expectedFormatter.string(from: date)
         #expect(rendered == expected)
+    }
+
+    @Test func shortDefaultsToInAppLanguageLocaleForFormattedLabels() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 2,
+            day: 10,
+            hour: 12
+        )))
+        let now = try #require(calendar.date(from: DateComponents(
+            timeZone: TimeZone(secondsFromGMT: 0),
+            year: 2026,
+            month: 2,
+            day: 20,
+            hour: 12
+        )))
+
+        withAppLanguage(.french) {
+            RelativeTime.resetFormatterCacheForTesting()
+            defer { RelativeTime.resetFormatterCacheForTesting() }
+
+            let expectedFormatter = DateFormatter()
+            expectedFormatter.locale = AppLanguage.currentLocale
+            expectedFormatter.setLocalizedDateFormatFromTemplate("d MMM")
+
+            #expect(RelativeTime.short(date, now: now, calendar: calendar) == expectedFormatter.string(from: date))
+            #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == AppLanguage.currentLocale.identifier)
+        }
+    }
+
+    @Test func shortTimeDefaultsToInAppLanguageLocale() throws {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+
+        withAppLanguage(.french) {
+            RelativeTime.resetFormatterCacheForTesting()
+            defer { RelativeTime.resetFormatterCacheForTesting() }
+
+            let expectedFormatter = DateFormatter()
+            expectedFormatter.locale = AppLanguage.currentLocale
+            expectedFormatter.timeStyle = .short
+            expectedFormatter.dateStyle = .none
+
+            #expect(RelativeTime.shortTime(date) == expectedFormatter.string(from: date))
+            #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == AppLanguage.currentLocale.identifier)
+        }
     }
 
     @Test func messageBubbleTimeLabelUsesCachedFormatter() {
@@ -7829,6 +7877,34 @@ struct MessageMediaGalleryTests {
         #expect(gallery.items.map(\.id) == ["initial", "other", "video"])
         #expect(gallery.initialData(for: initial) == data)
         #expect(gallery.initialData(for: otherImage) == nil)
+    }
+
+    @Test func pageCountLabelUsesLocalizedCatalogPhrase() {
+        #expect(MessageMediaFullscreenGalleryPresentation.pageCountLabel(
+            selectedIndex: 1,
+            totalCount: 12,
+            locale: Locale(identifier: "fr")
+        ) == "2 sur 12")
+    }
+
+    @Test func pageCountLabelLocalizesDigits() {
+        let locale = Locale(identifier: "ar_EG")
+        let label = MessageMediaFullscreenGalleryPresentation.pageCountLabel(
+            selectedIndex: 1,
+            totalCount: 12,
+            locale: locale
+        )
+
+        #expect(label.contains(LocalizedNumberLabel.decimal(2, locale: locale)))
+        #expect(label.contains(LocalizedNumberLabel.decimal(12, locale: locale)))
+        #expect(label != "2 of 12")
+    }
+
+    @Test func pageCountLabelFallsBackToEmptyWhenSelectionIsMissing() {
+        #expect(MessageMediaFullscreenGalleryPresentation.pageCountLabel(
+            selectedIndex: nil,
+            totalCount: 3
+        ).isEmpty)
     }
 
     @Test func fullscreenInitialDecodeFailureIsExplicit() async {

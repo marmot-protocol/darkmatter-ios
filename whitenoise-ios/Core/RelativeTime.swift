@@ -14,7 +14,7 @@ enum RelativeTime {
         _ date: Date,
         now: Date = Date(),
         calendar: Calendar = .current,
-        locale: Locale = .autoupdatingCurrent
+        locale: Locale = AppLanguage.currentLocale
     ) -> String {
         let seconds = now.timeIntervalSince(date)
         if seconds < 0 { return L10n.string("now") }
@@ -35,7 +35,7 @@ enum RelativeTime {
         return formatted(date, sameYear ? "d MMM" : "d MMM yyyy", locale: locale)
     }
 
-    static func shortTime(_ date: Date, locale: Locale = .autoupdatingCurrent) -> String {
+    static func shortTime(_ date: Date, locale: Locale = AppLanguage.currentLocale) -> String {
         let formatter = formatter(for: shortTimeFormatterKey, locale: locale) { formatter in
             formatter.timeStyle = .short
             formatter.dateStyle = .none
@@ -128,7 +128,7 @@ enum RelativeTime {
     static func resetFormatterCacheForTesting() {
         formatterCache.removeAll()
         durationFormatterCache.removeAll()
-        formatterCacheLocaleIdentifier = Locale.autoupdatingCurrent.identifier
+        formatterCacheLocaleIdentifier = AppLanguage.currentLocale.identifier
     }
 
     static var formatterCacheCountForTesting: Int {

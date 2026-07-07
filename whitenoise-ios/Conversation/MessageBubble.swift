@@ -2309,6 +2309,22 @@ private enum MediaFullscreenDismiss {
     }
 }
 
+nonisolated enum MessageMediaFullscreenGalleryPresentation {
+    static func pageCountLabel(
+        selectedIndex: Int?,
+        totalCount: Int,
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String {
+        guard let selectedIndex,
+              selectedIndex >= 0,
+              totalCount > 0
+        else { return "" }
+        let current = LocalizedNumberLabel.decimal(UInt64(selectedIndex + 1), locale: locale)
+        let total = LocalizedNumberLabel.decimal(UInt64(totalCount), locale: locale)
+        return L10n.formatted("%@ of %@", arguments: [current, total], locale: locale)
+    }
+}
+
 private struct MessageMediaFullscreenGalleryView: View {
     let gallery: MessageMediaGallery
     let onLoadMedia: (MessageMediaAttachment) async throws -> Data
@@ -2400,10 +2416,10 @@ private struct MessageMediaFullscreenGalleryView: View {
     }
 
     private var pageCountLabel: String {
-        guard let index = gallery.items.firstIndex(where: { $0.id == selectedItemID }) else {
-            return ""
-        }
-        return "\(index + 1) of \(gallery.items.count)"
+        MessageMediaFullscreenGalleryPresentation.pageCountLabel(
+            selectedIndex: gallery.items.firstIndex(where: { $0.id == selectedItemID }),
+            totalCount: gallery.items.count
+        )
     }
 }
 

@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import whitenoise_ios
 @testable import MarmotKit
 
@@ -32,6 +33,8 @@ struct AccountsViewTests {
     @Test func shownCountRendersExpectedBadgeLabel() {
         let shown = AccountsView.unreadBadgeCount(for: summary(unreadCount: 250, hasUnread: true))
         #expect(shown == 250)
-        #expect(shown.map { UnreadCountBadge.label(for: $0) } == "99+")
+        #expect(shown.map {
+            UnreadCountBadge.label(for: $0, locale: Locale(identifier: "en_US"))
+        } == "99+")
     }
 }
