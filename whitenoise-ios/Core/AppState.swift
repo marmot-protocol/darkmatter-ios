@@ -556,7 +556,7 @@ final class AppState {
     /// during a suspend/resume window); the timeline subscription will replace
     /// the optimistic record with the confirmed, fully-parsed one (#226).
     func parseMarkdown(text: String) async -> MarkdownDocumentFfi {
-        guard let client = try? runtimeClient() else { return .emptyDocument }
+        guard let client = foregroundSettingsReadClient() else { return .emptyDocument }
         return await client.parseMarkdown(text: text)
     }
 

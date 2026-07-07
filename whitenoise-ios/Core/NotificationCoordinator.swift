@@ -542,13 +542,15 @@ final class NotificationCoordinator {
     }
 
     private func nativePushEnabledAccountRefs(host: NotificationCoordinatorHost) async -> [String] {
-        await Self.nativePushEnabledAccountRefs(
-            accountRefs: host.accounts.map(\.label),
-            runtimeClient: { try host.currentMarmotClient() }
-        )
+        guard let client = foregroundSettingsReadClient(host: host) else { return [] }
+        return await client.nativePushEnabledAccountRefs(accountRefs: host.accounts.map(\.label))
     }
 
     #if DEBUG
+    func nativePushEnabledAccountRefsForTesting(host: NotificationCoordinatorHost) async -> [String] {
+        await nativePushEnabledAccountRefs(host: host)
+    }
+
     func drainNativePushRegistrationTaskForTesting() async {
         await nativePushRegistrationTask?.value
     }
