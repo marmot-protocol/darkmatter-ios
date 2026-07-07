@@ -455,6 +455,11 @@ final class AppState {
         // below.
         isSigningOut = true
         defer { isSigningOut = false }
+        let nativePushWasEnabled = (
+            try? await runtimeClient()
+                .notificationSettings(accountRef: signingOut)
+                .nativePushEnabled
+        ) ?? false
         await notificationCoordinator.cancelNativePushRegistrationTask()
         try? await marmot.clearPushRegistration(accountRef: signingOut)
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
@@ -464,10 +469,18 @@ final class AppState {
             guard outcome.localCleanup.completed else {
                 let message = outcome.localCleanup.reason
                     ?? L10n.string("Local account cleanup did not finish.")
+                await restoreNativePushAfterFailedSignOut(
+                    accountRef: signingOut,
+                    wasEnabled: nativePushWasEnabled
+                )
                 present(.error(L10n.string("Couldn't sign out"), message: message))
                 return
             }
         } catch {
+            await restoreNativePushAfterFailedSignOut(
+                accountRef: signingOut,
+                wasEnabled: nativePushWasEnabled
+            )
             present(.error(L10n.string("Couldn't sign out"), message: error.localizedDescription))
             return
         }
@@ -508,6 +521,17 @@ final class AppState {
             }
             scheduleNativePushRegistrationIfEnabled()
         }
+    }
+
+    @MainActor
+    private func restoreNativePushAfterFailedSignOut(
+        accountRef: String,
+        wasEnabled: Bool
+    ) async {
+        guard wasEnabled else { return }
+        _ = try? await marmot.setNativePushEnabled(accountRef: accountRef, enabled: true)
+        isSigningOut = false
+        scheduleNativePushRegistrationIfEnabled()
     }
 
     @discardableResult

@@ -146,6 +146,7 @@ final class NotificationCoordinator {
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var isForegroundCatchUpRunning = false
     private var notificationSubscriptionFailureToastPresented = false
+    private var nativePushRegistrationFailureToastPresented = false
 
     private static let notificationSubscriptionInitialRetryDelayNanoseconds: UInt64 = 1_000_000_000
     private static let notificationSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 60_000_000_000
@@ -173,7 +174,6 @@ final class NotificationCoordinator {
     }
 
     func startNotificationSubscription(host: NotificationCoordinatorHost) {
-        notificationSubscriptionFailureToastPresented = false
         let runner = NotificationSubscriptionRunner(
             initialRetryDelayNanoseconds: Self.notificationSubscriptionInitialRetryDelayNanoseconds,
             maximumRetryDelayNanoseconds: Self.notificationSubscriptionMaximumRetryDelayNanoseconds,
@@ -215,7 +215,6 @@ final class NotificationCoordinator {
 
     func stopNotificationSubscription() {
         notificationDriver.stop()
-        notificationSubscriptionFailureToastPresented = false
     }
 
     func reportNotificationSubscriptionError(_ error: Error, host: NotificationCoordinatorHost) {
@@ -316,7 +315,8 @@ final class NotificationCoordinator {
             let granted = try await host.notifications.requestAuthorization()
             guard granted else { throw NotificationSettingsActionError.permissionDenied }
         }
-        return try host.marmot.setLocalNotificationsEnabled(accountRef: accountRef, enabled: enabled)
+        let client = try host.currentMarmotClient()
+        return try await client.setLocalNotificationsEnabled(accountRef: accountRef, enabled: enabled)
     }
 
     @discardableResult
@@ -336,6 +336,7 @@ final class NotificationCoordinator {
             guard granted else { throw NotificationSettingsActionError.permissionDenied }
             return try await enableNativePush(accountRef: accountRef, host: host)
         } else {
+            await cancelNativePushRegistrationTask()
             return try await disableNativePush(accountRef: accountRef, host: host)
         }
     }
@@ -381,11 +382,13 @@ final class NotificationCoordinator {
         do {
             let granted = try await host.notifications.requestAuthorization()
             guard granted else {
-                _ = try? host.marmot.setLocalNotificationsEnabled(accountRef: accountRef, enabled: false)
+                _ = try? await host.currentMarmotClient()
+                    .setLocalNotificationsEnabled(accountRef: accountRef, enabled: false)
                 return
             }
 
-            _ = try host.marmot.setLocalNotificationsEnabled(accountRef: accountRef, enabled: true)
+            _ = try await host.currentMarmotClient()
+                .setLocalNotificationsEnabled(accountRef: accountRef, enabled: true)
 
             guard NativePushServerConfig.current() != nil else { return }
             host.notifications.registerForRemoteNotifications()
@@ -461,10 +464,14 @@ final class NotificationCoordinator {
             Self.pushRegistrationLog.warning(
                 "Native push registration sync failed: \(String(describing: lastError), privacy: .private)"
             )
+            guard !nativePushRegistrationFailureToastPresented else { return }
+            nativePushRegistrationFailureToastPresented = true
             host.present(.error(
                 L10n.string("Push registration failed"),
                 message: L10n.string("We'll keep trying in the background.")
             ))
+        } else {
+            nativePushRegistrationFailureToastPresented = false
         }
     }
 
@@ -518,12 +525,6 @@ final class NotificationCoordinator {
         } catch {
             // Foreground catch-up is a best-effort safety net. The live
             // subscription and NSE path continue to handle notification flow.
-        }
-    }
-
-    func setAppSceneActive(_ active: Bool) {
-        if !active {
-            cancelNativePushRegistrationTaskWithoutAwaiting()
         }
     }
 

@@ -136,6 +136,17 @@ final class MarmotClient {
         }.value
     }
 
+    /// Writes the local-notification preference off the main actor. The
+    /// generated Marmot binding is synchronous storage FFI.
+    func setLocalNotificationsEnabled(
+        accountRef: String,
+        enabled: Bool
+    ) async throws -> NotificationSettingsFfi {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, enabled] in
+            try marmot.setLocalNotificationsEnabled(accountRef: accountRef, enabled: enabled)
+        }.value
+    }
+
     /// Reads the native-push registration off the main actor. The generated
     /// Marmot binding is synchronous storage FFI.
     func pushRegistration(accountRef: String) async throws -> PushRegistrationFfi? {
