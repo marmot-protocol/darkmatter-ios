@@ -35,7 +35,8 @@ enum GroupManagementPresentation {
         state: GroupManagementStateFfi?,
         members: [AppGroupMemberRecordFfi],
         groupMemberDetails: [GroupMemberDetailsFfi],
-        myAccountId: String?
+        myAccountId: String?,
+        fallbackSelfMembership: SelfMembershipFfi = .member
     ) -> Bool {
         if let state {
             return state.isSelfAdmin
@@ -43,6 +44,8 @@ enum GroupManagementPresentation {
                 || state.requiresSelfDemoteBeforeLeave
                 || state.memberActions.contains { $0.isSelf }
         }
+
+        guard isActiveChatListMember(fallbackSelfMembership) else { return false }
 
         if !groupMemberDetails.isEmpty {
             return groupMemberDetails.contains { member in

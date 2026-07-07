@@ -4,6 +4,7 @@ import MarmotKit
 
 enum GroupDetailsConfirmation: Identifiable {
     case leave
+    case deleteLocal
     case remove(GroupMemberDetailsFfi)
     case selfDemote
 
@@ -11,6 +12,8 @@ enum GroupDetailsConfirmation: Identifiable {
         switch self {
         case .leave:
             return "leave"
+        case .deleteLocal:
+            return "delete-local"
         case .remove(let member):
             return "remove-\(member.memberIdHex)"
         case .selfDemote:
@@ -26,6 +29,8 @@ struct GroupDetailsView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: ConversationViewModel
     var onGroupChanged: (AppGroupRecordFfi) -> Void = { _ in }
+    var onGroupLeft: (String) -> Void = { _ in }
+    var onGroupDeleted: (String) -> Void = { _ in }
 
     @State private var model = GroupDetailsViewModel()
 
@@ -40,6 +45,8 @@ struct GroupDetailsView: View {
         // the model's conversation/onGroupChanged are set before any method runs.
         model.conversation = viewModel
         model.onGroupChanged = onGroupChanged
+        model.onGroupLeft = onGroupLeft
+        model.onGroupDeleted = onGroupDeleted
         return Form {
             headerSection
             membersSection
@@ -147,7 +154,19 @@ struct GroupDetailsView: View {
                 destructiveTitle: "Leave",
                 onConfirm: {
                     model.pendingConfirmation = nil
-                    Task { await model.leave(using: appState, dismiss: dismiss) }
+                    Task { await model.leave(using: appState, dismiss: { dismiss() }) }
+                },
+                onCancel: { model.pendingConfirmation = nil }
+            )
+        case .deleteLocal:
+            FullScreenConfirmationDialog(
+                title: "Delete local copy?",
+                message: "This removes the group's local history from this device. It won't send a leave proposal.",
+                systemImage: "trash",
+                destructiveTitle: "Delete Local Copy",
+                onConfirm: {
+                    model.pendingConfirmation = nil
+                    Task { await model.deleteLocal(using: appState, dismiss: { dismiss() }) }
                 },
                 onCancel: { model.pendingConfirmation = nil }
             )
@@ -320,21 +339,33 @@ struct GroupDetailsView: View {
                 }
             }
 
-            groupActionRow(
-                title: L10n.string("Leave Group"),
-                systemImage: "rectangle.portrait.and.arrow.right",
-                role: .destructive,
-                isDisabled: !GroupManagementPresentation.canLeave(
-                    state: viewModel.managementState,
-                    fallbackIsLastAdmin: viewModel.isLastAdmin
-                )
-                    || model.membershipActionInFlight,
-                help: .leave(message: GroupManagementPresentation.leaveHelpMessage(
-                    state: viewModel.managementState,
-                    fallbackIsLastAdmin: viewModel.isLastAdmin
-                ))
-            ) {
-                model.pendingConfirmation = .leave
+            if viewModel.canSendMessages {
+                groupActionRow(
+                    title: L10n.string("Leave Group"),
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    role: .destructive,
+                    isDisabled: !GroupManagementPresentation.canLeave(
+                        state: viewModel.managementState,
+                        fallbackIsLastAdmin: viewModel.isLastAdmin
+                    )
+                        || model.membershipActionInFlight,
+                    help: .leave(message: GroupManagementPresentation.leaveHelpMessage(
+                        state: viewModel.managementState,
+                        fallbackIsLastAdmin: viewModel.isLastAdmin
+                    ))
+                ) {
+                    model.pendingConfirmation = .leave
+                }
+            } else {
+                groupActionRow(
+                    title: "Delete Local Copy",
+                    systemImage: "trash",
+                    role: .destructive,
+                    isDisabled: model.membershipActionInFlight,
+                    help: .deleteLocal
+                ) {
+                    model.pendingConfirmation = .deleteLocal
+                }
             }
         }
     }
@@ -659,6 +690,7 @@ enum GroupActionHelp {
     case stepDown
     case archive
     case leave(message: String)
+    case deleteLocal
 
     var title: String {
         switch self {
@@ -668,6 +700,8 @@ enum GroupActionHelp {
             return L10n.string("Archive Group")
         case .leave:
             return L10n.string("Leave Group")
+        case .deleteLocal:
+            return "Delete Local Copy"
         }
     }
 
@@ -679,6 +713,8 @@ enum GroupActionHelp {
             return L10n.string("Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone.")
         case .leave(let message):
             return message
+        case .deleteLocal:
+            return "Deletes this group's local history from this device after you have left or been removed."
         }
     }
 }

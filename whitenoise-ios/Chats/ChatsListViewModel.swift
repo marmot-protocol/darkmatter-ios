@@ -356,6 +356,14 @@ final class ChatsListViewModel {
         publishItems()
     }
 
+    func markGroupLeft(groupIdHex: String) {
+        guard var row = rowByGroupId[groupIdHex] else { return }
+        row.selfMembership = .left
+        row.pendingConfirmation = false
+        storeRow(row)
+        publishItems()
+    }
+
     /// Reflect a locally-produced group change (e.g. an archive toggle) right
     /// away. Some local projection writes return group records rather than
     /// chat-list rows, so fold the changed fields into the current row.

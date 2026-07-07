@@ -139,6 +139,91 @@ struct GroupDetailsArchiveActionTests {
 
         #expect(!model.membershipActionInFlight)
     }
+
+    @Test func leaveMarksConversationInactiveAndNotifiesParent() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        var changedRecords: [AppGroupRecordFfi] = []
+        var leftGroupIds: [String] = []
+        var dismissed = false
+        var leaveRequests: [(String, String)] = []
+
+        model.conversation = conversation
+        model.onGroupChanged = { changedRecords.append($0) }
+        model.onGroupLeft = { leftGroupIds.append($0) }
+        model.leaveGroupForTesting = { accountRef, groupIdHex in
+            leaveRequests.append((accountRef, groupIdHex))
+            return SendSummaryFfi(published: 1, messageIds: ["leave-message"])
+        }
+
+        await model.leave(using: appState, dismiss: { dismissed = true })
+
+        #expect(leaveRequests.count == 1)
+        #expect(leaveRequests.first?.0 == "account-1")
+        #expect(leaveRequests.first?.1 == groupIdHex)
+        #expect(conversation.group.selfMembership == .left)
+        #expect(changedRecords.map(\.selfMembership) == [.left])
+        #expect(leftGroupIds == [groupIdHex])
+        #expect(dismissed)
+    }
+
+    @Test func deleteLocalIsGatedUntilMembershipIsInactive() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        var deleteRequests: [(String, String)] = []
+
+        model.conversation = conversation
+        model.deleteGroupLocalForTesting = { accountRef, groupIdHex in
+            deleteRequests.append((accountRef, groupIdHex))
+            return true
+        }
+
+        await model.deleteLocal(using: appState, dismiss: {})
+
+        #expect(deleteRequests.isEmpty)
+        #expect(model.actionError == "Leave this group before deleting the local copy.")
+    }
+
+    @Test func deleteLocalRemovesInactiveGroupFromParent() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false, selfMembership: .left)
+        )
+        let model = GroupDetailsViewModel()
+        var deleteRequests: [(String, String)] = []
+        var deletedGroupIds: [String] = []
+        var dismissed = false
+
+        model.conversation = conversation
+        model.onGroupDeleted = { deletedGroupIds.append($0) }
+        model.deleteGroupLocalForTesting = { accountRef, groupIdHex in
+            deleteRequests.append((accountRef, groupIdHex))
+            return true
+        }
+
+        await model.deleteLocal(using: appState, dismiss: { dismissed = true })
+
+        #expect(deleteRequests.count == 1)
+        #expect(deleteRequests.first?.0 == "account-1")
+        #expect(deleteRequests.first?.1 == groupIdHex)
+        #expect(deletedGroupIds == [groupIdHex])
+        #expect(dismissed)
+    }
 }
 
 @MainActor
@@ -264,7 +349,11 @@ private final class GroupAvatarPublishProbe {
     }
 }
 
-private func archiveTestGroup(groupIdHex: String, archived: Bool) -> AppGroupRecordFfi {
+private func archiveTestGroup(
+    groupIdHex: String,
+    archived: Bool,
+    selfMembership: SelfMembershipFfi = .member
+) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
         groupIdHex: groupIdHex,
         endpoint: "",
@@ -288,6 +377,7 @@ private func archiveTestGroup(groupIdHex: String, archived: Bool) -> AppGroupRec
         ),
         archived: archived,
         pendingConfirmation: false,
+        selfMembership: selfMembership,
         welcomerAccountIdHex: nil,
         viaWelcomeMessageIdHex: nil
     )

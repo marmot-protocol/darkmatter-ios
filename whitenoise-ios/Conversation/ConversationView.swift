@@ -389,6 +389,8 @@ struct ConversationView: View {
     let initialTargetMessageIdHex: String?
     let onChatListRowUpdated: ((ChatListRowFfi) -> Void)?
     let onGroupChanged: ((AppGroupRecordFfi) -> Void)?
+    let onGroupLeft: ((String) -> Void)?
+    let onGroupDeleted: ((String) -> Void)?
 
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
@@ -440,7 +442,9 @@ struct ConversationView: View {
         initialTargetMessageIdHex: String? = nil,
         initialAppState: AppState? = nil,
         onChatListRowUpdated: ((ChatListRowFfi) -> Void)? = nil,
-        onGroupChanged: ((AppGroupRecordFfi) -> Void)? = nil
+        onGroupChanged: ((AppGroupRecordFfi) -> Void)? = nil,
+        onGroupLeft: ((String) -> Void)? = nil,
+        onGroupDeleted: ((String) -> Void)? = nil
     ) {
         self.chat = chat
         self.initialTitle = initialTitle
@@ -448,6 +452,8 @@ struct ConversationView: View {
         self.initialMemberCount = initialMemberCount
         self.onChatListRowUpdated = onChatListRowUpdated
         self.onGroupChanged = onGroupChanged
+        self.onGroupLeft = onGroupLeft
+        self.onGroupDeleted = onGroupDeleted
         let targetMessageId = initialTargetMessageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialTargetMessageIdHex = targetMessageId?.isEmpty == false ? targetMessageId : nil
         _viewModel = State(
@@ -503,6 +509,14 @@ struct ConversationView: View {
                             viewModel: viewModel,
                             onGroupChanged: { group in
                                 onGroupChanged?(group)
+                            },
+                            onGroupLeft: { groupIdHex in
+                                showDetails = false
+                                onGroupLeft?(groupIdHex)
+                            },
+                            onGroupDeleted: { groupIdHex in
+                                showDetails = false
+                                onGroupDeleted?(groupIdHex)
                             }
                         )
                     }
