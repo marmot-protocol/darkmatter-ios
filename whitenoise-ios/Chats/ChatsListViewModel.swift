@@ -39,6 +39,8 @@ final class ChatsListViewModel {
         var id: String { row.groupIdHex }
         var unreadCount: UInt64 { row.unreadCount }
         var hasUnread: Bool { row.hasUnread }
+        var unreadMentionCount: UInt64 { row.unreadMentionCount }
+        var hasUnreadMention: Bool { row.unreadMention || row.unreadMentionCount > 0 }
         var isArchived: Bool { row.archived }
         var selfMembership: SelfMembershipFfi { row.selfMembership }
         var isActiveMember: Bool {

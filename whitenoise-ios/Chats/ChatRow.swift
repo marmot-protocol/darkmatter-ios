@@ -40,8 +40,15 @@ struct ChatRow: View {
                         .fontWeight(item.hasUnread ? .semibold : .regular)
                         .monospacedDigit()
                 }
-                if item.hasUnread {
-                    UnreadCountBadge(count: item.unreadCount)
+                if item.hasUnread || item.hasUnreadMention {
+                    HStack(spacing: 4) {
+                        if item.hasUnreadMention {
+                            MentionBadge(count: item.unreadMentionCount)
+                        }
+                        if item.hasUnread {
+                            UnreadCountBadge(count: item.unreadCount)
+                        }
+                    }
                 }
             }
         }
@@ -76,6 +83,26 @@ struct ChatRow: View {
         return RelativeTime.short(Date(timeIntervalSince1970: TimeInterval(latest.timelineAt)))
     }
 
+}
+
+struct MentionBadge: View {
+    let count: UInt64
+
+    var body: some View {
+        Text(Self.label(for: count))
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color.orange))
+            .accessibilityLabel(Text(verbatim: "Unread mention"))
+    }
+
+    static func label(for count: UInt64, locale: Locale = AppLanguage.currentLocale) -> String {
+        guard count > 1 else { return "@" }
+        return "@\(UnreadCountBadge.label(for: count, locale: locale))"
+    }
 }
 
 /// Circular avatar. Renders the profile picture when a URL is provided,

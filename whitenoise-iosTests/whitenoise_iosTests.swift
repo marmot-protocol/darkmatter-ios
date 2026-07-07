@@ -4286,6 +4286,23 @@ struct ChatsListProjectionTests {
         #expect(item.avatarURL?.absoluteString == "https://cdn.example.com/group.png")
     }
 
+    @Test func itemSurfacesUnreadMentionProjection() throws {
+        let item = ChatsListViewModel.Item(
+            row: chatListRow(
+                groupIdHex: hex("de"),
+                title: "Mentions",
+                unreadCount: 4,
+                unreadMentionCount: 2,
+                unreadMention: true
+            ),
+            avatarURL: nil,
+            title: "Mentions"
+        )
+
+        #expect(item.hasUnreadMention)
+        #expect(item.unreadMentionCount == 2)
+    }
+
     @MainActor
     @Test func chatListDisplayTitleUsesGroupDisplayForUnnamedDirectMessage() throws {
         let appState = AppState(client: try MarmotClient.testClient())
@@ -9047,6 +9064,8 @@ private func chatListRow(
     avatarUrl: String? = nil,
     lastMessage: ChatListMessagePreviewFfi? = nil,
     unreadCount: UInt64 = 0,
+    unreadMentionCount: UInt64 = 0,
+    unreadMention: Bool = false,
     firstUnreadMessageIdHex: String? = nil,
     lastReadMessageIdHex: String? = nil,
     lastReadTimelineAt: UInt64? = nil,
