@@ -56,6 +56,7 @@ final class PrivacySecuritySettingsViewModel {
     }
 
     func setTelemetryEnabled(_ enabled: Bool, using appState: AppState) async {
+        guard !telemetrySaving else { return }
         guard let current = telemetrySettings else { return }
         telemetrySaving = true
         telemetryErrorMessage = nil
@@ -76,6 +77,7 @@ final class PrivacySecuritySettingsViewModel {
     }
 
     func deleteAllAuditLogs(using appState: AppState) async {
+        guard !auditDeleting else { return }
         auditDeleting = true
         auditErrorMessage = nil
         defer { auditDeleting = false }
@@ -95,6 +97,7 @@ final class PrivacySecuritySettingsViewModel {
     }
 
     func setAuditEnabled(_ enabled: Bool, using appState: AppState) async {
+        guard !auditSaving else { return }
         guard let current = auditSettings else { return }
         auditSaving = true
         auditErrorMessage = nil

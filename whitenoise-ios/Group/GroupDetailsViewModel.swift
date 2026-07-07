@@ -35,6 +35,8 @@ final class GroupDetailsViewModel {
     @ObservationIgnored var onGroupChanged: (AppGroupRecordFfi) -> Void = { _ in }
 #if DEBUG
     @ObservationIgnored var setGroupArchivedForTesting: (@MainActor (String, String, Bool) async throws -> AppGroupRecordFfi)?
+    @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var updateGroupAvatarUrlForTesting: (@MainActor (String, String, String?) async throws -> SendSummaryFfi)?
 #endif
 
     func invite(refs: [String], using appState: AppState) async throws {
@@ -156,15 +158,33 @@ final class GroupDetailsViewModel {
     func rename(using appState: AppState) async {
         guard let conversation, let accountRef = appState.activeAccountRef,
               let name = GroupDetailsView.validatedGroupName(renameDraft) else { return }
+        guard !membershipActionInFlight else { return }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
         do {
-            let client = try appState.currentMarmotClient()
             appState.present(.warning(L10n.string("Updating group name…"), message: L10n.string("Publishing group update.")))
-            let summary = try await client.updateGroupProfile(
+            let summary: SendSummaryFfi
+#if DEBUG
+            if let updateGroupProfileForTesting {
+                summary = try await updateGroupProfileForTesting(accountRef, conversation.group.groupIdHex, name)
+            } else {
+                let client = try appState.currentMarmotClient()
+                summary = try await client.updateGroupProfile(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex,
+                    name: name,
+                    description: nil
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            summary = try await client.updateGroupProfile(
                 accountRef: accountRef,
                 groupIdHex: conversation.group.groupIdHex,
                 name: name,
                 description: nil
             )
+#endif
             await refreshGroupManagementAndNotify()
             await refreshVisibleDebugState(using: appState)
             Haptics.success()
@@ -179,6 +199,7 @@ final class GroupDetailsViewModel {
 
     func updateGroupImage(url: String?, using appState: AppState) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
+        guard !membershipActionInFlight else { return }
         let normalizedURL: String?
         if let url {
             guard let sanitized = GroupImageURLSheet.validatedImageURL(url) else {
@@ -188,17 +209,39 @@ final class GroupDetailsViewModel {
         } else {
             normalizedURL = nil
         }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
 
         do {
-            let client = try appState.currentMarmotClient()
             appState.present(.warning(L10n.string("Updating group image…"), message: L10n.string("Publishing group update.")))
-            let summary = try await client.updateGroupAvatarUrl(
+            let summary: SendSummaryFfi
+#if DEBUG
+            if let updateGroupAvatarUrlForTesting {
+                summary = try await updateGroupAvatarUrlForTesting(
+                    accountRef,
+                    conversation.group.groupIdHex,
+                    normalizedURL
+                )
+            } else {
+                let client = try appState.currentMarmotClient()
+                summary = try await client.updateGroupAvatarUrl(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex,
+                    url: normalizedURL,
+                    dim: nil,
+                    thumbhash: nil
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            summary = try await client.updateGroupAvatarUrl(
                 accountRef: accountRef,
                 groupIdHex: conversation.group.groupIdHex,
                 url: normalizedURL,
                 dim: nil,
                 thumbhash: nil
             )
+#endif
             await refreshGroupManagementAndNotify()
             await refreshVisibleDebugState(using: appState)
             Haptics.success()

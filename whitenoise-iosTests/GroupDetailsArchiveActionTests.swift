@@ -54,6 +54,91 @@ struct GroupDetailsArchiveActionTests {
         #expect(conversation.group.archived)
         #expect(changedRecords.map(\.archived) == [true])
     }
+
+    @Test func renameRejectsConcurrentPublishUntilFirstCompletes() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        let publisher = GroupProfilePublishProbe()
+
+        model.conversation = conversation
+        model.renameDraft = "Renamed group"
+        model.updateGroupProfileForTesting = { accountRef, groupIdHex, name in
+            try await publisher.publish(accountRef: accountRef, groupIdHex: groupIdHex, name: name)
+        }
+
+        let first = Task { @MainActor in
+            await model.rename(using: appState)
+        }
+        await publisher.waitUntilStarted()
+
+        #expect(model.membershipActionInFlight)
+
+        let second = Task { @MainActor in
+            await model.rename(using: appState)
+        }
+        await second.value
+
+        #expect(publisher.requests == [
+            GroupProfilePublishProbe.Request(
+                accountRef: "account-1",
+                groupIdHex: groupIdHex,
+                name: "Renamed group"
+            ),
+        ])
+
+        publisher.completeFirst()
+        await first.value
+
+        #expect(!model.membershipActionInFlight)
+    }
+
+    @Test func updateGroupImageRejectsConcurrentPublishUntilFirstCompletes() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        let publisher = GroupAvatarPublishProbe()
+
+        model.conversation = conversation
+        model.updateGroupAvatarUrlForTesting = { accountRef, groupIdHex, url in
+            try await publisher.publish(accountRef: accountRef, groupIdHex: groupIdHex, url: url)
+        }
+
+        let first = Task { @MainActor in
+            try await model.updateGroupImage(url: "https://example.com/avatar.png", using: appState)
+        }
+        await publisher.waitUntilStarted()
+
+        #expect(model.membershipActionInFlight)
+
+        let second = Task { @MainActor in
+            try await model.updateGroupImage(url: "https://example.com/avatar.png", using: appState)
+        }
+        try await second.value
+
+        #expect(publisher.requests == [
+            GroupAvatarPublishProbe.Request(
+                accountRef: "account-1",
+                groupIdHex: groupIdHex,
+                url: "https://example.com/avatar.png"
+            ),
+        ])
+
+        publisher.completeFirst()
+        try await first.value
+
+        #expect(!model.membershipActionInFlight)
+    }
 }
 
 @MainActor
@@ -95,6 +180,86 @@ private final class GroupArchivePublishProbe {
 
     func completeFirst(with record: AppGroupRecordFfi) {
         firstCompletion?.resume(returning: record)
+        firstCompletion = nil
+    }
+}
+
+@MainActor
+private final class GroupProfilePublishProbe {
+    struct Request: Equatable {
+        let accountRef: String
+        let groupIdHex: String
+        let name: String
+    }
+
+    private(set) var requests: [Request] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstCompletion: CheckedContinuation<SendSummaryFfi, Error>?
+
+    func publish(accountRef: String, groupIdHex: String, name: String) async throws -> SendSummaryFfi {
+        let request = Request(accountRef: accountRef, groupIdHex: groupIdHex, name: name)
+        requests.append(request)
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+
+        guard requests.count == 1 else {
+            return SendSummaryFfi(published: 0, messageIds: [])
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            firstCompletion = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard requests.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func completeFirst() {
+        firstCompletion?.resume(returning: SendSummaryFfi(published: 1, messageIds: ["message-1"]))
+        firstCompletion = nil
+    }
+}
+
+@MainActor
+private final class GroupAvatarPublishProbe {
+    struct Request: Equatable {
+        let accountRef: String
+        let groupIdHex: String
+        let url: String?
+    }
+
+    private(set) var requests: [Request] = []
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var firstCompletion: CheckedContinuation<SendSummaryFfi, Error>?
+
+    func publish(accountRef: String, groupIdHex: String, url: String?) async throws -> SendSummaryFfi {
+        let request = Request(accountRef: accountRef, groupIdHex: groupIdHex, url: url)
+        requests.append(request)
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+
+        guard requests.count == 1 else {
+            return SendSummaryFfi(published: 0, messageIds: [])
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            firstCompletion = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard requests.isEmpty else { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func completeFirst() {
+        firstCompletion?.resume(returning: SendSummaryFfi(published: 1, messageIds: ["message-1"]))
         firstCompletion = nil
     }
 }
