@@ -444,7 +444,7 @@ struct GroupDetailsView: View {
                 }
                 if !pushDebugInfo.tokens.isEmpty {
                     DisclosureGroup("Token fingerprints") {
-                        ForEach(pushDebugInfo.tokens, id: \.self) { token in
+                        ForEach(Array(pushDebugInfo.tokens.enumerated()), id: \.offset) { _, token in
                             tokenDebugRow(token)
                         }
                     }

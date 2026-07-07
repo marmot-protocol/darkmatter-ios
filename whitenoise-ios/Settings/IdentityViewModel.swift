@@ -14,6 +14,7 @@ final class IdentityViewModel {
     var exportError: String?
 
     func exportRawNsec(using appState: AppState) async {
+        guard !exportInFlight else { return }
         guard let accountRef = appState.activeAccountRef else { return }
         exportInFlight = true
         exportError = nil
@@ -30,6 +31,7 @@ final class IdentityViewModel {
     }
 
     func exportEncryptedNsec(passphrase: String, using appState: AppState) async {
+        guard !exportInFlight else { return }
         guard let accountRef = appState.activeAccountRef else { return }
         exportInFlight = true
         exportError = nil
