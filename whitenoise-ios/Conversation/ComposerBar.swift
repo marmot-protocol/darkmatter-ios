@@ -87,6 +87,31 @@ private enum ComposerAttachmentPopover: String, Identifiable {
     var id: String { rawValue }
 }
 
+nonisolated enum AudioDurationLabel {
+    private static let maximumDisplaySeconds = Int.max / 2
+
+    static func label(for duration: Double, locale: Locale = AppLanguage.currentLocale) -> String {
+        label(forTotalSeconds: totalSeconds(clamping: duration), locale: locale)
+    }
+
+    static func optionalLabel(for duration: Double?, locale: Locale = AppLanguage.currentLocale) -> String? {
+        guard let duration, duration.isFinite else { return nil }
+        return label(for: duration, locale: locale)
+    }
+
+    private static func totalSeconds(clamping duration: Double) -> Int {
+        guard duration.isFinite, duration > 0 else { return 0 }
+        guard duration < Double(maximumDisplaySeconds) else { return maximumDisplaySeconds }
+        return Int(duration.rounded(.down))
+    }
+
+    private static func label(forTotalSeconds totalSeconds: Int, locale: Locale) -> String {
+        let minutes = String(format: "%lld", locale: locale, Int64(totalSeconds / 60))
+        let seconds = String(format: "%02lld", locale: locale, Int64(totalSeconds % 60))
+        return L10n.formatted("%@:%@", arguments: [minutes, seconds], locale: locale)
+    }
+}
+
 nonisolated enum ComposerAudioDraftPreviewPresentation {
     static func playIconName(isPlaying: Bool, didFail: Bool) -> String {
         if isPlaying { return "pause.fill" }
@@ -96,8 +121,7 @@ nonisolated enum ComposerAudioDraftPreviewPresentation {
 
     static func durationLabel(_ duration: Double?) -> String {
         guard let duration else { return "" }
-        let total = max(0, Int(duration.rounded(.down)))
-        return "\(total / 60):\(String(format: "%02d", total % 60))"
+        return AudioDurationLabel.label(for: duration)
     }
 }
 

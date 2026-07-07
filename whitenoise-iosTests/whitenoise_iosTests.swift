@@ -213,6 +213,10 @@ struct AppStateBootstrapTests {
         #expect(ToastState.sleepNanoseconds(forDuration: .nan) == 0)
         #expect(ToastState.sleepNanoseconds(forDuration: .infinity) == UInt64.max)
         #expect(ToastState.sleepNanoseconds(forDuration: 1.25) == 1_250_000_000)
+        #expect(ToastState.sleepNanoseconds(
+            forDuration: TimeInterval(UInt64.max) / 1_000_000_000
+        ) == UInt64.max)
+        #expect(ToastState.sleepNanoseconds(forDuration: .greatestFiniteMagnitude) == UInt64.max)
     }
 
     @Test func routingIsBackedByFocusedNavigationState() async throws {
@@ -7419,6 +7423,27 @@ struct ComposerAudioDraftPreviewPresentationTests {
         #expect(ComposerAudioDraftPreviewPresentation.durationLabel(nil) == "")
         #expect(ComposerAudioDraftPreviewPresentation.durationLabel(2.9) == "0:02")
         #expect(ComposerAudioDraftPreviewPresentation.durationLabel(65) == "1:05")
+    }
+
+    @Test func durationLabelClampsNonFiniteDraftDurations() {
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(.nan) == "0:00")
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(.infinity) == "0:00")
+        #expect(ComposerAudioDraftPreviewPresentation.durationLabel(-.infinity) == "0:00")
+    }
+
+    @Test func durationLabelUsesLocalizedDigits() {
+        let locale = Locale(identifier: "ar_EG")
+        let expected = L10n.formatted(
+            "%@:%@",
+            arguments: [
+                String(format: "%lld", locale: locale, Int64(1)),
+                String(format: "%02lld", locale: locale, Int64(5))
+            ],
+            locale: locale
+        )
+
+        #expect(AudioDurationLabel.label(for: 65, locale: locale) == expected)
+        #expect(AudioDurationLabel.label(for: 65, locale: locale) != "1:05")
     }
 }
 
