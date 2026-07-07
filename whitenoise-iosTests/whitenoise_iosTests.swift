@@ -4504,6 +4504,19 @@ struct ConversationTimelineProjectionTests {
         #expect(!retained.contains(stale))
     }
 
+    @Test func markedReadDedupRetainsLoadedIdsDeterministically() {
+        let loaded = Set([hex("44"), hex("11"), hex("33"), hex("22")])
+
+        let retained = ConversationReadMarker.retainedMarkedReadMessageIds(
+            loaded,
+            loadedMessageIds: loaded,
+            pendingMessageIds: [],
+            limit: 2
+        )
+
+        #expect(retained == Set([hex("11"), hex("22")]))
+    }
+
     @Test func canDeleteMessageRequiresSenderOrAdminPermission() {
         let me = hex("11")
         let mine = message(id: hex("a1"), sender: me)
