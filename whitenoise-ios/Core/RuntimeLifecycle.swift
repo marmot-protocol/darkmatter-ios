@@ -235,6 +235,10 @@ final class RuntimeLifecycle {
     private func releaseRuntimeAfterStartupFailure() async {
         appState?.stopNotificationSubscription()
         await appState?.cancelNativePushRegistrationTask()
+        await shutdownAndReleaseCurrentClient()
+    }
+
+    private func shutdownAndReleaseCurrentClient() async {
         if let client {
             await client.marmot.shutdown()
             self.client = nil
@@ -339,13 +343,12 @@ final class RuntimeLifecycle {
         isRuntimeSuspending = true
         defer { finishRuntimeSuspensionWait() }
         appState?.stopNotificationSubscription()
-        await appState?.marmot.shutdown()
+        await shutdownAndReleaseCurrentClient()
         // Release the FFI handle so Rust drops the runtime and closes its
         // SQLite storage in the shared App Group container. Holding the handle
         // alive across suspension (only swapping it on resume) keeps that
         // file lock held, which is what iOS kills the app for with
         // `0xdead10cc`. Rebuilt in `resumeAfterForegroundActivation`.
-        client = nil
         runtimeSuspendedForBackground = true
     }
 
