@@ -104,7 +104,9 @@ final class ChatsListViewModel {
 
     private weak var appState: AppState?
     private var chatListTask: Task<Void, Never>?
+    private var chatListTaskID: UUID?
     private var avatarURLTask: Task<Void, Never>?
+    private var avatarEnrichmentTaskID: UUID?
     private var pendingChatListUpdateTask: Task<Void, Never>?
     private var currentAccount: String?
     private var rowByGroupId: [String: ChatListRowFfi] = [:]
@@ -118,6 +120,13 @@ final class ChatsListViewModel {
     private var pendingGroupDetailsRefreshGroupIds: Set<String> = []
 
     private static let chatListUpdateCoalescingDelayNanoseconds: UInt64 = 16_000_000
+    private static let liveSubscriptionInitialRetryDelayNanoseconds: UInt64 = 500_000_000
+    private static let liveSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 8_000_000_000
+    private static let rowEnrichmentRetryDelayNanoseconds: UInt64 = 1_000_000_000
+
+    #if DEBUG
+    @ObservationIgnored var mentionDisplayNameForTesting: MarkdownMentionResolver?
+    #endif
 
     init(appState: AppState) {
         self.appState = appState
@@ -135,8 +144,10 @@ final class ChatsListViewModel {
         if currentAccount == accountRef, !force { return }
         chatListTask?.cancel()
         chatListTask = nil
+        chatListTaskID = nil
         avatarURLTask?.cancel()
         avatarURLTask = nil
+        avatarEnrichmentTaskID = nil
         pendingChatListUpdateTask?.cancel()
         pendingChatListUpdateTask = nil
         if currentAccount != accountRef {
@@ -185,27 +196,59 @@ final class ChatsListViewModel {
 
     private func startLiveUpdates(accountRef: String) {
         guard let appState else { return }
-        chatListTask = Task { [weak self, weak appState] in
-            do {
-                guard let appState, appState.canUseRuntimeForForegroundWork else { return }
-                let client = try appState.currentMarmotClient()
-                let chatListSub = try await client.subscribeChatList(
-                    accountRef: accountRef,
-                    includeArchived: true
-                )
-                guard !Task.isCancelled else { return }
-                let snapshot = await client.chatListSubscriptionSnapshot(chatListSub)
-                guard !Task.isCancelled else { return }
-                self?.applyChatListSnapshot(snapshot)
+        let taskID = UUID()
+        chatListTaskID = taskID
+        chatListTask = Task { @MainActor [weak self, weak appState] in
+            defer { self?.finishChatListTask(taskID: taskID) }
+            var retryDelay = Self.liveSubscriptionInitialRetryDelayNanoseconds
+            while !Task.isCancelled {
+                do {
+                    guard let appState, appState.canUseRuntimeForForegroundWork else { return }
+                    let client = try appState.currentMarmotClient()
+                    let chatListSub = try await client.subscribeChatList(
+                        accountRef: accountRef,
+                        includeArchived: true
+                    )
+                    guard !Task.isCancelled,
+                          self?.ownsChatListTask(taskID: taskID, accountRef: accountRef) == true
+                    else { return }
+                    let snapshot = await client.chatListSubscriptionSnapshot(chatListSub)
+                    guard !Task.isCancelled,
+                          appState.canUseRuntimeForForegroundWork,
+                          self?.ownsChatListTask(taskID: taskID, accountRef: accountRef) == true
+                    else { return }
+                    self?.loadError = nil
+                    self?.applyChatListSnapshot(snapshot)
 
-                for await update in SubscriptionDriver.chatListUpdates(chatListSub) {
-                    self?.applyChatListUpdate(update)
+                    for await update in SubscriptionDriver.chatListUpdates(chatListSub) {
+                        guard !Task.isCancelled,
+                              appState.canUseRuntimeForForegroundWork,
+                              self?.ownsChatListTask(taskID: taskID, accountRef: accountRef) == true
+                        else { return }
+                        retryDelay = Self.liveSubscriptionInitialRetryDelayNanoseconds
+                        self?.applyChatListUpdate(update)
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !Task.isCancelled,
+                          appState?.canUseRuntimeForForegroundWork == true,
+                          self?.ownsChatListTask(taskID: taskID, accountRef: accountRef) == true
+                    else { return }
+                    if self?.rowByGroupId.isEmpty == true {
+                        self?.loadError = error.localizedDescription
+                    }
                 }
-            } catch {
-                guard !Task.isCancelled else { return }
-                if self?.rowByGroupId.isEmpty == true {
-                    self?.loadError = error.localizedDescription
+                guard !Task.isCancelled,
+                      appState?.canUseRuntimeForForegroundWork == true,
+                      self?.ownsChatListTask(taskID: taskID, accountRef: accountRef) == true
+                else { return }
+                do {
+                    try await Task.sleep(nanoseconds: retryDelay)
+                } catch {
+                    return
                 }
+                retryDelay = Self.nextLiveSubscriptionRetryDelay(after: retryDelay)
             }
         }
     }
@@ -328,6 +371,7 @@ final class ChatsListViewModel {
         avatarURLByGroupId[record.groupIdHex] = record.avatarUrl
         avatarURLLoadedGroupIds.insert(record.groupIdHex)
         pendingAvatarURLRefreshGroupIds.remove(record.groupIdHex)
+        updateCachedGroupDetails(with: record)
         storeRow(row)
         publishItems()
     }
@@ -355,15 +399,15 @@ final class ChatsListViewModel {
     }
 
     private func storeRow(_ row: ChatListRowFfi) {
+        updateCachedGroupDetails(with: row)
         rowByGroupId[row.groupIdHex] = row
         itemByGroupId[row.groupIdHex] = makeItem(for: row)
     }
 
     func refreshDisplayProjections() {
-        guard !groupDetailsCache.isEmpty else { return }
+        guard !rowByGroupId.isEmpty else { return }
         var changed = false
-        for groupId in groupDetailsCache.keys {
-            guard let row = rowByGroupId[groupId] else { continue }
+        for (groupId, row) in rowByGroupId {
             itemByGroupId[groupId] = makeItem(for: row)
             changed = true
         }
@@ -379,9 +423,38 @@ final class ChatsListViewModel {
             avatarURL: display.avatarURL,
             title: display.title,
             mentionDisplayName: { [weak appState] entity in
-                appState?.mentionDisplayName(for: entity)
+                #if DEBUG
+                if let name = self.mentionDisplayNameForTesting?(entity) {
+                    return name
+                }
+                #endif
+                return appState?.mentionDisplayName(for: entity)
             }
         )
+    }
+
+    private func updateCachedGroupDetails(with row: ChatListRowFfi) {
+        guard var details = groupDetailsCache[row.groupIdHex] else { return }
+        var group = details.group
+        var changed = false
+        if group.name != row.groupName {
+            group.name = row.groupName
+            changed = true
+        }
+        if group.avatarUrl != row.avatarUrl {
+            group.avatarUrl = row.avatarUrl
+            changed = true
+        }
+        guard changed else { return }
+        details.group = group
+        groupDetailsCache[row.groupIdHex] = details
+        avatarURLByGroupId[row.groupIdHex] = row.avatarUrl
+    }
+
+    private func updateCachedGroupDetails(with group: AppGroupRecordFfi) {
+        guard var details = groupDetailsCache[group.groupIdHex] else { return }
+        details.group = group
+        groupDetailsCache[group.groupIdHex] = details
     }
 
     private func display(
@@ -398,6 +471,15 @@ final class ChatsListViewModel {
             title: GroupDisplay.title(for: groupDisplay, appState: appState),
             avatarURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState) ?? fallbackAvatarURL
         )
+    }
+
+    static func nextLiveSubscriptionRetryDelay(after delay: UInt64) -> UInt64 {
+        guard delay < liveSubscriptionMaximumRetryDelayNanoseconds else {
+            return liveSubscriptionMaximumRetryDelayNanoseconds
+        }
+        let doubled = delay.multipliedReportingOverflow(by: 2)
+        guard !doubled.overflow else { return liveSubscriptionMaximumRetryDelayNanoseconds }
+        return min(doubled.partialValue, liveSubscriptionMaximumRetryDelayNanoseconds)
     }
 
     static func displayTitle(
@@ -485,23 +567,42 @@ final class ChatsListViewModel {
             }
         )
         guard avatarURLTask == nil else { return }
+        let taskID = UUID()
+        avatarEnrichmentTaskID = taskID
         avatarURLTask = Task { @MainActor [weak self, weak appState] in
+            defer { self?.finishAvatarEnrichmentTask(taskID: taskID) }
             guard let self, let appState else { return }
             while !Task.isCancelled, self.currentAccount == accountRef {
-                let avatarGroupIds = Array(self.pendingAvatarURLRefreshGroupIds)
-                let displayGroupIds = Array(self.pendingGroupDetailsRefreshGroupIds)
+                let avatarGroupIds = self.pendingAvatarURLRefreshGroupIds
+                let displayGroupIds = self.pendingGroupDetailsRefreshGroupIds
                 self.pendingAvatarURLRefreshGroupIds = []
                 self.pendingGroupDetailsRefreshGroupIds = []
-                let groupIds = Array(Set(avatarGroupIds + displayGroupIds))
+                let groupIds = Array(avatarGroupIds.union(displayGroupIds))
                 guard !groupIds.isEmpty else { break }
 
                 var changed = false
+                var failedAvatarGroupIds: Set<String> = []
+                var failedDisplayGroupIds: Set<String> = []
                 for groupId in groupIds where !Task.isCancelled {
-                    guard let client = try? appState.currentMarmotClient(),
-                          let details = try? await client.groupDetails(
-                              accountRef: accountRef,
-                              groupIdHex: groupId
-                          ) else { continue }
+                    let details: GroupDetailsFfi
+                    do {
+                        let client = try appState.currentMarmotClient()
+                        details = try await client.groupDetails(
+                            accountRef: accountRef,
+                            groupIdHex: groupId
+                        )
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        if avatarGroupIds.contains(groupId) {
+                            failedAvatarGroupIds.insert(groupId)
+                        }
+                        if displayGroupIds.contains(groupId) {
+                            failedDisplayGroupIds.insert(groupId)
+                        }
+                        continue
+                    }
+                    guard self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef) else { return }
 
                     // `groupDetails` is a suspension point: a full-snapshot
                     // replace (`applyChatListSnapshot`) can run during the await
@@ -537,16 +638,74 @@ final class ChatsListViewModel {
                     self.itemByGroupId[groupId] = self.makeItem(for: row)
                     changed = true
                 }
-                guard !Task.isCancelled, self.currentAccount == accountRef else { break }
+                guard !Task.isCancelled, self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef) else { break }
+                self.pendingAvatarURLRefreshGroupIds.formUnion(
+                    failedAvatarGroupIds.filter { self.rowByGroupId[$0] != nil }
+                )
+                self.pendingGroupDetailsRefreshGroupIds.formUnion(
+                    failedDisplayGroupIds.filter { self.rowByGroupId[$0] != nil }
+                )
                 if changed {
                     self.publishItems()
                 }
-            }
-            if self.currentAccount == accountRef {
-                self.avatarURLTask = nil
+                if !failedAvatarGroupIds.isEmpty || !failedDisplayGroupIds.isEmpty {
+                    do {
+                        try await Task.sleep(nanoseconds: Self.rowEnrichmentRetryDelayNanoseconds)
+                    } catch {
+                        return
+                    }
+                }
             }
         }
     }
+
+    private func ownsChatListTask(taskID: UUID, accountRef: String) -> Bool {
+        currentAccount == accountRef && chatListTaskID == taskID
+    }
+
+    private func finishChatListTask(taskID: UUID) {
+        guard chatListTaskID == taskID else { return }
+        chatListTask = nil
+        chatListTaskID = nil
+    }
+
+    private func ownsAvatarEnrichmentTask(taskID: UUID, accountRef: String) -> Bool {
+        currentAccount == accountRef && avatarEnrichmentTaskID == taskID
+    }
+
+    private func finishAvatarEnrichmentTask(taskID: UUID) {
+        guard avatarEnrichmentTaskID == taskID else { return }
+        avatarURLTask = nil
+        avatarEnrichmentTaskID = nil
+    }
+
+    #if DEBUG
+    func seedGroupDetailsCacheForTesting(_ details: GroupDetailsFfi) {
+        let groupId = details.group.groupIdHex
+        groupDetailsCache[groupId] = details
+        groupDetailsLoadedGroupIds.insert(groupId)
+        if let avatarUrl = details.group.avatarUrl {
+            avatarURLByGroupId[groupId] = avatarUrl
+            avatarURLLoadedGroupIds.insert(groupId)
+        }
+        if let row = rowByGroupId[groupId] {
+            itemByGroupId[groupId] = makeItem(for: row)
+            publishItems()
+        }
+    }
+
+    var avatarEnrichmentTaskIDForTesting: UUID? { avatarEnrichmentTaskID }
+
+    func installAvatarEnrichmentTaskForTesting(taskID: UUID) {
+        avatarURLTask?.cancel()
+        avatarURLTask = Task {}
+        avatarEnrichmentTaskID = taskID
+    }
+
+    func finishAvatarEnrichmentTaskForTesting(taskID: UUID) {
+        finishAvatarEnrichmentTask(taskID: taskID)
+    }
+    #endif
 
     /// Newest projected activity first; rows without messages fall back to the
     /// projection update time, then title.

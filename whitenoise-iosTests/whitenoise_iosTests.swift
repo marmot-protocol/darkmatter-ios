@@ -4350,6 +4350,82 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/group.png")
     }
 
+    @Test func localGroupChangeRefreshesCachedGroupDetailsDisplay() throws {
+        let groupId = hex("d8")
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: groupId, title: groupId, groupName: "")
+        viewModel.applyChatListSnapshot([row])
+        viewModel.seedGroupDetailsCacheForTesting(GroupDetailsFfi(
+            group: group(name: "Old name", id: groupId, avatarUrl: "https://cdn.example.com/old.png"),
+            members: [groupMember(memberIdHex: hex("11"), isAdmin: true, isSelf: true)]
+        ))
+
+        viewModel.applyLocalGroupChange(group(
+            name: "New name",
+            id: groupId,
+            avatarUrl: "https://cdn.example.com/new.png"
+        ))
+
+        #expect(viewModel.items.first?.title == "New name")
+        #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/new.png")
+    }
+
+    @Test func chatListRowRefreshesCachedGroupDetailsDisplay() throws {
+        let groupId = hex("d9")
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let oldRow = chatListRow(
+            groupIdHex: groupId,
+            title: "Old name",
+            groupName: "Old name",
+            avatarUrl: "https://cdn.example.com/old.png"
+        )
+        viewModel.applyChatListSnapshot([oldRow])
+        viewModel.seedGroupDetailsCacheForTesting(GroupDetailsFfi(
+            group: group(name: "Old name", id: groupId, avatarUrl: "https://cdn.example.com/old.png"),
+            members: [groupMember(memberIdHex: hex("11"), isAdmin: true, isSelf: true)]
+        ))
+
+        viewModel.applyChatListRow(chatListRow(
+            groupIdHex: groupId,
+            title: "New name",
+            groupName: "New name",
+            avatarUrl: "https://cdn.example.com/new.png"
+        ))
+
+        #expect(viewModel.items.first?.title == "New name")
+        #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/new.png")
+    }
+
+    @Test func profileRefreshRebuildsNamedGroupMentionPreviews() throws {
+        let bech32 = "npub1" + String(repeating: "q", count: 58)
+        let tokens = MarkdownDocumentFfi(blocks: [
+            .paragraph(inlines: [
+                .text(content: "ping "),
+                .nostrMention(entity: MarkdownNostrEntityFfi(hrp: .npub, bech32: bech32)),
+            ]),
+        ], truncated: false)
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        viewModel.mentionDisplayNameForTesting = { _ in nil }
+        let row = chatListRow(
+            groupIdHex: hex("da"),
+            title: "Named room",
+            groupName: "Named room",
+            lastMessage: chatListPreview(
+                messageIdHex: hex("db"),
+                plaintext: "fallback",
+                contentTokens: tokens
+            )
+        )
+        viewModel.applyChatListSnapshot([row])
+
+        #expect(viewModel.items.first?.previewText == "ping @npub1qqq…qqqq")
+
+        viewModel.mentionDisplayNameForTesting = { _ in "Alice" }
+        viewModel.refreshDisplayProjections()
+
+        #expect(viewModel.items.first?.previewText == "ping @Alice")
+    }
+
     @Test func localGroupChangeUpdatesProjectedMembership() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let row = chatListRow(groupIdHex: hex("d7"), title: "General")
@@ -4399,6 +4475,28 @@ struct ChatsListProjectionTests {
     @Test func intersectingKeepsEverythingWhenAllSurvive() throws {
         let cache = ["a": 1, "b": 2]
         #expect(ChatsListViewModel.intersecting(cache, with: ["a", "b"]) == cache)
+    }
+
+    @Test func chatListSubscriptionRetryDelayDoublesUntilCapped() {
+        #expect(ChatsListViewModel.nextLiveSubscriptionRetryDelay(after: 500_000_000) == 1_000_000_000)
+        #expect(ChatsListViewModel.nextLiveSubscriptionRetryDelay(after: 4_000_000_000) == 8_000_000_000)
+        #expect(ChatsListViewModel.nextLiveSubscriptionRetryDelay(after: 8_000_000_000) == 8_000_000_000)
+    }
+
+    @Test func staleAvatarEnrichmentTaskCannotClearNewerTaskHandle() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let stale = UUID()
+        let current = UUID()
+
+        viewModel.installAvatarEnrichmentTaskForTesting(taskID: stale)
+        viewModel.installAvatarEnrichmentTaskForTesting(taskID: current)
+        viewModel.finishAvatarEnrichmentTaskForTesting(taskID: stale)
+
+        #expect(viewModel.avatarEnrichmentTaskIDForTesting == current)
+
+        viewModel.finishAvatarEnrichmentTaskForTesting(taskID: current)
+
+        #expect(viewModel.avatarEnrichmentTaskIDForTesting == nil)
     }
 
     @Test func chatListRowUpdatesAreCoalescedBeforePublishing() async throws {
@@ -8922,6 +9020,7 @@ private func chatListPreview(
     sender: String = hex("11"),
     senderDisplayName: String? = nil,
     plaintext: String = "hello",
+    contentTokens: MarkdownDocumentFfi = .emptyDocument,
     kind: UInt64 = MessageSemantics.kindChat,
     timelineAt: UInt64 = 1,
     deleted: Bool = false
@@ -8931,6 +9030,7 @@ private func chatListPreview(
         sender: sender,
         senderDisplayName: senderDisplayName,
         plaintext: plaintext,
+        contentTokens: contentTokens,
         kind: kind,
         timelineAt: timelineAt,
         deleted: deleted

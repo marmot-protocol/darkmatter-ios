@@ -360,7 +360,7 @@ struct ChatsListView: View {
             ContentUnavailableView(
                 "No archived chats",
                 systemImage: "archivebox",
-                description: Text("Swipe a chat to archive it; archived chats stay active and still notify you.")
+                description: Text("Swipe a chat to archive it; archived chats stay active but stay out of unread and notification attention.")
             )
         } else if scope == .unread {
             ContentUnavailableView("No unread chats", systemImage: "circle")
