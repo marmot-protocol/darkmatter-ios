@@ -11,6 +11,8 @@ struct MemberPickerView: View {
     let title: LocalizedStringKey
     let normalize: MemberPickerViewModel.Normalize
     var scanInvalidMessage: String?
+    var excludedAccountIds: Set<String> = []
+    var excludedMemberMessage: String?
 
     var body: some View {
         Section(title) {
@@ -33,13 +35,34 @@ struct MemberPickerView: View {
                     .autocorrectionDisabled()
                     .font(.system(.body, design: .monospaced))
                     .onChange(of: model.pending) {
-                        Task { await model.autoStagePendingIfComplete(normalize: normalize, warmProfile: warmProfile) }
+                        Task {
+                            await model.autoStagePendingIfComplete(
+                                excludedAccountIds: excludedAccountIds,
+                                excludedMemberMessage: excludedMemberMessage,
+                                normalize: normalize,
+                                warmProfile: warmProfile
+                            )
+                        }
                     }
                     .onSubmit {
-                        Task { await model.addPending(normalize: normalize, warmProfile: warmProfile) }
+                        Task {
+                            await model.addPending(
+                                excludedAccountIds: excludedAccountIds,
+                                excludedMemberMessage: excludedMemberMessage,
+                                normalize: normalize,
+                                warmProfile: warmProfile
+                            )
+                        }
                     }
                 Button {
-                    Task { await model.addPending(normalize: normalize, warmProfile: warmProfile) }
+                    Task {
+                        await model.addPending(
+                            excludedAccountIds: excludedAccountIds,
+                            excludedMemberMessage: excludedMemberMessage,
+                            normalize: normalize,
+                            warmProfile: warmProfile
+                        )
+                    }
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundStyle(.tint)
@@ -76,6 +99,8 @@ extension View {
         model: MemberPickerViewModel,
         scanInvalidMessage: String? = nil,
         normalize: @escaping MemberPickerViewModel.Normalize,
+        excludedAccountIds: Set<String> = [],
+        excludedMemberMessage: String? = nil,
         warmProfile: @escaping MemberPickerViewModel.ProfileWarmup
     ) -> some View {
         fullScreenCover(
@@ -90,6 +115,8 @@ extension View {
                     await model.addScanned(
                         result,
                         invalidMessage: scanInvalidMessage,
+                        excludedAccountIds: excludedAccountIds,
+                        excludedMemberMessage: excludedMemberMessage,
                         normalize: normalize,
                         warmProfile: warmProfile
                     )

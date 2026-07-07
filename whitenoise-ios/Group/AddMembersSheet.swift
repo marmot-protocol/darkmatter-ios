@@ -6,6 +6,8 @@ struct AddMembersSheet: View {
     @Environment(\.dismiss) private var dismiss
     let normalize: (String) async throws -> MemberRefFfi
     let onSubmit: ([String]) async throws -> Void
+    var excludedAccountIds: Set<String> = []
+    var excludedMemberMessage = AddMembersPresentation.existingMemberMessage
 
     @State private var model = AddMembersSheetViewModel()
 
@@ -17,7 +19,9 @@ struct AddMembersSheet: View {
                 MemberPickerView(
                     model: memberPicker,
                     title: "Invite",
-                    normalize: normalize
+                    normalize: normalize,
+                    excludedAccountIds: excludedAccountIds,
+                    excludedMemberMessage: excludedMemberMessage
                 )
             }
             .navigationTitle("Add Members")
@@ -28,7 +32,16 @@ struct AddMembersSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(model.isInviting ? L10n.string("Inviting…") : L10n.string("Invite")) {
-                        Task { await model.invite(normalize: normalize, onSubmit: onSubmit, using: appState, dismiss: { dismiss() }) }
+                        Task {
+                            await model.invite(
+                                normalize: normalize,
+                                excludedAccountIds: excludedAccountIds,
+                                excludedMemberMessage: excludedMemberMessage,
+                                onSubmit: onSubmit,
+                                using: appState,
+                                dismiss: { dismiss() }
+                            )
+                        }
                     }
                     .disabled(!AddMembersPresentation.canInvite(
                         stagedCount: memberPicker.members.count,
@@ -41,6 +54,8 @@ struct AddMembersSheet: View {
             .memberPickerScanner(
                 model: memberPicker,
                 normalize: normalize,
+                excludedAccountIds: excludedAccountIds,
+                excludedMemberMessage: excludedMemberMessage,
                 warmProfile: { _ = appState.profile(forAccountIdHex: $0) }
             )
         }
@@ -82,6 +97,7 @@ enum AddMembersPresentation {
         case empty
         case invalid
         case duplicate
+        case blocked
         case added([MemberRefFfi], MemberRefFfi)
     }
 
@@ -136,12 +152,36 @@ enum AddMembersPresentation {
     /// captured before the off-main hop.
     static func stage(
         _ normalized: MemberRefFfi,
-        existingMembers: [MemberRefFfi]
+        existingMembers: [MemberRefFfi],
+        excludedAccountIds: Set<String> = []
     ) -> PendingMemberAddResult {
-        guard !existingMembers.contains(where: { $0.accountIdHex == normalized.accountIdHex }) else {
+        let accountId = normalizedAccountId(normalized.accountIdHex)
+        let blockedAccountIds = Set(excludedAccountIds.map(normalizedAccountId))
+        guard !blockedAccountIds.contains(accountId) else {
+            return .blocked
+        }
+        guard !existingMembers.contains(where: { normalizedAccountId($0.accountIdHex) == accountId }) else {
             return .duplicate
         }
         return .added(existingMembers + [normalized], normalized)
+    }
+
+    static let selfRecipientMessage = "You can't add yourself to a chat."
+    static let existingMemberMessage = "That profile is already in this group."
+
+    static func excludedNewChatAccountIds(activeAccountIdHex: String?) -> Set<String> {
+        normalizedAccountSet([activeAccountIdHex])
+    }
+
+    static func excludedInviteAccountIds(
+        activeAccountIdHex: String?,
+        members: [AppGroupMemberRecordFfi],
+        groupMemberDetails: [GroupMemberDetailsFfi]
+    ) -> Set<String> {
+        var accountIds = normalizedAccountSet([activeAccountIdHex])
+        accountIds.formUnion(normalizedAccountSet(members.map(\.memberIdHex)))
+        accountIds.formUnion(normalizedAccountSet(groupMemberDetails.map(\.memberIdHex)))
+        return accountIds
     }
 
     /// "Create" is enabled once at least one member is staged, no create is
@@ -165,5 +205,15 @@ enum AddMembersPresentation {
 
     static func secondaryIdentity(for member: MemberRefFfi) -> String {
         IdentityFormatter.short(member.npub)
+    }
+
+    private static func normalizedAccountSet(_ values: [String?]) -> Set<String> {
+        Set(values.compactMap { value in
+            value.map(normalizedAccountId).flatMap { $0.isEmpty ? nil : $0 }
+        })
+    }
+
+    private static func normalizedAccountId(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

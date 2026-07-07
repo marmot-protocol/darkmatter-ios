@@ -11,6 +11,8 @@ final class AddMembersSheetViewModel {
 
     func invite(
         normalize: @escaping MemberPickerViewModel.Normalize,
+        excludedAccountIds: Set<String>,
+        excludedMemberMessage: String,
         onSubmit: ([String]) async throws -> Void,
         using appState: AppState,
         dismiss: () -> Void
@@ -23,7 +25,12 @@ final class AddMembersSheetViewModel {
         // Fold the still-in-field text before clearing any prior validation error
         // (`addPending` sets its own error on invalid input). The in-flight guard
         // stays ahead of the await so a double-tap can't start two invites.
-        guard await memberPicker.addPending(normalize: normalize, warmProfile: warmProfile(using: appState)) else {
+        guard await memberPicker.addPending(
+            excludedAccountIds: excludedAccountIds,
+            excludedMemberMessage: excludedMemberMessage,
+            normalize: normalize,
+            warmProfile: warmProfile(using: appState)
+        ) else {
             isInviting = false
             return
         }

@@ -34,7 +34,11 @@ struct NewChatSheet: View {
                     model: model.memberPicker,
                     title: "Recipients",
                     normalize: { try await appState.currentMarmotClient().normalizeMemberRef(memberRef: $0) },
-                    scanInvalidMessage: L10n.string("That QR code isn't a White Noise profile.")
+                    scanInvalidMessage: L10n.string("That QR code isn't a White Noise profile."),
+                    excludedAccountIds: AddMembersPresentation.excludedNewChatAccountIds(
+                        activeAccountIdHex: appState.activeAccount?.accountIdHex
+                    ),
+                    excludedMemberMessage: AddMembersPresentation.selfRecipientMessage
                 )
 
                 Section("Optional") {
@@ -61,6 +65,10 @@ struct NewChatSheet: View {
                 model: model.memberPicker,
                 scanInvalidMessage: L10n.string("That QR code isn't a White Noise profile."),
                 normalize: { try await appState.currentMarmotClient().normalizeMemberRef(memberRef: $0) },
+                excludedAccountIds: AddMembersPresentation.excludedNewChatAccountIds(
+                    activeAccountIdHex: appState.activeAccount?.accountIdHex
+                ),
+                excludedMemberMessage: AddMembersPresentation.selfRecipientMessage,
                 warmProfile: { _ = appState.profile(forAccountIdHex: $0) }
             )
         }

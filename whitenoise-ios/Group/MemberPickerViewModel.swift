@@ -23,10 +23,19 @@ final class MemberPickerViewModel {
     @discardableResult
     func addPending(
         invalidMessage: String? = nil,
+        excludedAccountIds: Set<String> = [],
+        excludedMemberMessage: String? = nil,
         normalize: Normalize,
         warmProfile: ProfileWarmup = { _ in }
     ) async -> Bool {
-        await add(pending, invalidMessage: invalidMessage, normalize: normalize, warmProfile: warmProfile)
+        await add(
+            pending,
+            invalidMessage: invalidMessage,
+            excludedAccountIds: excludedAccountIds,
+            excludedMemberMessage: excludedMemberMessage,
+            normalize: normalize,
+            warmProfile: warmProfile
+        )
     }
 
     /// Silent auto-stage for the input field: stages `pending` only when it
@@ -37,22 +46,40 @@ final class MemberPickerViewModel {
     /// Marmot failure on a locally-valid reference leaves the text in place for
     /// the user to retry explicitly.
     func autoStagePendingIfComplete(
+        excludedAccountIds: Set<String> = [],
+        excludedMemberMessage: String? = nil,
         normalize: Normalize,
         warmProfile: ProfileWarmup = { _ in }
     ) async {
         let raw = pending
         guard AddMembersPresentation.isCompleteReference(raw) else { return }
-        await add(raw, suppressInvalidFeedback: true, normalize: normalize, warmProfile: warmProfile)
+        await add(
+            raw,
+            suppressInvalidFeedback: true,
+            excludedAccountIds: excludedAccountIds,
+            excludedMemberMessage: excludedMemberMessage,
+            normalize: normalize,
+            warmProfile: warmProfile
+        )
     }
 
     @discardableResult
     func addScanned(
         _ raw: String,
         invalidMessage: String? = nil,
+        excludedAccountIds: Set<String> = [],
+        excludedMemberMessage: String? = nil,
         normalize: Normalize,
         warmProfile: ProfileWarmup = { _ in }
     ) async -> Bool {
-        await add(raw, invalidMessage: invalidMessage, normalize: normalize, warmProfile: warmProfile)
+        await add(
+            raw,
+            invalidMessage: invalidMessage,
+            excludedAccountIds: excludedAccountIds,
+            excludedMemberMessage: excludedMemberMessage,
+            normalize: normalize,
+            warmProfile: warmProfile
+        )
     }
 
     @discardableResult
@@ -60,6 +87,8 @@ final class MemberPickerViewModel {
         _ raw: String,
         invalidMessage: String? = nil,
         suppressInvalidFeedback: Bool = false,
+        excludedAccountIds: Set<String> = [],
+        excludedMemberMessage: String? = nil,
         normalize: Normalize,
         warmProfile: ProfileWarmup = { _ in }
     ) async -> Bool {
@@ -76,8 +105,18 @@ final class MemberPickerViewModel {
             }
             return false
         case .normalized(let normalized):
-            switch AddMembersPresentation.stage(normalized, existingMembers: members) {
+            switch AddMembersPresentation.stage(
+                normalized,
+                existingMembers: members,
+                excludedAccountIds: excludedAccountIds
+            ) {
             case .empty, .invalid:
+                return false
+            case .blocked:
+                if !suppressInvalidFeedback {
+                    Haptics.error()
+                    error = excludedMemberMessage ?? AddMembersPresentation.existingMemberMessage
+                }
                 return false
             case .duplicate:
                 clearPendingIfUnchanged(raw)

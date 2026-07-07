@@ -22,6 +22,10 @@ final class NewChatSheetViewModel {
         // (`addPending` sets its own error on invalid input). The in-flight guard
         // stays ahead of the await so a double-tap can't start two creates.
         guard await memberPicker.addPending(
+            excludedAccountIds: AddMembersPresentation.excludedNewChatAccountIds(
+                activeAccountIdHex: appState.activeAccount?.accountIdHex
+            ),
+            excludedMemberMessage: AddMembersPresentation.selfRecipientMessage,
             normalize: normalize(using: appState),
             warmProfile: warmProfile(using: appState)
         ) else {
