@@ -40,6 +40,10 @@ final class ChatsListViewModel {
         var unreadCount: UInt64 { row.unreadCount }
         var hasUnread: Bool { row.hasUnread }
         var isArchived: Bool { row.archived }
+        var selfMembership: SelfMembershipFfi { row.selfMembership }
+        var isActiveMember: Bool {
+            GroupManagementPresentation.isActiveChatListMember(row.selfMembership)
+        }
         var firstUnreadMessageIdHex: String? { row.firstUnreadMessageIdHex }
         var lastMessage: ChatListMessagePreviewFfi? { row.lastMessage }
         var projectedGroup: AppGroupRecordFfi {
@@ -315,6 +319,7 @@ final class ChatsListViewModel {
         var row = rowByGroupId[record.groupIdHex] ?? Self.row(from: record)
         row.archived = record.archived
         row.pendingConfirmation = record.pendingConfirmation
+        row.selfMembership = record.selfMembership
         row.groupName = record.name
         row.avatarUrl = record.avatarUrl
         if let name = ContentSanitizer.groupName(record.name) {

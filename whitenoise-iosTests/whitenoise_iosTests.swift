@@ -4144,6 +4144,21 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/group.png")
     }
 
+    @Test func localGroupChangeUpdatesProjectedMembership() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: hex("d7"), title: "General")
+        viewModel.applyChatListSnapshot([row])
+
+        viewModel.applyLocalGroupChange(group(
+            name: "General",
+            id: row.groupIdHex,
+            selfMembership: .removed
+        ))
+
+        #expect(viewModel.items.first?.selfMembership == .removed)
+        #expect(viewModel.items.first?.isActiveMember == false)
+    }
+
     @Test func chatListRemoveUpdateDropsProjectedRow() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let kept = chatListRow(groupIdHex: hex("d1"), title: "Keep")
@@ -6101,6 +6116,52 @@ struct ReceivedMessageTimestampTests {
             tags: [MessageTagFfi(values: ["e", hex("dd")])],
             recordedAt: recordedAt
         )
+    }
+}
+
+struct ChatListSwipeActionsPresentationTests {
+    @Test func activeMemberShowsLeaveAndArchive() {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: false,
+            selfMembership: .member
+        )
+        #expect(actions.contains(.leave))
+        #expect(actions.contains(.archive))
+        #expect(!actions.contains(.delete))
+        #expect(!actions.contains(.unarchive))
+    }
+
+    @Test func inactiveMemberShowsDeleteAndArchive() {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: false,
+            selfMembership: .removed
+        )
+        #expect(actions.contains(.delete))
+        #expect(actions.contains(.archive))
+        #expect(!actions.contains(.leave))
+        #expect(!actions.contains(.unarchive))
+    }
+
+    @Test func archivedActiveMemberShowsUnarchiveAndLeave() {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: true,
+            selfMembership: .member
+        )
+        #expect(actions.contains(.unarchive))
+        #expect(actions.contains(.leave))
+        #expect(!actions.contains(.delete))
+        #expect(!actions.contains(.archive))
+    }
+
+    @Test func archivedInactiveMemberShowsUnarchiveAndDelete() {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: true,
+            selfMembership: .left
+        )
+        #expect(actions.contains(.unarchive))
+        #expect(actions.contains(.delete))
+        #expect(!actions.contains(.leave))
+        #expect(!actions.contains(.archive))
     }
 }
 
@@ -8565,6 +8626,7 @@ private func group(
     admins: [String] = [],
     avatarUrl: String? = nil,
     archived: Bool = false,
+    selfMembership: SelfMembershipFfi = .member,
     encryptedMedia: AppGroupEncryptedMediaComponentFfi = encryptedMediaComponent()
 ) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
@@ -8581,6 +8643,7 @@ private func group(
         encryptedMedia: encryptedMedia,
         archived: archived,
         pendingConfirmation: false,
+        selfMembership: selfMembership,
         welcomerAccountIdHex: nil,
         viaWelcomeMessageIdHex: nil
     )
@@ -8619,7 +8682,8 @@ private func chatListRow(
     firstUnreadMessageIdHex: String? = nil,
     lastReadMessageIdHex: String? = nil,
     lastReadTimelineAt: UInt64? = nil,
-    updatedAt: UInt64 = 1
+    updatedAt: UInt64 = 1,
+    selfMembership: SelfMembershipFfi = .member
 ) -> ChatListRowFfi {
     ChatListRowFfi(
         groupIdHex: groupIdHex,
@@ -8637,7 +8701,8 @@ private func chatListRow(
         firstUnreadMessageIdHex: firstUnreadMessageIdHex,
         lastReadMessageIdHex: lastReadMessageIdHex,
         lastReadTimelineAt: lastReadTimelineAt,
-        updatedAt: updatedAt
+        updatedAt: updatedAt,
+        selfMembership: selfMembership
     )
 }
 
