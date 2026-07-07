@@ -17,7 +17,7 @@ struct ProfileEditView: View {
                         title: model.displayName.isEmpty
                             ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
                             : model.displayName,
-                        pictureURL: ContentSanitizer.imageURL(model.existingPicture)
+                        pictureURL: ContentSanitizer.imageURL(model.picture)
                     )
                     .frame(width: 72, height: 72)
                     .frame(maxWidth: .infinity)
@@ -31,6 +31,15 @@ struct ProfileEditView: View {
                 TextField("Display name", text: $model.displayName)
                 TextField("About", text: $model.about, axis: .vertical)
                     .lineLimit(2...5)
+                TextField("Picture URL", text: $model.picture)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                if let invalidPictureMessage = model.invalidPictureMessage {
+                    Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
                 TextField("NIP-05 (name@domain)", text: $model.nip05)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -110,6 +119,7 @@ nonisolated struct ProfileEditFormFields: Equatable {
 }
 
 nonisolated enum ProfileEditMetadataField: Equatable {
+    case picture
     case nip05
 }
 
@@ -117,14 +127,16 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
     var name: String?
     var displayName: String
     var about: String
+    var picture: String
     var nip05: String
-    // Picture and lud16 are not editable on this screen. They are carried
-    // forward verbatim from the existing profile so publishing a kind:0
-    // replacement never blanks values the user already has set.
-    var preservedPicture: String?
+    // lud16 is not editable on this screen. It is carried forward verbatim from
+    // the existing profile so publishing a kind:0 replacement never blanks it.
     var preservedLud16: String?
 
     var validationError: ProfileEditMetadataField? {
+        if !trimmedPicture.isEmpty, normalizedPictureURL == nil {
+            return .picture
+        }
         if !trimmedNip05.isEmpty, normalizedNip05 == nil {
             return .nip05
         }
@@ -139,14 +151,23 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
             name: name,
             displayName: displayName,
             about: ContentSanitizer.multilineText(about),
-            picture: preservedPicture,
+            picture: normalizedPictureURL,
             nip05: normalizedNip05,
             lud16: preservedLud16
         )
     }
 
+    private var trimmedPicture: String {
+        picture.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var trimmedNip05: String {
         nip05.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedPictureURL: String? {
+        guard !trimmedPicture.isEmpty else { return nil }
+        return ContentSanitizer.imageURL(trimmedPicture)?.absoluteString
     }
 
     private var normalizedNip05: String? {
