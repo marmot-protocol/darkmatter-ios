@@ -37,6 +37,7 @@ final class RuntimeLifecycle {
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTaskID = UUID()
     @ObservationIgnored private var foregroundActivationTask: Task<Void, Never>?
+    @ObservationIgnored private var foregroundActivationTaskID = UUID()
     @ObservationIgnored private var runtimeSuspensionTask: Task<Void, Never>?
     @ObservationIgnored private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// Set when the real background-suspension entry point runs while bootstrap
@@ -46,6 +47,7 @@ final class RuntimeLifecycle {
     @ObservationIgnored private var bootstrapNeedsBackgroundSuspensionRecheck = false
 #if DEBUG
     @ObservationIgnored var afterBootstrapRuntimeStartForTesting: (() async -> Void)?
+    @ObservationIgnored var afterForegroundRuntimeCreatedForTesting: (() async -> Void)?
 #endif
     /// Observed (like the original AppState stored flag) so the foreground/local
     /// runtime gates that fold it in stay reactive.
@@ -260,7 +262,6 @@ final class RuntimeLifecycle {
     func setAppSceneActive(_ active: Bool) {
         appState?.isAppSceneActive = active
         if !active {
-            foregroundActivationTask?.cancel()
             appState?.cancelNativePushRegistrationTaskSync()
         }
     }
@@ -268,10 +269,15 @@ final class RuntimeLifecycle {
     @discardableResult
     func startForegroundActivation() -> Task<Void, Never> {
         appState?.isAppSceneActive = true
-        foregroundActivationTask?.cancel()
+        if let foregroundActivationTask {
+            return foregroundActivationTask
+        }
+        let id = UUID()
+        foregroundActivationTaskID = id
         let task = Task { [weak self] in
             guard let self else { return }
-            await resumeAfterForegroundActivation()
+            await resumeAfterForegroundActivation(activationID: id)
+            clearCompletedForegroundActivationTask(id: id)
         }
         foregroundActivationTask = task
         return task
@@ -284,6 +290,7 @@ final class RuntimeLifecycle {
             bootstrapNeedsBackgroundSuspensionRecheck = true
         }
         foregroundActivationTask?.cancel()
+        foregroundActivationTaskID = UUID()
         appState?.cancelNativePushRegistrationTaskSync()
         if let runtimeSuspensionTask {
             return runtimeSuspensionTask
@@ -342,9 +349,9 @@ final class RuntimeLifecycle {
         runtimeSuspendedForBackground = true
     }
 
-    func resumeAfterForegroundActivation() async {
+    private func resumeAfterForegroundActivation(activationID: UUID) async {
         await waitForRuntimeSuspensionToFinish()
-        guard phaseOwnsLiveRuntime, !Task.isCancelled else { return }
+        guard phaseOwnsLiveRuntime, ownsForegroundActivation(id: activationID) else { return }
 
         if runtimeSuspendedForBackground {
             isRuntimeWarmingUp = true
@@ -353,8 +360,31 @@ final class RuntimeLifecycle {
             defer { isRuntimeWarmingUp = false }
             do {
                 let restored = try makeRuntime()
+#if DEBUG
+                if let afterForegroundRuntimeCreatedForTesting {
+                    await afterForegroundRuntimeCreatedForTesting()
+                }
+#endif
+                guard ownsForegroundActivation(id: activationID) else {
+                    await restored.marmot.shutdown()
+                    return
+                }
+                do {
+                    try await restored.startRuntime()
+                } catch {
+                    await restored.marmot.shutdown()
+                    if ownsForegroundActivation(id: activationID) {
+                        appState?.stopNotificationSubscription()
+                        await appState?.cancelNativePushRegistrationTask()
+                        appState?.setPhase(.failed(error.localizedDescription))
+                    }
+                    return
+                }
+                guard ownsForegroundActivation(id: activationID) else {
+                    await restored.marmot.shutdown()
+                    return
+                }
                 client = restored
-                try await restored.startRuntime()
                 noteRuntimeForegroundReadyAfterSuspension()
                 // The notification subscription needs an active account, so it
                 // only belongs to `.ready`. An `.onboarding` resume rebuilds the
@@ -366,24 +396,30 @@ final class RuntimeLifecycle {
                     appState?.startNotificationSubscription()
                 }
             } catch {
-                // Release the partial runtime before showing the failure screen
-                // so Retry → bootstrap() → runtimeClient() rebuilds a fresh
-                // runtime instead of reusing this instance whose start() failed.
-                await releaseRuntimeAfterStartupFailure()
-                appState?.setPhase(.failed(error.localizedDescription))
+                // Runtime construction failed before a handle existed. Only the
+                // owning foreground activation should surface the startup error.
+                if ownsForegroundActivation(id: activationID) {
+                    appState?.stopNotificationSubscription()
+                    await appState?.cancelNativePushRegistrationTask()
+                    appState?.setPhase(.failed(error.localizedDescription))
+                }
                 return
             }
         }
 
-        guard isAppSceneActive, !Task.isCancelled else { return }
+        guard ownsForegroundActivation(id: activationID) else { return }
         // The remaining maintenance is account-scoped and no-ops safely in
         // `.onboarding`: `catchUpAfterForegroundActivation` is `.ready`-gated by
         // `ForegroundNotificationSyncPolicy`, and the push-registration / profile
         // queue paths find no accounts to act on while onboarding.
         await catchUpAfterForegroundActivation()
-        guard isAppSceneActive, !Task.isCancelled else { return }
+        guard ownsForegroundActivation(id: activationID) else { return }
         appState?.scheduleNativePushRegistrationIfEnabled()
         appState?.resumeProfileFetchQueueIfNeeded()
+    }
+
+    private func ownsForegroundActivation(id: UUID) -> Bool {
+        foregroundActivationTaskID == id && isAppSceneActive && !Task.isCancelled
     }
 
     private func noteRuntimeForegroundReadyAfterSuspension() {
@@ -428,6 +464,7 @@ final class RuntimeLifecycle {
     private func cancelForegroundMaintenance() async {
         let foregroundTask = foregroundActivationTask
         foregroundActivationTask = nil
+        foregroundActivationTaskID = UUID()
         foregroundTask?.cancel()
 
         // Native-push cancellation/drain stays in `NotificationCoordinator`
@@ -439,6 +476,11 @@ final class RuntimeLifecycle {
         await foregroundTask?.value
         await appState?.cancelNativePushRegistrationTask()
         await profileTask?.value
+    }
+
+    private func clearCompletedForegroundActivationTask(id: UUID) {
+        guard foregroundActivationTaskID == id else { return }
+        foregroundActivationTask = nil
     }
 
     private var phaseOwnsLiveRuntime: Bool {

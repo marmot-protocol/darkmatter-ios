@@ -524,6 +524,50 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// #545: an inactive→active bounce while foreground resume is rebuilding
+    /// the runtime must share the in-flight activation. Starting a second
+    /// activation before the first `startRuntime()` returns can double-open the
+    /// App Group SQLite store, or let the cancelled task tear down the winner.
+    @Test func inactiveActiveBounceDuringRuntimeRestartSharesInFlightForegroundActivation() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let generation = appState.runtimeGeneration
+
+        await appState.startRuntimeSuspension().value
+
+        let checkpoint = AsyncTestCheckpoint()
+        var foregroundRuntimeCreateCount = 0
+        appState.runtimeLifecycle.afterForegroundRuntimeCreatedForTesting = {
+            foregroundRuntimeCreateCount += 1
+            await checkpoint.pause()
+        }
+
+        let firstActivation = appState.startForegroundActivation()
+        await checkpoint.waitUntilPaused()
+
+        #expect(appState.client == nil)
+        #expect(foregroundRuntimeCreateCount == 1)
+
+        appState.setAppSceneActive(false)
+        let secondActivation = appState.startForegroundActivation()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(foregroundRuntimeCreateCount == 1)
+
+        await checkpoint.release()
+        await firstActivation.value
+        await secondActivation.value
+        appState.runtimeLifecycle.afterForegroundRuntimeCreatedForTesting = nil
+
+        #expect(appState.isAppSceneActive)
+        #expect(!appState.runtimeSuspendedForBackground)
+        #expect(appState.phase == .ready)
+        #expect(appState.client != nil)
+        #expect(appState.runtimeGeneration == generation + 1)
+
+        await stopReadyRuntime(appState)
+    }
+
     /// #445: if the app is backgrounded while `performBootstrap` is still in
     /// flight, the runtime is already started but `phase` is still
     /// `.bootstrapping`, so a suspension that lands during bootstrap fails the
