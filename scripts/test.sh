@@ -8,13 +8,12 @@ RESULT_BUNDLE="${WN_TEST_RESULT_BUNDLE:-build/TestResults.xcresult}"
 
 rm -rf "$RESULT_BUNDLE"
 
-run() {
+  run() {
   xcodebuild test \
     -project whitenoise-ios.xcodeproj \
     -scheme "Whitenoise (Staging)" \
     -destination "$DESTINATION" \
     -resultBundlePath "$RESULT_BUNDLE" \
-    -enableCodeCoverage YES \
     ONLY_ACTIVE_ARCH=YES \
     CODE_SIGN_STYLE=Manual \
     DEVELOPMENT_TEAM="" \
