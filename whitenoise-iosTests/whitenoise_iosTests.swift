@@ -890,6 +890,42 @@ struct AppStateBootstrapTests {
         #expect(task != nil)
     }
 
+    @Test func staleProfileFetchQueueCompletionDoesNotClearNewerRunner() async throws {
+        let appState = try testAppState()
+        let oldTaskID = UUID()
+        let newTaskID = UUID()
+        let newTask = Task<Void, Never> {}
+
+        appState.profileStore.profileFetchQueueTask = newTask
+        appState.profileStore.profileFetchQueueTaskID = newTaskID
+        appState.profileStore.activeProfileFetchID = hex("44")
+
+        appState.profileStore.finishProfileFetchQueueForTesting(taskID: oldTaskID)
+
+        #expect(appState.profileStore.profileFetchQueueTask != nil)
+        #expect(appState.profileStore.profileFetchQueueTaskID == newTaskID)
+        #expect(appState.profileStore.activeProfileFetchID == hex("44"))
+
+        newTask.cancel()
+    }
+
+    @Test func staleProfileProjectionQueueCompletionDoesNotClearNewerRunner() async throws {
+        let appState = try testAppState()
+        let oldTaskID = UUID()
+        let newTaskID = UUID()
+        let newTask = Task<Void, Never> {}
+
+        appState.profileStore.profileProjectionLoadTask = newTask
+        appState.profileStore.profileProjectionLoadTaskID = newTaskID
+
+        appState.profileStore.finishProfileProjectionLoadQueueForTesting(taskID: oldTaskID)
+
+        #expect(appState.profileStore.profileProjectionLoadTask != nil)
+        #expect(appState.profileStore.profileProjectionLoadTaskID == newTaskID)
+
+        newTask.cancel()
+    }
+
     @Test func cancelProfileFetchQueuePreservesProfileProjectionLoadVersions() async throws {
         // Regression for #353 (corrected per adversarial review of PR #357):
         // `cancelProfileFetchQueue()` runs on every background suspension (via

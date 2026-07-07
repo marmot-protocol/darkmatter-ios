@@ -56,21 +56,24 @@ final class ProfileEditViewModel {
         // result rather than seed this editor with another account's metadata.
         guard appState.activeAccount?.accountIdHex == id else { return }
         guard let profile = loadedProfile ?? cachedProfile else { return }
-        let isNewAccount = loadedAccountIdHex != id
+        let isDifferentAccount = ProfileEditLoadSeeding.isDifferentLoadedAccount(
+            previousAccountId: loadedAccountIdHex,
+            loading: id
+        )
         let formFields = ProfileEditFormFields(profile: profile)
         existingName = formFields.name
         existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
         displayName = ProfileEditFieldSeeding.seeded(
-            current: displayName, loaded: formFields.displayName, isNewAccount: isNewAccount
+            current: displayName, loaded: formFields.displayName, isNewAccount: isDifferentAccount
         )
         about = ProfileEditFieldSeeding.seeded(
-            current: about, loaded: formFields.about, isNewAccount: isNewAccount
+            current: about, loaded: formFields.about, isNewAccount: isDifferentAccount
         )
         picture = ProfileEditFieldSeeding.seeded(
-            current: picture, loaded: formFields.picture, isNewAccount: isNewAccount
+            current: picture, loaded: formFields.picture, isNewAccount: isDifferentAccount
         )
         nip05 = ProfileEditFieldSeeding.seeded(
-            current: nip05, loaded: formFields.nip05, isNewAccount: isNewAccount
+            current: nip05, loaded: formFields.nip05, isNewAccount: isDifferentAccount
         )
         loadedAccountIdHex = id
     }
