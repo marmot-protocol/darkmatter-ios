@@ -109,8 +109,11 @@ nonisolated enum GroupManagementPresentation {
 enum GroupRelaysPresentation {
     static let emptyMessage = L10n.string("No relays configured.")
 
-    static func countLabel(for relays: [String]) -> String {
-        "\(relays.count)"
+    static func countLabel(
+        for relays: [String],
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String {
+        LocalizedNumberLabel.decimal(UInt64(relays.count), locale: locale)
     }
     static func rows(for relays: [String]) -> [String] {
         guard !relays.isEmpty else { return [emptyMessage] }
