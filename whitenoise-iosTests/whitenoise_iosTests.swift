@@ -1831,7 +1831,7 @@ struct RelaySettingsTests {
     @Test func relayNormalizationDeduplicatesSchemeAndHostCase() {
         #expect(
             RelaySettings.normalizedRelayURL("WSS://Relay.DAMUS.IO/Nostr?Token=ABC")
-                == "wss://relay.damus.io"
+                == "wss://relay.damus.io/Nostr?Token=ABC"
         )
         #expect(RelaySettings.normalizedRelayURLs([
             "WSS://Relay.DAMUS.IO",
@@ -1841,8 +1841,8 @@ struct RelaySettingsTests {
 
     @Test func relayNormalizationRejectsUserinfoAndBoundsInput() {
         #expect(RelaySettings.normalizedRelayURL("wss://user:pass@relay.example") == nil)
-        #expect(RelaySettings.normalizedRelayURL("wss://relay.example/path?q=token#frag") == "wss://relay.example")
-        #expect(RelaySettings.normalizedRelayURL("wss://relay.example:443/path") == "wss://relay.example:443")
+        #expect(RelaySettings.normalizedRelayURL("wss://relay.example/path?q=token#frag") == "wss://relay.example/path?q=token")
+        #expect(RelaySettings.normalizedRelayURL("wss://relay.example:443/path") == "wss://relay.example:443/path")
         #expect(RelaySettings.normalizedRelayURL("wss://relay.example/" + String(repeating: "a", count: 4096)) == nil)
     }
 
