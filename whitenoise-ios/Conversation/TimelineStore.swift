@@ -68,6 +68,7 @@ final class TimelineStore {
     @ObservationIgnored private var replyTargetByMessageId: [String: String] = [:]
     @ObservationIgnored private var replyPreviewsByMessageId: [String: TimelineReplyPreviewFfi] = [:]
     @ObservationIgnored private var replyPreviewDisplayCache: [String: ReplyPreviewDisplayCacheEntry] = [:]
+    @ObservationIgnored private var groupSystemDisplayCache: [String: GroupSystemDisplayCacheEntry] = [:]
     @ObservationIgnored private var transientTimelineItems: [String: TimelineItem] = [:]
     @ObservationIgnored private var systemTimelineItems: [TimelineItem] = []
     /// Transient QUIC debug rows keyed by timeline id (streaming debug only).
@@ -111,9 +112,11 @@ final class TimelineStore {
 
 #if DEBUG
     var markdownProjectionBuildCountForTesting: Int { markdownProjections.buildCountForTesting }
+    var groupSystemProjectionBuildCountForTesting: Int { groupSystemProjectionBuildCount }
     var mediaItemProjectionBuildCountForTesting: Int { mediaProjections.buildCountForTesting }
     var mediaReferenceCountForTesting: Int { mediaProjections.referenceCountForTesting }
     var streamDebugTimelineItemCountForTesting: Int { streamDebugTimelineItems.count }
+    private var groupSystemProjectionBuildCount = 0
 #endif
 
     private struct MessageTimelineSignature: Equatable {
@@ -189,6 +192,17 @@ final class TimelineStore {
     private struct ReplyPreviewDisplayCacheEntry {
         let key: ReplyPreviewDisplayCacheKey
         let value: (name: String, text: String)
+    }
+
+    private struct GroupSystemDisplayCacheKey: Equatable {
+        let record: MessageTimelineSignature
+        let profileGeneration: Int
+        let languageRawValue: String
+    }
+
+    private struct GroupSystemDisplayCacheEntry {
+        let key: GroupSystemDisplayCacheKey
+        let text: String?
     }
 
     // MARK: - Loaded-window queries
@@ -282,6 +296,29 @@ final class TimelineStore {
     func mediaItems(for record: AppMessageRecordFfi) -> [MessageMediaAttachment] {
         _ = timelineProjectionGeneration
         return mediaProjections.build(for: record, ownerId: record.messageIdHex)
+    }
+
+    func groupSystemDisplayText(for record: AppMessageRecordFfi) -> String? {
+        _ = timelineProjectionGeneration
+        let key = GroupSystemDisplayCacheKey(
+            record: MessageTimelineSignature(record),
+            profileGeneration: appState?.profileRefreshGeneration ?? 0,
+            languageRawValue: AppLanguage.currentRawValue
+        )
+        if let cached = groupSystemDisplayCache[record.messageIdHex], cached.key == key {
+            return cached.text
+        }
+#if DEBUG
+        groupSystemProjectionBuildCount += 1
+#endif
+        let text = GroupSystemEventPresentation.displayText(
+            for: record,
+            displayName: { accountIdHex in
+                appState?.displayName(forAccountIdHex: accountIdHex) ?? IdentityFormatter.short(accountIdHex)
+            }
+        )
+        groupSystemDisplayCache[record.messageIdHex] = GroupSystemDisplayCacheEntry(key: key, text: text)
+        return text
     }
 
     // MARK: - Page application (driven by the view model's IO)
@@ -425,6 +462,7 @@ final class TimelineStore {
 
         projectionChanged = true
         replyPreviewDisplayCache[appRecord.messageIdHex] = nil
+        groupSystemDisplayCache[appRecord.messageIdHex] = nil
         messageById[appRecord.messageIdHex] = appRecord
         messageStatusById[appRecord.messageIdHex] = appRecord.direction == "sent" ? .sent : .received
         confirmedPendingTimelineRecordIds.remove(appRecord.messageIdHex)
@@ -480,6 +518,7 @@ final class TimelineStore {
         replyTargetByMessageId[messageIdHex] = nil
         replyPreviewsByMessageId[messageIdHex] = nil
         replyPreviewDisplayCache[messageIdHex] = nil
+        groupSystemDisplayCache[messageIdHex] = nil
         mediaProjections.removeReferences(forMessageId: messageIdHex)
         reactionProjections.removeSummary(forMessageId: messageIdHex)
         deletedProjections.removeProjected(forMessageId: messageIdHex)
@@ -580,6 +619,7 @@ final class TimelineStore {
 
     func refreshProfileDependentTimelineProjections() {
         replyPreviewDisplayCache.removeAll()
+        groupSystemDisplayCache.removeAll()
         if markdownProjections.rebuild(for: timeline, onlyRowsWithMentions: true, resolver: mentionDisplayNameResolver) {
             noteProjectionChanged()
         }

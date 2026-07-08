@@ -168,6 +168,36 @@ struct GroupSystemEventPresentationTests {
         #expect(record.kind == MessageSemantics.kindGroupSystem)
         #expect(GroupSystemEventPresentation.isDisplayable(record))
     }
+
+    @MainActor
+    @Test func groupSystemTimelineDisplayTextIsCachedPerProjectionGeneration() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let row = timelineRecord(
+            messageIdHex: hex("aa"),
+            plaintext: #"{"v":1,"system_type":"member_added","text":"Member added"}"#,
+            kind: MessageSemantics.kindGroupSystem,
+            tags: [MessageTagFfi(values: ["system", "member_added"])],
+            timelineAt: 1
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [row], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        let record = try #require(viewModel.record(for: row.messageIdHex))
+
+        #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
+        #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
+        #expect(viewModel.groupSystemProjectionBuildCountForTesting == 1)
+
+        viewModel.refreshProfileDependentTimelineProjections()
+
+        #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
+        #expect(viewModel.groupSystemProjectionBuildCountForTesting == 2)
+    }
 }
 
 private func testDisplayName(_ accountHex: String) -> String {
