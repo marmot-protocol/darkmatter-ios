@@ -347,6 +347,10 @@ final class ConversationViewModel {
         timelineStore.markdownDisplayBlocks(for: item)
     }
 
+    func groupSystemDisplayText(for record: AppMessageRecordFfi) -> String? {
+        timelineStore.groupSystemDisplayText(for: record)
+    }
+
     func record(for messageIdHex: String) -> AppMessageRecordFfi? {
         timelineStore.record(for: messageIdHex)
     }
@@ -1086,6 +1090,10 @@ final class ConversationViewModel {
 #if DEBUG
     var markdownProjectionBuildCountForTesting: Int {
         timelineStore.markdownProjectionBuildCountForTesting
+    }
+
+    var groupSystemProjectionBuildCountForTesting: Int {
+        timelineStore.groupSystemProjectionBuildCountForTesting
     }
 
     @discardableResult

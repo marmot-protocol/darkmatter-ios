@@ -925,10 +925,7 @@ struct ConversationView: View {
     private func row(for item: TimelineItem, viewModel: ConversationViewModel) -> some View {
         switch item.kind {
         case .message(let record, let status):
-            if let groupSystemText = GroupSystemEventPresentation.displayText(
-                for: record,
-                displayName: { appState.displayName(forAccountIdHex: $0) }
-            ) {
+            if let groupSystemText = viewModel.groupSystemDisplayText(for: record) {
                 GroupSystemEventRow(text: groupSystemText)
                     .id(item.id)
                     .onAppear {
