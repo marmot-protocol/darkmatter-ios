@@ -21,17 +21,10 @@ import Testing
 /// deliberately:
 ///   1. `sourceEpoch` is NOT an `imeta` field — it is the message's own record
 ///      epoch, threaded into every reference. The projection must carry it.
-///   2. The current Swift parser is **all-or-nothing per message**: if any
-///      `imeta` tag fails validation, the whole list degrades to `nil` (message
-///      renders as chat text, no media). A message with one good + one bad
-///      `imeta` shows *neither* attachment today.
-///
-/// DECISION (2026-06-22): the Rust `media` projection will instead **drop only
-/// the malformed attachment and keep the valid ones**. This is the single
-/// intentional behavior change in the swap (see `oneMalformedImetaDropsAllAttachments`
-/// and the PARITY HOOK). The corpus below pins *today's* Swift behavior so this
-/// file stays a truthful snapshot; the parity hook flips that one case to the
-/// drop-bad target when the binding lands.
+///   2. The parser is tolerant at the media boundary: malformed required fields
+///      drop only that attachment, and malformed optional fields such as
+///      `thumbhash` / `dim` are ignored without hiding an otherwise valid
+///      attachment.
 struct MediaImetaProjectionParityTests {
 
     // MARK: - Canonical corpus (input imeta -> reference the projection must emit)
@@ -96,7 +89,7 @@ struct MediaImetaProjectionParityTests {
             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 3, dim: nil)]
         ),
 
-        // --- Malformed: every branch degrades the whole message to nil ---
+        // --- Malformed required fields degrade that attachment to nil ---
         Case(name: "missing locator -> nil",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, omitLocator: true)],
              sourceEpoch: 1, expected: nil),
@@ -118,12 +111,14 @@ struct MediaImetaProjectionParityTests {
         Case(name: "invalid media type -> nil",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/", dim: nil)],
              sourceEpoch: 1, expected: nil),
-        Case(name: "invalid dim -> nil",
+        Case(name: "invalid dim is ignored",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: "640")],
-             sourceEpoch: 1, expected: nil),
-        Case(name: "overlong thumbhash -> nil",
+             sourceEpoch: 1,
+             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 1, dim: nil)]),
+        Case(name: "overlong thumbhash is ignored",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, extra: ["thumbhash \(String(repeating: "x", count: 129))"])],
-             sourceEpoch: 1, expected: nil),
+             sourceEpoch: 1,
+             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 1, dim: nil)]),
         Case(name: "filename at 255-byte cap -> valid",
              imeta: [imetaValues(file: String(repeating: "a", count: 255), ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil)],
              sourceEpoch: 1,
@@ -139,18 +134,15 @@ struct MediaImetaProjectionParityTests {
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/\(String(repeating: "a", count: 122))", dim: nil)],
              sourceEpoch: 1, expected: nil),
 
-        // --- The all-or-nothing rule across multiple attachments ---
-        // INTENTIONAL DIVERGENCE: today's Swift parser returns nil here; the
-        // agreed Rust target keeps the valid attachment (drop-bad). Pinned to
-        // today's value so this snapshot stays green; flipped in the parity hook.
+        // --- The drop-bad rule across multiple attachments ---
         Case(
-            name: "one valid + one malformed -> nil today (target: drop-bad)",
+            name: "one valid + one malformed -> keep valid attachment",
             imeta: [
                 imetaValues(file: "good.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil),
                 imetaValues(file: "bad.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, omitLocator: true),
             ],
             sourceEpoch: 1,
-            expected: nil
+            expected: [ref(file: "good.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 1, dim: nil)]
         ),
 
         Case(name: "no imeta tags -> nil (not a media message)",
@@ -188,12 +180,10 @@ struct MediaImetaProjectionParityTests {
         #expect(lo?.locators == hi?.locators)
     }
 
-    /// Pins TODAY's all-or-nothing Swift behavior: a single bad `imeta` among
-    /// valid ones drops the *whole* message's media. The agreed target (drop-bad)
-    /// changes this; when the binding lands, the Rust field returns the valid
-    /// attachment here and this assertion moves to the parity hook. Keeping it
-    /// green now documents exactly what behavior we are consciously changing.
-    @Test func oneMalformedImetaDropsAllAttachments() {
+    /// A single bad `imeta` among valid ones drops only the malformed
+    /// attachment, so a hostile or corrupt optional attachment cannot hide
+    /// valid encrypted media in the same message.
+    @Test func oneMalformedImetaKeepsValidAttachments() {
         let good = imetaValues(file: "good.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil)
         let bad = imetaValues(file: "bad.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, omitLocator: true)
 
@@ -203,7 +193,7 @@ struct MediaImetaProjectionParityTests {
 
         let oneBad = MessageSemantics.mediaAttachments(
             from: [good, bad].map { MessageTagFfi(values: $0) }, sourceEpoch: 1)
-        #expect(oneBad == nil)
+        #expect(oneBad?.map(\.fileName) == ["good.png"])
     }
 
     /// Peer-controlled `filename` / `m` are byte-length capped, mirroring the
@@ -222,6 +212,24 @@ struct MediaImetaProjectionParityTests {
 
         #expect(attachment(filename: "a.png", mediaType: "image/\(String(repeating: "a", count: 121))") != nil)
         #expect(attachment(filename: "a.png", mediaType: "image/\(String(repeating: "a", count: 122))") == nil)
+    }
+
+    @Test func imetaTagCountIsCappedBeforeParsing() {
+        let tags = (0..<(MessageSemantics.maxImetaTags + 3)).map { index in
+            MessageTagFfi(values: imetaValues(
+                file: "file-\(index).png",
+                ciphertext: hex32(String(format: "%02x", index + 1)),
+                plaintext: hex32(String(format: "%02x", index + 41)),
+                nonce: n,
+                mediaType: "image/png",
+                dim: nil
+            ))
+        }
+
+        let attachments = MessageSemantics.mediaAttachments(from: tags, sourceEpoch: 1)
+
+        #expect(attachments?.count == MessageSemantics.maxImetaTags)
+        #expect(attachments?.last?.fileName == "file-\(MessageSemantics.maxImetaTags - 1).png")
     }
 
     // MARK: - Bindings landed (whitenoise 127fe17): how parity is enforced now
@@ -245,10 +253,8 @@ struct MediaImetaProjectionParityTests {
     // `record.media` into the media projection cache at ingest and the
     // `listMedia` timeline path + its index maps are deleted. `MessageSemantics`
     // `mediaAttachments` is RETAINED as the fallback for local/optimistic records
-    // that have no row projection yet, so this corpus still pins its (unchanged,
-    // all-or-nothing) behavior. The DECIDED drop-bad behavior now lives in the
-    // Rust row path (`record.media`), which a pure-Swift fixture can't exercise —
-    // verify it via the Rust conversion tests + a real-runtime integration check.
+    // that have no row projection yet, so this corpus pins the same tolerant
+    // drop-bad behavior expected from the Rust row path (`record.media`).
 }
 
 // MARK: - Fixtures (file-private; mirror encryptedMediaTag in whitenoise_iosTests)

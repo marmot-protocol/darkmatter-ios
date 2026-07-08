@@ -172,16 +172,19 @@ nonisolated enum MessageSemantics {
         from tags: [MessageTagFfi],
         sourceEpoch: UInt64 = 0
     ) -> [MediaAttachmentReferenceFfi]? {
-        let imetaTags = tags.filter { $0.values.first == imetaTag }
-        guard !imetaTags.isEmpty else { return nil }
+        let imetaTags = tags.lazy
+            .filter { $0.values.first == imetaTag }
+            .prefix(maxImetaTags)
+        var foundImeta = false
 
         var attachments: [MediaAttachmentReferenceFfi] = []
         for tag in imetaTags {
-            guard let attachment = mediaAttachment(from: tag, sourceEpoch: sourceEpoch) else {
-                return nil
+            foundImeta = true
+            if let attachment = mediaAttachment(from: tag, sourceEpoch: sourceEpoch) {
+                attachments.append(attachment)
             }
-            attachments.append(attachment)
         }
+        guard foundImeta, !attachments.isEmpty else { return nil }
         return attachments
     }
 
@@ -234,11 +237,15 @@ nonisolated enum MessageSemantics {
             } else if let value = field.dropPrefix("v ") {
                 version = value
             } else if let value = field.dropPrefix("dim ") {
-                dim = value
+                let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if isValidMediaDim(candidate) {
+                    dim = candidate
+                }
             } else if let value = field.dropPrefix("thumbhash ") {
                 let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard isValidMediaThumbhash(candidate) else { return nil }
-                thumbhash = candidate
+                if isValidMediaThumbhash(candidate) {
+                    thumbhash = candidate
+                }
             } else if field.hasPrefix("blurhash ") {
                 continue
             }
@@ -253,8 +260,7 @@ nonisolated enum MessageSemantics {
               isWithinByteLimit(fileName, maxImetaFileNameBytes),
               !mediaType.isEmpty,
               isWithinByteLimit(mediaType, maxImetaMediaTypeBytes),
-              version == encryptedMediaVersion,
-              dim.map(isValidMediaDim) ?? true
+              version == encryptedMediaVersion
         else { return nil }
 
         return MediaAttachmentReferenceFfi(
@@ -288,6 +294,7 @@ nonisolated enum MessageSemantics {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard let type,
+              isWithinByteLimit(type, maxImetaMediaTypeBytes),
               isValidMediaType(type)
         else { return nil }
         return type == "image/jpg" ? "image/jpeg" : type
@@ -336,6 +343,7 @@ nonisolated enum MessageSemantics {
     // generous canonical "type/subtype".
     static let maxImetaFileNameBytes = 255
     static let maxImetaMediaTypeBytes = 127
+    static let maxImetaTags = MediaDraftProcessor.maxAttachmentCount + 2
 
     private static func isWithinByteLimit(_ value: String, _ max: Int) -> Bool {
         value.utf8.count <= max
