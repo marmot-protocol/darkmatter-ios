@@ -136,6 +136,45 @@ struct TimelineProjectionBoundaryTests {
         #expect(viewModel.markdownProjectionBuildCountForTesting == 2)
     }
 
+    @Test func mediaProjectionCacheSkipsUnchangedWindowRows() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let reference = mediaReference(sourceEpoch: 7)
+        let record = timelineRecord(
+            messageIdHex: hexId(8),
+            plaintext: "caption",
+            tags: [MessageSemantics.imetaTag(for: reference)],
+            media: [reference]
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.mediaItemProjectionBuildCountForTesting == 1)
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.mediaItemProjectionBuildCountForTesting == 1)
+
+        let updatedReference = mediaReference(sourceEpoch: 8)
+        let updated = timelineRecord(
+            messageIdHex: record.messageIdHex,
+            plaintext: record.plaintext,
+            tags: [MessageSemantics.imetaTag(for: updatedReference)],
+            media: [updatedReference]
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [updated], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.mediaItemProjectionBuildCountForTesting == 2)
+    }
+
     @Test func mediaDownloaderProbesDecryptedCacheOnlyOnceBeforeDownload() async throws {
         let downloadedData = Data([0x09, 0x0a, 0x0b])
         let reference = mediaReference(sourceEpoch: 7, plaintext: downloadedData)
