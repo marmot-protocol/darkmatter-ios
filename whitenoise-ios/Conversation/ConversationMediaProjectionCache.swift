@@ -28,11 +28,37 @@ final class ConversationMediaProjectionCache {
     private var referencesByMessageId: [String: [MediaAttachmentReferenceFfi]] = [:]
     private var pendingByRowId: [String: [MessageMediaAttachment]] = [:]
     private var projectionsByRowId: [String: [MessageMediaAttachment]] = [:]
+    private var projectionKeysByRowId: [String: ProjectionKey] = [:]
 #if DEBUG
     // Counts build invocations across both record-backed and classify-backed
     // media paths so tests can catch accidental body-time rebuilds.
     private(set) var buildCountForTesting = 0
 #endif
+
+    private enum ProjectionSourceKey: Equatable {
+        case mirrored([MediaAttachmentReferenceFfi])
+        case fallback(kind: UInt64, tags: [MessageTagFfi])
+    }
+
+    private struct ProjectionKey: Equatable {
+        let ownerId: String
+        let messageIdHex: String
+        let source: ProjectionSourceKey
+
+        init(
+            record: AppMessageRecordFfi,
+            ownerId: String,
+            mirroredReferences: [MediaAttachmentReferenceFfi]?
+        ) {
+            self.ownerId = ownerId
+            messageIdHex = record.messageIdHex
+            if let mirroredReferences {
+                source = .mirrored(mirroredReferences)
+            } else {
+                source = .fallback(kind: record.kind, tags: record.tags)
+            }
+        }
+    }
 
     // MARK: Reads
 
@@ -119,9 +145,16 @@ final class ConversationMediaProjectionCache {
         guard case .message(let record, _) = item.kind else {
             return remove(rowId: item.id)
         }
+        let key = ProjectionKey(
+            record: record,
+            ownerId: item.id,
+            mirroredReferences: referencesByMessageId[record.messageIdHex]
+        )
+        guard projectionKeysByRowId[item.id] != key else { return false }
         let next = build(for: record, ownerId: item.id)
+        projectionKeysByRowId[item.id] = key
         guard !next.isEmpty else {
-            return remove(rowId: item.id)
+            return projectionsByRowId.removeValue(forKey: item.id) != nil
         }
         guard projectionsByRowId[item.id] != next else { return false }
         projectionsByRowId[item.id] = next
@@ -130,7 +163,9 @@ final class ConversationMediaProjectionCache {
 
     @discardableResult
     func remove(rowId: String) -> Bool {
-        projectionsByRowId.removeValue(forKey: rowId) != nil
+        let removedProjection = projectionsByRowId.removeValue(forKey: rowId) != nil
+        projectionKeysByRowId.removeValue(forKey: rowId)
+        return removedProjection
     }
 
     @discardableResult
@@ -142,9 +177,8 @@ final class ConversationMediaProjectionCache {
             activeRowIds.insert(item.id)
             changed = update(for: item) || changed
         }
-        for rowId in Array(projectionsByRowId.keys) where !activeRowIds.contains(rowId) {
-            projectionsByRowId[rowId] = nil
-            changed = true
+        for rowId in Array(projectionKeysByRowId.keys) where !activeRowIds.contains(rowId) {
+            changed = remove(rowId: rowId) || changed
         }
         return changed
     }
