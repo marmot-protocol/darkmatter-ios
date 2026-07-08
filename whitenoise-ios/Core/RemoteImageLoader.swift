@@ -223,9 +223,14 @@ nonisolated enum RemoteImageFetch {
         let collector = BoundedDataCollector(maximumResponseBytes: cap)
         let task = session.dataTask(with: request)
         task.delegate = collector
-        return try await withCheckedThrowingContinuation { continuation in
-            collector.setContinuation(continuation)
-            task.resume()
+        let cancellation = RemoteImageDownloadCancellation(task: task)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                collector.setContinuation(continuation)
+                task.resume()
+            }
+        } onCancel: {
+            cancellation.cancel()
         }
     }
 
@@ -247,6 +252,18 @@ nonisolated enum RemoteImageFetch {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
         return configuration
+    }
+}
+
+private final class RemoteImageDownloadCancellation: @unchecked Sendable {
+    private let task: URLSessionDataTask
+
+    init(task: URLSessionDataTask) {
+        self.task = task
+    }
+
+    func cancel() {
+        task.cancel()
     }
 }
 

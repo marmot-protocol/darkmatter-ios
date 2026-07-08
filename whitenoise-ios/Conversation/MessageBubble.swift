@@ -1005,6 +1005,17 @@ nonisolated enum MessageVideoThumbnailPresentation {
     }
 }
 
+nonisolated enum MessageMediaThumbnailPresentation {
+    static func cacheKey(for item: MessageMediaAttachment) -> String {
+        if let hash = item.reference?.plaintextSha256.lowercased(),
+           hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
+        {
+            return "sha256:\(hash)"
+        }
+        return "item:\(item.id)"
+    }
+}
+
 nonisolated enum MessageAudioBubblePresentation {
     static func cacheKey(for item: MessageMediaAttachment) -> String {
         if let hash = item.reference?.plaintextSha256.lowercased(),
@@ -1036,11 +1047,14 @@ private struct MessageMediaTile: View {
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
     @Environment(\.displayScale) private var displayScale
-    @State private var imageData: Data?
     @State private var image: UIImage?
     @State private var loadedImageID: String?
     @State private var isLoading = false
     @State private var didFail = false
+
+    private var thumbnailCacheKey: String {
+        MessageMediaThumbnailPresentation.cacheKey(for: item)
+    }
 
     var body: some View {
         ZStack {
@@ -1084,11 +1098,9 @@ private struct MessageMediaTile: View {
             guard item.isImage else { return }
             if didFail {
                 Task { await loadImageIfNeeded(scale: displayScale, force: true) }
-            } else if let imageData {
-                onOpenImage(item, imageData)
             } else {
                 Task {
-                    if let data = await loadImageIfNeeded(scale: displayScale, force: true) {
+                    if let data = await loadImageIfNeeded(scale: displayScale) {
                         onOpenImage(item, data)
                     }
                 }
@@ -1138,9 +1150,10 @@ private struct MessageMediaTile: View {
         guard item.isImage else { return nil }
         let maxPixelSize = max(1, Int(ceil(sideLength * scale)))
         if !force {
-            if loadedImageID == item.id, let imageData { return imageData }
-            if let cachedThumbnail = MessageMediaThumbnailDecoder.cachedThumbnail(for: item.id, maxPixelSize: maxPixelSize) {
-                imageData = cachedThumbnail.sourceData
+            if let cachedThumbnail = MessageMediaThumbnailDecoder.cachedThumbnail(
+                for: thumbnailCacheKey,
+                maxPixelSize: maxPixelSize
+            ) {
                 image = cachedThumbnail.image
                 loadedImageID = item.id
                 didFail = false
@@ -1158,24 +1171,21 @@ private struct MessageMediaTile: View {
                 maxPixelSize: maxPixelSize,
                 scale: scale
             ) else {
-                imageData = nil
                 image = nil
                 loadedImageID = item.id
                 didFail = true
                 return nil
             }
-            imageData = data
             image = decoded
             loadedImageID = item.id
             MessageMediaThumbnailDecoder.store(
                 decoded,
                 sourceData: data,
-                for: item.id,
+                for: thumbnailCacheKey,
                 maxPixelSize: maxPixelSize
             )
             return data
         } catch {
-            imageData = nil
             image = nil
             loadedImageID = item.id
             didFail = true
@@ -1305,7 +1315,6 @@ private struct MessageVideoAttachmentView: View {
     @State private var previewThumbnail: UIImage?
     @State private var fullscreenVideo: MessageFullscreenVideo?
     @State private var isLoading = false
-    @State private var isLoadingPreview = false
     @State private var isLoadingFullscreen = false
     @State private var didFail = false
 
@@ -1349,7 +1358,7 @@ private struct MessageVideoAttachmentView: View {
             }
 
             if player == nil {
-                if isLoading || (isLoadingPreview && displayThumbnail == nil) {
+                if isLoading {
                     ProgressView()
                         .controlSize(
                             overlayDiameter >= VideoPreviewOverlayPresentation.regularDiameter ? .regular : .small
@@ -1414,9 +1423,6 @@ private struct MessageVideoAttachmentView: View {
         .onTapGesture {
             Task { await loadAndPlay(scale: displayScale) }
         }
-        .task(id: item.id) {
-            await loadPreviewThumbnailIfNeeded(scale: displayScale)
-        }
         .onChange(of: item.id) { _, _ in
             player?.pause()
             audioSession.stop()
@@ -1425,7 +1431,6 @@ private struct MessageVideoAttachmentView: View {
             previewThumbnail = nil
             fullscreenVideo = nil
             isLoading = false
-            isLoadingPreview = false
             isLoadingFullscreen = false
             didFail = false
         }
@@ -1447,27 +1452,6 @@ private struct MessageVideoAttachmentView: View {
             Image(systemName: "play.rectangle")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-        }
-    }
-
-    private func loadPreviewThumbnailIfNeeded(scale: CGFloat) async {
-        guard item.thumbnail == nil,
-              previewThumbnail == nil,
-              !isLoadingPreview else { return }
-        if let cached = MessageVideoThumbnailDecoder.cachedThumbnail(
-            for: thumbnailCacheKey,
-            maxPixelSize: maxThumbnailPixelSize(scale: scale)
-        ) {
-            previewThumbnail = cached
-            return
-        }
-        isLoadingPreview = true
-        defer { isLoadingPreview = false }
-        do {
-            let url = try await playbackFileURL()
-            await loadPreviewThumbnail(from: url, scale: scale)
-        } catch {
-            // Thumbnail fetch is opportunistic; tapping the video can still retry.
         }
     }
 
@@ -1829,15 +1813,6 @@ private struct MessageAudioAttachmentView: View {
         if let embedded = embeddedMetadata {
             MessageAudioMetadataCache.store(embedded, for: metadataCacheKey)
             applyMetadata(embedded)
-            return
-        }
-
-        do {
-            let data = try await onLoadMedia(item)
-            let metadata = await audioMetadata(from: data)
-            applyMetadata(metadata)
-        } catch {
-            // Playback still gets its own retry path when the user taps play.
         }
     }
 

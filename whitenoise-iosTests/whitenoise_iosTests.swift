@@ -7427,14 +7427,76 @@ struct MessageSemanticsTests {
             for: secondReference,
             cachesDirectory: cachesDirectory,
             policy: policy,
-            now: Date(timeIntervalSince1970: 1_001)
+            now: Date(timeIntervalSince1970: 1_006)
         )
         MessageMediaCache.store(
             Data(repeating: 0x03, count: 4),
             for: thirdReference,
             cachesDirectory: cachesDirectory,
             policy: policy,
-            now: Date(timeIntervalSince1970: 1_002)
+            now: Date(timeIntervalSince1970: 1_012)
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondURL.path))
+        #expect(FileManager.default.fileExists(atPath: thirdURL.path))
+    }
+
+    @Test func mediaCacheThrottlesDirectoryWideSweeps() throws {
+        let policy = DecryptedMediaCacheEvictionPolicy(maxBytes: 8, maxAge: 60 * 60)
+        let cachesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MessageMediaCacheSweepThrottleTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cachesDirectory) }
+        let firstReference = encryptedMediaReference(
+            plaintextByte: "26",
+            ciphertextByte: "27",
+            sourceEpoch: 0
+        )
+        let secondReference = encryptedMediaReference(
+            plaintextByte: "28",
+            ciphertextByte: "29",
+            sourceEpoch: 0
+        )
+        let thirdReference = encryptedMediaReference(
+            plaintextByte: "2a",
+            ciphertextByte: "2b",
+            sourceEpoch: 0
+        )
+        let firstURL = try #require(MessageMediaCache.cacheURL(for: firstReference, cachesDirectory: cachesDirectory))
+        let secondURL = try #require(MessageMediaCache.cacheURL(for: secondReference, cachesDirectory: cachesDirectory))
+        let thirdURL = try #require(MessageMediaCache.cacheURL(for: thirdReference, cachesDirectory: cachesDirectory))
+
+        MessageMediaCache.store(
+            Data(repeating: 0x01, count: 4),
+            for: firstReference,
+            cachesDirectory: cachesDirectory,
+            policy: policy,
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+        MessageMediaCache.store(
+            Data(repeating: 0x02, count: 4),
+            for: secondReference,
+            cachesDirectory: cachesDirectory,
+            policy: policy,
+            now: Date(timeIntervalSince1970: 2_001)
+        )
+        MessageMediaCache.store(
+            Data(repeating: 0x03, count: 4),
+            for: thirdReference,
+            cachesDirectory: cachesDirectory,
+            policy: policy,
+            now: Date(timeIntervalSince1970: 2_002)
+        )
+
+        #expect(FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondURL.path))
+        #expect(FileManager.default.fileExists(atPath: thirdURL.path))
+
+        _ = MessageMediaCache.cachedData(
+            for: thirdReference,
+            cachesDirectory: cachesDirectory,
+            policy: policy,
+            now: Date(timeIntervalSince1970: 2_006)
         )
 
         #expect(!FileManager.default.fileExists(atPath: firstURL.path))
@@ -8129,6 +8191,52 @@ struct MessageMediaGridPresentationTests {
         #expect(trailingRightToLeft.contains(.bottomLeft))
         #expect(!trailingRightToLeft.contains(.topRight))
         #expect(!trailingRightToLeft.contains(.bottomRight))
+    }
+}
+
+struct MessageMediaThumbnailPresentationTests {
+
+    @Test func thumbnailCacheKeySurvivesSourceEpochRefresh() {
+        let initial = attachment(
+            id: "row:\(hex("33")):0:0",
+            reference: encryptedMediaReference(
+                fileName: "photo.jpg",
+                mediaType: "image/jpeg",
+                dim: "640x480",
+                sourceEpoch: 0
+            )
+        )
+        let refreshed = attachment(
+            id: "row:\(hex("33")):42:0",
+            reference: encryptedMediaReference(
+                fileName: "photo.jpg",
+                mediaType: "image/jpeg",
+                dim: "640x480",
+                sourceEpoch: 42
+            )
+        )
+
+        #expect(MessageMediaThumbnailPresentation.cacheKey(for: initial) == MessageMediaThumbnailPresentation.cacheKey(for: refreshed))
+    }
+
+    @Test func thumbnailCacheKeyFallsBackToItemIdForLocalImage() {
+        let local = attachment(id: "local-image", reference: nil)
+
+        #expect(MessageMediaThumbnailPresentation.cacheKey(for: local) == "item:local-image")
+    }
+
+    private func attachment(
+        id: String,
+        reference: MediaAttachmentReferenceFfi?
+    ) -> MessageMediaAttachment {
+        MessageMediaAttachment(
+            id: id,
+            reference: reference,
+            fileName: reference?.fileName ?? "local.jpg",
+            mediaType: reference?.mediaType ?? "image/jpeg",
+            dim: reference?.dim,
+            localData: nil
+        )
     }
 }
 
