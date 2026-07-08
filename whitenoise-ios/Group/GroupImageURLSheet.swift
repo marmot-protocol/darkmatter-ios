@@ -115,9 +115,20 @@ struct DuckDuckGoImageSearchClient {
         sanitizedImageURL(raw)?.host
     }
 
-    private static func dimensionsLabel(width: Int?, height: Int?) -> String? {
+    static func dimensionsLabel(
+        width: Int?,
+        height: Int?,
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String? {
         guard let width, let height, width > 0, height > 0 else { return nil }
-        return "\(width)x\(height)"
+        return L10n.formatted(
+            "%@ × %@",
+            arguments: [
+                LocalizedNumberLabel.decimal(UInt64(width), locale: locale),
+                LocalizedNumberLabel.decimal(UInt64(height), locale: locale)
+            ],
+            locale: locale
+        )
     }
 }
 
