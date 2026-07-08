@@ -2,7 +2,7 @@ import Foundation
 
 nonisolated enum NostrProfileReference {
     private static let bech32Charset = Array("qpzry9x8gf2tvdw0s3jn54khce6mua7l")
-    private static let maxBech32ReferenceUTF8Bytes = 256
+    private static let maxBech32ReferenceUTF8Bytes = 4096
     /// O(1) reverse lookup for `bech32Charset`, built once. Decoding scans every
     /// character of every reference, so a linear `firstIndex(of:)` per character
     /// was O(n) per lookup (issue #33).
@@ -22,25 +22,53 @@ nonisolated enum NostrProfileReference {
     ]
 
     static func memberRef(from raw: String) -> String? {
+        guard let reference = referenceForResolution(from: raw) else { return nil }
+        return memberRef(fromReference: reference)
+    }
+
+    /// Validates a pasted/scanned/deep-linked profile reference while
+    /// preserving the original reference form for Marmot resolution. In
+    /// particular, valid `nprofile` values stay as `nprofile` so Rust can use
+    /// relay hints as hidden resolution hints instead of receiving only the
+    /// decoded pubkey.
+    static func referenceForResolution(from raw: String) -> String? {
         guard isWithinReferenceLimit(raw) else { return nil }
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         if looksLikeProfileReference(trimmed) {
-            return memberRef(fromReference: trimmed)
+            return referenceForResolution(fromReference: trimmed)
         }
 
         if hasCaseInsensitivePrefix(trimmed, "nostr:") {
             let rest = String(trimmed.dropFirst("nostr:".count))
-            return memberRef(fromReference: rest)
+            return referenceForResolution(fromReference: rest)
         }
 
         if let reference = reference(fromDeepLinkURLString: trimmed) {
-            return memberRef(fromReference: reference)
+            return referenceForResolution(fromReference: reference)
         }
 
-        return memberRef(fromReference: trimmed)
+        return referenceForResolution(fromReference: trimmed)
+    }
+
+    static func referenceForResolution(fromReference reference: String) -> String? {
+        guard isWithinReferenceLimit(reference) else { return nil }
+        let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if hasCaseInsensitivePrefix(trimmed, "nprofile1") {
+            guard nprofilePubkeyHex(trimmed) != nil else { return nil }
+            return trimmed.lowercased()
+        }
+        if hasCaseInsensitivePrefix(trimmed, "npub1") {
+            guard npubPubkeyBytes(trimmed) != nil else { return nil }
+            return trimmed.lowercased()
+        }
+        if Hex.is32Bytes(trimmed) {
+            return trimmed.lowercased()
+        }
+        return nil
     }
 
     /// Hex pubkey from an `npub1…` or `nprofile1…` reference, checksum
@@ -59,6 +87,7 @@ nonisolated enum NostrProfileReference {
     }
 
     static func memberRef(fromReference reference: String) -> String? {
+        guard isWithinReferenceLimit(reference) else { return nil }
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if hasCaseInsensitivePrefix(trimmed, "nprofile1") {

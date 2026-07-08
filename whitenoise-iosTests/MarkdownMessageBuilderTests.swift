@@ -182,6 +182,27 @@ struct MarkdownMessageBuilderTests {
         #expect(run.font == Font.body.bold())
     }
 
+    @Test func inlineNostrUriResolvesToDisplayNameWithoutMentionStyling() throws {
+        let bech32 = "npub1" + String(repeating: "q", count: 58)
+        let document = doc([para([
+            .nostrUri(entity: MarkdownNostrEntityFfi(hrp: .npub, bech32: bech32))
+        ])])
+        let blocks = try #require(MarkdownMessageBuilder.displayBlocks(
+            for: document,
+            mentionDisplayName: { entity in
+                entity.bech32 == bech32 ? "Jeff" : nil
+            }
+        ))
+        guard case .paragraph(let attributed) = try #require(blocks.first) else {
+            throw TestFailure("expected paragraph")
+        }
+
+        let run = try #require(attributed.runs.first)
+        #expect(String(attributed.characters) == "Jeff")
+        #expect(run.link == URL(string: "nostr:\(bech32)"))
+        #expect(run.font == Font.body)
+    }
+
     @Test func mentionFallsBackToBech32WhenResolverDeclines() throws {
         let bech32 = "npub1" + String(repeating: "q", count: 58)
         let document = doc([para([

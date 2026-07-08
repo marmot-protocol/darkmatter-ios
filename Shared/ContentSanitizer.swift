@@ -15,6 +15,7 @@ nonisolated enum ContentSanitizer {
     static let maxImageURLLength = 2048
 
     private static let blankLineRunRegex = try! NSRegularExpression(pattern: "\n{3,}")
+    private static let scalarBudgetMultiplier = 8
 
     /// Single-line text: strip control/bidi characters, collapse all
     /// whitespace (including newlines) to single spaces, trim, cap length.
@@ -26,14 +27,14 @@ nonisolated enum ContentSanitizer {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
         guard !collapsed.isEmpty else { return nil }
-        return String(collapsed.prefix(maxLength))
+        return boundedPrefix(collapsed, maxGraphemes: maxLength)
     }
 
     /// Relay / URL-like single-line display: everything `singleLine` does, plus
-    /// removal of the remaining invisible Unicode *format* characters (general
-    /// category `Cf`) that `stripUnsafe` deliberately leaves in place for
-    /// general text — notably U+200C ZERO WIDTH NON-JOINER, U+200D ZERO WIDTH
-    /// JOINER, and U+2060 WORD JOINER (#306).
+    /// removal of the remaining invisible Unicode characters that
+    /// `stripUnsafe` deliberately leaves in place for general text — notably
+    /// U+200C ZERO WIDTH NON-JOINER, U+200D ZERO WIDTH JOINER, U+2060 WORD
+    /// JOINER, and host-spoofing invisible letter/blank scalars.
     ///
     /// A relay/host string can never legitimately contain a zero-width joiner
     /// or word joiner inside a host label, so for this surface they are pure
@@ -51,23 +52,28 @@ nonisolated enum ContentSanitizer {
         return stripped
     }
 
-    /// True for invisible Unicode format characters that have no place in a
-    /// relay/URL host string. Covers the general `Cf` (format) category, which
-    /// includes U+200C/U+200D (ZWNJ/ZWJ), U+2060 (WORD JOINER), U+FEFF (BOM),
-    /// the bidi isolates/overrides, and U+061C (Arabic letter mark). Whitespace
-    /// is already collapsed away by `singleLine` before this runs.
+    /// True for invisible Unicode characters that have no place in names or a
+    /// relay/URL host string. Covers the general `Cf` (format) category, plus
+    /// always-invisible letter/blank scalars that are not classified as format.
+    /// Whitespace is already collapsed away by `singleLine` before this runs.
     private static func isInvisibleFormat(_ scalar: UnicodeScalar) -> Bool {
-        scalar.properties.generalCategory == .format
+        if scalar.properties.generalCategory == .format { return true }
+        switch scalar.value {
+        case 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800:
+            return true
+        default:
+            return false
+        }
     }
 
     /// Person display name (single line, short cap).
     static func displayName(_ raw: String?) -> String? {
-        singleLine(raw, maxLength: maxNameLength)
+        visibleSingleLine(raw, maxLength: maxNameLength)
     }
 
     /// Group name (single line, slightly longer cap than a person name).
     static func groupName(_ raw: String?) -> String? {
-        singleLine(raw, maxLength: maxGroupNameLength)
+        visibleSingleLine(raw, maxLength: maxGroupNameLength)
     }
 
     /// Multi-line free text (e.g. about): strip control/bidi but keep normal
@@ -79,7 +85,7 @@ nonisolated enum ContentSanitizer {
         let cleaned = clampBlankLineRuns(stripUnsafe(raw))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
-        return String(cleaned.prefix(maxLength))
+        return boundedPrefix(cleaned, maxGraphemes: maxLength)
     }
 
     /// Normalize line endings (CRLF and lone CR → LF) then clamp runs of 3+
@@ -105,7 +111,7 @@ nonisolated enum ContentSanitizer {
     static func messageBody(_ raw: String) -> String {
         let trimmed = clampBlankLineRuns(stripUnsafe(raw))
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(trimmed.prefix(maxMessageLength))
+        return boundedPrefix(trimmed, maxGraphemes: maxMessageLength)
     }
 
     /// Strip-only variant for markdown text runs: removes control/bidi/
@@ -123,7 +129,7 @@ nonisolated enum ContentSanitizer {
     /// optional handling.
     static func reactionEmoji(_ raw: String) -> String {
         let stripped = stripUnsafe(raw).trimmingCharacters(in: .whitespacesAndNewlines)
-        return String(stripped.prefix(maxReactionLength))
+        return boundedPrefix(stripped, maxGraphemes: maxReactionLength)
     }
 
     /// Image URL allowlist: only HTTPS with a public host. Rejects data:,
@@ -140,7 +146,7 @@ nonisolated enum ContentSanitizer {
         // the sibling sanitizers (`singleLine`, `profileAddress`, `reactionEmoji`)
         // apply to the surfaces they guard.
         guard !trimmed.isEmpty,
-              trimmed.count <= maxImageURLLength,
+              trimmed.utf8.count <= maxImageURLLength,
               let comps = URLComponents(string: trimmed),
               let scheme = comps.scheme?.lowercased(),
               scheme == "https",
@@ -158,7 +164,7 @@ nonisolated enum ContentSanitizer {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !collapsed.isEmpty, collapsed.count <= maxProfileAddressLength else { return nil }
+        guard !collapsed.isEmpty, collapsed.utf8.count <= maxProfileAddressLength else { return nil }
 
         let parts = collapsed.split(separator: "@", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }
@@ -285,7 +291,7 @@ nonisolated enum ContentSanitizer {
     }
 
     private static func isValidProfileAddressLocalPart(_ value: String) -> Bool {
-        guard !value.isEmpty, value.count <= 64 else { return false }
+        guard !value.isEmpty, value.utf8.count <= 64 else { return false }
         return value.unicodeScalars.allSatisfy { scalar in
             isASCIIDigit(scalar) ||
                 (97...122).contains(scalar.value) ||
@@ -298,7 +304,7 @@ nonisolated enum ContentSanitizer {
 
     private static func isValidProfileAddressDomain(_ value: String) -> Bool {
         guard !value.isEmpty,
-              value.count <= 253,
+              value.utf8.count <= 253,
               value.contains("."),
               !isPrivateOrLoopbackHost(value)
         else { return false }
@@ -309,7 +315,7 @@ nonisolated enum ContentSanitizer {
         else { return false }
         return labels.allSatisfy { label in
             guard !label.isEmpty,
-                  label.count <= 63,
+                  label.utf8.count <= 63,
                   label.first != "-",
                   label.last != "-"
             else { return false }
@@ -424,11 +430,30 @@ nonisolated enum ContentSanitizer {
                  0x202A...0x202E,       // LRE, RLE, PDF, LRO, RLO
                  0x2066...0x2069,       // LRI, RLI, FSI, PDI
                  0x061C,                // Arabic letter mark
-                 0x200B, 0xFEFF:        // zero-width space, BOM / ZWNBSP
+                 0x200B, 0xFEFF,        // zero-width space, BOM / ZWNBSP
+                 0x2028, 0x2029:        // line separator, paragraph separator
                 return false
             default:
                 return true
             }
         }))
+    }
+
+    private static func visibleSingleLine(_ raw: String?, maxLength: Int) -> String? {
+        guard let collapsed = singleLine(raw, maxLength: maxLength) else { return nil }
+        let stripped = String(String.UnicodeScalarView(
+            collapsed.unicodeScalars.filter { !isInvisibleFormat($0) }
+        ))
+        guard !stripped.isEmpty else { return nil }
+        return boundedPrefix(stripped, maxGraphemes: maxLength)
+    }
+
+    private static func boundedPrefix(_ value: String, maxGraphemes: Int) -> String {
+        let graphemeBounded = String(value.prefix(maxGraphemes))
+        let maxScalars = max(maxGraphemes, maxGraphemes * scalarBudgetMultiplier)
+        guard graphemeBounded.unicodeScalars.count > maxScalars else {
+            return graphemeBounded
+        }
+        return String(String.UnicodeScalarView(graphemeBounded.unicodeScalars.prefix(maxScalars)))
     }
 }

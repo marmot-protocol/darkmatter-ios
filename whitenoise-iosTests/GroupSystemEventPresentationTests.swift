@@ -56,6 +56,17 @@ struct GroupSystemEventPresentationTests {
         }
     }
 
+    @Test func displayTextIgnoresNonHexActorAndSubject() {
+        withAppLanguage(.english) {
+            let text = GroupSystemEventPresentation.displayText(
+                from: #"{"v":1,"system_type":"admin_added","text":"Admin added","data":{"actor":"alice\u202E","subject":"bob\u200D"}}"#,
+                displayName: testDisplayName
+            )
+
+            #expect(text == "Admin added")
+        }
+    }
+
     @Test func displayTextSanitizesGroupRenameName() {
         withAppLanguage(.english) {
             let text = GroupSystemEventPresentation.displayText(

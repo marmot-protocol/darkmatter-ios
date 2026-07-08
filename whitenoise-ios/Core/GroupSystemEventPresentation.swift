@@ -220,7 +220,7 @@ enum GroupSystemEventPresentation {
 
         private func normalizedHex(_ value: String?) -> String? {
             guard let value = trimmed(value) else { return nil }
-            return value.lowercased()
+            return Hex.normalized32Bytes(value)
         }
 
         private func disappearingTimerText(
