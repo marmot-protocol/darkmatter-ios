@@ -547,15 +547,11 @@ private struct GroupImageRemoteThumbnail: View {
     private func loadImage(scale: CGFloat) async {
         phase = .loading
         do {
-            let data = try await RemoteImageFetch.imageData(for: url)
-            guard let image = await RemoteImageDecoder.downsampledImage(
-                from: data,
+            let image = try await RemoteAvatarImageLoader.image(
+                for: url,
                 maxPixelSize: Self.thumbnailMaxPixelSize(scale: scale),
                 scale: scale
-            ) else {
-                phase = .failure
-                return
-            }
+            )
             phase = .success(image)
         } catch {
             phase = .failure

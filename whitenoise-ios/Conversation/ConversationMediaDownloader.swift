@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import MarmotKit
 
 /// Dedup key for an in-flight media download: a content-addressed media
@@ -21,27 +22,46 @@ struct MediaDownloadInFlightKey: Hashable {
 /// thumbnail/gallery requests share one decrypt/download task.
 @MainActor
 final class MediaDownloadInFlightStore {
-    private var tasks: [MediaDownloadInFlightKey: Task<Data, Error>] = [:]
+    private struct Entry {
+        let id: UUID
+        let task: Task<Data, Error>
+    }
+
+    private var tasks: [MediaDownloadInFlightKey: Entry] = [:]
 
     func data(
         for key: MediaDownloadInFlightKey,
         operation: @escaping @MainActor () async throws -> Data
     ) async throws -> Data {
-        if let task = tasks[key] {
-            return try await task.value
+        if let entry = tasks[key] {
+            return try await entry.task.value
         }
-        let task = Task { @MainActor in
-            try await operation()
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            defer { self?.clearTask(for: key, id: id) }
+            return try await operation()
         }
-        tasks[key] = task
-        do {
-            let data = try await task.value
-            tasks[key] = nil
-            return data
-        } catch {
-            tasks[key] = nil
-            throw error
+        tasks[key] = Entry(id: id, task: task)
+        return try await task.value
+    }
+
+    private func clearTask(for key: MediaDownloadInFlightKey, id: UUID) {
+        guard tasks[key]?.id == id else {
+            return
         }
+        tasks[key] = nil
+    }
+}
+
+nonisolated enum MediaPlaintextHash {
+    static func matches(_ data: Data, reference: MediaAttachmentReferenceFfi) -> Bool {
+        sha256Hex(of: data) == reference.plaintextSha256.lowercased()
+    }
+
+    private static func sha256Hex(of data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
 
@@ -99,7 +119,9 @@ final class ConversationMediaDownloader {
         guard let reference = media.reference else {
             throw MediaDataError.missingReference
         }
-        if let cached = await cache.cachedData(for: reference) {
+        if let cached = await cache.cachedData(for: reference),
+           MediaPlaintextHash.matches(cached, reference: reference)
+        {
             return cached
         }
         guard let appState, let accountRef = appState.activeAccountRef else {
@@ -112,14 +134,18 @@ final class ConversationMediaDownloader {
             // Row references already carry the real source_epoch, so the reference
             // is directly downloadable — no listMedia round-trip to recover it.
             let result = try await self.downloadMedia(client, accountRef, groupIdHex, reference)
+            guard MediaPlaintextHash.matches(result.plaintext, reference: reference) else {
+                throw MediaDataError.plaintextHashMismatch
+            }
             await self.cache.store(result.plaintext, for: reference)
             return result.plaintext
         }
     }
 
-    enum MediaDataError: LocalizedError {
+    enum MediaDataError: LocalizedError, Equatable {
         case missingReference
         case missingAccount
+        case plaintextHashMismatch
 
         var errorDescription: String? {
             switch self {
@@ -127,6 +153,8 @@ final class ConversationMediaDownloader {
                 return L10n.string("This attachment is not ready yet.")
             case .missingAccount:
                 return L10n.string("No active account.")
+            case .plaintextHashMismatch:
+                return L10n.string("Attachment verification failed.")
             }
         }
     }

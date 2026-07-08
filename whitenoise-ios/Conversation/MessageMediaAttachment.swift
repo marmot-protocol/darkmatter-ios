@@ -1058,6 +1058,9 @@ nonisolated private enum DecryptedMediaCacheEvictor {
         let modifiedAt: Date
     }
 
+    private static let minimumSweepInterval: TimeInterval = 5
+    private static let sweepGate = DecryptedMediaCacheSweepGate(minimumInterval: minimumSweepInterval)
+
     static func touch(_ url: URL, at date: Date) {
         try? FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
     }
@@ -1066,9 +1069,11 @@ nonisolated private enum DecryptedMediaCacheEvictor {
         directory: URL,
         policy: DecryptedMediaCacheEvictionPolicy,
         preserving preservedURL: URL? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        force: Bool = false
     ) {
         guard policy.maxBytes >= 0, policy.maxAge >= 0 else { return }
+        guard sweepGate.shouldSweep(directory: directory, now: now, force: force) else { return }
         guard let urls = try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey],
@@ -1118,6 +1123,34 @@ nonisolated private enum DecryptedMediaCacheEvictor {
 
     private static func sameFile(_ lhs: URL, _ rhs: URL) -> Bool {
         lhs.standardizedFileURL.path == rhs.standardizedFileURL.path
+    }
+}
+
+private final class DecryptedMediaCacheSweepGate: @unchecked Sendable {
+    private let minimumInterval: TimeInterval
+    private let lock = NSLock()
+    private var lastSweepByDirectory: [String: Date] = [:]
+
+    init(minimumInterval: TimeInterval) {
+        self.minimumInterval = minimumInterval
+    }
+
+    func shouldSweep(directory: URL, now: Date, force: Bool) -> Bool {
+        let key = directory.standardizedFileURL.path
+        lock.lock()
+        defer { lock.unlock() }
+        if force {
+            lastSweepByDirectory[key] = now
+            return true
+        }
+        if let lastSweep = lastSweepByDirectory[key] {
+            let elapsed = now.timeIntervalSince(lastSweep)
+            if elapsed >= 0, elapsed < minimumInterval {
+                return false
+            }
+        }
+        lastSweepByDirectory[key] = now
+        return true
     }
 }
 
