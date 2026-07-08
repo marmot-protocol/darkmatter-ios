@@ -506,8 +506,9 @@ enum MarkdownMessageBuilder {
 
     /// npub/nprofile entities deep-link to the profile screen via a synthetic
     /// `nostr:` URL; other entity kinds render styled but inert. When the
-    /// profile is known, the mention reads `@Display Name` (bold, body font)
-    /// instead of the truncated bech32.
+    /// profile is known, mention tokens read `@Display Name` (bold, body font)
+    /// while inline `nostr:` URLs render the resolved name without fabricating
+    /// mention styling.
     @discardableResult
     private static func appendNostrEntity(
         _ entity: MarkdownNostrEntityFfi,
@@ -526,8 +527,8 @@ enum MarkdownMessageBuilder {
             }
         }
         if let name = context.mentionDisplayName?(entity) {
-            nested.bold = true
-            return append("@" + name, to: &out, context: nested, budget: &budget)
+            nested.bold = !prefix.isEmpty
+            return append(prefix + name, to: &out, context: nested, budget: &budget)
         }
         nested.monospaced = true
         return append(prefix + truncatedBech32(entity.bech32), to: &out, context: nested, budget: &budget)

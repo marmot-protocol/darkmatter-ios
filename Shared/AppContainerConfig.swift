@@ -116,17 +116,26 @@ nonisolated struct NativePushServerConfig: Equatable {
 }
 
 nonisolated enum RelayURL {
+    private static let maxRelayURLUTF8Bytes = 2048
+
     static func normalized(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var components = URLComponents(string: trimmed),
+        guard !trimmed.isEmpty,
+              trimmed.utf8.count <= maxRelayURLUTF8Bytes,
+              var components = URLComponents(string: trimmed),
               let scheme = components.scheme?.lowercased(),
               scheme == "wss" || scheme == "ws",
               let host = components.host,
-              !host.isEmpty
+              !host.isEmpty,
+              components.user == nil,
+              components.password == nil
         else { return nil }
 
         components.scheme = scheme
         components.host = host.lowercased()
+        components.path = ""
+        components.query = nil
+        components.fragment = nil
         return components.url?.absoluteString
     }
 }

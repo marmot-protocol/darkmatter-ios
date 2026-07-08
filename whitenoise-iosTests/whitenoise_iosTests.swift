@@ -230,6 +230,10 @@ struct AppStateBootstrapTests {
 
     @Test func routingIsBackedByFocusedNavigationState() async throws {
         let appState = try testAppState()
+        appState.accountStore.accounts = [
+            AccountSummaryFfi(label: "account-a", accountIdHex: hex("aa"), localSigning: true, signedOut: false, running: true),
+            AccountSummaryFfi(label: "account-b", accountIdHex: hex("bb"), localSigning: true, signedOut: false, running: true)
+        ]
         appState.activeAccountRef = "account-a"
 
         appState.presentProfile(npub: "npub1example")
@@ -250,6 +254,25 @@ struct AppStateBootstrapTests {
         #expect(appState.navigation.pendingChatId == nil)
         #expect(appState.navigation.pendingChatAccountRef == nil)
         #expect(appState.navigation.pendingChatMessageIdHex == nil)
+    }
+
+    @Test func routedChatIgnoresMissingOrSignedOutAccounts() async throws {
+        let appState = try testAppState()
+        appState.accountStore.accounts = [
+            AccountSummaryFfi(label: "account-a", accountIdHex: hex("aa"), localSigning: true, signedOut: false, running: true),
+            AccountSummaryFfi(label: "account-b", accountIdHex: hex("bb"), localSigning: true, signedOut: true, running: false)
+        ]
+        appState.activeAccountRef = "account-a"
+
+        appState.presentChat(groupIdHex: "group-stale", accountRef: "removed-account")
+
+        #expect(appState.activeAccountRef == "account-a")
+        #expect(appState.navigation.pendingChatId == nil)
+
+        appState.presentChat(groupIdHex: "group-signed-out", accountRef: "account-b")
+
+        #expect(appState.activeAccountRef == "account-a")
+        #expect(appState.navigation.pendingChatId == nil)
     }
 
     @Test func notificationPresentationRuntimeGateRequiresForegroundRuntime() {
@@ -1786,12 +1809,19 @@ struct RelaySettingsTests {
     @Test func relayNormalizationDeduplicatesSchemeAndHostCase() {
         #expect(
             RelaySettings.normalizedRelayURL("WSS://Relay.DAMUS.IO/Nostr?Token=ABC")
-                == "wss://relay.damus.io/Nostr?Token=ABC"
+                == "wss://relay.damus.io"
         )
         #expect(RelaySettings.normalizedRelayURLs([
             "WSS://Relay.DAMUS.IO",
             "wss://relay.damus.io"
         ]) == ["wss://relay.damus.io"])
+    }
+
+    @Test func relayNormalizationRejectsUserinfoAndBoundsInput() {
+        #expect(RelaySettings.normalizedRelayURL("wss://user:pass@relay.example") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://relay.example/path?q=token#frag") == "wss://relay.example")
+        #expect(RelaySettings.normalizedRelayURL("wss://relay.example:443/path") == "wss://relay.example:443")
+        #expect(RelaySettings.normalizedRelayURL("wss://relay.example/" + String(repeating: "a", count: 4096)) == nil)
     }
 
     @Test func savingRelaysReloadsAuthoritativeListsWhenFinalPublishFails() async throws {
@@ -3782,8 +3812,30 @@ struct ContentSanitizerTests {
 
     @Test func emptyAfterStrippingReturnsNil() {
         #expect(ContentSanitizer.displayName("\u{202E}\u{200B}") == nil)
+        #expect(ContentSanitizer.displayName("\u{200D}\u{2060}\u{3164}") == nil)
         #expect(ContentSanitizer.displayName("   ") == nil)
         #expect(ContentSanitizer.displayName(nil) == nil)
+    }
+
+    @Test func verticalSeparatorsAreRemovedBeforeBlankLineClamp() {
+        #expect(ContentSanitizer.messageBody("hello\u{2028}\u{2029}world") == "helloworld")
+        #expect(ContentSanitizer.multilineText("about\u{2028}\u{2029}text") == "abouttext")
+    }
+
+    @Test func namesAndReactionsHaveScalarBudgets() {
+        let megaCluster = "a" + String(repeating: "\u{0301}", count: 2_000)
+
+        let name = ContentSanitizer.displayName(megaCluster)
+        #expect(name?.count == 1)
+        #expect((name?.unicodeScalars.count ?? 0) <= ContentSanitizer.maxNameLength * 8)
+
+        let reaction = ContentSanitizer.reactionEmoji(megaCluster)
+        #expect(reaction.count == 1)
+        #expect(reaction.unicodeScalars.count <= ContentSanitizer.maxReactionLength * 8)
+    }
+
+    @Test func relayDisplayLineStripsInvisibleLetterScalars() {
+        #expect(ContentSanitizer.relayDisplayLine("relay\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}.example", maxLength: 80) == "relay.example")
     }
 
     @Test func imageURLAllowsHttps() {
@@ -3805,6 +3857,10 @@ struct ContentSanitizerTests {
         let overCap = atCap + "a"
         #expect(overCap.count == cap + 1)
         #expect(ContentSanitizer.imageURL(overCap) == nil)
+        let utf8OverCap = prefix + String(repeating: "é", count: cap - prefix.count)
+        #expect(utf8OverCap.count == cap)
+        #expect(utf8OverCap.utf8.count > cap)
+        #expect(ContentSanitizer.imageURL(utf8OverCap) == nil)
         // A multi-megabyte hostile value is rejected without parsing it.
         let huge = prefix + String(repeating: "a", count: 4_000_000)
         #expect(ContentSanitizer.imageURL(huge) == nil)
@@ -4279,6 +4335,11 @@ struct DeepLinkTests {
         for scheme in ["whitenoise", "whitenoise-staging"] {
             #expect(DeepLink.parse(string: "\(scheme)://profile/\(npub)") == .profile(npub: npub))
         }
+    }
+
+    @Test func darkmatterProfileLinksDoNotParse() {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        #expect(DeepLink.parse(string: "darkmatter://profile/\(npub)") == nil)
     }
 }
 
@@ -5706,7 +5767,6 @@ struct GroupManagementPresentationTests {
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
         let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
         let nprofile = "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p"
-        let nprofileHex = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
 
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(npub)") == npub
@@ -5724,19 +5784,20 @@ struct GroupManagementPresentationTests {
             AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(npub)") == npub
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: nprofile) == nprofileHex
+            AddMembersPresentation.memberRef(fromScannedPayload: nprofile) == nprofile
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(nprofile)") == nprofileHex
+            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(nprofile)") == nprofile
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(nprofile)") == nprofileHex
+            AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(nprofile)") == nprofile
         )
         #expect(
-            DeepLink.parse(string: "nostr:\(nprofile)") == .profile(npub: nprofileHex)
+            DeepLink.parse(string: "nostr:\(nprofile)") == .profile(npub: nprofile)
         )
+        #expect(NostrProfileReference.memberRef(from: nprofile) == "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d")
         #expect(
-            NostrProfileReference.memberRef(from: nprofileHex.uppercased()) == nprofileHex
+            NostrProfileReference.memberRef(from: "3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D") == "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
         )
     }
 

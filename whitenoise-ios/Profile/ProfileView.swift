@@ -3,10 +3,7 @@ import MarmotKit
 
 nonisolated enum ProfileReferenceResolution {
     static func referenceForResolution(_ raw: String) -> String? {
-        guard NostrProfileReference.isWithinReferenceLimit(raw) else { return nil }
-        let reference = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !reference.isEmpty else { return nil }
-        return reference
+        NostrProfileReference.referenceForResolution(from: raw)
     }
 }
 

@@ -10,7 +10,7 @@ import Foundation
 /// Info.plist).
 nonisolated enum DeepLink: Equatable {
     /// Profile reference accepted by Marmot. This is usually an `npub`, but
-    /// may be hex when the source was an `nprofile` pointer.
+    /// may be hex or `nprofile` when the source includes relay hints.
     case profile(npub: String)
     case chat(groupIdHex: String)
 
@@ -83,8 +83,8 @@ nonisolated enum DeepLink: Equatable {
         switch url.host?.lowercased() {
         case "profile":
             if let reference = parts.first,
-               let memberRef = NostrProfileReference.memberRef(fromReference: reference) {
-                return .profile(npub: memberRef)
+               let resolutionReference = NostrProfileReference.referenceForResolution(fromReference: reference) {
+                return .profile(npub: resolutionReference)
             }
         case "chat":
             // A Marmot group id is a 32-byte (64-char) hex value. Reject any
@@ -97,8 +97,8 @@ nonisolated enum DeepLink: Equatable {
         }
         // Tolerate <scheme>://<profile-ref>
         if let host = url.host,
-           let memberRef = NostrProfileReference.memberRef(fromReference: host) {
-            return .profile(npub: memberRef)
+           let resolutionReference = NostrProfileReference.referenceForResolution(fromReference: host) {
+            return .profile(npub: resolutionReference)
         }
         return nil
     }
@@ -110,8 +110,8 @@ nonisolated enum DeepLink: Equatable {
         guard NostrProfileReference.isWithinReferenceLimit(raw) else { return nil }
 
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let memberRef = NostrProfileReference.memberRef(from: trimmed) {
-            return .profile(npub: memberRef)
+        if let resolutionReference = NostrProfileReference.referenceForResolution(from: trimmed) {
+            return .profile(npub: resolutionReference)
         }
         if let url = URL(string: trimmed), let link = parse(url) {
             return link

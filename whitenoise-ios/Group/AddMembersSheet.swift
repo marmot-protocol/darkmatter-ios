@@ -123,7 +123,7 @@ enum AddMembersPresentation {
         if case .profile(let memberRef) = DeepLink.parse(string: trimmed) {
             return memberRef
         }
-        return NostrProfileReference.memberRef(fromReference: trimmed)
+        return NostrProfileReference.referenceForResolution(fromReference: trimmed)
     }
 
     /// Parses and normalizes a raw member reference. The `normalize` closure

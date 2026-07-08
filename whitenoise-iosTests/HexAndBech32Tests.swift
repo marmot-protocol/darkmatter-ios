@@ -73,8 +73,8 @@ struct Bech32CharsetLookupTests {
     }
 
     @Test func rejectsOverlongBech32ReferencesBeforeDecode() {
-        let overlongNpub = "npub1" + String(repeating: "q", count: 300)
-        let overlongNprofile = "nprofile1" + String(repeating: "q", count: 300)
+        let overlongNpub = "npub1" + String(repeating: "q", count: 4_096)
+        let overlongNprofile = "nprofile1" + String(repeating: "q", count: 4_096)
 
         #expect(NostrProfileReference.memberRef(fromReference: overlongNpub) == nil)
         #expect(NostrProfileReference.pubkeyHex(fromBech32: overlongNpub) == nil)
@@ -84,12 +84,17 @@ struct Bech32CharsetLookupTests {
     }
 
     @Test func rejectsOverlongRawInputsBeforeURLFallback() {
-        let overlongRaw = String(repeating: "x", count: 257)
-        let overlongURL = "\(DeepLink.scheme)://profile/" + String(repeating: "q", count: 300)
+        let overlongRaw = String(repeating: "x", count: 4_097)
+        let overlongURL = "\(DeepLink.scheme)://profile/" + String(repeating: "q", count: 4_097)
 
         #expect(NostrProfileReference.memberRef(from: overlongRaw) == nil)
         #expect(NostrProfileReference.memberRef(from: overlongURL) == nil)
         #expect(DeepLink.parse(string: overlongURL) == nil)
+    }
+
+    @Test func referenceLimitAllowsRelayHeavyNprofilePayloads() {
+        #expect(NostrProfileReference.isWithinReferenceLimit(String(repeating: "q", count: 4_096)))
+        #expect(!NostrProfileReference.isWithinReferenceLimit(String(repeating: "q", count: 4_097)))
     }
 }
 

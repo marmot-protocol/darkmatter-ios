@@ -1,4 +1,5 @@
 import Foundation
+import MarmotKit
 
 extension AppState {
     @MainActor
@@ -14,13 +15,24 @@ extension AppState {
     /// Request navigation into a chat (e.g. just after creating one).
     @MainActor
     func presentChat(groupIdHex: String, accountRef: String? = nil, messageIdHex: String? = nil) {
-        if let accountRef = navigation.presentChat(
-            groupIdHex: groupIdHex,
-            accountRef: accountRef,
-            messageIdHex: messageIdHex
-        ) {
-            activeAccountRef = accountRef
+        let requestedAccountRef = accountRef?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let requestedAccountRef, !requestedAccountRef.isEmpty {
+            guard canRoute(toAccountRef: requestedAccountRef) else { return }
+            if let accountRef = navigation.presentChat(
+                groupIdHex: groupIdHex,
+                accountRef: requestedAccountRef,
+                messageIdHex: messageIdHex
+            ) {
+                activeAccountRef = accountRef
+            }
+            return
         }
+
+        _ = navigation.presentChat(
+            groupIdHex: groupIdHex,
+            accountRef: nil,
+            messageIdHex: messageIdHex
+        )
     }
 
     @MainActor
@@ -66,6 +78,12 @@ extension AppState {
             presentChat(groupIdHex: groupIdHex)
         case nil:
             break
+        }
+    }
+
+    private func canRoute(toAccountRef accountRef: String) -> Bool {
+        accounts.contains { account in
+            account.label == accountRef && !account.signedOut
         }
     }
 }
