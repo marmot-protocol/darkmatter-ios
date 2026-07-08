@@ -1161,6 +1161,402 @@ public func FfiConverterTypeEventsSubscription_lower(_ value: EventsSubscription
 
 
 
+public protocol ExternalAccountSignerFfi : AnyObject {
+
+    /**
+     * Return the signer account public key as hex or npub.
+     */
+    func publicKey() throws  -> String
+
+    /**
+     * Sign a serialized unsigned Nostr event and return the signed event JSON.
+     *
+     * MDK uses this for normal Nostr publishing, relay auth, push ownership,
+     * Blossom upload auth, and account identity proofs.
+     */
+    func signEvent(unsignedEventJson: String) throws  -> String
+
+    /**
+     * NIP-04 encrypt/decrypt support for legacy Nostr surfaces.
+     *
+     * Current MDK protocol flows do not require NIP-04. Clients that cannot
+     * support it should return a clear unsupported signer error.
+     */
+    func nip04Encrypt(publicKey: String, content: String) throws  -> String
+
+    func nip04Decrypt(publicKey: String, encryptedContent: String) throws  -> String
+
+    /**
+     * NIP-44 encrypt/decrypt support for gift-wrap and encrypted app data.
+     */
+    func nip44Encrypt(publicKey: String, content: String) throws  -> String
+
+    func nip44Decrypt(publicKey: String, payload: String) throws  -> String
+
+}
+
+open class ExternalAccountSignerFfiImpl:
+    ExternalAccountSignerFfi {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_marmot_uniffi_fn_clone_externalaccountsignerffi(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_marmot_uniffi_fn_free_externalaccountsignerffi(pointer, $0) }
+    }
+
+
+
+
+    /**
+     * Return the signer account public key as hex or npub.
+     */
+open func publicKey()throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_public_key(self.uniffiClonePointer(),$0
+    )
+})
+}
+
+    /**
+     * Sign a serialized unsigned Nostr event and return the signed event JSON.
+     *
+     * MDK uses this for normal Nostr publishing, relay auth, push ownership,
+     * Blossom upload auth, and account identity proofs.
+     */
+open func signEvent(unsignedEventJson: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_sign_event(self.uniffiClonePointer(),
+        FfiConverterString.lower(unsignedEventJson),$0
+    )
+})
+}
+
+    /**
+     * NIP-04 encrypt/decrypt support for legacy Nostr surfaces.
+     *
+     * Current MDK protocol flows do not require NIP-04. Clients that cannot
+     * support it should return a clear unsupported signer error.
+     */
+open func nip04Encrypt(publicKey: String, content: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_nip04_encrypt(self.uniffiClonePointer(),
+        FfiConverterString.lower(publicKey),
+        FfiConverterString.lower(content),$0
+    )
+})
+}
+
+open func nip04Decrypt(publicKey: String, encryptedContent: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_nip04_decrypt(self.uniffiClonePointer(),
+        FfiConverterString.lower(publicKey),
+        FfiConverterString.lower(encryptedContent),$0
+    )
+})
+}
+
+    /**
+     * NIP-44 encrypt/decrypt support for gift-wrap and encrypted app data.
+     */
+open func nip44Encrypt(publicKey: String, content: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_nip44_encrypt(self.uniffiClonePointer(),
+        FfiConverterString.lower(publicKey),
+        FfiConverterString.lower(content),$0
+    )
+})
+}
+
+open func nip44Decrypt(publicKey: String, payload: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_externalaccountsignerffi_nip44_decrypt(self.uniffiClonePointer(),
+        FfiConverterString.lower(publicKey),
+        FfiConverterString.lower(payload),$0
+    )
+})
+}
+
+
+}
+// Magic number for the Rust proxy to call using the same mechanism as every other method,
+// to free the callback once it's dropped by Rust.
+private let IDX_CALLBACK_FREE: Int32 = 0
+// Callback return codes
+private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
+private let UNIFFI_CALLBACK_ERROR: Int32 = 1
+private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceExternalAccountSignerFfi {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    static var vtable: UniffiVTableCallbackInterfaceExternalAccountSignerFfi = UniffiVTableCallbackInterfaceExternalAccountSignerFfi(
+        publicKey: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.publicKey(
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        signEvent: { (
+            uniffiHandle: UInt64,
+            unsignedEventJson: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.signEvent(
+                     unsignedEventJson: try FfiConverterString.lift(unsignedEventJson)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        nip04Encrypt: { (
+            uniffiHandle: UInt64,
+            publicKey: RustBuffer,
+            content: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.nip04Encrypt(
+                     publicKey: try FfiConverterString.lift(publicKey),
+                     content: try FfiConverterString.lift(content)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        nip04Decrypt: { (
+            uniffiHandle: UInt64,
+            publicKey: RustBuffer,
+            encryptedContent: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.nip04Decrypt(
+                     publicKey: try FfiConverterString.lift(publicKey),
+                     encryptedContent: try FfiConverterString.lift(encryptedContent)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        nip44Encrypt: { (
+            uniffiHandle: UInt64,
+            publicKey: RustBuffer,
+            content: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.nip44Encrypt(
+                     publicKey: try FfiConverterString.lift(publicKey),
+                     content: try FfiConverterString.lift(content)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        nip44Decrypt: { (
+            uniffiHandle: UInt64,
+            publicKey: RustBuffer,
+            payload: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.nip44Decrypt(
+                     publicKey: try FfiConverterString.lift(publicKey),
+                     payload: try FfiConverterString.lift(payload)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError.lower
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeExternalAccountSignerFfi.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface ExternalAccountSignerFfi: handle missing in uniffiFree")
+            }
+        }
+    )
+}
+
+private func uniffiCallbackInitExternalAccountSignerFfi() {
+    uniffi_marmot_uniffi_fn_init_callback_vtable_externalaccountsignerffi(&UniffiCallbackInterfaceExternalAccountSignerFfi.vtable)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeExternalAccountSignerFfi: FfiConverter {
+    fileprivate static var handleMap = UniffiHandleMap<ExternalAccountSignerFfi>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ExternalAccountSignerFfi
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ExternalAccountSignerFfi {
+        return ExternalAccountSignerFfiImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ExternalAccountSignerFfi) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ExternalAccountSignerFfi {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ExternalAccountSignerFfi, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalAccountSignerFfi_lift(_ pointer: UnsafeMutableRawPointer) throws -> ExternalAccountSignerFfi {
+    return try FfiConverterTypeExternalAccountSignerFfi.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeExternalAccountSignerFfi_lower(_ value: ExternalAccountSignerFfi) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeExternalAccountSignerFfi.lower(value)
+}
+
+
+
+
 public protocol GroupStateSubscriptionProtocol : AnyObject {
 
     func next() async  -> AppGroupRecordFfi?
@@ -1333,8 +1729,9 @@ public protocol MarmotProtocol : AnyObject {
      * (mdk#461). Each entry's `unread_count` is read from that
      * account's materialized chat-list projection, so this does not require
      * switching into, or loading a full session/timeline for, any account —
-     * non-active (not-`running`) accounts are reported too. Only
-     * local-signing accounts are included, matching `list_accounts`.
+     * non-active (not-`running`) accounts are reported too. Sign-capable
+     * local and external-signer accounts are included, matching
+     * `list_accounts`.
      */
     func accountUnreadSummary() throws  -> [AccountUnreadFfi]
 
@@ -1425,6 +1822,16 @@ public protocol MarmotProtocol : AnyObject {
      * `None` when nothing is known yet — call `refresh_directory` to fetch.
      */
     func displayName(accountIdHex: String)  -> String?
+
+    /**
+     * Fetch and decrypt the group's encrypted Blossom avatar
+     * (`marmot.group.blossom.image.v1`) into raw image bytes (PNG/JPEG/…).
+     * Errors when the group has no Blossom image set. Presence and the
+     * content hash (for caching) are on `AppGroupRecordFfi::image_hash_hex`;
+     * when the group also carries a URL avatar, the URL takes precedence
+     * for rendering.
+     */
+    func downloadGroupBlossomImage(accountRef: String, groupIdHex: String) async throws  -> Data
 
     /**
      * Fetch an encrypted media blob and decrypt it using the group's
@@ -1522,6 +1929,17 @@ public protocol MarmotProtocol : AnyObject {
     func login(identity: String, defaultRelays: [String], bootstrapRelays: [String]) async throws  -> AccountSummaryFfi
 
     /**
+     * Log in with an external account signer such as Amber/NIP-55.
+     *
+     * MDK stores only the account public key and device-local database
+     * encryption material. All Nostr signing/decryption and MLS
+     * account-identity proof signing are routed through `signer`; apps must
+     * call this again after process restart before the external account can
+     * publish, decrypt welcomes, or start its worker.
+     */
+    func loginExternalSigner(publicKey: String, signer: ExternalAccountSignerFfi, defaultRelays: [String], bootstrapRelays: [String]) async throws  -> AccountSummaryFfi
+
+    /**
      * Mark a kind-9 timeline message visible/read. Own kind-9 messages can
      * advance the marker too, which clears any earlier unread messages.
      */
@@ -1617,6 +2035,15 @@ public protocol MarmotProtocol : AnyObject {
      * freshly-fetched metadata (name, picture, etc.) for that account.
      */
     func refreshProfile(accountIdHex: String, relays: [String]) async throws
+
+    /**
+     * Re-register an external signer for an already-known external account.
+     *
+     * This is the restore path after app/process restart. It does not create a
+     * new account; it only installs the signer callback so runtime work can
+     * resume for the account.
+     */
+    func registerExternalSigner(accountRef: String, signer: ExternalAccountSignerFfi) async throws
 
     /**
      * Live relay-plane connection health (connected / connecting /
@@ -2122,8 +2549,9 @@ open func accountRelayLists(accountRef: String)throws  -> AccountRelayListsFfi {
      * (mdk#461). Each entry's `unread_count` is read from that
      * account's materialized chat-list projection, so this does not require
      * switching into, or loading a full session/timeline for, any account —
-     * non-active (not-`running`) accounts are reported too. Only
-     * local-signing accounts are included, matching `list_accounts`.
+     * non-active (not-`running`) accounts are reported too. Sign-capable
+     * local and external-signer accounts are included, matching
+     * `list_accounts`.
      */
 open func accountUnreadSummary()throws  -> [AccountUnreadFfi] {
     return try  FfiConverterSequenceTypeAccountUnreadFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
@@ -2424,6 +2852,31 @@ open func displayName(accountIdHex: String) -> String? {
 }
 
     /**
+     * Fetch and decrypt the group's encrypted Blossom avatar
+     * (`marmot.group.blossom.image.v1`) into raw image bytes (PNG/JPEG/…).
+     * Errors when the group has no Blossom image set. Presence and the
+     * content hash (for caching) are on `AppGroupRecordFfi::image_hash_hex`;
+     * when the group also carries a URL avatar, the URL takes precedence
+     * for rendering.
+     */
+open func downloadGroupBlossomImage(accountRef: String, groupIdHex: String)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_download_group_blossom_image(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
      * Fetch an encrypted media blob and decrypt it using the group's
      * encrypted media component secret.
      */
@@ -2705,6 +3158,32 @@ open func login(identity: String, defaultRelays: [String], bootstrapRelays: [Str
                 uniffi_marmot_uniffi_fn_method_marmot_login(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(identity),FfiConverterSequenceString.lower(defaultRelays),FfiConverterSequenceString.lower(bootstrapRelays)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAccountSummaryFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
+     * Log in with an external account signer such as Amber/NIP-55.
+     *
+     * MDK stores only the account public key and device-local database
+     * encryption material. All Nostr signing/decryption and MLS
+     * account-identity proof signing are routed through `signer`; apps must
+     * call this again after process restart before the external account can
+     * publish, decrypt welcomes, or start its worker.
+     */
+open func loginExternalSigner(publicKey: String, signer: ExternalAccountSignerFfi, defaultRelays: [String], bootstrapRelays: [String])async throws  -> AccountSummaryFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_login_external_signer(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(publicKey),FfiConverterTypeExternalAccountSignerFfi.lower(signer),FfiConverterSequenceString.lower(defaultRelays),FfiConverterSequenceString.lower(bootstrapRelays)
                 )
             },
             pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
@@ -2998,6 +3477,30 @@ open func refreshProfile(accountIdHex: String, relays: [String])async throws  {
                 uniffi_marmot_uniffi_fn_method_marmot_refresh_profile(
                     self.uniffiClonePointer(),
                     FfiConverterString.lower(accountIdHex),FfiConverterSequenceString.lower(relays)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_void,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_void,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
+     * Re-register an external signer for an already-known external account.
+     *
+     * This is the restore path after app/process restart. It does not create a
+     * new account; it only installs the signer callback so runtime work can
+     * resume for the account.
+     */
+open func registerExternalSigner(accountRef: String, signer: ExternalAccountSignerFfi)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_register_external_signer(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterTypeExternalAccountSignerFfi.lower(signer)
                 )
             },
             pollFunc: ffi_marmot_uniffi_rust_future_poll_void,
@@ -4844,15 +5347,17 @@ public struct AccountSummaryFfi {
     public var label: String
     public var accountIdHex: String
     public var localSigning: Bool
+    public var externalSigning: Bool
     public var signedOut: Bool
     public var running: Bool
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(label: String, accountIdHex: String, localSigning: Bool, signedOut: Bool, running: Bool) {
+    public init(label: String, accountIdHex: String, localSigning: Bool, externalSigning: Bool, signedOut: Bool, running: Bool) {
         self.label = label
         self.accountIdHex = accountIdHex
         self.localSigning = localSigning
+        self.externalSigning = externalSigning
         self.signedOut = signedOut
         self.running = running
     }
@@ -4871,6 +5376,9 @@ extension AccountSummaryFfi: Equatable, Hashable {
         if lhs.localSigning != rhs.localSigning {
             return false
         }
+        if lhs.externalSigning != rhs.externalSigning {
+            return false
+        }
         if lhs.signedOut != rhs.signedOut {
             return false
         }
@@ -4884,6 +5392,7 @@ extension AccountSummaryFfi: Equatable, Hashable {
         hasher.combine(label)
         hasher.combine(accountIdHex)
         hasher.combine(localSigning)
+        hasher.combine(externalSigning)
         hasher.combine(signedOut)
         hasher.combine(running)
     }
@@ -4900,6 +5409,7 @@ public struct FfiConverterTypeAccountSummaryFfi: FfiConverterRustBuffer {
                 label: FfiConverterString.read(from: &buf),
                 accountIdHex: FfiConverterString.read(from: &buf),
                 localSigning: FfiConverterBool.read(from: &buf),
+                externalSigning: FfiConverterBool.read(from: &buf),
                 signedOut: FfiConverterBool.read(from: &buf),
                 running: FfiConverterBool.read(from: &buf)
         )
@@ -4909,6 +5419,7 @@ public struct FfiConverterTypeAccountSummaryFfi: FfiConverterRustBuffer {
         FfiConverterString.write(value.label, into: &buf)
         FfiConverterString.write(value.accountIdHex, into: &buf)
         FfiConverterBool.write(value.localSigning, into: &buf)
+        FfiConverterBool.write(value.externalSigning, into: &buf)
         FfiConverterBool.write(value.signedOut, into: &buf)
         FfiConverterBool.write(value.running, into: &buf)
     }
@@ -5449,6 +5960,12 @@ public struct AppGroupRecordFfi {
     public var avatarUrl: String?
     public var avatarDim: String?
     public var avatarThumbhash: String?
+    /**
+     * Content hash of the encrypted Blossom avatar
+     * (`marmot.group.blossom.image.v1`), `None` when absent. Doubles as a
+     * cache key; fetch + decrypt via `Marmot::download_group_blossom_image`.
+     */
+    public var imageHashHex: String?
     public var encryptedMedia: AppGroupEncryptedMediaComponentFfi
     /**
      * Per-group disappearing-message retention in seconds
@@ -5471,7 +5988,12 @@ public struct AppGroupRecordFfi {
         /**
          * URL-based group avatar (`marmot.group.avatar-url.v1`), `None` when absent.
          * When set it takes precedence over a Blossom image avatar.
-         */avatarUrl: String?, avatarDim: String?, avatarThumbhash: String?, encryptedMedia: AppGroupEncryptedMediaComponentFfi,
+         */avatarUrl: String?, avatarDim: String?, avatarThumbhash: String?,
+        /**
+         * Content hash of the encrypted Blossom avatar
+         * (`marmot.group.blossom.image.v1`), `None` when absent. Doubles as a
+         * cache key; fetch + decrypt via `Marmot::download_group_blossom_image`.
+         */imageHashHex: String?, encryptedMedia: AppGroupEncryptedMediaComponentFfi,
         /**
          * Per-group disappearing-message retention in seconds
          * (`marmot.group.message-retention.v1`). `0` means messages never expire.
@@ -5490,6 +6012,7 @@ public struct AppGroupRecordFfi {
         self.avatarUrl = avatarUrl
         self.avatarDim = avatarDim
         self.avatarThumbhash = avatarThumbhash
+        self.imageHashHex = imageHashHex
         self.encryptedMedia = encryptedMedia
         self.disappearingMessageSecs = disappearingMessageSecs
         self.archived = archived
@@ -5534,6 +6057,9 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         if lhs.avatarThumbhash != rhs.avatarThumbhash {
             return false
         }
+        if lhs.imageHashHex != rhs.imageHashHex {
+            return false
+        }
         if lhs.encryptedMedia != rhs.encryptedMedia {
             return false
         }
@@ -5569,6 +6095,7 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         hasher.combine(avatarUrl)
         hasher.combine(avatarDim)
         hasher.combine(avatarThumbhash)
+        hasher.combine(imageHashHex)
         hasher.combine(encryptedMedia)
         hasher.combine(disappearingMessageSecs)
         hasher.combine(archived)
@@ -5597,6 +6124,7 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
                 avatarUrl: FfiConverterOptionString.read(from: &buf),
                 avatarDim: FfiConverterOptionString.read(from: &buf),
                 avatarThumbhash: FfiConverterOptionString.read(from: &buf),
+                imageHashHex: FfiConverterOptionString.read(from: &buf),
                 encryptedMedia: FfiConverterTypeAppGroupEncryptedMediaComponentFfi.read(from: &buf),
                 disappearingMessageSecs: FfiConverterUInt64.read(from: &buf),
                 archived: FfiConverterBool.read(from: &buf),
@@ -5618,6 +6146,7 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.avatarUrl, into: &buf)
         FfiConverterOptionString.write(value.avatarDim, into: &buf)
         FfiConverterOptionString.write(value.avatarThumbhash, into: &buf)
+        FfiConverterOptionString.write(value.imageHashHex, into: &buf)
         FfiConverterTypeAppGroupEncryptedMediaComponentFfi.write(value.encryptedMedia, into: &buf)
         FfiConverterUInt64.write(value.disappearingMessageSecs, into: &buf)
         FfiConverterBool.write(value.archived, into: &buf)
@@ -13395,6 +13924,25 @@ public enum MarmotKitError {
      */
     case Io(details: String
     )
+    /**
+     * The account is configured for external signing, but this runtime has no
+     * registered callback for it yet. Typed so clients can prompt the user to
+     * reconnect Amber instead of surfacing a generic runtime failure.
+     */
+    case ExternalSignerUnavailable(account: String
+    )
+    /**
+     * The external signer returned a different public key than the account it
+     * was registered for. Typed so clients can treat this as a hard account
+     * mismatch rather than a retryable runtime error.
+     */
+    case ExternalSignerMismatch
+    /**
+     * The user rejected/cancelled an external signer prompt. Typed separately
+     * from runtime failures so clients can keep the user in the flow or offer a
+     * retry without treating the account as broken.
+     */
+    case ExternalSignerRejected
     case Runtime(details: String
     )
 }
@@ -13473,7 +14021,12 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 21: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .Runtime(
+        case 22: return .ExternalSignerUnavailable(
+            account: try FfiConverterString.read(from: &buf)
+            )
+        case 23: return .ExternalSignerMismatch
+        case 24: return .ExternalSignerRejected
+        case 25: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -13593,8 +14146,21 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Runtime(details):
+        case let .ExternalSignerUnavailable(account):
             writeInt(&buf, Int32(22))
+            FfiConverterString.write(account, into: &buf)
+
+
+        case .ExternalSignerMismatch:
+            writeInt(&buf, Int32(23))
+
+
+        case .ExternalSignerRejected:
+            writeInt(&buf, Int32(24))
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(25))
             FfiConverterString.write(details, into: &buf)
 
         }
@@ -16028,6 +16594,24 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_eventssubscription_next() != 16714) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_public_key() != 3690) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_sign_event() != 4107) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_nip04_encrypt() != 51930) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_nip04_decrypt() != 43776) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_nip44_encrypt() != 30197) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_externalaccountsignerffi_nip44_decrypt() != 30219) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_groupstatesubscription_next() != 58132) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16052,7 +16636,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_account_relay_lists() != 47794) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_account_unread_summary() != 17362) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_account_unread_summary() != 15239) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_audit_log_files() != 25846) {
@@ -16103,6 +16687,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_display_name() != 65469) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_download_group_blossom_image() != 5312) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_download_media() != 56125) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -16149,6 +16736,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_login() != 33167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_login_external_signer() != 44038) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_mark_timeline_message_read() != 32522) {
@@ -16200,6 +16790,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_refresh_profile() != 33641) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_register_external_signer() != 831) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_relay_health() != 9336) {
@@ -16377,6 +16970,7 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
 
+    uniffiCallbackInitExternalAccountSignerFfi()
     return InitializationResult.ok
 }()
 

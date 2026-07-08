@@ -19,6 +19,7 @@ extension AppGroupRecordFfi {
         avatarUrl: String?,
         avatarDim: String?,
         avatarThumbhash: String?,
+        imageHashHex: String? = nil,
         encryptedMedia: AppGroupEncryptedMediaComponentFfi,
         archived: Bool,
         pendingConfirmation: Bool,
@@ -37,6 +38,7 @@ extension AppGroupRecordFfi {
             avatarUrl: avatarUrl,
             avatarDim: avatarDim,
             avatarThumbhash: avatarThumbhash,
+            imageHashHex: imageHashHex,
             encryptedMedia: encryptedMedia,
             disappearingMessageSecs: 0,
             archived: archived,
@@ -85,6 +87,25 @@ extension ChatListRowFfi {
             lastReadTimelineAt: lastReadTimelineAt,
             updatedAt: updatedAt,
             selfMembership: .member
+        )
+    }
+}
+
+extension AccountSummaryFfi {
+    init(
+        label: String,
+        accountIdHex: String,
+        localSigning: Bool,
+        signedOut: Bool,
+        running: Bool
+    ) {
+        self.init(
+            label: label,
+            accountIdHex: accountIdHex,
+            localSigning: localSigning,
+            externalSigning: false,
+            signedOut: signedOut,
+            running: running
         )
     }
 }
