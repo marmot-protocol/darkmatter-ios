@@ -20,9 +20,8 @@ nonisolated enum MediaAttachmentKind: String, Sendable {
         if MediaAttachmentPolicy.supportedDocumentMediaTypes.contains(canonical) {
             return .document
         }
-        if let fileName,
-           let fileExtension = fileName.split(separator: ".").last.map(String.init),
-           MediaAttachmentPolicy.supportedDocumentExtensions.contains(fileExtension.lowercased())
+        if let fileExtension = MediaAttachmentPolicy.safeFileExtension(from: fileName),
+           MediaAttachmentPolicy.supportedDocumentExtensions.contains(fileExtension)
         {
             return .document
         }
@@ -122,10 +121,8 @@ nonisolated enum MediaAttachmentPolicy {
         if supportedVideoMediaTypes.contains(canonical) { return true }
         if supportedAudioMediaTypes.contains(canonical) { return true }
         if supportedDocumentMediaTypes.contains(canonical) { return true }
-        if let fileName,
-           let fileExtension = fileName.split(separator: ".").last.map(String.init)
-        {
-            return supportedDocumentExtensions.contains(fileExtension.lowercased())
+        if let fileExtension = safeFileExtension(from: fileName) {
+            return supportedDocumentExtensions.contains(fileExtension)
         }
         return false
     }
@@ -137,8 +134,7 @@ nonisolated enum MediaAttachmentPolicy {
         {
             return canonicalMediaType(mediaType)
         }
-        if let fileName,
-           let fileExtension = fileName.split(separator: ".").last.map(String.init),
+        if let fileExtension = safeFileExtension(from: fileName),
            let mediaType = mediaType(forFileExtension: fileExtension)
         {
             return canonicalMediaType(mediaType)
@@ -153,6 +149,7 @@ nonisolated enum MediaAttachmentPolicy {
 
     static func mediaType(forFileExtension fileExtension: String) -> String? {
         let lower = fileExtension.lowercased()
+        guard isSafeFileExtension(lower) else { return nil }
         switch lower {
         case "m4a": return "audio/mp4"
         case "mp3": return "audio/mpeg"
@@ -176,11 +173,8 @@ nonisolated enum MediaAttachmentPolicy {
     }
 
     static func fileExtension(for mediaType: String, fileName: String? = nil) -> String {
-        if let fileName,
-           let ext = fileName.split(separator: ".").last.map(String.init),
-           !ext.isEmpty
-        {
-            return ext.lowercased()
+        if let ext = safeFileExtension(from: fileName) {
+            return ext
         }
         switch canonicalMediaType(mediaType) {
         case "image/jpeg": return "jpg"
@@ -205,6 +199,31 @@ nonisolated enum MediaAttachmentPolicy {
         case "application/vnd.ms-powerpoint": return "ppt"
         case "application/vnd.openxmlformats-officedocument.presentationml.presentation": return "pptx"
         default: return "bin"
+        }
+    }
+
+    static func safeFileExtension(from fileName: String?) -> String? {
+        guard let ext = fileName?
+            .split(separator: ".", omittingEmptySubsequences: false)
+            .last
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+            isSafeFileExtension(ext)
+        else { return nil }
+        return ext
+    }
+
+    private static func isSafeFileExtension(_ ext: String) -> Bool {
+        let bytes = ext.utf8
+        guard (1...12).contains(bytes.count) else { return false }
+        return bytes.allSatisfy { byte in
+            switch byte {
+            case 0x30...0x39, 0x61...0x7A:
+                return true
+            default:
+                return false
+            }
         }
     }
 }
@@ -276,7 +295,7 @@ nonisolated struct MessageMediaAttachment: Identifiable, Hashable {
             return MessageMediaAttachment(
                 id: id,
                 reference: reference,
-                fileName: reference.fileName,
+                fileName: displayFileName(reference.fileName),
                 mediaType: reference.mediaType,
                 dim: reference.dim,
                 localData: nil,
@@ -285,6 +304,11 @@ nonisolated struct MessageMediaAttachment: Identifiable, Hashable {
                 waveformSamples: []
             )
         }
+    }
+
+    static func displayFileName(_ raw: String) -> String {
+        ContentSanitizer.singleLine(raw, maxLength: MessageSemantics.maxImetaFileNameBytes)
+            ?? "Attachment"
     }
 
     static func == (lhs: MessageMediaAttachment, rhs: MessageMediaAttachment) -> Bool {

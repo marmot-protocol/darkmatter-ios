@@ -7024,7 +7024,7 @@ struct MessageSemanticsTests {
         #expect(info[0].thumbhash == "Abc123+/=_-")
     }
 
-    @Test func invalidThumbhashFallsBackToChat() {
+    @Test func invalidThumbhashIsDroppedWithoutHidingAttachment() {
         var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
         tag.values.append("thumbhash \(String(repeating: "x", count: 129))")
         let record = unsignedEventRecord(
@@ -7033,9 +7033,32 @@ struct MessageSemanticsTests {
             tags: [tag]
         )
 
-        #expect(MessageSemantics.classify(record) == .chat)
-        #expect(MessagePreview.isPreviewable(record))
+        guard case .media(let info) = MessageSemantics.classify(record) else {
+            #expect(Bool(false), "expected media")
+            return
+        }
+        #expect(info.count == 1)
+        #expect(info[0].fileName == "a.png")
+        #expect(info[0].thumbhash == nil)
         #expect(MessagePreview.body(record) == "caption")
+    }
+
+    @Test func invalidOptionalDimIsDroppedWithoutHidingAttachment() {
+        var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
+        tag = MessageTagFfi(values: tag.values.filter { !$0.hasPrefix("dim ") })
+        tag.values.append("dim 640")
+        let record = unsignedEventRecord(
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [tag]
+        )
+
+        guard case .media(let info) = MessageSemantics.classify(record) else {
+            #expect(Bool(false), "expected media")
+            return
+        }
+        #expect(info.count == 1)
+        #expect(info[0].dim == nil)
     }
 
     @Test func mediaReferenceWithoutCaptionFallsBackToFileName() {
@@ -7282,6 +7305,20 @@ struct MessageSemanticsTests {
         #expect(secondItem.id.hasPrefix("msg-b:"))
     }
 
+    @Test func receivedMediaDisplayFileNameStripsSpoofingScalars() throws {
+        let reference = encryptedMediaReference(
+            fileName: "photo\u{202E}gpj.exe",
+            plaintextByte: "46",
+            ciphertextByte: "47",
+            sourceEpoch: 0
+        )
+
+        let item = try #require(MessageMediaAttachment.displayItems(from: [reference], ownerId: "msg").first)
+
+        #expect(item.fileName == "photogpj.exe")
+        #expect(MessagePreview.mediaFallback([reference]) == "📎 photogpj.exe")
+    }
+
     @Test func mediaCacheStoresPlaintextWithCompleteFileProtection() throws {
         let reference = encryptedMediaReference(
             plaintextByte: "7a",
@@ -7297,6 +7334,24 @@ struct MessageSemanticsTests {
         MessageMediaCache.store(data, for: reference, cachesDirectory: cachesDirectory)
 
         #expect(try Data(contentsOf: url) == data)
+    }
+
+    @Test func mediaCacheURLIgnoresUnsafePeerFilenameExtension() throws {
+        let reference = encryptedMediaReference(
+            fileName: "folder/evil",
+            plaintextByte: "7c",
+            ciphertextByte: "7d",
+            mediaType: "image/png",
+            sourceEpoch: 0
+        )
+        let cachesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MessageMediaCacheUnsafeExtensionTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cachesDirectory) }
+
+        let url = try #require(MessageMediaCache.cacheURL(for: reference, cachesDirectory: cachesDirectory))
+
+        #expect(url.lastPathComponent == "\(reference.plaintextSha256).png")
+        #expect(url.deletingLastPathComponent().lastPathComponent == "EncryptedMedia")
     }
 
     @Test func mediaCacheEvictsExpiredPlaintext() throws {
@@ -7582,6 +7637,13 @@ struct MediaAttachmentPolicyTests {
         #expect(MediaAttachmentKind.classify(mediaType: "image/png") == .image)
         #expect(MediaAttachmentKind.classify(mediaType: "image/svg+xml") == .unsupported)
         #expect(!MediaAttachmentPolicy.isSupported(mediaType: "image/svg+xml"))
+    }
+
+    @Test func fileExtensionFallsBackWhenPeerFilenameExtensionIsUnsafe() {
+        #expect(MediaAttachmentPolicy.fileExtension(for: "image/png", fileName: "safe.PNG") == "png")
+        #expect(MediaAttachmentPolicy.fileExtension(for: "image/png", fileName: "nested/x/y") == "png")
+        #expect(MediaAttachmentPolicy.fileExtension(for: "application/pdf", fileName: "report.\(String(repeating: "a", count: 13))") == "pdf")
+        #expect(MediaAttachmentPolicy.mediaType(forFileExtension: "x/y") == nil)
     }
 
     @Test func genericDraftPreservesNonImageBytesForUpload() throws {

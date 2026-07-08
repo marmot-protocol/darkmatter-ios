@@ -133,8 +133,12 @@ enum MessagePreview {
 
     private static func mediaFallback(_ fileNames: [String]) -> String {
         let names = fileNames
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .compactMap {
+                ContentSanitizer.singleLine(
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines),
+                    maxLength: MessageSemantics.maxImetaFileNameBytes
+                )
+            }
         if names.count == 1 {
             return "📎 \(names[0])"
         }
