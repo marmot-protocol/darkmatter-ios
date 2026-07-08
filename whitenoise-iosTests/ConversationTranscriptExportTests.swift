@@ -180,6 +180,19 @@ struct ConversationTranscriptExportTests {
 
         #expect(try Data(contentsOf: url) == data)
     }
+
+    @MainActor
+    @Test func groupDetailsViewModelDeletesPendingTranscriptExportOnDeinit() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TranscriptDeinit-\(UUID().uuidString).json")
+        try Data("private transcript".utf8).write(to: url, options: [.atomic, .completeFileProtection])
+
+        var model: GroupDetailsViewModel? = GroupDetailsViewModel()
+        model?.transcriptExportURL = url
+        model = nil
+
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
 }
 
 private func testExportGroup(

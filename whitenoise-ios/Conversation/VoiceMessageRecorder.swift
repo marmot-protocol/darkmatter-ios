@@ -18,6 +18,36 @@ nonisolated enum VoiceRecordingGesturePolicy {
     }
 }
 
+nonisolated enum VoiceRecordingFileProtection {
+    static let activeRecording = FileProtectionType.completeUnlessOpen
+    static let completedRecording = FileProtectionType.complete
+}
+
+nonisolated struct VoiceRecordingWaveformAccumulator: Sendable {
+    private var samples: [CGFloat] = []
+
+    mutating func append(_ sample: CGFloat) {
+        samples.append(max(0.05, min(1, sample)))
+    }
+
+    mutating func reset() {
+        samples.removeAll(keepingCapacity: true)
+    }
+
+    func persistedSamples(bucketCount: Int = MediaWaveformAnalyzer.sampleCount) -> [CGFloat] {
+        guard bucketCount > 0 else { return [] }
+        guard samples.count > bucketCount else {
+            return MediaWaveformAnalyzer.normalized(samples)
+        }
+        var peaks = [CGFloat](repeating: 0.08, count: bucketCount)
+        for (index, sample) in samples.enumerated() {
+            let bucket = min(bucketCount - 1, index * bucketCount / samples.count)
+            peaks[bucket] = max(peaks[bucket], sample)
+        }
+        return MediaWaveformAnalyzer.normalized(peaks)
+    }
+}
+
 @MainActor
 final class VoiceMessageRecorder: NSObject, ObservableObject {
     enum RecordingState: Equatable {
@@ -62,6 +92,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
     private var currentDragTranslation: CGSize = .zero
     private var holdTask: Task<Void, Never>?
     private var meterTask: Task<Void, Never>?
+    private var waveformAccumulator = VoiceRecordingWaveformAccumulator()
 
     var isActive: Bool { state.isActive }
     var isLocked: Bool { state.isLocked }
@@ -78,6 +109,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
         currentDragTranslation = .zero
         durationSeconds = 0
         waveformSamples = []
+        waveformAccumulator.reset()
         holdTask?.cancel()
         holdTask = Task { @MainActor [weak self] in
             do {
@@ -161,7 +193,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
             try FileManager.default.createDirectory(
                 at: directory,
                 withIntermediateDirectories: true,
-                attributes: [.protectionKey: FileProtectionType.complete]
+                attributes: [.protectionKey: VoiceRecordingFileProtection.activeRecording]
             )
         } catch {
             throw Failure.startFailed
@@ -218,6 +250,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
                 self.durationSeconds = recorder.currentTime
                 let power = recorder.averagePower(forChannel: 0)
                 let normalized = max(0.05, min(1, CGFloat(pow(10, power / 36))))
+                self.waveformAccumulator.append(normalized)
                 self.waveformSamples.append(normalized)
                 if self.waveformSamples.count > MediaWaveformAnalyzer.sampleCount {
                     self.waveformSamples.removeFirst(self.waveformSamples.count - MediaWaveformAnalyzer.sampleCount)
@@ -234,14 +267,14 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
         let duration = max(durationSeconds, recorder.currentTime)
         recorder.stop()
         try? FileManager.default.setAttributes(
-            [.protectionKey: FileProtectionType.complete],
+            [.protectionKey: VoiceRecordingFileProtection.completedRecording],
             ofItemAtPath: url.path
         )
         let result = VoiceRecordingResult(
             url: url,
             fileName: url.lastPathComponent,
             durationSeconds: duration,
-            waveformSamples: waveformSamples
+            waveformSamples: waveformAccumulator.persistedSamples()
         )
         reset(deleteFile: false)
         return result
@@ -260,6 +293,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
         state = .idle
         durationSeconds = 0
         waveformSamples = []
+        waveformAccumulator.reset()
         if deleteFile, let url {
             try? FileManager.default.removeItem(at: url)
         }
