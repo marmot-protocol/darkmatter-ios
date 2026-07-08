@@ -459,4 +459,19 @@ struct StreamWatchRaceGuardTests {
             latestStreamWatchInFlight: true
         ))
     }
+
+    @Test func fallbackStreamPreviewDropIsConservativeForConcurrentSenderStreams() {
+        #expect(StreamWatcher.fallbackStreamPreviewToDrop(
+            sender: "alice",
+            streamSenderById: ["stream-a": "alice"]
+        ) == "stream-a")
+        #expect(StreamWatcher.fallbackStreamPreviewToDrop(
+            sender: "alice",
+            streamSenderById: ["stream-a": "alice", "stream-b": "alice"]
+        ) == nil)
+        #expect(StreamWatcher.fallbackStreamPreviewToDrop(
+            sender: "alice",
+            streamSenderById: ["stream-b": "bob"]
+        ) == nil)
+    }
 }

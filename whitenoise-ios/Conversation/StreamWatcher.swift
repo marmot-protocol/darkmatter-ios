@@ -195,14 +195,24 @@ final class StreamWatcher {
         else { return }
         switch semantics {
         case .chat, .reply, .media:
-            let streamIds = streamSenderById
-                .filter { $0.value == record.sender }
-                .map(\.key)
-            guard streamIds.count == 1, let streamId = streamIds.first else { return }
+            guard let streamId = Self.fallbackStreamPreviewToDrop(
+                sender: record.sender,
+                streamSenderById: streamSenderById
+            ) else { return }
             endStream(streamId: streamId)
         case .streamFinal, .reaction, .delete, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
             return
         }
+    }
+
+    nonisolated static func fallbackStreamPreviewToDrop(
+        sender: String,
+        streamSenderById: [String: String]
+    ) -> String? {
+        let matchingStreamIds = streamSenderById
+            .filter { $0.value == sender }
+            .map(\.key)
+        return matchingStreamIds.count == 1 ? matchingStreamIds[0] : nil
     }
 
     // MARK: - Watch lifecycle
