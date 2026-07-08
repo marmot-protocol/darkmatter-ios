@@ -106,6 +106,28 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    @Test func createIdentityPublishesEngineDefaultPseudonymProfile() async throws {
+        let appState = try testAppState()
+        await appState.bootstrap()
+
+        let account = try await appState.createIdentity()
+        let client = try appState.currentMarmotClient()
+        let projections = await client.profileProjections(for: [
+            ProfileProjectionRequest(accountIdHex: account.accountIdHex, localAccountLabel: nil)
+        ])
+        let projection = try #require(projections[account.accountIdHex])
+        let profile = try #require(projection.profile)
+        let name = try #require(profile.name)
+        let displayName = try #require(profile.displayName)
+
+        #expect(name == displayName)
+        #expect(projection.projectedName == displayName)
+        #expect(name.split(separator: " ").count == 2)
+        #expect(name.range(of: #"^[A-Z][A-Za-z]+ [A-Z][A-Za-z]+$"#, options: .regularExpression) != nil)
+
+        await stopReadyRuntime(appState)
+    }
+
     @Test func createIdentityDefaultsNotificationsOnWhenPermissionIsGranted() async throws {
         try await notificationDefaultsTestGate.withLock {
             var authorizationRequestCount = 0

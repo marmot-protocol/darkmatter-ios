@@ -727,6 +727,7 @@ final class AppState {
     // MARK: - Identity management
 
     /// Generate a fresh Nostr identity. On success the new account becomes active.
+    /// Marmot owns the default profile pseudonym pool; iOS must not mirror it.
     @MainActor
     @discardableResult
     func createIdentity() async throws -> AccountSummaryFfi {
