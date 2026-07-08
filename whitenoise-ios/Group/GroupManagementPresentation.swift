@@ -1,14 +1,14 @@
 import Foundation
 import MarmotKit
 
-enum GroupMemberManagementAction: Equatable {
+nonisolated enum GroupMemberManagementAction: Equatable {
     case remove
     case promote
     case demote
     case selfDemote
 }
 
-enum GroupManagementPresentation {
+nonisolated enum GroupManagementPresentation {
     static let inactiveGroupComposerMessage = L10n.string("This group is inactive. You can't send new messages.")
 
     static func isActiveChatListMember(_ membership: SelfMembershipFfi) -> Bool {

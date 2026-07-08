@@ -92,7 +92,7 @@ struct StagedGroupMemberRow: View {
     }
 }
 
-enum AddMembersPresentation {
+nonisolated enum AddMembersPresentation {
     enum PendingMemberAddResult: Equatable {
         case empty
         case invalid

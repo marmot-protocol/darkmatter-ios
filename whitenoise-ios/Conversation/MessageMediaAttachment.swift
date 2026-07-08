@@ -1130,7 +1130,7 @@ nonisolated private enum DecryptedMediaCacheEvictor {
     }
 }
 
-private final class DecryptedMediaCacheSweepGate: @unchecked Sendable {
+nonisolated private final class DecryptedMediaCacheSweepGate: @unchecked Sendable {
     private let minimumInterval: TimeInterval
     private let lock = NSLock()
     private var lastSweepByDirectory: [String: Date] = [:]
