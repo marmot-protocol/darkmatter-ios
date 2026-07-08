@@ -58,7 +58,7 @@ struct TimelineWindowEvictionTests {
     }
 
     @MainActor
-    @Test func confirmedSentMessageSurvivesWindowPageUntilMirrored() throws {
+    @Test func confirmedSentMessageSurvivesPartialWindowButNotCompleteAuthoritativeWindow() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: testGroup()
@@ -76,13 +76,22 @@ struct TimelineWindowEvictionTests {
         viewModel.confirmSent(tempId: tempId, record: pending, messageId: confirmedId)
 
         viewModel.applyTimelinePage(
-            TimelinePageFfi(messages: [retained], hasMoreBefore: false, hasMoreAfter: false),
+            TimelinePageFfi(messages: [retained], hasMoreBefore: true, hasMoreAfter: false),
             placement: .window
         )
 
         var ids = timelineMessageIds(in: viewModel)
         #expect(ids.contains(retained.messageIdHex))
         #expect(ids.contains(confirmedId))
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [retained], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        ids = timelineMessageIds(in: viewModel)
+        #expect(ids.contains(retained.messageIdHex))
+        #expect(!ids.contains(confirmedId))
 
         let mirrored = timelineRecord(
             messageIdHex: confirmedId,
@@ -148,6 +157,34 @@ struct TimelineWindowEvictionTests {
         #expect(ids.contains(retained.messageIdHex))
         #expect(!ids.contains(confirmedId))
     }
+
+    @MainActor
+    @Test func confirmSentDoesNotOverwriteAlreadyLoadedDurableRow() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let tempId = "pending-race"
+        let confirmedId = hexId(4)
+        let pending = pendingSentRecord(timelineAt: 4, plaintext: "optimistic echo")
+        let durable = timelineRecord(
+            messageIdHex: confirmedId,
+            timelineAt: 4,
+            direction: "sent",
+            plaintext: "durable row"
+        )
+
+        viewModel.applyPendingOutgoingMessage(tempId: tempId, record: pending)
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [durable], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        viewModel.confirmSent(tempId: tempId, record: pending, messageId: confirmedId)
+
+        let loaded = try #require(viewModel.record(for: confirmedId))
+        #expect(loaded.plaintext == "durable row")
+        #expect(timelineMessageIds(in: viewModel) == [confirmedId])
+    }
 }
 
 private let testGroupId = String(repeating: "b", count: 64)
@@ -155,7 +192,8 @@ private let testGroupId = String(repeating: "b", count: 64)
 private func timelineRecord(
     messageIdHex: String,
     timelineAt: UInt64,
-    direction: String = "received"
+    direction: String = "received",
+    plaintext: String? = nil
 ) -> TimelineMessageRecordFfi {
     TimelineMessageRecordFfi(
         messageIdHex: messageIdHex,
@@ -163,7 +201,7 @@ private func timelineRecord(
         direction: direction,
         groupIdHex: testGroupId,
         sender: String(repeating: "a", count: 64),
-        plaintext: "message \(timelineAt)",
+        plaintext: plaintext ?? "message \(timelineAt)",
         contentTokens: MarkdownDocumentFfi.emptyDocument,
         kind: MessageSemantics.kindChat,
         tags: [],
@@ -182,13 +220,13 @@ private func timelineRecord(
     )
 }
 
-private func pendingSentRecord(timelineAt: UInt64) -> AppMessageRecordFfi {
+private func pendingSentRecord(timelineAt: UInt64, plaintext: String = "just sent") -> AppMessageRecordFfi {
     AppMessageRecordFfi(
         messageIdHex: "",
         direction: "sent",
         groupIdHex: testGroupId,
         sender: String(repeating: "a", count: 64),
-        plaintext: "just sent",
+        plaintext: plaintext,
         kind: MessageSemantics.kindChat,
         tags: [],
         recordedAt: timelineAt,

@@ -443,11 +443,19 @@ struct StreamWatchRaceGuardTests {
         #expect(!AgentStreamWatchAdmission.canStart(
             streamIdHex: "stream-a",
             activeStreamIds: ["stream-a"],
+            inFlightStreamIds: [],
+            latestStreamWatchInFlight: false
+        ))
+        #expect(!AgentStreamWatchAdmission.canStart(
+            streamIdHex: "stream-a",
+            activeStreamIds: [],
+            inFlightStreamIds: ["stream-a"],
             latestStreamWatchInFlight: false
         ))
         #expect(AgentStreamWatchAdmission.canStart(
             streamIdHex: "stream-b",
             activeStreamIds: ["stream-a"],
+            inFlightStreamIds: ["stream-c"],
             latestStreamWatchInFlight: true
         ))
     }

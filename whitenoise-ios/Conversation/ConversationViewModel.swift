@@ -7,10 +7,11 @@ enum AgentStreamWatchAdmission {
     static func canStart(
         streamIdHex: String?,
         activeStreamIds: Set<String>,
+        inFlightStreamIds: Set<String> = [],
         latestStreamWatchInFlight: Bool
     ) -> Bool {
         if let streamIdHex {
-            return !activeStreamIds.contains(streamIdHex)
+            return !activeStreamIds.contains(streamIdHex) && !inFlightStreamIds.contains(streamIdHex)
         }
         return !latestStreamWatchInFlight
     }
@@ -1019,17 +1020,20 @@ final class ConversationViewModel {
         var emittedMessageIds: Set<String> = []
         var deferredRepliesByParentId: [String: [TimelineItem]] = [:]
 
-        func append(_ item: TimelineItem) {
-            ordered.append(item)
-            guard let messageId = Self.messageId(in: item) else { return }
-            emittedMessageIds.insert(messageId)
+        func appendDrainingDeferredReplies(from root: TimelineItem) {
+            var stack = [root]
+            while let item = stack.popLast() {
+                ordered.append(item)
+                guard let messageId = Self.messageId(in: item) else { continue }
+                emittedMessageIds.insert(messageId)
 
-            let deferredReplies = deferredRepliesByParentId.removeValue(forKey: messageId) ?? []
-            for deferred in deferredReplies {
-                guard let deferredId = Self.messageId(in: deferred),
-                      !emittedMessageIds.contains(deferredId)
-                else { continue }
-                append(deferred)
+                let deferredReplies = deferredRepliesByParentId.removeValue(forKey: messageId) ?? []
+                for deferred in deferredReplies.reversed() {
+                    guard let deferredId = Self.messageId(in: deferred),
+                          !emittedMessageIds.contains(deferredId)
+                    else { continue }
+                    stack.append(deferred)
+                }
             }
         }
 
@@ -1041,7 +1045,7 @@ final class ConversationViewModel {
                   messageIds.contains(parentId),
                   !emittedMessageIds.contains(parentId)
             else {
-                append(item)
+                appendDrainingDeferredReplies(from: item)
                 continue
             }
 
@@ -1053,7 +1057,7 @@ final class ConversationViewModel {
                 guard let messageId = Self.messageId(in: item),
                       !emittedMessageIds.contains(messageId)
                 else { continue }
-                append(item)
+                appendDrainingDeferredReplies(from: item)
             }
         }
 
@@ -1080,6 +1084,10 @@ final class ConversationViewModel {
     }
 
 #if DEBUG
+    var markdownProjectionBuildCountForTesting: Int {
+        timelineStore.markdownProjectionBuildCountForTesting
+    }
+
     @discardableResult
     func replaceMediaReferencesForTesting(_ references: [MediaAttachmentReferenceFfi], forMessageId messageIdHex: String) -> Bool {
         replaceMediaReferences(references, forMessageId: messageIdHex)
@@ -1418,7 +1426,11 @@ final class ConversationViewModel {
 
         var next = current
         if next.last?.kind == item.kind {
-            next[next.count - 1] = item
+            next[next.count - 1] = TimelineItem(
+                id: next[next.count - 1].id,
+                kind: item.kind,
+                timestamp: item.timestamp
+            )
         } else {
             next.append(item)
         }

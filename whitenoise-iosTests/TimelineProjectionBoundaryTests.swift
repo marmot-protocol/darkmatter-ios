@@ -100,6 +100,42 @@ struct TimelineProjectionBoundaryTests {
         #expect(preview.text == "target body")
     }
 
+    @Test func markdownProjectionCacheSkipsUnchangedWindowRows() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let tokens = doc([.paragraph(inlines: [.text(content: "hello **world**")])])
+        let record = timelineRecord(
+            messageIdHex: hexId(7),
+            plaintext: "hello **world**",
+            contentTokens: tokens
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.markdownProjectionBuildCountForTesting == 1)
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.markdownProjectionBuildCountForTesting == 1)
+
+        let updated = timelineRecord(
+            messageIdHex: record.messageIdHex,
+            plaintext: "hello again",
+            contentTokens: doc([.paragraph(inlines: [.text(content: "hello again")])])
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [updated], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(viewModel.markdownProjectionBuildCountForTesting == 2)
+    }
+
     @Test func mediaDownloaderProbesDecryptedCacheOnlyOnceBeforeDownload() async throws {
         let downloadedData = Data([0x09, 0x0a, 0x0b])
         let reference = mediaReference(sourceEpoch: 7, plaintext: downloadedData)
@@ -211,6 +247,7 @@ struct TimelineProjectionBoundaryTests {
     private func timelineRecord(
         messageIdHex: String,
         plaintext: String,
+        contentTokens: MarkdownDocumentFfi = MarkdownDocumentFfi.emptyDocument,
         tags: [MessageTagFfi] = [],
         media: [MediaAttachmentReferenceFfi] = [],
         replyToMessageIdHex: String? = nil,
@@ -223,7 +260,7 @@ struct TimelineProjectionBoundaryTests {
             groupIdHex: testGroupId,
             sender: hexId(10),
             plaintext: plaintext,
-            contentTokens: MarkdownDocumentFfi.emptyDocument,
+            contentTokens: contentTokens,
             kind: MessageSemantics.kindChat,
             tags: tags,
             timelineAt: UInt64(Int(messageIdHex.suffix(2), radix: 16) ?? 1),
@@ -239,6 +276,10 @@ struct TimelineProjectionBoundaryTests {
             deletedByMessageIdHex: nil,
             invalidationStatus: nil
         )
+    }
+
+    private func doc(_ blocks: [MarkdownBlockFfi]) -> MarkdownDocumentFfi {
+        MarkdownDocumentFfi(blocks: blocks, truncated: false)
     }
 
     private func appRecord(

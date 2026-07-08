@@ -104,14 +104,26 @@ enum MarkdownMessageBuilder {
                 if !text.isEmpty { truncated = true }
                 return Substring()
             }
-            if text.count <= remainingCharacters {
-                remainingCharacters -= text.count
-                return text[...]
+            let bounded = text.prefix(remainingCharacters + 1)
+            if bounded.count <= remainingCharacters, bounded.endIndex == text.endIndex {
+                remainingCharacters -= bounded.count
+                return bounded
             }
             truncated = true
-            let cut = text.prefix(remainingCharacters)
+            let cut = bounded.prefix(remainingCharacters)
             remainingCharacters = 0
             return cut
+        }
+
+        mutating func takeSanitizedTextRun(_ raw: String) -> String {
+            guard remainingCharacters > 0 else {
+                if !raw.isEmpty { truncated = true }
+                return ""
+            }
+            return String(take(MarkdownMessageBuilder.boundedTextRun(
+                raw,
+                maxCharacters: remainingCharacters
+            )))
         }
     }
 
@@ -151,7 +163,7 @@ enum MarkdownMessageBuilder {
     }
 
     static func truncatedBech32(_ bech32: String) -> String {
-        let clean = ContentSanitizer.textRun(bech32)
+        let clean = boundedTextRun(bech32, maxCharacters: 64)
         guard clean.count > 16 else { return clean }
         return "\(clean.prefix(8))…\(clean.suffix(4))"
     }
@@ -159,7 +171,7 @@ enum MarkdownMessageBuilder {
     /// Render-side scheme gate for link destinations. Returns nil (no link,
     /// children render as plain text) for disallowed or unparseable URLs.
     static func allowedLinkURL(_ raw: String) -> URL? {
-        let trimmed = ContentSanitizer.textRun(raw)
+        let trimmed = boundedTextRun(raw, maxCharacters: ContentSanitizer.maxImageURLLength)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let components = URLComponents(string: trimmed),
@@ -257,9 +269,9 @@ enum MarkdownMessageBuilder {
         to out: inout [MarkdownDisplayBlock],
         budget: inout Budget
     ) {
-        var clean = ContentSanitizer.textRun(content)
+        var clean = budget.takeSanitizedTextRun(content)
         while clean.hasSuffix("\n") { clean.removeLast() }
-        let piece = String(budget.take(clean))
+        let piece = clean
         guard !piece.isEmpty, piece.contains(where: { !$0.isWhitespace }) else { return }
         var attributes = AttributeContainer()
         attributes.font = Font.body.monospaced()
@@ -521,7 +533,7 @@ enum MarkdownMessageBuilder {
         if context.link == nil {
             switch entity.hrp {
             case .npub, .nprofile:
-                nested.link = allowedLinkURL("nostr:\(ContentSanitizer.textRun(entity.bech32))")
+                nested.link = allowedLinkURL("nostr:\(boundedTextRun(entity.bech32, maxCharacters: 512))")
             case .note, .nevent, .naddr, .nrelay:
                 break
             }
@@ -542,7 +554,7 @@ enum MarkdownMessageBuilder {
         budget: inout Budget,
         codeBackground: Bool = false
     ) -> Bool {
-        let piece = String(budget.take(ContentSanitizer.textRun(raw)))
+        let piece = budget.takeSanitizedTextRun(raw)
         guard !piece.isEmpty else { return false }
         var attributes = AttributeContainer()
         attributes.font = context.font
@@ -558,6 +570,13 @@ enum MarkdownMessageBuilder {
         }
         out += AttributedString(piece, attributes: attributes)
         return true
+    }
+
+    private static func boundedTextRun(_ raw: String, maxCharacters: Int) -> String {
+        guard maxCharacters > 0, !raw.isEmpty else { return "" }
+        let maxScalars = max(maxCharacters, maxCharacters * 8)
+        let scalarPrefix = String(String.UnicodeScalarView(raw.unicodeScalars.prefix(maxScalars)))
+        return ContentSanitizer.textRun(scalarPrefix)
     }
 
     /// Breaks are structural, not attacker text: soft → space, hard → newline,

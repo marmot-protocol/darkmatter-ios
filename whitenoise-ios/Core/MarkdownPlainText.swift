@@ -41,14 +41,24 @@ enum MarkdownPlainText {
         }
 
         mutating func append(_ piece: String) {
-            let collapsed = piece
+            guard !exhausted else { return }
+            let separatorLength = text.isEmpty ? 0 : 1
+            let remaining = max(0, maxCharacters - text.count - separatorLength)
+            guard remaining > 0 else { return }
+            let collapsed = MarkdownPlainText.boundedRawText(piece, maxCharacters: remaining)
                 .components(separatedBy: .whitespacesAndNewlines)
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
             guard !collapsed.isEmpty else { return }
             if !text.isEmpty { text += " " }
-            text += String(collapsed.prefix(max(0, maxCharacters - text.count)))
+            text += String(collapsed.prefix(remaining))
         }
+    }
+
+    private static func boundedRawText(_ raw: String, maxCharacters: Int) -> String {
+        guard maxCharacters > 0, !raw.isEmpty else { return "" }
+        let maxScalars = max(maxCharacters, maxCharacters * 8)
+        return String(String.UnicodeScalarView(raw.unicodeScalars.prefix(maxScalars)))
     }
 
     private static func appendBlocks(_ blocks: [MarkdownBlockFfi], to state: inout State, depth: Int) {
