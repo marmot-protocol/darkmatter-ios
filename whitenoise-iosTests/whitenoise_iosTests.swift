@@ -5776,14 +5776,26 @@ struct GroupManagementPresentationTests {
 
     @Test func relayDisclosureShowsCountAndUrls() {
         let relays = ["wss://relay.example", "wss://relay.two"]
+        let locale = Locale(identifier: "en_US")
 
-        #expect(GroupRelaysPresentation.countLabel(for: relays) == "2")
+        #expect(GroupRelaysPresentation.countLabel(for: relays, locale: locale) == "2")
         #expect(GroupRelaysPresentation.rows(for: relays) == relays)
     }
 
     @Test func relayDisclosureShowsEmptyState() {
-        #expect(GroupRelaysPresentation.countLabel(for: []) == "0")
+        #expect(GroupRelaysPresentation.countLabel(for: [], locale: Locale(identifier: "en_US")) == "0")
         #expect(GroupRelaysPresentation.rows(for: []) == [GroupRelaysPresentation.emptyMessage])
+    }
+
+    @Test func relayDisclosureLocalizesCountDigits() {
+        let relays = ["wss://relay.example", "wss://relay.two"]
+        let locale = Locale(identifier: "ar_EG")
+
+        #expect(
+            GroupRelaysPresentation.countLabel(for: relays, locale: locale)
+                == LocalizedNumberLabel.decimal(2, locale: locale)
+        )
+        #expect(GroupRelaysPresentation.countLabel(for: relays, locale: locale) != "2")
     }
 
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
