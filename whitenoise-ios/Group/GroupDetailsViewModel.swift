@@ -43,6 +43,10 @@ final class GroupDetailsViewModel {
     @ObservationIgnored var deleteGroupLocalForTesting: (@MainActor (String, String) async throws -> Bool)?
 #endif
 
+    isolated deinit {
+        cleanupTranscriptExportFile()
+    }
+
     func invite(refs: [String], using appState: AppState) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
         guard !membershipActionInFlight else { return }

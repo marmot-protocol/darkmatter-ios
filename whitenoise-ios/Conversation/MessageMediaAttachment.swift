@@ -557,8 +557,8 @@ nonisolated enum MediaDraftProcessor {
             return try attachment(from: image, fileName: fileName)
         }
 
-        if typeIdentifier == nil, UIImage(data: data) != nil {
-            return try attachment(from: data, fileName: fileName, typeIdentifier: UTType.image.identifier)
+        if typeIdentifier == nil, let image = UIImage(data: data) {
+            return try attachment(from: image, fileName: fileName)
         }
 
         let kind = kind(for: typeIdentifier, fileName: fileName)
@@ -913,27 +913,31 @@ nonisolated enum MediaWaveformAnalyzer {
                 var counts = [Int](repeating: 0, count: sampleCount)
                 var framesProcessed: AVAudioFramePosition = 0
 
-                while true {
-                    let toRead = nextChunkFrameCount(
-                        analyzedFrames: analyzedFrames,
-                        framesProcessed: framesProcessed,
-                        chunkCapacity: chunkCapacity
-                    )
-                    guard toRead > 0 else { break }
-                    buffer.frameLength = 0
-                    try file.read(into: buffer, frameCount: toRead)
-                    let read = Int(buffer.frameLength)
-                    guard read > 0, let channel = buffer.floatChannelData?[0] else { break }
-                    for offset in 0..<read {
-                        let bucket = bucketIndex(
-                            forFrame: framesProcessed + AVAudioFramePosition(offset),
-                            analyzedFrames: analyzedFrames
+                do {
+                    while true {
+                        let toRead = nextChunkFrameCount(
+                            analyzedFrames: analyzedFrames,
+                            framesProcessed: framesProcessed,
+                            chunkCapacity: chunkCapacity
                         )
-                        let value = abs(channel[offset])
-                        if value > peaks[bucket] { peaks[bucket] = value }
-                        counts[bucket] += 1
+                        guard toRead > 0 else { break }
+                        buffer.frameLength = 0
+                        try file.read(into: buffer, frameCount: toRead)
+                        let read = Int(buffer.frameLength)
+                        guard read > 0, let channel = buffer.floatChannelData?[0] else { break }
+                        for offset in 0..<read {
+                            let bucket = bucketIndex(
+                                forFrame: framesProcessed + AVAudioFramePosition(offset),
+                                analyzedFrames: analyzedFrames
+                            )
+                            let value = abs(channel[offset])
+                            if value > peaks[bucket] { peaks[bucket] = value }
+                            counts[bucket] += 1
+                        }
+                        framesProcessed += AVAudioFramePosition(read)
                     }
-                    framesProcessed += AVAudioFramePosition(read)
+                } catch {
+                    return Metadata(durationSeconds: duration, samples: fallback())
                 }
 
                 guard framesProcessed > 0 else {
