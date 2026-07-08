@@ -15,7 +15,8 @@ struct SystemTimelineItemsTests {
             limit: 8
         )
 
-        #expect(retained == [duplicate])
+        #expect(retained.map(\.id) == [first.id])
+        #expect(retained.first?.timestamp == duplicate.timestamp)
     }
 
     @Test func retainedSystemTimelineItemsKeepDistinctSeparatedEvents() {
@@ -65,6 +66,31 @@ struct SystemTimelineItemsTests {
             if case .systemEvent = item.kind { return true }
             return false
         })
+    }
+
+    @Test func resetOptimisticStateClearsTransientMessageRows() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let pending = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: testGroup().groupIdHex,
+            sender: String(repeating: "a", count: 64),
+            plaintext: "pending",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 1,
+            receivedAt: 1
+        )
+
+        viewModel.applyPendingOutgoingMessage(tempId: "pending", record: pending)
+        #expect(!viewModel.timeline.isEmpty)
+
+        viewModel.resetOptimisticStateForTesting()
+
+        #expect(viewModel.timeline.isEmpty)
     }
 
     @Test func groupSnapshotChangesRefreshDurableTimelineRows() {

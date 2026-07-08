@@ -121,4 +121,22 @@ struct TimelineIncrementalUpsertOrderingTests {
         #expect(incremental == fullRebuild)
         #expect(incremental.map(\.timestamp) == [20, 10, 30])
     }
+
+    @Test func normalizedReplyOrderingHandlesDeepChainsIteratively() {
+        let count = 2_048
+        let records = (0..<count).map { index in
+            TimelineItem.message(record(id: hexId(index + 1), timestamp: UInt64(index + 1)))
+        }
+        let ids = records.map(messageId(in:))
+        var replies: [String: String] = [:]
+        for index in 1..<ids.count {
+            replies[ids[index]] = ids[index - 1]
+        }
+
+        let ordered = ConversationViewModel.normalizedReplyOrdering(Array(records.reversed())) {
+            replies[$0.messageIdHex]
+        }
+
+        #expect(ordered.map(messageId(in:)) == ids)
+    }
 }

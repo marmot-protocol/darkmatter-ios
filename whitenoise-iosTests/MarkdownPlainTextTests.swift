@@ -89,6 +89,18 @@ struct MarkdownPlainTextTests {
         #expect(flattened == nil)
     }
 
+    @Test func giantTextNodeIsCappedBeforeWhitespaceCollapse() {
+        let flattened = MarkdownPlainText.flatten(doc([
+            .paragraph(inlines: [
+                .text(content: String(repeating: "a", count: 10_000)),
+                .text(content: "tail"),
+            ])
+        ]))
+
+        #expect(flattened?.count == 1000)
+        #expect(flattened?.allSatisfy { $0 == "a" } == true)
+    }
+
     @Test func nostrEntitiesTruncate() {
         let bech32 = "npub1" + String(repeating: "q", count: 58)
         let flattened = MarkdownPlainText.flatten(doc([

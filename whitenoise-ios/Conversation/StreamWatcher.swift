@@ -36,6 +36,7 @@ final class StreamWatcher {
     /// Generation token per stream watch; a naturally-exiting task only clears
     /// its own entry when the stored generation still matches (re-watch guard).
     private var streamWatchGenerations: [String: UUID] = [:]
+    private var streamWatchInFlightIds: Set<String> = []
     private var latestStreamWatchInFlight = false
     private var streamText: [String: String] = [:]
     private var streamTextLengthById: [String: Int] = [:]
@@ -94,10 +95,13 @@ final class StreamWatcher {
         for task in streamWatchTasks.values { task.cancel() }
         streamWatchTasks.removeAll()
         streamWatchGenerations.removeAll()
+        streamWatchInFlightIds.removeAll()
     }
 
     func resetDebugSequence() {
-        streamDebugEventSequence = 0
+        // Keep debug row ids monotonic for this watcher lifetime. Rows include
+        // wall-clock seconds, so resetting the sequence can collide when the
+        // user toggles streaming debug off/on within the same second.
     }
 
     func forgetScannedFinalized(_ messageIdHex: String) {
@@ -194,9 +198,8 @@ final class StreamWatcher {
             let streamIds = streamSenderById
                 .filter { $0.value == record.sender }
                 .map(\.key)
-            for streamId in streamIds {
-                endStream(streamId: streamId)
-            }
+            guard streamIds.count == 1, let streamId = streamIds.first else { return }
+            endStream(streamId: streamId)
         case .streamFinal, .reaction, .delete, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
             return
         }
@@ -212,10 +215,21 @@ final class StreamWatcher {
         guard AgentStreamWatchAdmission.canStart(
             streamIdHex: streamIdHex,
             activeStreamIds: Set(streamWatchTasks.keys),
+            inFlightStreamIds: streamWatchInFlightIds,
             latestStreamWatchInFlight: latestStreamWatchInFlight
         ) else { return }
-        if streamIdHex == nil { latestStreamWatchInFlight = true }
-        defer { if streamIdHex == nil { latestStreamWatchInFlight = false } }
+        if let streamIdHex {
+            streamWatchInFlightIds.insert(streamIdHex)
+        } else {
+            latestStreamWatchInFlight = true
+        }
+        defer {
+            if let streamIdHex {
+                streamWatchInFlightIds.remove(streamIdHex)
+            } else {
+                latestStreamWatchInFlight = false
+            }
+        }
         do {
             let client = try appState.currentMarmotClient()
             let insecureLocal = AgentStreamSecurity.insecureLocalEnabled(
@@ -322,6 +336,10 @@ final class StreamWatcher {
         ) else { return }
         streamWatchTasks[streamId] = nil
         streamWatchGenerations[streamId] = nil
+        clearStreamPreviewState(streamId: streamId)
+        if removeStreamBubble(streamId: streamId) {
+            sink?.streamNoteProjectionChanged()
+        }
     }
 
     // MARK: - Preview text
@@ -376,6 +394,13 @@ final class StreamWatcher {
     private func clearStreamPreviewText(streamId: String) {
         streamText[streamId] = nil
         streamTextLengthById[streamId] = nil
+    }
+
+    private func clearStreamPreviewState(streamId: String) {
+        clearStreamPreviewText(streamId: streamId)
+        streamsWithCheckpointPreview.remove(streamId)
+        streamStartedAtById[streamId] = nil
+        streamSenderById[streamId] = nil
     }
 
     private func hasStreamPreviewText(streamId: String) -> Bool {
@@ -461,10 +486,7 @@ final class StreamWatcher {
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
         streamWatchGenerations[streamId] = nil
-        clearStreamPreviewText(streamId: streamId)
-        streamsWithCheckpointPreview.remove(streamId)
-        streamStartedAtById[streamId] = nil
-        streamSenderById[streamId] = nil
+        clearStreamPreviewState(streamId: streamId)
         if removeStreamBubble(streamId: streamId) {
             sink?.streamNoteProjectionChanged()
         }
@@ -486,10 +508,7 @@ final class StreamWatcher {
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
         streamWatchGenerations[streamId] = nil
-        streamsWithCheckpointPreview.remove(streamId)
-        streamStartedAtById[streamId] = nil
-        streamSenderById[streamId] = nil
-        clearStreamPreviewText(streamId: streamId)
+        clearStreamPreviewState(streamId: streamId)
     }
 
     @discardableResult
@@ -498,10 +517,7 @@ final class StreamWatcher {
         streamWatchTasks[streamId]?.cancel()
         streamWatchTasks[streamId] = nil
         streamWatchGenerations[streamId] = nil
-        clearStreamPreviewText(streamId: streamId)
-        streamsWithCheckpointPreview.remove(streamId)
-        streamStartedAtById[streamId] = nil
-        streamSenderById[streamId] = nil
+        clearStreamPreviewState(streamId: streamId)
         return removeStreamBubble(streamId: streamId)
     }
 

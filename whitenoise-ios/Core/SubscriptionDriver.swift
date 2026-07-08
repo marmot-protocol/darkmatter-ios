@@ -6,7 +6,7 @@ import MarmotKit
 enum SubscriptionDriver {
 
     static func chats(_ sub: ChatsSubscription) -> AsyncStream<AppGroupRecordFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(128)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.next() {
                     continuation.yield(next)
@@ -18,7 +18,7 @@ enum SubscriptionDriver {
     }
 
     static func chatList(_ sub: ChatListSubscription) -> AsyncStream<ChatListRowFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(512)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.next() {
                     continuation.yield(next)
@@ -30,7 +30,7 @@ enum SubscriptionDriver {
     }
 
     static func chatListUpdates(_ sub: ChatListSubscription) -> AsyncStream<ChatListSubscriptionUpdateFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(128)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.nextUpdate() {
                     continuation.yield(next)
@@ -42,7 +42,7 @@ enum SubscriptionDriver {
     }
 
     static func timelineMessageUpdates(_ sub: TimelineMessagesSubscription) -> AsyncStream<TimelineSubscriptionUpdateFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(128)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.nextUpdate() {
                     continuation.yield(next)
@@ -54,7 +54,7 @@ enum SubscriptionDriver {
     }
 
     static func groupState(_ sub: GroupStateSubscription) -> AsyncStream<AppGroupRecordFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(64)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.next() {
                     continuation.yield(next)
@@ -66,7 +66,7 @@ enum SubscriptionDriver {
     }
 
     static func events(_ sub: EventsSubscription) -> AsyncStream<MarmotEventFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(256)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.next() {
                     continuation.yield(next)
@@ -78,7 +78,7 @@ enum SubscriptionDriver {
     }
 
     static func notifications(_ sub: NotificationsSubscription) -> AsyncStream<NotificationUpdateFfi> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(128)) { continuation in
             let task = Task {
                 while !Task.isCancelled, let next = await sub.next() {
                     continuation.yield(next)
