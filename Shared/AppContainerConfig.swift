@@ -133,8 +133,6 @@ nonisolated enum RelayURL {
 
         components.scheme = scheme
         components.host = host.lowercased()
-        components.path = ""
-        components.query = nil
         components.fragment = nil
         return components.url?.absoluteString
     }
