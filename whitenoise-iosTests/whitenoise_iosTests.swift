@@ -4213,7 +4213,32 @@ struct GroupImageSearchTests {
         #expect(results.first?.imageURL.absoluteString == "https://images.example.com/a.jpg")
         #expect(results.first?.thumbnailURL?.absoluteString == "https://external-content.duckduckgo.com/thumb.jpg")
         #expect(results.first?.sourceHost == "example.com")
-        #expect(results.first?.dimensionsLabel == "640x480")
+        #expect(results.first?.dimensionsLabel == DuckDuckGoImageSearchClient.dimensionsLabel(
+            width: 640,
+            height: 480
+        ))
+    }
+
+    @Test func groupImageDimensionsLabelLocalizesDigits() {
+        let locale = Locale(identifier: "ar_EG")
+
+        #expect(DuckDuckGoImageSearchClient.dimensionsLabel(
+            width: 640,
+            height: 480,
+            locale: locale
+        ) == L10n.formatted(
+            "%@ × %@",
+            arguments: [
+                LocalizedNumberLabel.decimal(640, locale: locale),
+                LocalizedNumberLabel.decimal(480, locale: locale)
+            ],
+            locale: locale
+        ))
+        #expect(DuckDuckGoImageSearchClient.dimensionsLabel(
+            width: 640,
+            height: 480,
+            locale: locale
+        ) != "640x480")
     }
 
     @Test func duckDuckGoResultDecoderCapsResultCount() throws {
