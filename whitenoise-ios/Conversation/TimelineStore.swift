@@ -197,7 +197,6 @@ final class TimelineStore {
     private struct GroupSystemDisplayCacheKey: Equatable {
         let record: MessageTimelineSignature
         let profileGeneration: Int
-        let languageRawValue: String
     }
 
     private struct GroupSystemDisplayCacheEntry {
@@ -302,8 +301,7 @@ final class TimelineStore {
         _ = timelineProjectionGeneration
         let key = GroupSystemDisplayCacheKey(
             record: MessageTimelineSignature(record),
-            profileGeneration: appState?.profileRefreshGeneration ?? 0,
-            languageRawValue: AppLanguage.currentRawValue
+            profileGeneration: appState?.profileRefreshGeneration ?? 0
         )
         if let cached = groupSystemDisplayCache[record.messageIdHex], cached.key == key {
             return cached.text
