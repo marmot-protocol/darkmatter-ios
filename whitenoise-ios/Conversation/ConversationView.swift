@@ -585,6 +585,9 @@ struct ConversationView: View {
             .onChange(of: appState.profileRefreshGeneration) { _, _ in
                 viewModel?.refreshProfileDependentTimelineProjections()
             }
+            .onReceive(NotificationCenter.default.publisher(for: AppLanguage.didChangeNotification)) { _ in
+                viewModel?.refreshProfileDependentTimelineProjections()
+            }
             .onChange(of: viewModel?.canSendMessages ?? true) { _, canSendMessages in
                 handleComposerAvailabilityChange(canSendMessages: canSendMessages)
             }
