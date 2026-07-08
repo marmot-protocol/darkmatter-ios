@@ -5,7 +5,7 @@ import UIKit
 final class BackgroundRuntimeSuspensionTask {
     typealias BeginBackgroundTask = @MainActor (
         _ name: String,
-        _ expirationHandler: @escaping () -> Void
+        _ expirationHandler: @escaping @Sendable () -> Void
     ) -> UIBackgroundTaskIdentifier
     typealias EndBackgroundTask = @MainActor (_ taskID: UIBackgroundTaskIdentifier) -> Void
 
@@ -28,8 +28,9 @@ final class BackgroundRuntimeSuspensionTask {
     ) {
         self.endBackgroundTask = endBackgroundTask
         taskID = beginBackgroundTask(name) { [weak self] in
+            guard let owner = self else { return }
             Task { @MainActor in
-                self?.beginEndObserverIfPossible()
+                owner.beginEndObserverIfPossible()
             }
         }
     }

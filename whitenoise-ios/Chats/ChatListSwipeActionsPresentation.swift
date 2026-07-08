@@ -2,8 +2,8 @@ import MarmotKit
 
 /// Pure swipe-action policy for chat-list rows (#345). Inactive memberships
 /// (`left` / `removed`) keep archive controls but swap leave for local delete.
-enum ChatListSwipeActionsPresentation: Equatable {
-    struct Actions: OptionSet, Equatable {
+nonisolated enum ChatListSwipeActionsPresentation: Equatable {
+    nonisolated struct Actions: OptionSet, Equatable {
         let rawValue: Int
 
         static let leave = Actions(rawValue: 1 << 0)

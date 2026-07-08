@@ -255,7 +255,7 @@ nonisolated enum RemoteImageFetch {
     }
 }
 
-private final class RemoteImageDownloadCancellation: @unchecked Sendable {
+nonisolated private final class RemoteImageDownloadCancellation: @unchecked Sendable {
     private let task: URLSessionDataTask
 
     init(task: URLSessionDataTask) {
