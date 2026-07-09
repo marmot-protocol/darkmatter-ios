@@ -61,11 +61,56 @@ struct ComposerMentionQueryTests {
         #expect(ComposerMentionQuery.filter(candidates, matching: "JE").map(\.displayName) == ["Jeff"])
     }
 
-    @Test func replacingInsertsFullNpubMention() throws {
+    @Test func replacingInsertsDisplayNameMention() throws {
         let draft = "ping @je"
         let session = try #require(ComposerMentionQuery.active(in: draft))
-        let updated = ComposerMentionQuery.replacing(session: session, in: draft, with: jeffNpub)
-        #expect(updated == "ping @\(jeffNpub) ")
+        let updated = ComposerMentionQuery.replacing(session: session, in: draft, with: "Jeff")
+        #expect(updated == "ping @Jeff ")
+    }
+
+    @Test func canonicalizeDisplayNameMentionForSend() {
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111")
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: candidates
+        )
+        #expect(outgoing == "ping @\(jeffNpub) ")
+    }
+
+    @Test func canonicalizeDisplayNameMentionWithSpacesAndPunctuation() {
+        let candidates = [
+            mentionCandidate(name: "Jeff Smith", npub: jeffNpub, hex: "111")
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping (@Jeff Smith), are you around?",
+            candidates: candidates
+        )
+        #expect(outgoing == "ping (@\(jeffNpub)), are you around?")
+    }
+
+    @Test func canonicalizePrefersLongestDisplayName() {
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            mentionCandidate(name: "Jeff Smith", npub: aliceNpub, hex: "222"),
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff Smith ",
+            candidates: candidates
+        )
+        #expect(outgoing == "ping @\(aliceNpub) ")
+    }
+
+    @Test func canonicalizeKeepsNonMentionAtSignsAndLongerWords() {
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111")
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "mail me@Jeff or ping @Jefferson or open /@Jeff",
+            candidates: candidates
+        )
+        #expect(outgoing == "mail me@Jeff or ping @Jefferson or open /@Jeff")
     }
 
     @Test func hidesAutocompleteForCompleteNpubBody() {

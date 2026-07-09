@@ -1493,11 +1493,21 @@ final class ConversationViewModel {
     // MARK: - Send
 
     func send(_ text: String) async {
-        await composer.send(text)
+        await composer.send(canonicalizedMentionText(text))
     }
 
     func sendMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
-        await composer.sendMedia(attachments, caption: caption)
+        await composer.sendMedia(attachments, caption: canonicalizedMentionText(caption))
+    }
+
+    private func canonicalizedMentionText(_ text: String) -> String {
+        mentionController.canonicalizeMentions(
+            in: text,
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: groupMlsRefreshGeneration
+        )
     }
 
 #if DEBUG
