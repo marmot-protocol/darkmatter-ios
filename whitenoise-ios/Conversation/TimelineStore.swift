@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import MarmotKit
 
 /// Owns the conversation's merged timeline: the durable message mirror, the
@@ -40,6 +41,11 @@ import MarmotKit
 @Observable
 @MainActor
 final class TimelineStore {
+    private static let performanceSignposter = OSSignposter(
+        subsystem: "dev.ipf.whitenoise.ios",
+        category: "Performance"
+    )
+
     private(set) var timeline: [TimelineItem] = []
     /// Coarse invalidation token for projection data read through methods.
     private(set) var timelineProjectionGeneration = 0
@@ -116,6 +122,7 @@ final class TimelineStore {
     var mediaItemProjectionBuildCountForTesting: Int { mediaProjections.buildCountForTesting }
     var mediaReferenceCountForTesting: Int { mediaProjections.referenceCountForTesting }
     var streamDebugTimelineItemCountForTesting: Int { streamDebugTimelineItems.count }
+    private(set) var timelineRebuildCountForTesting = 0
     private var groupSystemProjectionBuildCount = 0
 #endif
 
@@ -343,6 +350,7 @@ final class TimelineStore {
         var projectionChanged = false
         var changedReactionTargets: Set<String> = []
         let shouldEvictAbsentRecords = shouldEvictAbsentTimelineRecords(from: page)
+        let canUpdateTimelineIncrementally = !shouldEvictAbsentRecords
         let hasCompleteAuthoritativeWindow = !page.hasMoreBefore && !page.hasMoreAfter
         if shouldEvictAbsentRecords {
             let incomingMessageIds = Set(page.messages.map(\.messageIdHex).filter { !$0.isEmpty })
@@ -360,7 +368,10 @@ final class TimelineStore {
         streamWatcher?.recordFinalizedStreams(in: page.messages)
         for record in page.messages {
             collectReactionTargets(affectedBy: ConversationViewModel.appMessageRecord(from: record), into: &changedReactionTargets)
-            projectionChanged = applyTimelineRecord(record) || projectionChanged
+            projectionChanged = applyTimelineRecord(
+                record,
+                updateTimeline: canUpdateTimelineIncrementally
+            ) || projectionChanged
         }
         if shouldEvictAbsentRecords {
             streamWatcher?.pruneScannedFinalizedMessageIds(keeping: Set(messageById.keys))
@@ -369,6 +380,7 @@ final class TimelineStore {
         hasMoreBefore = page.hasMoreBefore
         hasMoreAfter = page.hasMoreAfter
         rebuildProjectedState(
+            rebuildTimeline: !canUpdateTimelineIncrementally,
             projectionChanged: projectionChanged,
             changedReactionTargets: shouldEvictAbsentRecords ? nil : changedReactionTargets
         )
@@ -393,7 +405,11 @@ final class TimelineStore {
                     changedReactionTargets.insert(target)
                 }
                 streamWatcher?.recordFinalizedStreams(in: [record])
-                projectionChanged = applyTimelineRecord(record, trigger: trigger) || projectionChanged
+                projectionChanged = applyTimelineRecord(
+                    record,
+                    updateTimeline: true,
+                    trigger: trigger
+                ) || projectionChanged
             case .remove(let messageIdHex, _):
                 if !messageIdHex.isEmpty {
                     changedReactionTargets.insert(messageIdHex)
@@ -405,13 +421,17 @@ final class TimelineStore {
                 }
                 projectionChanged = removeTimelineRecord(
                     messageIdHex: messageIdHex,
-                    updateTimeline: false
+                    updateTimeline: true
                 ) || projectionChanged
             }
         }
         readMarker?.pruneMarkedReadMessageIds(force: true)
         streamWatcher?.pruneScannedFinalizedMessageIds(keeping: Set(messageById.keys))
-        rebuildProjectedState(projectionChanged: projectionChanged, changedReactionTargets: changedReactionTargets)
+        rebuildProjectedState(
+            rebuildTimeline: false,
+            projectionChanged: projectionChanged,
+            changedReactionTargets: changedReactionTargets
+        )
         isLoading = false
     }
 
@@ -431,7 +451,7 @@ final class TimelineStore {
         var changedReactionTargets: Set<String> = []
         for record in records {
             collectReactionTargets(affectedBy: ConversationViewModel.appMessageRecord(from: record), into: &changedReactionTargets)
-            projectionChanged = applyTimelineRecord(record) || projectionChanged
+            projectionChanged = applyTimelineRecord(record, updateTimeline: true) || projectionChanged
         }
         streamWatcher?.pruneScannedFinalizedMessageIds(keeping: Set(messageById.keys))
         readMarker?.pruneMarkedReadMessageIds(force: true)
@@ -440,6 +460,7 @@ final class TimelineStore {
             hasMoreAfter = page.hasMoreAfter
         }
         rebuildProjectedState(
+            rebuildTimeline: false,
             projectionChanged: projectionChanged,
             changedReactionTargets: changedReactionTargets
         )
@@ -555,6 +576,12 @@ final class TimelineStore {
 
     @discardableResult
     private func rebuildTimeline() -> Bool {
+        let signpost = Self.performanceSignposter.beginInterval("TimelineStore.rebuildTimeline")
+        defer { Self.performanceSignposter.endInterval("TimelineStore.rebuildTimeline", signpost) }
+        #if DEBUG
+        timelineRebuildCountForTesting += 1
+        #endif
+
         var next: [TimelineItem] = messageById.values.compactMap { record in
             visibleTimelineItem(for: record, status: messageStatusById[record.messageIdHex])
         }
@@ -671,6 +698,9 @@ final class TimelineStore {
 
     @discardableResult
     private func assignTimeline(_ next: [TimelineItem]) -> Bool {
+        let signpost = Self.performanceSignposter.beginInterval("TimelineStore.assignTimeline")
+        defer { Self.performanceSignposter.endInterval("TimelineStore.assignTimeline", signpost) }
+
         let nextSignature = next.map(TimelineItemSignature.init)
         guard timelineSignature != nextSignature else { return false }
         timeline = next

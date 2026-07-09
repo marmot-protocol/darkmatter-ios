@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import MarmotKit
 
 /// Owns the conversation's read-marking pipeline: an optimistic "already marked"
@@ -10,6 +11,11 @@ import MarmotKit
 /// state, while the marked-set bookkeeping stays self-contained.
 @MainActor
 final class ConversationReadMarker {
+    private static let performanceSignposter = OSSignposter(
+        subsystem: "dev.ipf.whitenoise.ios",
+        category: "Performance"
+    )
+
     private static let readMarkCoalescingDelayNanoseconds: UInt64 = 100_000_000
 
     private let groupIdHex: String
@@ -140,6 +146,9 @@ final class ConversationReadMarker {
             pruneMarkedReadMessageIds(force: true)
             return false
         }
+        let signpost = Self.performanceSignposter.beginInterval("ConversationReadMarker.flushPendingReadMarks")
+        defer { Self.performanceSignposter.endInterval("ConversationReadMarker.flushPendingReadMarks", signpost) }
+
         defer {
             pendingReadMessageIdSet.subtract(messageIds)
             pruneMarkedReadMessageIds(force: true)

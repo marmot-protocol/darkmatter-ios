@@ -11,6 +11,7 @@ private struct KeyboardAdaptiveBottomPadding: ViewModifier {
                 NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)
             ) { notification in
                 let gap = KeyboardFrameChange.bottomGap(from: notification)
+                guard KeyboardFrameChange.shouldUpdateBottomGap(current: keyboardGap, next: gap) else { return }
                 withAnimation(KeyboardFrameChange.animation(from: notification)) {
                     keyboardGap = gap
                 }
@@ -27,6 +28,7 @@ private struct KeyboardVisibilityTracking: ViewModifier {
                 NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)
             ) { notification in
                 let visible = KeyboardFrameChange.isVisible(from: notification)
+                guard KeyboardFrameChange.shouldUpdateVisibility(current: isVisible, next: visible) else { return }
                 withAnimation(KeyboardFrameChange.animation(from: notification)) {
                     isVisible = visible
                 }

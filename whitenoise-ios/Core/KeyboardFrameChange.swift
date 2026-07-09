@@ -16,6 +16,14 @@ enum KeyboardFrameChange {
         isVisible(from: notification) ? BottomInputChromeLayout.keyboardInset : 0
     }
 
+    static func shouldUpdateBottomGap(current: CGFloat, next: CGFloat) -> Bool {
+        abs(current - next) > 0.5
+    }
+
+    static func shouldUpdateVisibility(current: Bool, next: Bool) -> Bool {
+        current != next
+    }
+
     static func animation(from notification: Notification) -> Animation {
         guard
             let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double

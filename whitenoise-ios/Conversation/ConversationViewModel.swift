@@ -1112,6 +1112,10 @@ final class ConversationViewModel {
     var mediaReferenceCountForTesting: Int {
         timelineStore.mediaProjections.referenceCountForTesting
     }
+
+    var timelineRebuildCountForTesting: Int {
+        timelineStore.timelineRebuildCountForTesting
+    }
 #endif
 
     static func pendingOutgoingMessage(

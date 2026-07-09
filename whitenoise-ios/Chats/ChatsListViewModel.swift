@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import MarmotKit
 
 /// Owns the live list of chats for the currently active account. The list is
@@ -8,8 +9,12 @@ import MarmotKit
 @Observable
 @MainActor
 final class ChatsListViewModel {
+    private static let performanceSignposter = OSSignposter(
+        subsystem: "dev.ipf.whitenoise.ios",
+        category: "Performance"
+    )
 
-    struct Item: Identifiable {
+    struct Item: Equatable, Identifiable {
         let row: ChatListRowFfi
         let avatarURL: URL?
         let title: String
@@ -128,6 +133,7 @@ final class ChatsListViewModel {
 
     #if DEBUG
     @ObservationIgnored var mentionDisplayNameForTesting: MarkdownMentionResolver?
+    @ObservationIgnored private(set) var publishedItemsMutationCountForTesting = 0
     #endif
 
     init(appState: AppState) {
@@ -286,13 +292,29 @@ final class ChatsListViewModel {
 
     func applyChatListSnapshot(_ snapshot: [ChatListRowFfi]) {
         pendingChatListRowsByGroupId = [:]
-        rowByGroupId = [:]
-        itemByGroupId = [:]
+        let previousRows = rowByGroupId
+        let previousItems = itemByGroupId
+        var nextRows: [String: ChatListRowFfi] = [:]
+        var nextItems: [String: Item] = [:]
+        var changed = false
         for row in snapshot {
-            storeRow(row)
+            updateCachedGroupDetails(with: row)
+            let item = makeItem(for: row)
+            nextRows[row.groupIdHex] = row
+            nextItems[row.groupIdHex] = item
+            if previousRows[row.groupIdHex] != row || previousItems[row.groupIdHex] != item {
+                changed = true
+            }
         }
+        if Set(previousRows.keys) != Set(nextRows.keys) {
+            changed = true
+        }
+        rowByGroupId = nextRows
+        itemByGroupId = nextItems
         pruneEnrichmentCaches(toSurviving: Set(rowByGroupId.keys))
-        publishItems()
+        if changed {
+            publishItems()
+        }
         scheduleRowEnrichment(for: snapshot)
     }
 
@@ -329,9 +351,14 @@ final class ChatsListViewModel {
 
     func applyChatListRow(_ row: ChatListRowFfi) {
         pendingChatListRowsByGroupId[row.groupIdHex] = nil
-        storeRow(row)
-        publishItems()
+        if storeRow(row) {
+            publishItems()
+        }
         scheduleRowEnrichment(for: [row])
+    }
+
+    func enqueueChatListRowUpdate(_ row: ChatListRowFfi) {
+        enqueueChatListRow(row)
     }
 
     func applyChatListUpdate(_ update: ChatListSubscriptionUpdateFfi) {
@@ -345,6 +372,7 @@ final class ChatsListViewModel {
 
     func removeChatListRow(groupIdHex: String) {
         pendingChatListRowsByGroupId[groupIdHex] = nil
+        let hadPublishedRow = rowByGroupId[groupIdHex] != nil || itemByGroupId[groupIdHex] != nil
         rowByGroupId[groupIdHex] = nil
         itemByGroupId[groupIdHex] = nil
         avatarURLByGroupId[groupIdHex] = nil
@@ -353,15 +381,18 @@ final class ChatsListViewModel {
         groupDetailsCache[groupIdHex] = nil
         groupDetailsLoadedGroupIds.remove(groupIdHex)
         pendingGroupDetailsRefreshGroupIds.remove(groupIdHex)
-        publishItems()
+        if hadPublishedRow {
+            publishItems()
+        }
     }
 
     func markGroupLeft(groupIdHex: String) {
         guard var row = rowByGroupId[groupIdHex] else { return }
         row.selfMembership = .left
         row.pendingConfirmation = false
-        storeRow(row)
-        publishItems()
+        if storeRow(row) {
+            publishItems()
+        }
     }
 
     /// Reflect a locally-produced group change (e.g. an archive toggle) right
@@ -382,8 +413,9 @@ final class ChatsListViewModel {
         avatarURLLoadedGroupIds.insert(record.groupIdHex)
         pendingAvatarURLRefreshGroupIds.remove(record.groupIdHex)
         updateCachedGroupDetails(with: record)
-        storeRow(row)
-        publishItems()
+        if storeRow(row) {
+            publishItems()
+        }
     }
 
     private func enqueueChatListRow(_ row: ChatListRowFfi) {
@@ -401,25 +433,35 @@ final class ChatsListViewModel {
         let pendingRows = Array(pendingChatListRowsByGroupId.values)
         pendingChatListRowsByGroupId = [:]
         guard !pendingRows.isEmpty else { return }
+        var changed = false
         for row in pendingRows {
-            storeRow(row)
+            changed = storeRow(row) || changed
         }
-        publishItems()
+        if changed {
+            publishItems()
+        }
         scheduleRowEnrichment(for: pendingRows)
     }
 
-    private func storeRow(_ row: ChatListRowFfi) {
+    @discardableResult
+    private func storeRow(_ row: ChatListRowFfi) -> Bool {
         updateCachedGroupDetails(with: row)
+        let item = makeItem(for: row)
+        let changed = itemByGroupId[row.groupIdHex] != item
         rowByGroupId[row.groupIdHex] = row
-        itemByGroupId[row.groupIdHex] = makeItem(for: row)
+        itemByGroupId[row.groupIdHex] = item
+        return changed
     }
 
     func refreshDisplayProjections() {
         guard !rowByGroupId.isEmpty else { return }
         var changed = false
         for (groupId, row) in rowByGroupId {
-            itemByGroupId[groupId] = makeItem(for: row)
-            changed = true
+            let item = makeItem(for: row)
+            if itemByGroupId[groupId] != item {
+                itemByGroupId[groupId] = item
+                changed = true
+            }
         }
         if changed {
             publishItems()
@@ -532,11 +574,22 @@ final class ChatsListViewModel {
         ContentSanitizer.groupName(row.groupName) == nil
     }
 
-    private func publishItems() {
+    @discardableResult
+    private func publishItems() -> Bool {
+        let signpost = Self.performanceSignposter.beginInterval("ChatsListViewModel.publishItems")
+        defer { Self.performanceSignposter.endInterval("ChatsListViewModel.publishItems", signpost) }
+
         let all = Array(itemByGroupId.values)
-        items = all.filter { !$0.row.archived }.sorted(by: Self.sortRule)
-        archivedItems = all.filter { $0.row.archived }.sorted(by: Self.sortRule)
+        let nextItems = all.filter { !$0.row.archived }.sorted(by: Self.sortRule)
+        let nextArchivedItems = all.filter { $0.row.archived }.sorted(by: Self.sortRule)
+        guard items != nextItems || archivedItems != nextArchivedItems else { return false }
+        items = nextItems
+        archivedItems = nextArchivedItems
+        #if DEBUG
+        publishedItemsMutationCountForTesting += 1
+        #endif
         updateActiveAccountUnreadSummary(rows: all.map(\.row))
+        return true
     }
 
     private func updateActiveAccountUnreadSummary(rows: [ChatListRowFfi]) {
@@ -645,8 +698,11 @@ final class ChatsListViewModel {
                         }
                     }
 
-                    self.itemByGroupId[groupId] = self.makeItem(for: row)
-                    changed = true
+                    let item = self.makeItem(for: row)
+                    if self.itemByGroupId[groupId] != item {
+                        self.itemByGroupId[groupId] = item
+                        changed = true
+                    }
                 }
                 guard !Task.isCancelled, self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef) else { break }
                 self.pendingAvatarURLRefreshGroupIds.formUnion(
@@ -699,8 +755,11 @@ final class ChatsListViewModel {
             avatarURLLoadedGroupIds.insert(groupId)
         }
         if let row = rowByGroupId[groupId] {
-            itemByGroupId[groupId] = makeItem(for: row)
-            publishItems()
+            let item = makeItem(for: row)
+            if itemByGroupId[groupId] != item {
+                itemByGroupId[groupId] = item
+                publishItems()
+            }
         }
     }
 
