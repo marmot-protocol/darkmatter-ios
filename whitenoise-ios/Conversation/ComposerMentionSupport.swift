@@ -100,11 +100,78 @@ enum ComposerMentionQuery {
     static func replacing(
         session: Session,
         in draft: String,
-        with npub: String
+        with displayName: String
     ) -> String {
         var updated = draft
-        updated.replaceSubrange(session.replacementRange(in: draft), with: "@\(npub) ")
+        updated.replaceSubrange(session.replacementRange(in: draft), with: "@\(displayName) ")
         return updated
+    }
+}
+
+nonisolated enum ComposerMentionCanonicalizer {
+    private static let underscoreScalar = UnicodeScalar("_")
+    private static let slashScalar = UnicodeScalar("/")
+
+    static func canonicalize(_ text: String, candidates: [ComposerMentionCandidate]) -> String {
+        guard text.contains("@") else { return text }
+        let replacements = candidates
+            .filter { candidate in
+                !candidate.npub.isEmpty
+                    && !candidate.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            .sorted { lhs, rhs in
+                lhs.displayName.count > rhs.displayName.count
+            }
+        guard !replacements.isEmpty else { return text }
+
+        var canonical = ""
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "@",
+               leftBoundaryAllowsMention(at: index, in: text),
+               let match = matchCandidate(in: text, at: index, candidates: replacements) {
+                canonical += "@\(match.candidate.npub)"
+                index = match.endIndex
+                continue
+            }
+            canonical.append(text[index])
+            index = text.index(after: index)
+        }
+        return canonical
+    }
+
+    private static func matchCandidate(
+        in text: String,
+        at atIndex: String.Index,
+        candidates: [ComposerMentionCandidate]
+    ) -> (candidate: ComposerMentionCandidate, endIndex: String.Index)? {
+        let nameStart = text.index(after: atIndex)
+        for candidate in candidates {
+            guard text[nameStart...].hasPrefix(candidate.displayName) else { continue }
+            let nameEnd = text.index(nameStart, offsetBy: candidate.displayName.count)
+            guard rightBoundaryAllowsMention(at: nameEnd, in: text) else { continue }
+            return (candidate, nameEnd)
+        }
+        return nil
+    }
+
+    private static func leftBoundaryAllowsMention(at atIndex: String.Index, in text: String) -> Bool {
+        if atIndex == text.startIndex { return true }
+        let previous = text[text.index(before: atIndex)]
+        return isNostrMentionBoundary(previous)
+    }
+
+    private static func rightBoundaryAllowsMention(at index: String.Index, in text: String) -> Bool {
+        guard index < text.endIndex else { return true }
+        return isNostrMentionBoundary(text[index])
+    }
+
+    private static func isNostrMentionBoundary(_ character: Character) -> Bool {
+        !character.unicodeScalars.contains(where: { scalar in
+            CharacterSet.alphanumerics.contains(scalar)
+                || scalar == underscoreScalar
+                || scalar == slashScalar
+        })
     }
 }
 
@@ -153,7 +220,30 @@ final class ComposerMentionController {
 
     func applySelection(_ candidate: ComposerMentionCandidate, to draft: inout String) {
         guard let session = ComposerMentionQuery.active(in: draft) else { return }
-        draft = ComposerMentionQuery.replacing(session: session, in: draft, with: candidate.npub)
+        draft = ComposerMentionQuery.replacing(
+            session: session,
+            in: draft,
+            with: candidate.displayName
+        )
+    }
+
+    func canonicalizeMentions(
+        in text: String,
+        appState: AppState?,
+        members: [AppGroupMemberRecordFfi],
+        groupMemberDetails: [GroupMemberDetailsFfi],
+        rosterGeneration: UInt64
+    ) -> String {
+        guard let appState else { return text }
+        return ComposerMentionCanonicalizer.canonicalize(
+            text,
+            candidates: allCandidates(
+                appState: appState,
+                members: members,
+                groupMemberDetails: groupMemberDetails,
+                rosterGeneration: rosterGeneration
+            )
+        )
     }
 
     private func allCandidates(
