@@ -1,7 +1,7 @@
-mdk-sha: ea2f2fc2
+mdk-sha: f9ef165a
 mdk-branch: HEAD
 mdk-tag:
-built-at: 2026-07-08T00:21:23Z
+built-at: 2026-07-09T18:29:55Z
 uniffi-version: 0.28.3
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
