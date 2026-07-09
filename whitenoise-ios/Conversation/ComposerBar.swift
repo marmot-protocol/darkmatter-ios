@@ -433,8 +433,10 @@ struct ComposerBar: View {
     private func focusComposer() {
         guard inputEnabled else { return }
         guard audioDraft == nil else { return }
+        guard !focused else { return }
         Task { @MainActor in
             await Task.yield()
+            guard inputEnabled, audioDraft == nil, !focused else { return }
             focused = true
         }
     }

@@ -549,7 +549,7 @@ private struct ChatDestination: View {
                 initialTitle: item.title,
                 initialTargetMessageIdHex: target.messageIdHex,
                 initialAppState: appState,
-                onChatListRowUpdated: { viewModel.applyChatListRow($0) },
+                onChatListRowUpdated: { viewModel.enqueueChatListRowUpdate($0) },
                 onGroupChanged: { viewModel.applyLocalGroupChange($0) },
                 onGroupLeft: onGroupLeft,
                 onGroupDeleted: onGroupDeleted

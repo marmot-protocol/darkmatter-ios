@@ -88,6 +88,31 @@ struct TimelineBottomViewport: Equatable {
     }
 }
 
+enum MessageActionsPlacement: Equatable {
+    case below
+    case above
+    case centered
+
+    static func resolve(
+        rowFrame: CGRect?,
+        contentTopY: CGFloat,
+        contentBottomY: CGFloat,
+        menuEstimate: CGFloat
+    ) -> MessageActionsPlacement {
+        guard let rowFrame else { return .centered }
+
+        let spaceBelow = contentBottomY - rowFrame.maxY
+        let spaceAbove = rowFrame.minY - contentTopY
+        if spaceBelow >= menuEstimate {
+            return .below
+        }
+        if spaceAbove >= menuEstimate {
+            return .above
+        }
+        return .centered
+    }
+}
+
 enum TimelineBottomScrollReason: Equatable {
     case contentGrowth
     case timelineChange
@@ -409,6 +434,8 @@ struct ConversationView: View {
     /// popover and show the menu as a centered overlay over the bubble instead.
     @State private var actionsCentered = false
     @State private var rowFrames = RowFrameStore()
+    @State private var measuredActionRowFrameKey: String?
+    @State private var pendingActionFrameMeasurementClearTask: Task<Void, Never>?
     @State private var composerFocusRequest = 0
     @State private var isAtTimelineBottom = true
     @State private var didPerformInitialBottomScroll = false
@@ -428,6 +455,7 @@ struct ConversationView: View {
     @State private var contentBottomY: CGFloat = 0
 
     private static let timelineBottomID = "conversation-timeline-bottom"
+    private static let actionFrameMeasurementClearDelayNanoseconds: UInt64 = 250_000_000
 
     private struct ActionsTarget: Identifiable {
         let record: AppMessageRecordFfi
@@ -837,7 +865,7 @@ struct ConversationView: View {
                         .compatibleBottomScrollEdgeEffect()
                         .scrollDismissesKeyboard(.interactively)
                         .simultaneousGesture(TapGesture().onEnded { scheduleKeyboardDismiss() })
-                        .onPreferenceChange(RowFramesKey.self) { rowFrames.frames = $0 }
+                        .onPreferenceChange(RowFramesKey.self) { rowFrames.replace(with: $0) }
                         .onScrollGeometryChange(for: TimelineBottomViewport.self) { geometry in
                             TimelineBottomViewport(
                                 contentHeight: geometry.contentSize.height,
@@ -994,21 +1022,33 @@ struct ConversationView: View {
         .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
             beginReply(to: record, viewModel: viewModel)
         }
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: RowFramesKey.self,
-                    value: [item.rowFrameKey: geo.frame(in: .global)]
-                )
+        .background {
+            if allowsActions, measuredActionRowFrameKey == item.rowFrameKey {
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: RowFramesKey.self,
+                        value: [
+                            RowFramePreference(
+                                key: item.rowFrameKey,
+                                frame: geo.frame(in: .global)
+                            )
+                        ]
+                    )
+                }
             }
-        )
+        }
         .id(item.id)
-        .onLongPressGesture {
+        .onLongPressGesture(
+            pressing: { pressing in
+                updateActionFrameMeasurement(pressing: pressing, rowFrameKey: item.rowFrameKey)
+            }
+        ) {
             guard allowsActions,
                   !record.messageIdHex.isEmpty,
                   !viewModel.isDeleted(record.messageIdHex) else { return }
             Haptics.tap()
             presentActions(for: record, rowFrameKey: item.rowFrameKey)
+            finishActionFrameMeasurement(rowFrameKey: item.rowFrameKey)
         }
         .popover(
             isPresented: actionsBinding(for: record),
@@ -1572,11 +1612,46 @@ struct ConversationView: View {
         pendingKeyboardDismissTask = nil
     }
 
+    private func updateActionFrameMeasurement(pressing: Bool, rowFrameKey: String) {
+        if pressing {
+            pendingActionFrameMeasurementClearTask?.cancel()
+            pendingActionFrameMeasurementClearTask = nil
+            measuredActionRowFrameKey = rowFrameKey
+        } else {
+            scheduleActionFrameMeasurementClear(rowFrameKey: rowFrameKey)
+        }
+    }
+
+    private func scheduleActionFrameMeasurementClear(rowFrameKey: String) {
+        pendingActionFrameMeasurementClearTask?.cancel()
+        pendingActionFrameMeasurementClearTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: Self.actionFrameMeasurementClearDelayNanoseconds)
+            guard !Task.isCancelled, measuredActionRowFrameKey == rowFrameKey else { return }
+            measuredActionRowFrameKey = nil
+            pendingActionFrameMeasurementClearTask = nil
+        }
+    }
+
+    private func finishActionFrameMeasurement(rowFrameKey: String) {
+        pendingActionFrameMeasurementClearTask?.cancel()
+        pendingActionFrameMeasurementClearTask = nil
+        if measuredActionRowFrameKey == rowFrameKey {
+            measuredActionRowFrameKey = nil
+        }
+    }
+
+    private func cancelActionFrameMeasurement() {
+        pendingActionFrameMeasurementClearTask?.cancel()
+        pendingActionFrameMeasurementClearTask = nil
+        measuredActionRowFrameKey = nil
+    }
+
     private func cancelPendingTimelineFollowUpWork() {
         initialScrollFollowUpTask?.cancel()
         initialScrollFollowUpTask = nil
         cancelPendingBottomScroll()
         cancelPendingKeyboardDismiss()
+        cancelActionFrameMeasurement()
     }
 
     // MARK: - Message actions placement
@@ -1585,21 +1660,28 @@ struct ConversationView: View {
     /// (default), flipped above it (no room below), or centered over it (the
     /// bubble is so tall neither end has room — a popover would land off-screen).
     private func presentActions(for record: AppMessageRecordFfi, rowFrameKey: String) {
-        let frame = rowFrames.frames[rowFrameKey]
-        let spaceBelow = contentBottomY - (frame?.maxY ?? 0)
-        let spaceAbove = (frame?.minY ?? 0) - contentTopY
-        let fitsBelow = spaceBelow >= Self.actionsMenuEstimate
-        let fitsAbove = spaceAbove >= Self.actionsMenuEstimate
+        let placement = MessageActionsPlacement.resolve(
+            rowFrame: rowFrames.frames[rowFrameKey],
+            contentTopY: contentTopY,
+            contentBottomY: contentBottomY,
+            menuEstimate: Self.actionsMenuEstimate
+        )
 
-        actionsAbove = !fitsBelow
-        if !fitsBelow && !fitsAbove {
+        switch placement {
+        case .below:
+            actionsAbove = false
+            actionsCentered = false
+            actionsTarget = ActionsTarget(record: record)
+        case .above:
+            actionsAbove = true
+            actionsCentered = false
+            actionsTarget = ActionsTarget(record: record)
+        case .centered:
+            actionsAbove = false
             withAnimation(.easeOut(duration: 0.15)) {
                 actionsCentered = true
                 actionsTarget = ActionsTarget(record: record)
             }
-        } else {
-            actionsCentered = false
-            actionsTarget = ActionsTarget(record: record)
         }
     }
 
@@ -1677,12 +1759,27 @@ struct ConversationView: View {
 /// scroll-driven updates don't churn SwiftUI state; we only read it on demand
 /// when a long press needs to decide which way the actions popover should open.
 private final class RowFrameStore {
-    var frames: [String: CGRect] = [:]
+    private(set) var frames: [String: CGRect] = [:]
+
+    func replace(with preferences: [RowFramePreference]) {
+        var next: [String: CGRect] = [:]
+        next.reserveCapacity(preferences.count)
+        for preference in preferences {
+            next[preference.key] = preference.frame
+        }
+        guard frames != next else { return }
+        frames = next
+    }
+}
+
+private struct RowFramePreference: Equatable {
+    let key: String
+    let frame: CGRect
 }
 
 private struct RowFramesKey: PreferenceKey {
-    static let defaultValue: [String: CGRect] = [:]
-    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
-        value.merge(nextValue()) { _, new in new }
+    static let defaultValue: [RowFramePreference] = []
+    static func reduce(value: inout [RowFramePreference], nextValue: () -> [RowFramePreference]) {
+        value.append(contentsOf: nextValue())
     }
 }

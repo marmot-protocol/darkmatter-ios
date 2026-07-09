@@ -4834,6 +4834,39 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.map(\.id) == [newer.groupIdHex, older.groupIdHex])
     }
 
+    @Test func directChatListRowUpdatesCanBeCoalescedBeforePublishing() async throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(
+            groupIdHex: hex("e1"),
+            title: "Read marker",
+            lastMessage: chatListPreview(messageIdHex: hex("f1"), plaintext: "read", timelineAt: 10),
+            updatedAt: 10
+        )
+
+        viewModel.enqueueChatListRowUpdate(row)
+
+        #expect(viewModel.items.isEmpty)
+        try await waitForExpectation { viewModel.items.map(\.id) == [row.groupIdHex] }
+    }
+
+    @Test func identicalProjectedRowDoesNotRepublishObservedLists() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(
+            groupIdHex: hex("e1"),
+            title: "Stable",
+            lastMessage: chatListPreview(messageIdHex: hex("f1"), plaintext: "stable", timelineAt: 10),
+            updatedAt: 10
+        )
+        viewModel.applyChatListSnapshot([row])
+        let mutationCount = viewModel.publishedItemsMutationCountForTesting
+
+        viewModel.applyChatListRow(row)
+        viewModel.applyChatListSnapshot([row])
+
+        #expect(viewModel.publishedItemsMutationCountForTesting == mutationCount)
+        #expect(viewModel.items.map(\.id) == [row.groupIdHex])
+    }
+
 }
 
 @MainActor
@@ -5242,6 +5275,36 @@ struct ConversationTimelineProjectionTests {
         ])
         #expect(!viewModel.hasMoreBefore)
         #expect(viewModel.hasMoreAfter)
+    }
+
+    @Test func liveProjectionUpdateMaintainsTimelineWithoutFullRebuild() throws {
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let first = timelineRecord(messageIdHex: hex("e1"), groupIdHex: groupIdHex, timelineAt: 10)
+        let second = timelineRecord(messageIdHex: hex("e2"), groupIdHex: groupIdHex, timelineAt: 20)
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [first], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        let rebuildCount = viewModel.timelineRebuildCountForTesting
+
+        viewModel.applyTimelineSubscriptionUpdate(.projection(update: RuntimeProjectionUpdateFfi(
+            accountIdHex: hex("01"),
+            accountLabel: "account",
+            update: TimelineProjectionUpdateFfi(
+                groupIdHex: groupIdHex,
+                messages: [],
+                changes: [.upsert(trigger: .newMessage, message: second)],
+                chatListRow: nil,
+                chatListTrigger: .newLastMessage
+            )
+        )))
+
+        #expect(messageIds(in: viewModel.timeline) == [first.messageIdHex, second.messageIdHex])
+        #expect(viewModel.timelineRebuildCountForTesting == rebuildCount)
     }
 
     @Test func projectedOutgoingMessageReplacesMatchingPendingBubble() throws {
@@ -9074,6 +9137,55 @@ struct TimelineBottomTests {
         ) == -10)
     }
 
+    @Test func messageActionsPlacementPrefersBelowWhenThereIsRoom() {
+        #expect(MessageActionsPlacement.resolve(
+            rowFrame: CGRect(x: 0, y: 120, width: 300, height: 80),
+            contentTopY: 80,
+            contentBottomY: 800,
+            menuEstimate: 280
+        ) == .below)
+    }
+
+    @Test func messageActionsPlacementFlipsAboveWhenBelowDoesNotFit() {
+        #expect(MessageActionsPlacement.resolve(
+            rowFrame: CGRect(x: 0, y: 440, width: 300, height: 160),
+            contentTopY: 80,
+            contentBottomY: 760,
+            menuEstimate: 280
+        ) == .above)
+    }
+
+    @Test func messageActionsPlacementCentersWhenNeitherSideFits() {
+        #expect(MessageActionsPlacement.resolve(
+            rowFrame: CGRect(x: 0, y: 260, width: 300, height: 360),
+            contentTopY: 80,
+            contentBottomY: 760,
+            menuEstimate: 280
+        ) == .centered)
+    }
+
+    @Test func messageActionsPlacementCentersWithoutMeasuredFrame() {
+        #expect(MessageActionsPlacement.resolve(
+            rowFrame: nil,
+            contentTopY: 80,
+            contentBottomY: 760,
+            menuEstimate: 280
+        ) == .centered)
+    }
+}
+
+@MainActor
+struct KeyboardFrameChangeTests {
+
+    @Test func bottomGapUpdatesOnlyForMaterialChanges() {
+        #expect(!KeyboardFrameChange.shouldUpdateBottomGap(current: 16, next: 16.25))
+        #expect(KeyboardFrameChange.shouldUpdateBottomGap(current: 0, next: 16))
+    }
+
+    @Test func visibilityUpdatesOnlyWhenValueChanges() {
+        #expect(!KeyboardFrameChange.shouldUpdateVisibility(current: true, next: true))
+        #expect(KeyboardFrameChange.shouldUpdateVisibility(current: false, next: true))
+    }
 }
 
 @MainActor
