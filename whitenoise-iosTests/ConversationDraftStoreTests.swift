@@ -1,0 +1,91 @@
+import Foundation
+import Testing
+@testable import whitenoise_ios
+
+@MainActor
+struct ConversationDraftStoreTests {
+    @Test func draftsPersistAcrossStoreInstancesAndStayAccountGroupScoped() async throws {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let first = ConversationDraftStore(fileURL: fixture.file)
+        await first.loadIfNeeded()
+        first.setDraft("first account, first group", accountRef: "account-a", groupIdHex: "group-a")
+        first.setDraft("first account, second group", accountRef: "account-a", groupIdHex: "group-b")
+        first.setDraft("second account", accountRef: "account-b", groupIdHex: "group-a")
+        await first.flush()
+
+        let restored = ConversationDraftStore(fileURL: fixture.file)
+        await restored.loadIfNeeded()
+
+        #expect(restored.draft(accountRef: "account-a", groupIdHex: "group-a") == "first account, first group")
+        #expect(restored.draft(accountRef: "account-a", groupIdHex: "group-b") == "first account, second group")
+        #expect(restored.draft(accountRef: "account-b", groupIdHex: "group-a") == "second account")
+        #expect(restored.draft(accountRef: "account-b", groupIdHex: "group-b") == nil)
+    }
+
+    @Test func blankDraftsAreRemovedAndStoredTextIsBoundedWithoutRewritingContent() async {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let store = ConversationDraftStore(fileURL: fixture.file)
+        await store.loadIfNeeded()
+
+        let exact = "  First line\nsecond line  "
+        store.setDraft(exact, accountRef: "account", groupIdHex: "group")
+        #expect(store.draft(accountRef: "account", groupIdHex: "group") == exact)
+
+        store.setDraft(" \n\t ", accountRef: "account", groupIdHex: "group")
+        #expect(store.draft(accountRef: "account", groupIdHex: "group") == nil)
+
+        let oversized = String(repeating: "x", count: ContentSanitizer.maxMessageLength + 100)
+        store.setDraft(oversized, accountRef: "account", groupIdHex: "group")
+        #expect(store.draft(accountRef: "account", groupIdHex: "group")?.count == ContentSanitizer.maxMessageLength)
+    }
+
+    @Test func removingAnAccountKeepsOtherAccountsDrafts() async {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let store = ConversationDraftStore(fileURL: fixture.file)
+        await store.loadIfNeeded()
+        store.setDraft("remove", accountRef: "account-a", groupIdHex: "group")
+        store.setDraft("keep", accountRef: "account-b", groupIdHex: "group")
+
+        store.removeDrafts(accountRef: "account-a")
+
+        #expect(store.draft(accountRef: "account-a", groupIdHex: "group") == nil)
+        #expect(store.draft(accountRef: "account-b", groupIdHex: "group") == "keep")
+    }
+
+    @Test func backgroundSuspensionFlushesTheLatestDraftImmediately() async throws {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let store = ConversationDraftStore(fileURL: fixture.file)
+        await store.loadIfNeeded()
+        let appState = AppState(
+            client: try MarmotClient.testClient(),
+            notifications: .shared,
+            conversationDraftStore: store
+        )
+
+        store.setDraft("last keystrokes", accountRef: "account", groupIdHex: "group")
+        await appState.startRuntimeSuspension().value
+
+        let restored = ConversationDraftStore(fileURL: fixture.file)
+        await restored.loadIfNeeded()
+        #expect(restored.draft(accountRef: "account", groupIdHex: "group") == "last keystrokes")
+    }
+
+    @Test func chatListPreviewCollapsesLinesAndUnsafeFormatting() {
+        let preview = ConversationDraftPreview.text(
+            from: "  First\u{202E}\nsecond\u{200B}  "
+        )
+
+        #expect(preview == "First second")
+    }
+
+    private func makeFixture() -> (root: URL, file: URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ConversationDraftStoreTests-\(UUID().uuidString)", isDirectory: true)
+        return (root, root.appendingPathComponent("drafts.json"))
+    }
+}

@@ -140,6 +140,63 @@ struct GroupDetailsArchiveActionTests {
         #expect(!model.membershipActionInFlight)
     }
 
+    @Test func clearingDescriptionPublishesTheExplicitEmptyStringSentinel() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(
+                groupIdHex: groupIdHex,
+                archived: false,
+                description: "Existing description"
+            )
+        )
+        let model = GroupDetailsViewModel()
+        var requests: [(accountRef: String, groupIdHex: String, description: String)] = []
+
+        model.conversation = conversation
+        model.descriptionDraft = " \n\t "
+        model.updateGroupDescriptionForTesting = { accountRef, groupIdHex, description in
+            requests.append((accountRef, groupIdHex, description))
+            return SendSummaryFfi(published: 1, messageIds: ["description-update"])
+        }
+
+        let succeeded = await model.updateDescription(using: appState)
+
+        #expect(succeeded)
+        #expect(requests.count == 1)
+        #expect(requests.first?.accountRef == "account-1")
+        #expect(requests.first?.groupIdHex == groupIdHex)
+        #expect(requests.first?.description == "")
+        #expect(!model.membershipActionInFlight)
+    }
+
+    @Test func sharedMediaProjectionLoadsOnceUnlessExplicitlyRefreshed() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        var requestCount = 0
+
+        model.conversation = conversation
+        model.listMediaForTesting = { _, _ in
+            requestCount += 1
+            return []
+        }
+
+        await model.loadSharedMedia(using: appState)
+        await model.loadSharedMedia(using: appState)
+        #expect(requestCount == 1)
+
+        await model.loadSharedMedia(using: appState, force: true)
+        #expect(requestCount == 2)
+    }
+
     @Test func leaveMarksConversationInactiveAndNotifiesParent() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "account-1"
@@ -352,13 +409,14 @@ private final class GroupAvatarPublishProbe {
 private func archiveTestGroup(
     groupIdHex: String,
     archived: Bool,
-    selfMembership: SelfMembershipFfi = .member
+    selfMembership: SelfMembershipFfi = .member,
+    description: String = ""
 ) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
         groupIdHex: groupIdHex,
         endpoint: "",
         name: "Archive Test Group",
-        description: "",
+        description: description,
         admins: [],
         relays: [],
         nostrGroupIdHex: String(repeating: "cd", count: 32),

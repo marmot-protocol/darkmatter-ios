@@ -10,7 +10,8 @@ import MarmotKit
 ///   "react" optimistic overlay, keyed by their own temporary id.
 /// - `optimisticRemovals` — `ReactionRemoval` placeholders suppressing `me` from
 ///   a target+emoji tally until an "un-react" lands server-side (#349).
-/// - `talliesByTarget` — the aggregated `[ReactionTally]` per target message.
+/// - `detailsByTarget` — sender-level reactions per target message, from which
+///   the bubble tallies and reaction-details sheet are both derived.
 ///
 /// `recompute` folds the mirrored summary plus local optimistic diffs (and the
 /// timeline's `deletedMessageIds` / local account id, both passed in) into UI
@@ -27,12 +28,16 @@ final class ConversationReactionProjectionCache {
     private var summariesByTarget: [String: TimelineReactionSummaryFfi] = [:]
     private var optimisticRecords: [String: AppMessageRecordFfi] = [:]
     private var optimisticRemovals: Set<ReactionRemoval> = []
-    private var talliesByTarget: [String: [ConversationViewModel.ReactionTally]] = [:]
+    private var detailsByTarget: [String: ConversationViewModel.ReactionDetails] = [:]
 
     // MARK: Read
 
     func tallies(forMessageId messageIdHex: String) -> [ConversationViewModel.ReactionTally] {
-        talliesByTarget[messageIdHex] ?? []
+        detailsByTarget[messageIdHex]?.tallies ?? []
+    }
+
+    func details(forMessageId messageIdHex: String) -> ConversationViewModel.ReactionDetails {
+        detailsByTarget[messageIdHex] ?? ConversationViewModel.ReactionDetails(groups: [])
     }
 
     // MARK: Server summary (ingest write-path)
@@ -113,7 +118,9 @@ final class ConversationReactionProjectionCache {
     // MARK: Aggregation
 
     /// All aggregated tallies (for full-recompute test hooks).
-    var allTallies: [String: [ConversationViewModel.ReactionTally]] { talliesByTarget }
+    var allTallies: [String: [ConversationViewModel.ReactionTally]] {
+        detailsByTarget.mapValues(\.tallies)
+    }
 
     /// Rebuild every per-target tally. Reserved for full projection refreshes or
     /// delete-state changes; live deltas should prefer `recompute(targets:…)` so
@@ -127,9 +134,9 @@ final class ConversationReactionProjectionCache {
             targets.insert(target)
         }
 
-        var result: [String: [ConversationViewModel.ReactionTally]] = [:]
+        var result: [String: ConversationViewModel.ReactionDetails] = [:]
         for target in targets where !target.isEmpty {
-            let tallies = ConversationViewModel.reactionTallies(
+            let details = ConversationViewModel.reactionDetails(
                 for: target,
                 summary: summariesByTarget[target],
                 optimisticRemovals: optimisticRemovals,
@@ -137,12 +144,12 @@ final class ConversationReactionProjectionCache {
                 deletedMessageIds: deletedMessageIds,
                 me: me
             )
-            if !tallies.isEmpty {
-                result[target] = tallies
+            if !details.groups.isEmpty {
+                result[target] = details
             }
         }
-        guard talliesByTarget != result else { return false }
-        talliesByTarget = result
+        guard detailsByTarget != result else { return false }
+        detailsByTarget = result
         return true
     }
 
@@ -151,9 +158,9 @@ final class ConversationReactionProjectionCache {
     @discardableResult
     func recompute(targets: Set<String>, deletedMessageIds: Set<String>, me: String) -> Bool {
         guard !targets.isEmpty else { return false }
-        var next = talliesByTarget
+        var next = detailsByTarget
         for target in targets where !target.isEmpty {
-            let tallies = ConversationViewModel.reactionTallies(
+            let details = ConversationViewModel.reactionDetails(
                 for: target,
                 summary: summariesByTarget[target],
                 optimisticRemovals: optimisticRemovals,
@@ -161,14 +168,14 @@ final class ConversationReactionProjectionCache {
                 deletedMessageIds: deletedMessageIds,
                 me: me
             )
-            if tallies.isEmpty {
+            if details.groups.isEmpty {
                 next[target] = nil
             } else {
-                next[target] = tallies
+                next[target] = details
             }
         }
-        guard talliesByTarget != next else { return false }
-        talliesByTarget = next
+        guard detailsByTarget != next else { return false }
+        detailsByTarget = next
         return true
     }
 }

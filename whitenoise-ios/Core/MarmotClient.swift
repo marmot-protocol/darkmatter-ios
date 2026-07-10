@@ -327,7 +327,7 @@ final class MarmotClient {
     func listMedia(
         accountRef: String,
         groupIdHex: String,
-        limit: UInt32
+        limit: UInt32? = nil
     ) async throws -> [MediaRecordFfi] {
         try await Task.detached(priority: .utility) { [marmot, accountRef, groupIdHex, limit] in
             try marmot.listMedia(
@@ -397,6 +397,14 @@ final class MarmotClient {
         try await marmot.inviteMembersDetailed(accountRef: accountRef, groupIdHex: groupIdHex, memberRefs: memberRefs)
     }
 
+    func acceptGroupInvite(accountRef: String, groupIdHex: String) async throws -> AppGroupRecordFfi {
+        try await marmot.acceptGroupInvite(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func declineGroupInvite(accountRef: String, groupIdHex: String) async throws -> GroupInviteDeclineResultFfi {
+        try await marmot.declineGroupInvite(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
     func removeMembersDetailed(accountRef: String, groupIdHex: String, memberRefs: [String]) async throws -> GroupMutationResultFfi {
         try await marmot.removeMembersDetailed(accountRef: accountRef, groupIdHex: groupIdHex, memberRefs: memberRefs)
     }
@@ -451,6 +459,15 @@ final class MarmotClient {
 
     func deleteMessage(accountRef: String, groupIdHex: String, targetMessageId: String) async throws -> SendSummaryFfi {
         try await marmot.deleteMessage(accountRef: accountRef, groupIdHex: groupIdHex, targetMessageId: targetMessageId)
+    }
+
+    func editMessage(accountRef: String, groupIdHex: String, targetMessageId: String, content: String) async throws -> SendSummaryFfi {
+        try await marmot.editMessage(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            targetMessageId: targetMessageId,
+            content: content
+        )
     }
 
     func reactToMessage(accountRef: String, groupIdHex: String, targetMessageId: String, emoji: String) async throws -> SendSummaryFfi {

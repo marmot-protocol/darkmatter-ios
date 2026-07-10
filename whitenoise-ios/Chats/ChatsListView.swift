@@ -46,11 +46,18 @@ struct ChatsListView: View {
     struct ChatNavigationTarget: Hashable {
         let groupIdHex: String
         let messageIdHex: String?
+        let unreadMessageIdHex: String?
 
-        init(groupIdHex: String, messageIdHex: String? = nil) {
+        init(
+            groupIdHex: String,
+            messageIdHex: String? = nil,
+            unreadMessageIdHex: String? = nil
+        ) {
             self.groupIdHex = groupIdHex
             let messageId = messageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
             self.messageIdHex = messageId?.isEmpty == false ? messageId : nil
+            let unreadMessageId = unreadMessageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.unreadMessageIdHex = unreadMessageId?.isEmpty == false ? unreadMessageId : nil
         }
     }
 
@@ -121,6 +128,7 @@ struct ChatsListView: View {
             .onAppear {
                 // Reflect messages we sent from a conversation (which emit no
                 // event) when returning to the list.
+                viewModel?.refreshDisplayProjections()
                 Task { await viewModel?.refreshRows() }
             }
             .onChange(of: appState.profileRefreshGeneration) { _, _ in
@@ -129,6 +137,9 @@ struct ChatsListView: View {
             .onChange(of: path.count) { oldCount, count in
                 if count > 0 || (oldCount > 0 && count == 0) {
                     dismissSearchKeyboard()
+                }
+                if oldCount > 0 && count == 0 {
+                    viewModel?.refreshDisplayProjections()
                 }
             }
         }
@@ -401,7 +412,8 @@ struct ChatsListView: View {
         path.append(
             ChatNavigationTarget(
                 groupIdHex: item.id,
-                messageIdHex: item.firstUnreadMessageIdHex
+                messageIdHex: item.firstUnreadMessageIdHex,
+                unreadMessageIdHex: item.firstUnreadMessageIdHex
             )
         )
     }
@@ -546,13 +558,19 @@ private struct ChatDestination: View {
         if let item {
             ConversationView(
                 chat: item.projectedGroup,
+                accountRef: appState.activeAccountRef,
                 initialTitle: item.title,
                 initialTargetMessageIdHex: target.messageIdHex,
+                initialUnreadMessageIdHex: target.unreadMessageIdHex,
                 initialAppState: appState,
+                forwardDestinationProvider: {
+                    viewModel.forwardDestinations(excludingGroupIdHex: target.groupIdHex)
+                },
                 onChatListRowUpdated: { viewModel.enqueueChatListRowUpdate($0) },
                 onGroupChanged: { viewModel.applyLocalGroupChange($0) },
                 onGroupLeft: onGroupLeft,
-                onGroupDeleted: onGroupDeleted
+                onGroupDeleted: onGroupDeleted,
+                onDraftChanged: { viewModel.refreshDisplayProjections() }
             )
         } else if timedOut {
             // A slow network can take longer than the spin-wait to deliver the

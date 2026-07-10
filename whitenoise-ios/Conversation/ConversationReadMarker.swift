@@ -47,7 +47,7 @@ final class ConversationReadMarker {
         self.onChatListRowUpdated = onChatListRowUpdated
     }
 
-    func markReadIfVisible(_ record: AppMessageRecordFfi, isDeleted: Bool) async {
+    func markReadIfVisible(_ record: AppMessageRecordFfi, isDeleted: Bool) {
         guard Self.shouldMarkRead(
             record,
             isDeleted: isDeleted,

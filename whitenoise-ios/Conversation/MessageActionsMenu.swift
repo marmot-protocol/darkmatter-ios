@@ -3,29 +3,49 @@ import MarmotKit
 
 /// Free-floating actions pane shown in a popover anchored under a long-pressed
 /// message: a row of the most-recent reaction emojis with a full-picker
-/// button, then Reply, Copy, and Delete (own messages only).
+/// button, then message actions such as reply, forward, edit, info, and delete.
 struct MessageActionsMenu: View {
     let isMine: Bool
+    let canInteract: Bool
+    let canForward: Bool
+    let canEdit: Bool
     let quickReactions: [String]
     let onReact: (String) -> Void
     let onReply: () -> Void
     let onCopy: () -> Void
+    let onForward: () -> Void
+    let onEdit: () -> Void
+    let onInfo: () -> Void
     let onDelete: () -> Void
     let onMoreEmoji: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            reactionRow
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+            if canInteract {
+                reactionRow
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
 
-            Divider()
+                Divider()
+            }
 
-            actionRow("Reply", systemImage: "arrowshape.turn.up.left", action: onReply)
-            Divider().padding(.leading, 46)
+            if canInteract {
+                actionRow("Reply", systemImage: "arrowshape.turn.up.left", action: onReply)
+                Divider().padding(.leading, 46)
+            }
             actionRow("Copy", systemImage: "doc.on.doc", action: onCopy)
+            if canForward {
+                Divider().padding(.leading, 46)
+                actionRow("Forward", systemImage: "arrowshape.turn.up.right", action: onForward)
+            }
+            if canEdit {
+                Divider().padding(.leading, 46)
+                actionRow("Edit", systemImage: "pencil", action: onEdit)
+            }
+            Divider().padding(.leading, 46)
+            actionRow("Message info", systemImage: "info.circle", action: onInfo)
 
-            if isMine {
+            if isMine && canInteract {
                 Divider().padding(.leading, 46)
                 actionRow("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             }

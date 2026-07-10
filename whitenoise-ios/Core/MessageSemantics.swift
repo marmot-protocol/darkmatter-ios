@@ -5,7 +5,7 @@ import MarmotKit
 /// semantic shapes the UI cares about.
 ///
 /// Inner MLS messages are unsigned Nostr events: the FFI record carries the
-/// Nostr `kind` (9 chat, 7 reaction, 5 delete, 1200 stream-start) and the raw
+/// Nostr `kind` (9 chat, 7 reaction, 5 delete, 1009 edit, 1200 stream-start) and the raw
 /// `tags`. Host apps branch on those instead of a fixed payload enum — this
 /// type is that branch, kept in one place so the timeline, chat-list preview,
 /// and bubble all classify a record identically.
@@ -17,6 +17,7 @@ nonisolated enum MessageSemantics {
     static let kindDelete: UInt64 = 5
     static let kindReaction: UInt64 = 7
     static let kindChat: UInt64 = 9
+    static let kindEdit: UInt64 = 1009
     static let kindAgentStreamStart: UInt64 = 1200
     static let kindAgentActivity: UInt64 = 1201
     static let kindAgentOperation: UInt64 = 1202
@@ -56,6 +57,8 @@ nonisolated enum MessageSemantics {
         case reaction(targetMessageId: String)
         /// A kind-5 delete tombstoning the `e`-tag target.
         case delete(targetMessageId: String)
+        /// A kind-1009 replacement body for the `e`-tag target.
+        case edit(targetMessageId: String)
         /// A kind-1200 agent-stream start (opens the live QUIC preview).
         case agentStreamStart(StreamStart)
         /// Durable agent activity/status chrome; not a chat bubble.
@@ -84,6 +87,9 @@ nonisolated enum MessageSemantics {
         case kindDelete:
             guard let target = firstValue(of: eventRefTag, in: tags) else { return .unknown }
             return .delete(targetMessageId: target)
+        case kindEdit:
+            guard let target = firstValue(of: eventRefTag, in: tags) else { return .unknown }
+            return .edit(targetMessageId: target)
         case kindAgentStreamStart:
             guard let start = streamStart(from: tags) else { return .unknown }
             return .agentStreamStart(start)

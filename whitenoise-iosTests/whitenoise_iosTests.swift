@@ -2114,6 +2114,9 @@ struct LocalizationCatalogTests {
             "System",
             "Language",
             "Preferences",
+            "Draft: %@",
+            "Edit Description",
+            "Shared Media",
             "New encrypted message",
             "That QR code isn't a White Noise profile.",
             "Couldn't create chat",
@@ -4584,6 +4587,30 @@ struct ChatsListProjectionTests {
 
         #expect(item.hasUnreadMention)
         #expect(item.unreadMentionCount == 2)
+    }
+
+    @Test func draftPreviewOverridesTheLastMessageAndParticipatesInSearch() {
+        let item = ChatsListViewModel.Item(
+            row: chatListRow(
+                groupIdHex: hex("df"),
+                title: "Drafts",
+                lastMessage: chatListPreview(
+                    messageIdHex: hex("e0"),
+                    plaintext: "older message",
+                    timelineAt: 10
+                )
+            ),
+            avatarURL: nil,
+            title: "Drafts",
+            draftText: "  Follow up\nwith Alice  "
+        )
+
+        #expect(item.draftPreview == "Follow up with Alice")
+        #expect(item.searchHaystack.contains("follow up with alice"))
+        #expect(ChatRow.subtitleText(for: item, activeAccountIdHex: nil) == L10n.formatted(
+            "Draft: %@",
+            "Follow up with Alice"
+        ))
     }
 
     @MainActor
@@ -7742,6 +7769,17 @@ struct MediaComposerAvailabilityTests {
         #expect(!viewModel.canSendMediaAttachments)
     }
 
+    @Test func pendingInviteDisablesComposerAndAttachments() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "invited", pendingConfirmation: true)
+        )
+
+        #expect(viewModel.hasPendingInvite)
+        #expect(!viewModel.canSendMessages)
+        #expect(!viewModel.canSendMediaAttachments)
+    }
+
     @Test func inactiveMembershipDisablesComposerAndAttachments() throws {
         let me = hex("11")
         let other = hex("22")
@@ -7796,6 +7834,109 @@ struct MediaComposerAvailabilityTests {
         #expect(!disabled.chromeInteractive)
         #expect(disabled.controlOpacity < enabled.controlOpacity)
         #expect(disabled.tapBehavior == .showUnavailableTooltip)
+    }
+}
+
+struct ConversationInvitePresentationTests {
+    @Test func centeredPromptRequiresPendingInviteWithoutMessages() {
+        let systemOnly = [
+            TimelineItem.systemEvent(id: "created", event: .groupCreated, timestamp: 1)
+        ]
+        let withMessage = systemOnly + [TimelineItem.message(message(id: hex("91")))]
+
+        #expect(ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: true,
+            hasError: false,
+            isLoading: false,
+            timeline: []
+        ))
+        #expect(ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: true,
+            hasError: false,
+            isLoading: false,
+            timeline: systemOnly
+        ))
+        #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: true,
+            hasError: false,
+            isLoading: false,
+            timeline: withMessage
+        ))
+    }
+
+    @Test func centeredPromptDoesNotHideLoadingErrorsOrAcceptedChats() {
+        #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: true,
+            hasError: true,
+            isLoading: false,
+            timeline: []
+        ))
+        #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: true,
+            hasError: false,
+            isLoading: true,
+            timeline: []
+        ))
+        #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
+            isPending: false,
+            hasError: false,
+            isLoading: false,
+            timeline: []
+        ))
+    }
+}
+
+@MainActor
+struct ConversationInviteActionTests {
+    @Test func acceptClearsPendingStateInPlace() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let pending = group(
+            name: "invited",
+            pendingConfirmation: true,
+            welcomerAccountIdHex: hex("44")
+        )
+        let viewModel = ConversationViewModel(appState: appState, group: pending)
+        var receivedArguments: (String, String)?
+        viewModel.acceptGroupInviteForTesting = { accountRef, groupIdHex in
+            receivedArguments = (accountRef, groupIdHex)
+            return group(name: "invited", id: groupIdHex)
+        }
+
+        let updated = await viewModel.acceptInvite()
+
+        #expect(receivedArguments?.0 == "account-ref")
+        #expect(receivedArguments?.1 == pending.groupIdHex)
+        #expect(updated?.pendingConfirmation == false)
+        #expect(!viewModel.hasPendingInvite)
+        #expect(viewModel.inviteActionInFlight == nil)
+    }
+
+    @Test func declineAppliesArchivedInactiveGroup() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let pending = group(name: "invited", pendingConfirmation: true)
+        let viewModel = ConversationViewModel(appState: appState, group: pending)
+        let declined = group(
+            name: "invited",
+            id: pending.groupIdHex,
+            archived: true,
+            selfMembership: .left
+        )
+        viewModel.declineGroupInviteForTesting = { _, _ in
+            GroupInviteDeclineResultFfi(
+                group: declined,
+                summary: SendSummaryFfi(published: 1, messageIds: [])
+            )
+        }
+
+        let updated = await viewModel.declineInvite()
+
+        #expect(updated == declined)
+        #expect(viewModel.group == declined)
+        #expect(!viewModel.hasPendingInvite)
+        #expect(!viewModel.canSendMessages)
+        #expect(viewModel.inviteActionInFlight == nil)
     }
 }
 
@@ -8922,11 +9063,108 @@ struct TimelineBottomTests {
             targetMessageIdHex: "message-target",
             targetItemId: "msg-target"
         ))
-        #expect(!TimelineInitialScroll.shouldConcealContent(
+        #expect(TimelineInitialScroll.shouldConcealContent(
             hasItems: true,
             didFinishInitialPositioning: false,
             targetMessageIdHex: "message-target",
             targetItemId: nil
+        ))
+    }
+
+    @Test func missingInitialTargetLoadsHistoryBeforeFallingBack() {
+        #expect(TimelineInitialTargetPolicy.resolve(
+            targetMessageIdHex: nil,
+            targetItemId: nil,
+            hasMoreBefore: true,
+            canLoadOlder: true
+        ) == .ready)
+        #expect(TimelineInitialTargetPolicy.resolve(
+            targetMessageIdHex: "target",
+            targetItemId: "msg:target",
+            hasMoreBefore: true,
+            canLoadOlder: true
+        ) == .ready)
+        #expect(TimelineInitialTargetPolicy.resolve(
+            targetMessageIdHex: "target",
+            targetItemId: nil,
+            hasMoreBefore: true,
+            canLoadOlder: true
+        ) == .loadOlder)
+        #expect(TimelineInitialTargetPolicy.resolve(
+            targetMessageIdHex: "target",
+            targetItemId: nil,
+            hasMoreBefore: true,
+            canLoadOlder: false
+        ) == .waitForPagination)
+        #expect(TimelineInitialTargetPolicy.resolve(
+            targetMessageIdHex: "target",
+            targetItemId: nil,
+            hasMoreBefore: false,
+            canLoadOlder: false
+        ) == .fallbackToBottom)
+    }
+
+    @Test func unreadTargetPositioningRejectsAutomaticBottomScrolls() {
+        for reason in [
+            TimelineBottomScrollReason.contentGrowth,
+            .timelineChange,
+            .viewportChange,
+        ] {
+            #expect(TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
+                hasTargetMessage: true,
+                didFinishPositioning: false,
+                reason: reason
+            ))
+        }
+
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
+            hasTargetMessage: true,
+            didFinishPositioning: false,
+            reason: .buttonTap
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
+            hasTargetMessage: false,
+            didFinishPositioning: false,
+            reason: .viewportChange
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
+            hasTargetMessage: true,
+            didFinishPositioning: true,
+            reason: .contentGrowth
+        ))
+    }
+
+    @Test func viewportVisibilityIncludesPartialRowsButNotOffscreenRows() {
+        let viewport = CGRect(x: 0, y: 0, width: 320, height: 100)
+        let visible = TimelineViewportVisibility.visibleRowKeys(
+            frames: [
+                "above": CGRect(x: 0, y: -40, width: 320, height: 30),
+                "partial": CGRect(x: 0, y: -10, width: 320, height: 20),
+                "inside": CGRect(x: 0, y: 20, width: 320, height: 40),
+                "below": CGRect(x: 0, y: 101, width: 320, height: 20),
+            ],
+            viewport: viewport
+        )
+
+        #expect(visible == Set(["partial", "inside"]))
+    }
+
+    @Test func unreadDividerAppearsOnlyBeforePersistedFirstUnreadMessage() {
+        let unreadId = hex("71")
+        let unread = TimelineItem.message(message(id: unreadId, kind: MessageSemantics.kindChat))
+        let other = TimelineItem.message(message(id: hex("72"), kind: MessageSemantics.kindChat))
+
+        #expect(TimelineUnreadDivider.shouldShow(
+            before: unread,
+            firstUnreadMessageIdHex: unreadId
+        ))
+        #expect(!TimelineUnreadDivider.shouldShow(
+            before: other,
+            firstUnreadMessageIdHex: unreadId
+        ))
+        #expect(!TimelineUnreadDivider.shouldShow(
+            before: unread,
+            firstUnreadMessageIdHex: nil
         ))
     }
 
@@ -9598,7 +9836,9 @@ private func group(
     admins: [String] = [],
     avatarUrl: String? = nil,
     archived: Bool = false,
+    pendingConfirmation: Bool = false,
     selfMembership: SelfMembershipFfi = .member,
+    welcomerAccountIdHex: String? = nil,
     encryptedMedia: AppGroupEncryptedMediaComponentFfi = encryptedMediaComponent()
 ) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
@@ -9614,9 +9854,9 @@ private func group(
         avatarThumbhash: nil,
         encryptedMedia: encryptedMedia,
         archived: archived,
-        pendingConfirmation: false,
+        pendingConfirmation: pendingConfirmation,
         selfMembership: selfMembership,
-        welcomerAccountIdHex: nil,
+        welcomerAccountIdHex: welcomerAccountIdHex,
         viaWelcomeMessageIdHex: nil
     )
 }

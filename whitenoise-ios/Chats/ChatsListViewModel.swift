@@ -19,12 +19,14 @@ final class ChatsListViewModel {
         let avatarURL: URL?
         let title: String
         let previewText: String?
+        let draftPreview: String?
         let searchHaystack: String
 
         init(
             row: ChatListRowFfi,
             avatarURL: URL?,
             title: String,
+            draftText: String? = nil,
             mentionDisplayName: MarkdownMentionResolver? = nil
         ) {
             let previewText = Self.sanitizedPreview(
@@ -35,9 +37,11 @@ final class ChatsListViewModel {
             self.avatarURL = avatarURL
             self.title = title
             self.previewText = previewText
+            self.draftPreview = ConversationDraftPreview.text(from: draftText)
             self.searchHaystack = Self.makeSearchHaystack(
                 title: title,
-                previewText: previewText
+                previewText: previewText,
+                draftPreview: self.draftPreview
             )
         }
 
@@ -99,8 +103,15 @@ final class ChatsListViewModel {
             }
         }
 
-        private static func makeSearchHaystack(title: String, previewText: String?) -> String {
-            (title + " " + (previewText ?? "")).localizedLowercase
+        private static func makeSearchHaystack(
+            title: String,
+            previewText: String?,
+            draftPreview: String?
+        ) -> String {
+            [title, previewText, draftPreview]
+                .compactMap { $0 }
+                .joined(separator: " ")
+                .localizedLowercase
         }
     }
 
@@ -110,6 +121,7 @@ final class ChatsListViewModel {
     private(set) var loadError: String?
 
     private weak var appState: AppState?
+    @ObservationIgnored private let draftStore: ConversationDraftStore
     private var chatListTask: Task<Void, Never>?
     private var chatListTaskID: UUID?
     private var avatarURLTask: Task<Void, Never>?
@@ -138,6 +150,7 @@ final class ChatsListViewModel {
 
     init(appState: AppState) {
         self.appState = appState
+        self.draftStore = appState.conversationDraftStore
     }
 
     isolated deinit {
@@ -177,6 +190,8 @@ final class ChatsListViewModel {
             currentAccount = nil
             return
         }
+        await draftStore.loadIfNeeded()
+        guard !Task.isCancelled else { return }
         guard let appState, appState.canUseRuntimeForForegroundWork else { return }
         currentAccount = accountRef
         isLoading = true
@@ -268,6 +283,7 @@ final class ChatsListViewModel {
               let appState,
               appState.canUseRuntimeForForegroundWork
         else { return }
+        await draftStore.loadIfNeeded()
         do {
             let snapshot = try await appState.currentMarmotClient().chatList(
                 accountRef: accountRef,
@@ -288,6 +304,15 @@ final class ChatsListViewModel {
     /// published `items`/`archivedItems` arrays in `body`.
     func item(groupIdHex: String) -> Item? {
         itemByGroupId[groupIdHex]
+    }
+
+    /// Forwarding should use the same live, enriched projection as the chat
+    /// list so newly-arrived rows and resolved direct-chat names are preserved.
+    func forwardDestinations(excludingGroupIdHex currentGroupIdHex: String) -> [MessageForwardDestination] {
+        MessageForwardDestinationPresentation.destinations(
+            from: Array(itemByGroupId.values),
+            excludingGroupIdHex: currentGroupIdHex
+        )
     }
 
     func applyChatListSnapshot(_ snapshot: [ChatListRowFfi]) {
@@ -381,6 +406,9 @@ final class ChatsListViewModel {
         groupDetailsCache[groupIdHex] = nil
         groupDetailsLoadedGroupIds.remove(groupIdHex)
         pendingGroupDetailsRefreshGroupIds.remove(groupIdHex)
+        if let currentAccount {
+            draftStore.removeDraft(accountRef: currentAccount, groupIdHex: groupIdHex)
+        }
         if hadPublishedRow {
             publishItems()
         }
@@ -388,6 +416,9 @@ final class ChatsListViewModel {
 
     func markGroupLeft(groupIdHex: String) {
         guard var row = rowByGroupId[groupIdHex] else { return }
+        if let currentAccount {
+            draftStore.removeDraft(accountRef: currentAccount, groupIdHex: groupIdHex)
+        }
         row.selfMembership = .left
         row.pendingConfirmation = false
         if storeRow(row) {
@@ -470,10 +501,14 @@ final class ChatsListViewModel {
 
     private func makeItem(for row: ChatListRowFfi) -> Item {
         let display = display(for: row, details: groupDetailsCache[row.groupIdHex])
+        let draftAccountRef = currentAccount ?? appState?.activeAccountRef
         return Item(
             row: row,
             avatarURL: display.avatarURL,
             title: display.title,
+            draftText: draftAccountRef.flatMap {
+                draftStore.draft(accountRef: $0, groupIdHex: row.groupIdHex)
+            },
             mentionDisplayName: { [weak appState] entity in
                 #if DEBUG
                 if let name = self.mentionDisplayNameForTesting?(entity) {

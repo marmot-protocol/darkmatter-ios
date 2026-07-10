@@ -3,6 +3,11 @@ import Observation
 import MarmotKit
 import os
 
+enum ConversationInviteAction: Equatable {
+    case accepting
+    case declining
+}
+
 enum AgentStreamWatchAdmission {
     static func canStart(
         streamIdHex: String?,
@@ -62,6 +67,54 @@ final class ConversationViewModel {
         var id: String { emoji }
     }
 
+    /// Sender-level reaction data for one message. The bubble uses `tallies`,
+    /// while the reaction details sheet groups the same data by user. Keeping
+    /// both projections on this one model prevents optimistic react/un-react
+    /// state from disagreeing between the bubble and the sheet.
+    nonisolated struct ReactionDetails: Hashable {
+        struct EmojiGroup: Identifiable, Hashable {
+            let emoji: String
+            let senders: [String]
+            let mine: Bool
+
+            var id: String { emoji }
+            var count: Int { senders.count }
+        }
+
+        struct User: Identifiable, Hashable {
+            let sender: String
+            let emojis: [String]
+
+            var id: String { sender }
+        }
+
+        let groups: [EmojiGroup]
+
+        var tallies: [ReactionTally] {
+            groups.map { group in
+                ReactionTally(emoji: group.emoji, count: group.count, mine: group.mine)
+            }
+        }
+
+        var totalReactionCount: Int {
+            groups.reduce(0) { $0 + $1.count }
+        }
+
+        func users(filteredBy emoji: String?) -> [User] {
+            var emojisBySender: [String: [String]] = [:]
+
+            for group in groups where emoji == nil || group.emoji == emoji {
+                for sender in group.senders {
+                    emojisBySender[sender, default: []].append(group.emoji)
+                }
+            }
+
+            return emojisBySender
+                .map { User(sender: $0.key, emojis: $0.value) }
+                .sorted { $0.sender < $1.sender }
+        }
+    }
+
     /// The merged timeline, mirror, overlays, projection caches, and rebuild
     /// engine. The view model drives it (feeds pages, hands it optimistic rows)
     /// and reads projections back out. See `TimelineStore`.
@@ -78,6 +131,9 @@ final class ConversationViewModel {
     var hasMoreBefore: Bool { timelineStore.hasMoreBefore }
     var hasMoreAfter: Bool { timelineStore.hasMoreAfter }
     var isLoading: Bool { timelineStore.isLoading }
+    var canLoadOlderTimelinePage: Bool {
+        hasMoreBefore && !isLoadingOlder && timelineSubscription != nil
+    }
 
     private(set) var group: AppGroupRecordFfi
     private(set) var members: [AppGroupMemberRecordFfi] = []
@@ -88,6 +144,7 @@ final class ConversationViewModel {
     private(set) var isLoadingNewer = false
     private(set) var error: String?
     private(set) var isMediaRecordsRefreshPending = false
+    private(set) var inviteActionInFlight: ConversationInviteAction?
 
     // Composer surface forwarded from `composer`.
     var sendInFlight: Bool { composer.sendInFlight }
@@ -149,6 +206,8 @@ final class ConversationViewModel {
     var finalizedStreamIdCountForTesting: Int { streamWatcher.finalizedStreamIdCountForTesting }
     var markedReadMessageIdsForTesting: Set<String> { readMarker.markedReadMessageIdsForTesting }
     var mediaItemProjectionBuildCountForTesting: Int { timelineStore.mediaProjections.buildCountForTesting }
+    @ObservationIgnored var acceptGroupInviteForTesting: (@MainActor (String, String) async throws -> AppGroupRecordFfi)?
+    @ObservationIgnored var declineGroupInviteForTesting: (@MainActor (String, String) async throws -> GroupInviteDeclineResultFfi)?
 
     func insertMarkedReadMessageIdsForTesting(_ messageIds: Set<String>) {
         readMarker.insertMarkedReadMessageIdsForTesting(messageIds)
@@ -281,7 +340,8 @@ final class ConversationViewModel {
     }
 
     var canSendMessages: Bool {
-        GroupManagementPresentation.isActiveMember(
+        guard !group.pendingConfirmation else { return false }
+        return GroupManagementPresentation.isActiveMember(
             state: managementState,
             members: members,
             groupMemberDetails: groupMemberDetails,
@@ -299,6 +359,17 @@ final class ConversationViewModel {
             && group.encryptedMedia.required
             && group.encryptedMedia.mediaFormat == MessageSemantics.encryptedMediaVersion
             && group.encryptedMedia.allowedLocatorKinds.contains("blossom-v1")
+    }
+
+    var hasPendingInvite: Bool {
+        group.pendingConfirmation
+    }
+
+    var inviterAccountIdHex: String? {
+        guard let value = group.welcomerAccountIdHex?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty
+        else { return nil }
+        return value
     }
 
     func isAdmin(_ member: AppGroupMemberRecordFfi) -> Bool {
@@ -333,6 +404,10 @@ final class ConversationViewModel {
         timelineStore.reactions(for: messageIdHex)
     }
 
+    func reactionDetails(for messageIdHex: String) -> ReactionDetails {
+        timelineStore.reactionDetails(for: messageIdHex)
+    }
+
     /// All aggregated reaction tallies (full dict). Used by reaction tests.
     var reactions: [String: [ReactionTally]] { timelineStore.reactions }
 
@@ -365,6 +440,10 @@ final class ConversationViewModel {
 
     func isDeleted(_ messageIdHex: String) -> Bool {
         timelineStore.isDeleted(messageIdHex)
+    }
+
+    func isEdited(_ messageIdHex: String) -> Bool {
+        timelineStore.isEdited(messageIdHex)
     }
 
     func mediaItems(for item: TimelineItem) -> [MessageMediaAttachment] {
@@ -506,8 +585,13 @@ final class ConversationViewModel {
         bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
     }
 
-    func markReadIfVisible(_ record: AppMessageRecordFfi) async {
-        await readMarker.markReadIfVisible(record, isDeleted: isDeleted(record.messageIdHex))
+    func markVisibleMessagesRead(_ records: [AppMessageRecordFfi]) {
+        for record in records {
+            readMarker.markReadIfVisible(
+                record,
+                isDeleted: isDeleted(record.messageIdHex)
+            )
+        }
     }
 
     private func pruneMarkedReadMessageIds(force: Bool = false) {
@@ -1226,6 +1310,26 @@ final class ConversationViewModel {
         deletedMessageIds: Set<String>,
         me: String
     ) -> [ReactionTally] {
+        reactionDetails(
+            for: target,
+            summary: summary,
+            optimisticRemovals: optimisticRemovals,
+            optimisticRecords: optimisticRecords,
+            deletedMessageIds: deletedMessageIds,
+            me: me
+        ).tallies
+    }
+
+    /// Sender-level counterpart to `reactionTallies`. This is the canonical
+    /// fold of Marmot's authenticated summary and the local optimistic overlay.
+    nonisolated static func reactionDetails(
+        for target: String,
+        summary: TimelineReactionSummaryFfi?,
+        optimisticRemovals: Set<ReactionRemoval>,
+        optimisticRecords: [String: AppMessageRecordFfi],
+        deletedMessageIds: Set<String>,
+        me: String
+    ) -> ReactionDetails {
         var emojis: [String: Set<String>] = [:]
 
         if let summary {
@@ -1257,14 +1361,18 @@ final class ConversationViewModel {
             emojis[emoji] = senders
         }
 
-        var tallies: [ReactionTally] = []
+        var groups: [ReactionDetails.EmojiGroup] = []
         for (emoji, senders) in emojis where !senders.isEmpty {
-            tallies.append(ReactionTally(emoji: emoji, count: senders.count, mine: senders.contains(me)))
+            groups.append(ReactionDetails.EmojiGroup(
+                emoji: emoji,
+                senders: senders.sorted(),
+                mine: senders.contains(me)
+            ))
         }
-        tallies.sort { lhs, rhs in
+        groups.sort { lhs, rhs in
             lhs.count == rhs.count ? lhs.emoji < rhs.emoji : lhs.count > rhs.count
         }
-        return tallies
+        return ReactionDetails(groups: groups)
     }
 
     private func applyGroupUpdate(_ record: AppGroupRecordFfi) async {
@@ -1492,12 +1600,179 @@ final class ConversationViewModel {
 
     // MARK: - Send
 
+    func acceptInvite() async -> AppGroupRecordFfi? {
+        guard hasPendingInvite,
+              inviteActionInFlight == nil,
+              let appState,
+              let accountRef = appState.activeAccountRef
+        else { return nil }
+        inviteActionInFlight = .accepting
+        defer { inviteActionInFlight = nil }
+        do {
+            let updated: AppGroupRecordFfi
+#if DEBUG
+            if let acceptGroupInviteForTesting {
+                updated = try await acceptGroupInviteForTesting(accountRef, group.groupIdHex)
+            } else {
+                let client = try appState.currentMarmotClient()
+                updated = try await client.acceptGroupInvite(
+                    accountRef: accountRef,
+                    groupIdHex: group.groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            updated = try await client.acceptGroupInvite(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex
+            )
+#endif
+            applyGroupRecord(updated)
+            Haptics.success()
+            return updated
+        } catch {
+            Haptics.error()
+            appState.present(.error(
+                L10n.string("Couldn't accept invitation"),
+                message: error.localizedDescription
+            ))
+            return nil
+        }
+    }
+
+    func declineInvite() async -> AppGroupRecordFfi? {
+        guard hasPendingInvite,
+              inviteActionInFlight == nil,
+              let appState,
+              let accountRef = appState.activeAccountRef
+        else { return nil }
+        inviteActionInFlight = .declining
+        defer { inviteActionInFlight = nil }
+        do {
+            let result: GroupInviteDeclineResultFfi
+#if DEBUG
+            if let declineGroupInviteForTesting {
+                result = try await declineGroupInviteForTesting(accountRef, group.groupIdHex)
+            } else {
+                let client = try appState.currentMarmotClient()
+                result = try await client.declineGroupInvite(
+                    accountRef: accountRef,
+                    groupIdHex: group.groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            result = try await client.declineGroupInvite(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex
+            )
+#endif
+            applyGroupRecord(result.group)
+            Haptics.warning()
+            return result.group
+        } catch {
+            Haptics.error()
+            appState.present(.error(
+                L10n.string("Couldn't decline invitation"),
+                message: error.localizedDescription
+            ))
+            return nil
+        }
+    }
+
     func send(_ text: String) async {
         await composer.send(canonicalizedMentionText(text))
     }
 
     func sendMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
         await composer.sendMedia(attachments, caption: canonicalizedMentionText(caption))
+    }
+
+    func forwardDestinations() async throws -> [MessageForwardDestination] {
+        guard let appState, let accountRef = appState.activeAccountRef else { return [] }
+        let client = try appState.currentMarmotClient()
+        let rows = try await client.chatList(accountRef: accountRef, includeArchived: true)
+        return MessageForwardDestinationPresentation.destinations(
+            from: rows,
+            excludingGroupIdHex: group.groupIdHex
+        )
+    }
+
+    /// Sends exact plaintext to each selected group as a fresh, unattributed
+    /// message. Fan-out is sequential so one failed destination does not race
+    /// or cancel successful sends to the others.
+    func forwardMessage(
+        _ message: AppMessageRecordFfi,
+        to groupIds: Set<String>
+    ) async -> MessageForwardResult {
+        let destinations = groupIds.filter { !$0.isEmpty && $0 != group.groupIdHex }
+        guard let text = MessageForwardingPolicy.forwardableText(for: message),
+              !destinations.isEmpty,
+              let appState,
+              let accountRef = appState.activeAccountRef,
+              let client = try? appState.currentMarmotClient()
+        else {
+            return MessageForwardResult(successfulGroupIds: [], failedGroupIds: Set(destinations))
+        }
+
+        var successful = Set<String>()
+        var failed = Set<String>()
+        for destination in destinations {
+            do {
+                _ = try await client.sendText(
+                    accountRef: accountRef,
+                    groupIdHex: destination,
+                    text: text
+                )
+                successful.insert(destination)
+            } catch {
+                failed.insert(destination)
+            }
+        }
+        if failed.isEmpty {
+            Haptics.tap()
+        } else {
+            Haptics.error()
+        }
+        return MessageForwardResult(successfulGroupIds: successful, failedGroupIds: failed)
+    }
+
+    func editMessage(_ message: AppMessageRecordFfi, content: String) async -> Bool {
+        guard let normalized = MessageEditingPolicy.normalizedContent(content),
+              MessageEditingPolicy.canEdit(
+                message,
+                isDeleted: isDeleted(message.messageIdHex),
+                canSendMessages: canSendMessages
+              ),
+              let appState,
+              let accountRef = appState.activeAccountRef
+        else { return false }
+
+        let outgoing = Self.cappedOutgoingText(canonicalizedMentionText(normalized))
+        guard outgoing != message.plaintext else { return true }
+
+        let contentTokens = await appState.parseMarkdown(text: outgoing)
+        timelineStore.applyOptimisticEdit(
+            to: message,
+            plaintext: outgoing,
+            contentTokens: contentTokens
+        )
+        do {
+            let client = try appState.currentMarmotClient()
+            _ = try await client.editMessage(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex,
+                targetMessageId: message.messageIdHex,
+                content: outgoing
+            )
+            Haptics.tap()
+            return true
+        } catch {
+            timelineStore.rollbackOptimisticEdit(messageIdHex: message.messageIdHex)
+            Haptics.error()
+            appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
+            return false
+        }
     }
 
     private func canonicalizedMentionText(_ text: String) -> String {
@@ -1521,7 +1796,8 @@ final class ConversationViewModel {
     /// Tombstone a message we are allowed to delete. Optimistically marks it
     /// deleted, then publishes the delete payload (reverting on failure).
     func deleteMessage(_ message: AppMessageRecordFfi) async {
-        guard let appState, let accountRef = appState.activeAccountRef,
+        guard canSendMessages,
+              let appState, let accountRef = appState.activeAccountRef,
               !message.messageIdHex.isEmpty,
               Self.canDeleteMessage(message, myAccountId: myAccountId, isSelfAdmin: isSelfAdmin)
         else { return }
@@ -1562,7 +1838,8 @@ final class ConversationViewModel {
     }
 
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {
-        guard let appState, let accountRef = appState.activeAccountRef,
+        guard canSendMessages,
+              let appState, let accountRef = appState.activeAccountRef,
               !message.messageIdHex.isEmpty else { return }
         let me = appState.activeAccount?.accountIdHex ?? ""
         let alreadyMine = reactions(for: message.messageIdHex).contains { $0.emoji == emoji && $0.mine }
