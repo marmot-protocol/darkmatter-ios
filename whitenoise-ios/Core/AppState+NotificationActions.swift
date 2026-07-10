@@ -15,7 +15,7 @@ extension AppState {
             await runNotificationAction(
                 route: route,
                 failureTitle: L10n.string("Reply not sent")
-            ) { client in
+            ) { [notifications] client in
                 _ = try await client.sendText(
                     accountRef: route.accountRef,
                     groupIdHex: route.groupIdHex,
@@ -36,6 +36,12 @@ extension AppState {
                         messageIdHexes: [messageIdHex]
                     )
                 }
+                // The system only dismisses the acted-on notification; the
+                // conversation's siblings are read now too.
+                await notifications.removeDeliveredConversationNotifications(
+                    accountRef: route.accountRef,
+                    groupIdHex: route.groupIdHex
+                )
                 await self.refreshAccountUnreadSummaries()
             }
         case .markRead(let route, let messageIdHex):
