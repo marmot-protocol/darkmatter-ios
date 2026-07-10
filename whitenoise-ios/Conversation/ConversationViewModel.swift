@@ -918,6 +918,24 @@ final class ConversationViewModel {
         }
     }
 
+    /// Expiration prunes delete records locally without a subscription
+    /// broadcast, so the newest page is reapplied with `.window` placement:
+    /// unlike a tail refresh, that path evicts loaded records that no longer
+    /// exist in storage when the page boundaries confirm the loss.
+    func refreshTimelineWindowAfterLocalPrune() async {
+        guard let request = timelineTailRefreshRequest() else { return }
+        do {
+            let page = try await Self.timelineTailPage(for: request)
+            guard !Task.isCancelled,
+                  appState?.activeAccountRef == request.accountRef,
+                  group.groupIdHex == request.groupIdHex
+            else { return }
+            applyTimelinePage(page, placement: .window)
+        } catch {
+            // Timeline subscription remains the primary live path.
+        }
+    }
+
     private func scheduleTimelineTailRefresh() {
         guard let request = timelineTailRefreshRequest() else {
             cancelTimelineTailRefresh()

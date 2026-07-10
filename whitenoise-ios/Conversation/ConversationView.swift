@@ -773,6 +773,10 @@ struct ConversationView: View {
             .onChange(of: appState.profileRefreshGeneration) { _, _ in
                 viewModel?.refreshProfileDependentTimelineProjections()
             }
+            .onChange(of: appState.retentionSweepGeneration) { _, _ in
+                guard appState.retentionSweepPrunedGroupIds.contains(chat.groupIdHex) else { return }
+                Task { await viewModel?.refreshTimelineWindowAfterLocalPrune() }
+            }
             .onReceive(NotificationCenter.default.publisher(for: AppLanguage.didChangeNotification)) { _ in
                 viewModel?.refreshProfileDependentTimelineProjections()
             }

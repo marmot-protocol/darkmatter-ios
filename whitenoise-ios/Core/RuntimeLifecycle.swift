@@ -443,7 +443,11 @@ final class RuntimeLifecycle {
         guard ownsForegroundActivation(id: activationID) else { return }
         appState?.scheduleNativePushRegistrationIfEnabled()
         appState?.resumeProfileFetchQueueIfNeeded()
+<<<<<<< HEAD
         appState?.scheduleAccountUnreadSummaryRefresh()
+=======
+        appState?.startRetentionSweeps()
+>>>>>>> 6f2dd58 (Add disappearing message timer editing and expiration sweep)
     }
 
     private func ownsForegroundActivation(id: UUID) -> Bool {
@@ -549,6 +553,7 @@ final class RuntimeLifecycle {
 
         await foregroundTask?.value
         await appState?.cancelNativePushRegistrationTask()
+        await appState?.cancelRetentionSweeps()
         await profileTask?.value
     }
 

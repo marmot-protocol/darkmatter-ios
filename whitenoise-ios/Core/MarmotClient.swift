@@ -429,6 +429,18 @@ final class MarmotClient {
         try await marmot.updateGroupAvatarUrl(accountRef: accountRef, groupIdHex: groupIdHex, url: url, dim: dim, thumbhash: thumbhash)
     }
 
+    func updateMessageRetention(accountRef: String, groupIdHex: String, disappearingMessageSecs: UInt64) async throws -> SendSummaryFfi {
+        try await marmot.updateMessageRetention(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            disappearingMessageSecs: disappearingMessageSecs
+        )
+    }
+
+    func secureDeleteExpired(accountRef: String, groupIdHex: String) async throws -> SecureDeleteExpiredResultFfi {
+        try await marmot.secureDeleteExpired(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
     func leaveGroup(accountRef: String, groupIdHex: String) async throws -> SendSummaryFfi {
         try await marmot.leaveGroup(accountRef: accountRef, groupIdHex: groupIdHex)
     }
@@ -521,6 +533,21 @@ final class MarmotClient {
 
     func subscribeChatList(accountRef: String, includeArchived: Bool) async throws -> ChatListSubscription {
         try await marmot.subscribeChatList(accountRef: accountRef, includeArchived: includeArchived)
+    }
+
+    func subscribeChats(accountRef: String, includeArchived: Bool) async throws -> ChatsSubscription {
+        try await marmot.subscribeChats(accountRef: accountRef, includeArchived: includeArchived)
+    }
+
+    /// Materializes a chats subscription snapshot off the main actor.
+    /// `ChatsSubscription.snapshot()` is a synchronous UniFFI call backed by
+    /// local Marmot storage.
+    func chatsSubscriptionSnapshot(
+        _ subscription: ChatsSubscription
+    ) async -> [AppGroupRecordFfi] {
+        await Task.detached(priority: .utility) { [subscription] in
+            subscription.snapshot()
+        }.value
     }
 
     func subscribeTimelineMessages(accountRef: String, groupIdHex: String?, limit: UInt32?) async throws -> TimelineMessagesSubscription {

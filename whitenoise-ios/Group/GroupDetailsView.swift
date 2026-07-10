@@ -94,6 +94,15 @@ struct GroupDetailsView: View {
             }
             .appAppearance()
         }
+        .sheet(isPresented: $model.showRetentionEditor) {
+            GroupRetentionEditorSheet(
+                currentSeconds: viewModel.group.disappearingMessageSecs,
+                onSubmit: { seconds in
+                    await model.updateRetention(seconds: seconds, using: appState)
+                }
+            )
+            .appAppearance()
+        }
         .sheet(isPresented: $model.showDescriptionEditor) {
             NavigationStack {
                 Form {
@@ -335,12 +344,32 @@ struct GroupDetailsView: View {
                     .font(.system(.caption, design: .monospaced))
             }
             LabeledContent("Members", value: "\(memberCount)")
-            LabeledContent(
-                "Disappearing messages",
-                value: GroupSystemEventPresentation.retentionSettingLabel(
-                    seconds: viewModel.group.disappearingMessageSecs
+            if isAdmin {
+                Button {
+                    model.showRetentionEditor = true
+                } label: {
+                    LabeledContent("Disappearing messages") {
+                        HStack(spacing: 6) {
+                            Text(GroupSystemEventPresentation.retentionSettingLabel(
+                                seconds: viewModel.group.disappearingMessageSecs
+                            ))
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.membershipActionInFlight)
+            } else {
+                LabeledContent(
+                    "Disappearing messages",
+                    value: GroupSystemEventPresentation.retentionSettingLabel(
+                        seconds: viewModel.group.disappearingMessageSecs
+                    )
                 )
-            )
+            }
             DisclosureGroup(isExpanded: $model.showRelays) {
                 // Stable per-row identity by position. Sanitized display strings can
                 // collide (distinct raw relays sanitize to the same line), so id: \.self
