@@ -50,11 +50,15 @@ nonisolated enum MessageRetentionSweep {
                 guard !Task.isCancelled else { break }
                 // Snapshot references before the prune: the result reports
                 // ciphertext hashes, but the cache is keyed by plaintext hash
-                // and the records are gone once the engine deletes them.
-                let references = ((try? await client.listMedia(
+                // and the records are gone once the engine deletes them. A
+                // failed snapshot skips the group's prune entirely — deleting
+                // without it would orphan decrypted cache files forever; the
+                // next pass retries.
+                guard let mediaRecords = try? await client.listMedia(
                     accountRef: accountRef,
                     groupIdHex: groupIdHex
-                )) ?? []).map(\.reference)
+                ) else { continue }
+                let references = mediaRecords.map(\.reference)
                 guard let result = try? await client.secureDeleteExpired(
                     accountRef: accountRef,
                     groupIdHex: groupIdHex

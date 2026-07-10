@@ -80,7 +80,9 @@ struct GroupRetentionEditorSheet: View {
                         selection = .custom
                     }
                 } footer: {
-                    Text("Messages are deleted for everyone after the selected time.")
+                    Text(selection == .preset(0)
+                        ? "Messages are kept until you delete them."
+                        : "Messages are deleted for everyone after the selected time.")
                 }
 
                 if selection == .custom {
