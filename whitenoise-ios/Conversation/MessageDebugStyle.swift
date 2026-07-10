@@ -51,7 +51,7 @@ extension MessageSemantics {
         switch kind {
         case .chat, .reply, .media, .streamFinal:
             return true
-        case .reaction, .delete, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
+        case .reaction, .delete, .edit, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
             return false
         }
     }
@@ -76,7 +76,7 @@ extension MessageSemantics {
             return .agentChrome
         case .groupSystem:
             return .groupSystem
-        case .reaction, .delete:
+        case .reaction, .delete, .edit:
             return .control
         case .unknown:
             return .unknown
@@ -92,6 +92,7 @@ extension MessageSemantics {
         case .streamFinal: name = "stream-final"
         case .reaction: name = "reaction"
         case .delete: name = "delete"
+        case .edit: name = "edit"
         case .agentStreamStart: name = "agent-stream-start"
         case .agentActivity: name = "agent-activity"
         case .agentOperation: name = "agent-operation"
@@ -126,6 +127,8 @@ extension MessageSemantics {
             return "target: \(target)\nemoji: \(record.plaintext.isEmpty ? "(un-react)" : record.plaintext)"
         case .delete(let target):
             return "target: \(target)"
+        case .edit(let target):
+            return "target: \(target)\n\(formattedPlaintext(record.plaintext))"
         case .reply(let target):
             return "reply-to: \(target)\n\(formattedPlaintext(record.plaintext))"
         case .streamFinal(let streamId):

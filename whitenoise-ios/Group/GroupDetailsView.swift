@@ -33,6 +33,7 @@ struct GroupDetailsView: View {
     var onGroupDeleted: (String) -> Void = { _ in }
 
     @State private var model = GroupDetailsViewModel()
+    @State private var sharedMediaGallery: MessageMediaGallery?
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var memberCount: Int {
@@ -49,6 +50,7 @@ struct GroupDetailsView: View {
         model.onGroupDeleted = onGroupDeleted
         return Form {
             headerSection
+            sharedMediaSection
             membersSection
             infoSection
             groupActionsSection
@@ -92,6 +94,42 @@ struct GroupDetailsView: View {
             }
             .appAppearance()
         }
+        .sheet(isPresented: $model.showDescriptionEditor) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField(
+                            "Description",
+                            text: $model.descriptionDraft,
+                            axis: .vertical
+                        )
+                        .lineLimit(4...8)
+                    } footer: {
+                        Text("Everyone in the group will see this description. Leave it blank to remove it.")
+                    }
+                }
+                .navigationTitle("Edit Description")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { model.showDescriptionEditor = false }
+                            .disabled(model.membershipActionInFlight)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            Task {
+                                if await model.updateDescription(using: appState) {
+                                    model.showDescriptionEditor = false
+                                }
+                            }
+                        }
+                        .disabled(model.membershipActionInFlight)
+                    }
+                }
+                .interactiveDismissDisabled(model.membershipActionInFlight)
+            }
+            .appAppearance()
+        }
         .alert("Group name", isPresented: $model.showRename) {
             TextField("Group name", text: $model.renameDraft)
             Button("Save") { Task { await model.rename(using: appState) } }
@@ -103,6 +141,15 @@ struct GroupDetailsView: View {
         .fullScreenCover(item: $model.pendingConfirmation) { confirmation in
             fullScreenConfirmation(for: confirmation)
                 .appAppearance()
+        }
+        .fullScreenCover(item: $sharedMediaGallery) { gallery in
+            MessageMediaFullscreenGalleryView(
+                gallery: gallery,
+                onLoadMedia: { media in
+                    try await viewModel.data(for: media)
+                },
+                onDismiss: { sharedMediaGallery = nil }
+            )
         }
         .alert(model.actionHelp?.title ?? "", isPresented: actionHelpBinding) {
             Button("OK", role: .cancel) { model.actionHelp = nil }
@@ -131,6 +178,12 @@ struct GroupDetailsView: View {
         }
         .task(id: viewModel.groupMlsRefreshGeneration) {
             await model.refreshVisibleDebugState(using: appState)
+        }
+        .task(id: viewModel.group.groupIdHex) {
+            await model.loadSharedMedia(using: appState)
+        }
+        .refreshable {
+            await model.loadSharedMedia(using: appState, force: true)
         }
     }
 
@@ -239,8 +292,40 @@ struct GroupDetailsView: View {
                     Label(viewModel.group.avatarUrl == nil ? "Set group image" : "Edit group image",
                           systemImage: "photo")
                 }
+
+                Button {
+                    model.descriptionDraft = ContentSanitizer.multilineText(
+                        viewModel.group.description,
+                        maxLength: ContentSanitizer.maxGroupDescriptionLength
+                    ) ?? ""
+                    model.showDescriptionEditor = true
+                } label: {
+                    Label(
+                        Self.normalizedGroupDescriptionForUpdate(viewModel.group.description).isEmpty
+                            ? "Set group description"
+                            : "Edit group description",
+                        systemImage: "text.alignleft"
+                    )
+                }
             }
         }
+    }
+
+    private var sharedMediaSection: some View {
+        GroupSharedMediaSection(
+            records: model.sharedMediaRecords,
+            isLoading: model.isLoadingSharedMedia,
+            error: model.sharedMediaError,
+            onRetry: {
+                Task { await model.loadSharedMedia(using: appState, force: true) }
+            },
+            onLoadMedia: { media in
+                try await viewModel.data(for: media)
+            },
+            onOpenGallery: { gallery in
+                sharedMediaGallery = gallery
+            }
+        )
     }
 
     private var infoSection: some View {
@@ -668,6 +753,16 @@ struct GroupDetailsView: View {
     /// propagate spoofing characters to Marmot/relays (#195).
     static func validatedGroupName(_ draft: String) -> String? {
         ContentSanitizer.groupName(draft)
+    }
+
+    /// `nil` means "leave unchanged" to Marmot, while an empty string is the
+    /// explicit remove-description sentinel. Keep that distinction at the UI
+    /// boundary while still applying the shared peer-text sanitizer.
+    static func normalizedGroupDescriptionForUpdate(_ draft: String) -> String {
+        ContentSanitizer.multilineText(
+            draft,
+            maxLength: ContentSanitizer.maxGroupDescriptionLength
+        ) ?? ""
     }
 
 }

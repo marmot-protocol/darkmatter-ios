@@ -82,6 +82,10 @@ final class AppState {
         accountUnreadStore.byAccountId
     }
 
+    /// Account/group-scoped unsent composer text. The store owns protected-file
+    /// persistence and is shared by conversations and the chat-list projection.
+    @ObservationIgnored let conversationDraftStore: ConversationDraftStore
+
     /// The account whose chats / messages are currently displayed.
     /// `nil` only between bootstrap and onboarding completion. Backed by
     /// `AccountStore` (which persists it to UserDefaults).
@@ -225,6 +229,7 @@ final class AppState {
     init(
         client: MarmotClient,
         notifications: AppNotifications,
+        conversationDraftStore: ConversationDraftStore? = nil,
         suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig = AppState.defaultSuspendedRuntimeTelemetryBuildConfig
     ) {
         self.runtimeLifecycle = RuntimeLifecycle(
@@ -232,6 +237,7 @@ final class AppState {
             suspendedRuntimeTelemetryBuildConfig: suspendedRuntimeTelemetryBuildConfig
         )
         self.notifications = notifications
+        self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
         self.streamingDebugMode = UserDefaults.standard.bool(forKey: Self.streamingDebugModeKey)
         self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
@@ -485,6 +491,9 @@ final class AppState {
             return
         }
 
+        conversationDraftStore.removeDrafts(accountRef: signingOut)
+        await conversationDraftStore.flush()
+
         do {
             try await refreshAccounts()
         } catch {
@@ -657,7 +666,12 @@ final class AppState {
 
     @discardableResult
     func startRuntimeSuspension() -> Task<Void, Never> {
-        runtimeLifecycle.startRuntimeSuspension()
+        let runtimeSuspensionTask = runtimeLifecycle.startRuntimeSuspension()
+        let conversationDraftStore = conversationDraftStore
+        return Task { @MainActor in
+            await conversationDraftStore.flush()
+            await runtimeSuspensionTask.value
+        }
     }
 
     /// Cancels the AppState-side foreground maintenance for the lifecycle

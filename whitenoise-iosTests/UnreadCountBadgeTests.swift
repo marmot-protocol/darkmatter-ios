@@ -37,12 +37,7 @@ struct UnreadCountBadgeTests {
         #expect(UnreadCountBadge.label(for: 42, locale: locale) != "42")
     }
 
-    @Test func mentionBadgeShowsAtSymbolAndCapsCounts() {
-        let locale = Locale(identifier: "en_US")
-
-        #expect(MentionBadge.label(for: 0, locale: locale) == "@")
-        #expect(MentionBadge.label(for: 1, locale: locale) == "@")
-        #expect(MentionBadge.label(for: 2, locale: locale) == "@2")
-        #expect(MentionBadge.label(for: 100, locale: locale) == "@99+")
+    @Test func mentionBadgeUsesTheAtIcon() {
+        #expect(MentionBadgePresentation.systemImageName == "at")
     }
 }

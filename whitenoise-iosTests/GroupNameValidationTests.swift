@@ -38,4 +38,19 @@ struct GroupNameValidationTests {
         let oversized = NewChatSheet.normalizedGroupDescription(String(repeating: "x", count: 500))
         #expect(oversized?.count == ContentSanitizer.maxGroupDescriptionLength)
     }
+
+    @Test func groupDescriptionUpdateUsesAnEmptyStringToExplicitlyClear() {
+        #expect(GroupDetailsView.normalizedGroupDescriptionForUpdate("") == "")
+        #expect(GroupDetailsView.normalizedGroupDescriptionForUpdate(" \n\t ") == "")
+
+        let normalized = GroupDetailsView.normalizedGroupDescriptionForUpdate(
+            "  Mission\u{202E}\n\n\nnotes  "
+        )
+        #expect(normalized == "Mission\n\nnotes")
+
+        let oversized = GroupDetailsView.normalizedGroupDescriptionForUpdate(
+            String(repeating: "x", count: 500)
+        )
+        #expect(oversized.count == ContentSanitizer.maxGroupDescriptionLength)
+    }
 }

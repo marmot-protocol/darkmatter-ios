@@ -13,8 +13,10 @@ import MarmotKit
 final class GroupDetailsViewModel {
     var showAddMembers = false
     var showRename = false
+    var showDescriptionEditor = false
     var showGroupImageEditor = false
     var renameDraft = ""
+    var descriptionDraft = ""
     var actionError: String?
     var mlsState: AppGroupMlsStateFfi?
     var pushDebugInfo: GroupPushDebugInfoFfi?
@@ -27,6 +29,10 @@ final class GroupDetailsViewModel {
     var transcriptExportURL: URL?
     var showTranscriptShareSheet = false
     var transcriptExportError: String?
+    var sharedMediaRecords: [MediaRecordFfi] = []
+    var isLoadingSharedMedia = false
+    var sharedMediaError: String?
+    private var didLoadSharedMedia = false
 
     // Bound by the view at the top of `body` (both @ObservationIgnored, so the
     // assignment never triggers a re-render). `conversation` is therefore set
@@ -38,7 +44,9 @@ final class GroupDetailsViewModel {
 #if DEBUG
     @ObservationIgnored var setGroupArchivedForTesting: (@MainActor (String, String, Bool) async throws -> AppGroupRecordFfi)?
     @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var updateGroupDescriptionForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupAvatarUrlForTesting: (@MainActor (String, String, String?) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var listMediaForTesting: (@MainActor (String, String) async throws -> [MediaRecordFfi])?
     @ObservationIgnored var leaveGroupForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var deleteGroupLocalForTesting: (@MainActor (String, String) async throws -> Bool)?
 #endif
@@ -202,6 +210,107 @@ final class GroupDetailsViewModel {
             Haptics.error()
             actionError = error.localizedDescription
             appState.present(.error(L10n.string("Couldn't rename group"), message: error.localizedDescription))
+        }
+    }
+
+    @discardableResult
+    func updateDescription(using appState: AppState) async -> Bool {
+        guard let conversation, let accountRef = appState.activeAccountRef else { return false }
+        let description = GroupDetailsView.normalizedGroupDescriptionForUpdate(descriptionDraft)
+        let currentDescription = GroupDetailsView.normalizedGroupDescriptionForUpdate(
+            conversation.group.description
+        )
+        guard description != currentDescription else { return true }
+        guard !membershipActionInFlight else { return false }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
+
+        do {
+            appState.present(.warning(
+                L10n.string("Updating group description…"),
+                message: L10n.string("Publishing group update.")
+            ))
+            let summary: SendSummaryFfi
+#if DEBUG
+            if let updateGroupDescriptionForTesting {
+                summary = try await updateGroupDescriptionForTesting(
+                    accountRef,
+                    conversation.group.groupIdHex,
+                    description
+                )
+            } else {
+                let client = try appState.currentMarmotClient()
+                summary = try await client.updateGroupProfile(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex,
+                    name: nil,
+                    description: description
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            summary = try await client.updateGroupProfile(
+                accountRef: accountRef,
+                groupIdHex: conversation.group.groupIdHex,
+                name: nil,
+                description: description
+            )
+#endif
+            await refreshGroupManagementAndNotify()
+            await refreshVisibleDebugState(using: appState)
+            Haptics.success()
+            appState.present(.success(
+                description.isEmpty
+                    ? L10n.string("Group description removed")
+                    : L10n.string("Group description updated"),
+                message: publishMessage(for: summary)
+            ))
+            return true
+        } catch {
+            await refreshAfterFailedMutation(using: appState)
+            Haptics.error()
+            actionError = error.localizedDescription
+            appState.present(.error(
+                L10n.string("Couldn't update group description"),
+                message: error.localizedDescription
+            ))
+            return false
+        }
+    }
+
+    func loadSharedMedia(using appState: AppState, force: Bool = false) async {
+        guard let conversation, let accountRef = appState.activeAccountRef else { return }
+        guard !isLoadingSharedMedia, force || !didLoadSharedMedia else { return }
+        isLoadingSharedMedia = true
+        sharedMediaError = nil
+        defer { isLoadingSharedMedia = false }
+
+        do {
+            let records: [MediaRecordFfi]
+#if DEBUG
+            if let listMediaForTesting {
+                records = try await listMediaForTesting(accountRef, conversation.group.groupIdHex)
+            } else {
+                let client = try appState.currentMarmotClient()
+                records = try await client.listMedia(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            records = try await client.listMedia(
+                accountRef: accountRef,
+                groupIdHex: conversation.group.groupIdHex
+            )
+#endif
+            try Task.checkCancellation()
+            sharedMediaRecords = records
+            didLoadSharedMedia = true
+        } catch is CancellationError {
+            return
+        } catch {
+            sharedMediaError = L10n.string("Couldn't load shared media.")
         }
     }
 

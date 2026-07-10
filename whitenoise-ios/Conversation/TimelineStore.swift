@@ -5,8 +5,8 @@ import MarmotKit
 
 /// Owns the conversation's merged timeline: the durable message mirror, the
 /// optimistic overlays (pending sends, session system events, stream/debug
-/// rows), the four row-display projection caches (markdown / media / reaction /
-/// deleted), pagination edges, and the rebuild engine that folds them into the
+/// rows), the row-display projection caches (markdown / media / reaction /
+/// deleted / edit), pagination edges, and the rebuild engine that folds them into the
 /// published `timeline`.
 ///
 /// Carved out of `ConversationViewModel` (Phase 5b core). The view model keeps
@@ -91,6 +91,7 @@ final class TimelineStore {
     @ObservationIgnored let mediaProjections = ConversationMediaProjectionCache()
     @ObservationIgnored let reactionProjections = ConversationReactionProjectionCache()
     @ObservationIgnored let deletedProjections = ConversationDeletedMessageProjection()
+    @ObservationIgnored let editProjections = ConversationEditProjectionCache()
     @ObservationIgnored private var timelineSignature: [TimelineItemSignature] = []
 
     @ObservationIgnored private weak var appState: AppState?
@@ -223,6 +224,11 @@ final class TimelineStore {
         return reactionProjections.tallies(forMessageId: messageIdHex)
     }
 
+    func reactionDetails(for messageIdHex: String) -> ConversationViewModel.ReactionDetails {
+        _ = timelineProjectionGeneration
+        return reactionProjections.details(forMessageId: messageIdHex)
+    }
+
     func markdownDisplayBlocks(for item: TimelineItem) -> [MarkdownDisplayBlock]? {
         _ = timelineProjectionGeneration
         return markdownProjections.blocks(for: item)
@@ -230,7 +236,7 @@ final class TimelineStore {
 
     func record(for messageIdHex: String) -> AppMessageRecordFfi? {
         _ = timelineProjectionGeneration
-        return messageById[messageIdHex]
+        return messageById[messageIdHex].map(editProjections.displayRecord(for:))
     }
 
     /// The quoted preview (sender name + text) for a reply bubble, if resolvable.
@@ -265,9 +271,10 @@ final class TimelineStore {
             replyPreviewDisplayCache[record.messageIdHex] = ReplyPreviewDisplayCacheEntry(key: key, value: value)
             return value
         }
-        guard let target = messageById[targetId] else {
+        guard let storedTarget = messageById[targetId] else {
             return nil
         }
+        let target = editProjections.displayRecord(for: storedTarget)
         let key = ReplyPreviewDisplayCacheKey(
             messageIdHex: record.messageIdHex,
             targetId: targetId,
@@ -292,6 +299,12 @@ final class TimelineStore {
     func isDeleted(_ messageIdHex: String) -> Bool {
         _ = timelineProjectionGeneration
         return deletedProjections.contains(messageIdHex)
+    }
+
+    func isEdited(_ messageIdHex: String) -> Bool {
+        _ = timelineProjectionGeneration
+        guard let record = messageById[messageIdHex] else { return false }
+        return editProjections.isEdited(record)
     }
 
     func mediaItems(for item: TimelineItem) -> [MessageMediaAttachment] {
@@ -478,6 +491,11 @@ final class TimelineStore {
         let appRecord = ConversationViewModel.appMessageRecord(from: record)
         guard !appRecord.messageIdHex.isEmpty else { return false }
         let semantics = MessageSemantics.classify(appRecord)
+        let affectedEditTargets = editProjections.setRecord(
+            appRecord,
+            invalidated: record.invalidationStatus != nil,
+            deleted: record.deleted
+        )
 
         projectionChanged = true
         replyPreviewDisplayCache[appRecord.messageIdHex] = nil
@@ -521,6 +539,11 @@ final class TimelineStore {
             } else {
                 projectionChanged = removeTimelineItem(id: "msg:\(appRecord.messageIdHex)") || projectionChanged
             }
+            for targetMessageIdHex in affectedEditTargets where targetMessageIdHex != appRecord.messageIdHex {
+                if let targetItem = visibleTimelineItem(forMessageId: targetMessageIdHex) {
+                    projectionChanged = upsertTimelineItem(targetItem) || projectionChanged
+                }
+            }
         }
         streamWatcher?.dropMatchingStreamPreviewIfNeeded(for: appRecord, semantics: semantics, trigger: trigger)
         streamWatcher?.watchStartIfNeeded(appRecord, trigger: trigger)
@@ -530,6 +553,7 @@ final class TimelineStore {
     @discardableResult
     func removeTimelineRecord(messageIdHex: String, updateTimeline: Bool = true) -> Bool {
         let existed = messageById[messageIdHex] != nil
+        let affectedEditTargets = editProjections.removeRecord(messageIdHex: messageIdHex)
         messageById[messageIdHex] = nil
         messageStatusById[messageIdHex] = nil
         confirmedPendingTimelineRecordIds.remove(messageIdHex)
@@ -543,9 +567,16 @@ final class TimelineStore {
         deletedProjections.removeProjected(forMessageId: messageIdHex)
         readMarker?.forgetMarkIfNotPending(messageIdHex)
         streamWatcher?.forgetScannedFinalized(messageIdHex)
-        let timelineChanged = updateTimeline
+        var timelineChanged = updateTimeline
             ? removeTimelineItem(id: "msg:\(messageIdHex)")
             : false
+        if updateTimeline {
+            for targetMessageIdHex in affectedEditTargets where targetMessageIdHex != messageIdHex {
+                if let targetItem = visibleTimelineItem(forMessageId: targetMessageIdHex) {
+                    timelineChanged = upsertTimelineItem(targetItem) || timelineChanged
+                }
+            }
+        }
         return existed || timelineChanged
     }
 
@@ -656,14 +687,14 @@ final class TimelineStore {
     ) -> TimelineItem? {
         switch MessageSemantics.classify(record) {
         case .chat, .reply, .media, .streamFinal:
-            return TimelineItem.message(record, status: status)
+            return TimelineItem.message(editProjections.displayRecord(for: record), status: status)
         case .agentActivity, .agentOperation:
             guard AgentEventPresentation.display(for: record) != nil else { return nil }
             return TimelineItem.message(record, status: status)
         case .groupSystem:
             guard GroupSystemEventPresentation.isDisplayable(record) else { return nil }
             return TimelineItem.message(record, status: status)
-        case .reaction, .delete, .agentStreamStart, .unknown:
+        case .reaction, .delete, .edit, .agentStreamStart, .unknown:
             guard streamingDebugEnabled else { return nil }
             return TimelineItem.message(record, status: status)
         }
@@ -921,6 +952,33 @@ final class TimelineStore {
         )
     }
 
+    // MARK: - Optimistic edits
+
+    func applyOptimisticEdit(
+        to message: AppMessageRecordFfi,
+        plaintext: String,
+        contentTokens: MarkdownDocumentFfi
+    ) {
+        editProjections.setOptimistic(
+            targetMessageIdHex: message.messageIdHex,
+            sender: message.sender,
+            plaintext: plaintext,
+            contentTokens: contentTokens
+        )
+        if let item = visibleTimelineItem(forMessageId: message.messageIdHex) {
+            _ = upsertTimelineItem(item)
+        }
+        noteProjectionChanged()
+    }
+
+    func rollbackOptimisticEdit(messageIdHex: String) {
+        editProjections.removeOptimistic(targetMessageIdHex: messageIdHex)
+        if let item = visibleTimelineItem(forMessageId: messageIdHex) {
+            _ = upsertTimelineItem(item)
+        }
+        noteProjectionChanged()
+    }
+
     // MARK: - Session system events
 
     func appendSystemEvent(_ event: SystemEvent, timestamp: UInt64) {
@@ -950,11 +1008,13 @@ final class TimelineStore {
     func resetOptimisticState() {
         let backingChanged = deletedProjections.hasOptimistic ||
             reactionProjections.hasOptimistic ||
+            editProjections.hasOptimistic ||
             !systemTimelineItems.isEmpty ||
             mediaProjections.hasPending ||
             !transientTimelineItems.isEmpty
         deletedProjections.removeAllOptimistic()
         reactionProjections.removeAllOptimistic()
+        editProjections.removeAllOptimistic()
         systemTimelineItems.removeAll()
         transientTimelineItems.removeAll()
         mediaProjections.removeAllPending()

@@ -22,7 +22,7 @@ enum MessagePreview {
     /// stream-final is a real message and previews like any other chat.
     static func isPreviewable(_ record: AppMessageRecordFfi) -> Bool {
         switch MessageSemantics.classify(record) {
-        case .reaction, .delete, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
+        case .reaction, .delete, .edit, .agentStreamStart, .agentActivity, .agentOperation, .groupSystem, .unknown:
             return false
         case .chat, .reply, .media, .streamFinal:
             return true
@@ -56,7 +56,7 @@ enum MessagePreview {
                 tokens: record.contentTokens,
                 mentionDisplayName: mentionDisplayName
             )
-        case .reaction, .delete, .agentStreamStart, .unknown:
+        case .reaction, .delete, .edit, .agentStreamStart, .unknown:
             // Not previewable/displayable text: a reaction's emoji, a delete
             // tombstone, or a kind-1200 stream-start signal must never surface
             // as message body. Mirrors `isPreviewable(_:)` so the

@@ -26,11 +26,12 @@ struct MessageBubble: View {
     let status: MessageStatus
     var debugStyle: MessageDebugStyle? = nil
     var isDeleted: Bool = false
+    var isEdited: Bool = false
     var replyPreview: (name: String, text: String)? = nil
     var mediaItems: [MessageMediaAttachment] = []
     var markdownBlocks: [MarkdownDisplayBlock]? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
-    var onTapReaction: (String) -> Void = { _ in }
+    var onShowReactionDetails: (String) -> Void = { _ in }
     var onLoadMedia: (MessageMediaAttachment) async throws -> Data = { _ in Data() }
 
     @State private var mediaGallery: MessageMediaGallery?
@@ -379,7 +380,7 @@ struct MessageBubble: View {
         HStack(spacing: 4) {
             ForEach(reactions) { tally in
                 Button {
-                    onTapReaction(tally.emoji)
+                    onShowReactionDetails(tally.emoji)
                 } label: {
                     HStack(spacing: 2) {
                         Text(ContentSanitizer.reactionEmoji(tally.emoji))
@@ -408,6 +409,10 @@ struct MessageBubble: View {
     private var metaLine: some View {
         HStack(spacing: 4) {
             Text(timeLabel)
+            if isEdited, !isDeleted {
+                Text("·")
+                Text("Edited")
+            }
             // Show the status caption for our own messages, and the live
             // "streaming" indicator regardless of side.
             if let statusLabel, isFromMe || status == .streaming {
@@ -2300,7 +2305,7 @@ nonisolated enum MessageMediaFullscreenGalleryPresentation {
     }
 }
 
-private struct MessageMediaFullscreenGalleryView: View {
+struct MessageMediaFullscreenGalleryView: View {
     let gallery: MessageMediaGallery
     let onLoadMedia: (MessageMediaAttachment) async throws -> Data
     let onDismiss: () -> Void
