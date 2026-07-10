@@ -255,6 +255,9 @@ nonisolated enum RemoteImageFetch {
     }
 }
 
+// Thread-safe: the only stored property is immutable, and URLSessionDataTask
+// documents cancel() as callable from any thread.
+// swiftlint:disable:next no_unchecked_sendable
 nonisolated private final class RemoteImageDownloadCancellation: @unchecked Sendable {
     private let task: URLSessionDataTask
 
