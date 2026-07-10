@@ -19,9 +19,11 @@ nonisolated enum MessageLinkPolicy {
     static func action(for url: URL) -> MessageLinkAction {
         guard let scheme = url.scheme?.lowercased() else { return .blocked }
         switch scheme {
-        case _ where DeepLink.isCurrentAppScheme(scheme), "nostr":
-            // DeepLink validates the payload (bech32 checksum for profiles,
-            // 32-byte hex for chats); anything that fails stays inert.
+        case _ where DeepLink.isKnownInteropScheme(scheme), "nostr":
+            // All Marmot-ecosystem schemes route in-app — generated links are
+            // canonical `marmot://`, so flavor no longer implies another
+            // install. DeepLink validates the payload (bech32 checksum for
+            // profiles, 32-byte hex for chats); anything that fails stays inert.
             switch DeepLink.parse(string: url.absoluteString) {
             case .profile(let npub):
                 return .openProfile(npub: npub)
@@ -30,8 +32,6 @@ nonisolated enum MessageLinkPolicy {
             case nil:
                 return .blocked
             }
-        case _ where DeepLink.isKnownInteropScheme(scheme):
-            return .confirmExternal(url)
         case _ where externalSchemes.contains(scheme):
             return .confirmExternal(url)
         default:
