@@ -4368,9 +4368,9 @@ struct DeepLinkTests {
     @Test func generatedURLKeepsDelimiterCharactersInsidePathComponent() {
         let profileURL = DeepLink.profile(npub: "npub?query#fragment/child").url
         let chatURL = DeepLink.chat(groupIdHex: "ABC?query#fragment/child").url
-        let expectedScheme = DeepLink.scheme
+        let expectedScheme = DeepLink.canonicalScheme
 
-        #expect(["marmot", "marmot-staging"].contains(expectedScheme))
+        #expect(expectedScheme == "marmot")
         #expect(profileURL.absoluteString == "\(expectedScheme)://profile/npub%3Fquery%23fragment%2Fchild")
         #expect(profileURL.query == nil)
         #expect(profileURL.fragment == nil)
