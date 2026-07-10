@@ -2,6 +2,16 @@ import Foundation
 import Observation
 import MarmotKit
 
+struct NotificationActionRuntimeLease {
+    let client: MarmotClient
+    let restoredFromSuspension: Bool
+}
+
+enum NotificationActionError: Error {
+    case runtimeUnavailable
+    case markReadFailed
+}
+
 /// Owns the Marmot runtime's lifecycle: the live `MarmotClient` handle, the
 /// foreground/suspension gates, the runtime generation token, bootstrap, and the
 /// background suspend / foreground resume orchestration (including the
@@ -437,6 +447,52 @@ final class RuntimeLifecycle {
 
     private func ownsForegroundActivation(id: UUID) -> Bool {
         foregroundActivationTaskID == id && isAppSceneActive && !Task.isCancelled
+    }
+
+    // MARK: - Background notification actions
+
+    /// Started runtime for a notification action (reply / mark-read), which can
+    /// arrive while the app is backgrounded and the runtime is suspended.
+    /// Reuses the suspension machinery rather than a second lifecycle: an
+    /// in-flight teardown is awaited first, and a suspended runtime is rebuilt
+    /// under the same claim/waiter gate foreground resume honors, so a racing
+    /// `resumeAfterForegroundActivation` waits for this restart instead of
+    /// building a second runtime over the same App Group store.
+    func startRuntimeForNotificationAction() async throws -> NotificationActionRuntimeLease {
+        await runtimeSuspensionTask?.value
+        await waitForRuntimeSuspensionToFinish()
+        guard phaseOwnsLiveRuntime else {
+            throw NotificationActionError.runtimeUnavailable
+        }
+        if !runtimeSuspendedForBackground, let client {
+            return NotificationActionRuntimeLease(client: client, restoredFromSuspension: false)
+        }
+        // Claim the restart before the first await so a concurrent suspension
+        // or foreground activation waits (same waiter machinery) instead of
+        // interleaving a teardown or a duplicate rebuild.
+        isRuntimeSuspending = true
+        do {
+            let restored = try runtimeClient()
+            try await restored.startRuntime()
+            noteRuntimeForegroundReadyAfterSuspension()
+            return NotificationActionRuntimeLease(client: restored, restoredFromSuspension: true)
+        } catch {
+            // Release the partial runtime like the bootstrap failure path, so a
+            // later resume rebuilds a fresh one.
+            await shutdownAndReleaseCurrentClient()
+            finishRuntimeSuspensionWait()
+            throw error
+        }
+    }
+
+    /// Re-enters the normal suspension entry point after a notification action
+    /// restarted the runtime, so the rebuilt runtime does not keep the App
+    /// Group SQLite lock while the app stays suspended (0xdead10cc). A scene
+    /// that became active meanwhile owns the runtime through the regular
+    /// foreground activation instead.
+    func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
+        guard lease.restoredFromSuspension, !isAppSceneActive else { return }
+        await startRuntimeSuspension().value
     }
 
     private func noteRuntimeForegroundReadyAfterSuspension() {

@@ -16,6 +16,9 @@ struct LocalNotificationPresentation: Equatable {
     let route: LocalNotificationRoute
     let timestamp: Date
     let userInfo: [String: String]
+    // Defaulted so display-only presentations (summaries, failure fallbacks)
+    // stay action-free without touching every construction site.
+    var categoryIdentifier: String? = nil
 }
 
 nonisolated enum LocalNotificationProjection {
@@ -54,7 +57,11 @@ nonisolated enum LocalNotificationProjection {
             body: content.body,
             route: route,
             timestamp: Date(timeIntervalSince1970: TimeInterval(update.timestampMs) / 1000),
-            userInfo: userInfo(for: route)
+            userInfo: userInfo(for: route),
+            categoryIdentifier: NotificationActionCategory.identifier(
+                trigger: update.trigger,
+                messageIdHex: update.messageIdHex
+            )
         )
     }
 
