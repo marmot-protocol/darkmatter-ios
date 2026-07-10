@@ -145,7 +145,7 @@ struct GroupDetailsView: View {
         .fullScreenCover(item: $sharedMediaGallery) { gallery in
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
-                onLoadMedia: { media in
+                onLoadMedia: ConversationMediaLoader { media in
                     try await viewModel.data(for: media)
                 },
                 onDismiss: { sharedMediaGallery = nil }
@@ -319,7 +319,7 @@ struct GroupDetailsView: View {
             onRetry: {
                 Task { await model.loadSharedMedia(using: appState, force: true) }
             },
-            onLoadMedia: { media in
+            onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
             },
             onOpenGallery: { gallery in
