@@ -219,6 +219,10 @@ final class MarmotClient {
         }.value
     }
 
+    func postAuditLogFile(path: String, endpoint: String) async throws -> AuditLogUploadResultFfi {
+        try await marmot.postAuditLogFile(path: path, endpoint: endpoint)
+    }
+
     func privacySecuritySettingsProjection() async throws -> PrivacySecuritySettingsProjection {
         try await Task.detached(priority: .utility) { [marmot] in
             try PrivacySecuritySettingsProjection(

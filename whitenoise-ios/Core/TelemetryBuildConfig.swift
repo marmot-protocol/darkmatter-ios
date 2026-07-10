@@ -23,6 +23,9 @@ struct TelemetryBuildConfig: Equatable {
     /// metrics collector are different services with different credentials, so
     /// reusing the OTLP token here would authenticate against the wrong API.
     let auditLogBearerToken: String?
+    /// Upload endpoint for the forensic audit-log tracker. When absent the
+    /// engine's tracker uploader has nowhere to post, so uploads stay off.
+    let auditLogEndpoint: String?
     let deploymentEnvironment: String
     let serviceVersion: String
     let osVersion: String
@@ -66,6 +69,15 @@ struct TelemetryBuildConfig: Equatable {
                 ],
                 environment: environment
             ),
+            auditLogEndpoint: stringValue(
+                for: "WhiteNoiseAuditLogEndpoint",
+                in: info,
+                environmentKeys: [
+                    "WHITENOISE_AUDIT_LOG_ENDPOINT",
+                    "AUDIT_LOG_ENDPOINT_WHITENOISE_IOS"
+                ],
+                environment: environment
+            ),
             deploymentEnvironment: deploymentEnvironment(
                 from: stringValue(
                     for: "WhiteNoiseTelemetryEnvironment",
@@ -98,7 +110,7 @@ struct TelemetryBuildConfig: Equatable {
 
     func auditTrackerConfig() -> AuditLogTrackerConfigFfi {
         AuditLogTrackerConfigFfi(
-            endpoint: nil,
+            endpoint: auditLogEndpoint,
             authorizationBearerToken: auditLogBearerToken,
             source: AuditLogUploadSourceFfi(
                 deviceLabel: deviceModelIdentifier,

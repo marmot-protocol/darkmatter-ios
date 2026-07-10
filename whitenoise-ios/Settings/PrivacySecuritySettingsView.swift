@@ -4,6 +4,10 @@ struct PrivacySecuritySettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var model = PrivacySecuritySettingsViewModel()
 
+    private var auditUploadEndpoint: String? {
+        appState.telemetryBuildConfig.auditLogEndpoint
+    }
+
     var body: some View {
         @Bindable var model = model
         return Form {
@@ -97,6 +101,17 @@ struct PrivacySecuritySettingsView: View {
                 } else {
                     ForEach(model.auditFileRows) { row in
                         auditFileRow(row)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if auditUploadEndpoint != nil {
+                                    Button {
+                                        model.pendingSendRow = row
+                                    } label: {
+                                        Label(L10n.string("Send Audit Log"), systemImage: "arrow.up.circle")
+                                    }
+                                    .tint(.blue)
+                                    .disabled(model.auditSendingPath != nil)
+                                }
+                            }
                     }
 
                     Button(role: .destructive) {
@@ -109,6 +124,10 @@ struct PrivacySecuritySettingsView: View {
 
                 if model.auditDeleting {
                     ProgressView("Deleting audit logs")
+                }
+
+                if model.auditSendingPath != nil {
+                    ProgressView(L10n.string("Send Audit Log"))
                 }
             } header: {
                 Text("Audit Log Files")
@@ -141,6 +160,26 @@ struct PrivacySecuritySettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
+        .alert(
+            "Send audit log?",
+            isPresented: Binding(
+                get: { model.pendingSendRow != nil },
+                set: { if !$0 { model.pendingSendRow = nil } }
+            ),
+            presenting: model.pendingSendRow
+        ) { row in
+            Button(L10n.string("Send Audit Log")) {
+                model.pendingSendRow = nil
+                Task { await model.sendAuditLog(row: row, using: appState) }
+            }
+            Button("Cancel", role: .cancel) { model.pendingSendRow = nil }
+        } message: { row in
+            Text(L10n.formatted(
+                "Uploads %@ to %@.",
+                row.fileName,
+                auditUploadEndpoint ?? ""
+            ))
+        }
         .alert(
             "Delete all audit logs?",
             isPresented: $model.showDeleteAuditLogsConfirmation

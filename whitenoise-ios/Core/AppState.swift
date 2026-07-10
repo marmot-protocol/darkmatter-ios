@@ -643,6 +643,15 @@ final class AppState {
         }
     }
 
+    func auditLogUploadEndpoint() -> String? {
+        telemetryBuildConfig.auditLogEndpoint
+    }
+
+    @MainActor
+    func postAuditLogFile(path: String, endpoint: String) async throws -> AuditLogUploadResultFfi {
+        try await runtimeClient().postAuditLogFile(path: path, endpoint: endpoint)
+    }
+
     /// Foreground relay catch-up. Delegates to `NotificationCoordinator` (master
     /// #401), which owns the catch-up gate/in-flight flag. Internal (not
     /// `private`) so `RuntimeLifecycle`'s resume path can sequence it without

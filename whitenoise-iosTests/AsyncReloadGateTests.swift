@@ -122,6 +122,12 @@ private final class PrivacySecuritySettingsDataSourceStub: PrivacySecuritySettin
         AuditLogSettingsFfi(enabled: enabled, dataMode: .obfuscatedSensitiveData)
     }
 
+    func auditLogUploadEndpoint() -> String? { nil }
+
+    func postAuditLogFile(path: String, endpoint: String) async throws -> AuditLogUploadResultFfi {
+        AuditLogUploadResultFfi(path: path, status: 200, bytesSent: 0)
+    }
+
     func waitUntilProjectionCallCount(_ count: Int) async {
         guard projectionCallCount < count else { return }
         await withCheckedContinuation { continuation in

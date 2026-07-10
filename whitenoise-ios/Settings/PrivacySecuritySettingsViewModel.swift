@@ -10,6 +10,8 @@ protocol PrivacySecuritySettingsViewModelDataSource: AnyObject {
     func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi
     func deleteAllAuditLogFiles() async throws
     func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi
+    func auditLogUploadEndpoint() -> String?
+    func postAuditLogFile(path: String, endpoint: String) async throws -> AuditLogUploadResultFfi
 }
 
 extension AppState: PrivacySecuritySettingsViewModelDataSource {}
@@ -28,6 +30,8 @@ final class PrivacySecuritySettingsViewModel {
     var telemetrySaving = false
     var auditSaving = false
     var auditDeleting = false
+    var auditSendingPath: String?
+    var pendingSendRow: AuditFileRow?
     var showDeleteAuditLogsConfirmation = false
     var filesLoading = false
     var telemetryErrorMessage: String?
@@ -184,6 +188,27 @@ final class PrivacySecuritySettingsViewModel {
                 telemetrySettings = current
                 Haptics.error()
                 telemetryErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Uploads one audit file to the configured tracker endpoint. The engine
+    /// validates the endpoint and attaches the tracker's bearer token itself.
+    func sendAuditLog(row: AuditFileRow, using dataSource: any PrivacySecuritySettingsViewModelDataSource) async {
+        guard auditSendingPath == nil,
+              let endpoint = dataSource.auditLogUploadEndpoint() else { return }
+        await runAction(using: dataSource) {
+            auditSendingPath = row.path
+            auditErrorMessage = nil
+            defer { auditSendingPath = nil }
+
+            do {
+                _ = try await dataSource.postAuditLogFile(path: row.path, endpoint: endpoint)
+                savedAt = Date()
+                Haptics.success()
+            } catch {
+                auditErrorMessage = error.localizedDescription
+                Haptics.error()
             }
         }
     }
