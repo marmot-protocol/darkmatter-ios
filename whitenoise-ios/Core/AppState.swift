@@ -709,18 +709,36 @@ final class AppState {
         warmLocalAccountProfileProjections()
     }
 
+    @ObservationIgnored private var unreadSummaryRefreshGeneration = 0
+
+    /// Fire-and-forget wrapper for foreground resume — background reads and
+    /// notification actions can move the read cursor while the cached summary
+    /// goes stale.
+    @MainActor
+    func scheduleAccountUnreadSummaryRefresh() {
+        Task { @MainActor [weak self] in
+            await self?.refreshAccountUnreadSummaries()
+        }
+    }
+
     /// Fetches the durable unread aggregate (client access is AppState's domain)
-    /// and feeds it to the store; on failure prunes stale entries.
+    /// and feeds it to the store; on failure prunes stale entries. Concurrent
+    /// refreshes can complete out of order — only the newest may commit, so an
+    /// older fetch can't overwrite fresher badge counts.
     @MainActor
     func refreshAccountUnreadSummaries() async {
         guard !accounts.isEmpty else {
             accountUnreadStore.refreshed(from: [], accounts: [])
             return
         }
+        unreadSummaryRefreshGeneration += 1
+        let generation = unreadSummaryRefreshGeneration
         do {
             let summaries = try await runtimeClient().accountUnreadSummary()
+            guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(from: summaries, accounts: accounts)
         } catch {
+            guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.pruneToCurrentAccounts(accounts)
         }
     }
