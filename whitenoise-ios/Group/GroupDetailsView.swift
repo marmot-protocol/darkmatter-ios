@@ -97,7 +97,7 @@ struct GroupDetailsView: View {
         .sheet(isPresented: $model.showRetentionEditor) {
             GroupRetentionEditorSheet(
                 currentSeconds: viewModel.group.disappearingMessageSecs,
-                onSubmit: { seconds in
+                onSubmit: GroupRetentionSubmitter { seconds in
                     await model.updateRetention(seconds: seconds, using: appState)
                 }
             )

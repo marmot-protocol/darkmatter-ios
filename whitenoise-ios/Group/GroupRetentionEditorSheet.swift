@@ -1,11 +1,27 @@
 import SwiftUI
 
+/// Reference box for the retention submit callback — the same toolchain hazard
+/// ConversationMediaLoader works around: an async closure stored in a view
+/// struct garbles its argument in debug builds on the x86_64 simulator.
+@MainActor
+final class GroupRetentionSubmitter {
+    private let run: (UInt64) async -> Bool
+
+    init(_ run: @escaping (UInt64) async -> Bool) {
+        self.run = run
+    }
+
+    func submit(seconds: UInt64) async -> Bool {
+        await run(seconds)
+    }
+}
+
 /// Admin editor for the group's disappearing-messages timer. Enabling or
 /// shortening the timer asks for confirmation first because the engine prunes
 /// existing messages older than the new window immediately.
 struct GroupRetentionEditorSheet: View {
     let currentSeconds: UInt64
-    let onSubmit: (UInt64) async -> Bool
+    let onSubmit: GroupRetentionSubmitter
 
     @Environment(\.dismiss) private var dismiss
     @State private var selection: Selection
@@ -19,7 +35,7 @@ struct GroupRetentionEditorSheet: View {
         case custom
     }
 
-    init(currentSeconds: UInt64, onSubmit: @escaping (UInt64) async -> Bool) {
+    init(currentSeconds: UInt64, onSubmit: GroupRetentionSubmitter) {
         self.currentSeconds = currentSeconds
         self.onSubmit = onSubmit
         let draft = GroupRetentionPresentation.customDraft(forSeconds: currentSeconds)
@@ -151,7 +167,7 @@ struct GroupRetentionEditorSheet: View {
         guard !isSubmitting else { return }
         isSubmitting = true
         Task {
-            let succeeded = await onSubmit(seconds)
+            let succeeded = await onSubmit.submit(seconds: seconds)
             isSubmitting = false
             if succeeded {
                 dismiss()
