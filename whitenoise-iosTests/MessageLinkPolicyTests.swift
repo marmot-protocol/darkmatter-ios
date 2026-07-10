@@ -56,15 +56,16 @@ struct MessageLinkPolicyTests {
         }
     }
 
-    @Test func otherFlavorAppSchemesAskForConfirmation() {
+    @Test func otherFlavorAppSchemesRouteInApp() {
+        // Generated links are canonical `marmot://` in every flavor, so a
+        // scheme from another flavor is the same ecosystem, not another app.
         let otherMarmotScheme = DeepLink.scheme == "marmot-staging" ? "marmot" : "marmot-staging"
         let otherLegacyScheme = DeepLink.legacyScheme == "whitenoise-staging" ? "whitenoise" : "whitenoise-staging"
         for raw in [
             "\(otherMarmotScheme)://profile/\(validNpub)",
             "\(otherLegacyScheme)://profile/\(validNpub)",
         ] {
-            let url = URL(string: raw)!
-            #expect(MessageLinkPolicy.action(for: url) == .confirmExternal(url), "url: \(raw)")
+            #expect(action(raw) == .openProfile(npub: validNpub), "url: \(raw)")
         }
     }
 
