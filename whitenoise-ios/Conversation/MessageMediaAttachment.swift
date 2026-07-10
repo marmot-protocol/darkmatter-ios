@@ -1327,6 +1327,31 @@ nonisolated enum MessageMediaCache {
         }
     }
 
+    /// Removes cached decrypted plaintext for expired attachments off the
+    /// MainActor. The engine's secure-delete result reports pruned media by
+    /// ciphertext hash while cache files are keyed by plaintext hash, so
+    /// callers pass the pre-prune reference snapshot to resolve the URLs.
+    static func removeCachedData(
+        forCiphertextHashes hashes: Set<String>,
+        in references: [MediaAttachmentReferenceFfi]
+    ) async {
+        guard !hashes.isEmpty, let cachesDirectory = defaultCachesDirectory else { return }
+        await Task.detached(priority: .utility) {
+            removeCachedData(forCiphertextHashes: hashes, in: references, cachesDirectory: cachesDirectory)
+        }.value
+    }
+
+    static func removeCachedData(
+        forCiphertextHashes hashes: Set<String>,
+        in references: [MediaAttachmentReferenceFfi],
+        cachesDirectory: URL
+    ) {
+        for reference in references where hashes.contains(reference.ciphertextSha256.lowercased()) {
+            guard let url = cacheURL(for: reference, cachesDirectory: cachesDirectory) else { continue }
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     static func cacheURL(for reference: MediaAttachmentReferenceFfi) -> URL? {
         guard let cachesDirectory = defaultCachesDirectory else { return nil }
         return cacheURL(for: reference, cachesDirectory: cachesDirectory)

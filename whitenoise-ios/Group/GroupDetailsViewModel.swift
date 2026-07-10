@@ -15,6 +15,7 @@ final class GroupDetailsViewModel {
     var showRename = false
     var showDescriptionEditor = false
     var showGroupImageEditor = false
+    var showRetentionEditor = false
     var renameDraft = ""
     var descriptionDraft = ""
     var actionError: String?
@@ -372,6 +373,43 @@ final class GroupDetailsViewModel {
             actionError = error.localizedDescription
             appState.present(.error(L10n.string("Couldn't update group image"), message: error.localizedDescription))
             throw error
+        }
+    }
+
+    /// Publishes a new disappearing-messages retention. The engine prunes
+    /// retroactively on enable/shorten, so the timeline window is reloaded
+    /// after the group state refresh to evict any locally pruned rows.
+    @discardableResult
+    func updateRetention(seconds: UInt64, using appState: AppState) async -> Bool {
+        guard let conversation, let accountRef = appState.activeAccountRef else { return false }
+        guard seconds != conversation.group.disappearingMessageSecs else { return true }
+        guard !membershipActionInFlight else { return false }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
+        do {
+            appState.present(.warning(
+                L10n.string("Updating disappearing messages…"),
+                message: L10n.string("Publishing group update.")
+            ))
+            let client = try appState.currentMarmotClient()
+            let summary = try await client.updateMessageRetention(
+                accountRef: accountRef,
+                groupIdHex: conversation.group.groupIdHex,
+                disappearingMessageSecs: seconds
+            )
+            await refreshGroupManagementAndNotify()
+            await refreshVisibleDebugState(using: appState)
+            await conversation.refreshTimelineWindowAfterLocalPrune()
+            Haptics.success()
+            appState.present(.success(
+                L10n.string("Disappearing messages updated"),
+                message: publishMessage(for: summary)
+            ))
+            return true
+        } catch {
+            await refreshAfterFailedMutation(using: appState)
+            handleActionError(error, title: L10n.string("Couldn't update disappearing messages"), using: appState)
+            return false
         }
     }
 
