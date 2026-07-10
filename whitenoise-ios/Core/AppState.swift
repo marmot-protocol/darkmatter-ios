@@ -709,6 +709,16 @@ final class AppState {
         warmLocalAccountProfileProjections()
     }
 
+    /// Fire-and-forget wrapper for foreground resume — background reads and
+    /// notification actions can move the read cursor while the cached summary
+    /// goes stale.
+    @MainActor
+    func scheduleAccountUnreadSummaryRefresh() {
+        Task { @MainActor [weak self] in
+            await self?.refreshAccountUnreadSummaries()
+        }
+    }
+
     /// Fetches the durable unread aggregate (client access is AppState's domain)
     /// and feeds it to the store; on failure prunes stale entries.
     @MainActor

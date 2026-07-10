@@ -24,18 +24,31 @@ extension AppState {
                 // Replying implies the notified message was read. Best-effort:
                 // a failed mark must not report the delivered reply as failed.
                 if let messageIdHex = route.messageIdHex, !messageIdHex.isEmpty {
+                    // The read cursor only advances for an initialized chat —
+                    // the conversation screen normally does this on open.
+                    _ = try? await client.initializeChatReadState(
+                        accountRef: route.accountRef,
+                        groupIdHex: route.groupIdHex
+                    )
                     _ = await client.markTimelineMessagesRead(
                         accountRef: route.accountRef,
                         groupIdHex: route.groupIdHex,
                         messageIdHexes: [messageIdHex]
                     )
                 }
+                await self.refreshAccountUnreadSummaries()
             }
         case .markRead(let route, let messageIdHex):
             await runNotificationAction(
                 route: route,
                 failureTitle: L10n.string("Couldn't mark as read")
             ) { [notifications] client in
+                // The read cursor only advances for an initialized chat — the
+                // conversation screen normally does this on open.
+                _ = try? await client.initializeChatReadState(
+                    accountRef: route.accountRef,
+                    groupIdHex: route.groupIdHex
+                )
                 let results = await client.markTimelineMessagesRead(
                     accountRef: route.accountRef,
                     groupIdHex: route.groupIdHex,
@@ -48,6 +61,7 @@ extension AppState {
                     accountRef: route.accountRef,
                     groupIdHex: route.groupIdHex
                 )
+                await self.refreshAccountUnreadSummaries()
             }
         }
     }

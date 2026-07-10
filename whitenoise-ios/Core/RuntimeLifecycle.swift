@@ -443,6 +443,7 @@ final class RuntimeLifecycle {
         guard ownsForegroundActivation(id: activationID) else { return }
         appState?.scheduleNativePushRegistrationIfEnabled()
         appState?.resumeProfileFetchQueueIfNeeded()
+        appState?.scheduleAccountUnreadSummaryRefresh()
     }
 
     private func ownsForegroundActivation(id: UUID) -> Bool {
