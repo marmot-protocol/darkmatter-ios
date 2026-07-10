@@ -1529,7 +1529,7 @@ struct TelemetryBuildConfigTests {
         }
     }
 
-    @Test func auditTrackerConfigDefersEndpointToMarmotAndCarriesCredentialsAndSource() {
+    @Test func auditTrackerConfigCarriesEndpointCredentialsAndSource() {
         let config = TelemetryBuildConfig(
             otlpEndpoint: "https://collector.example/v1/metrics",
             bearerToken: "otlp-token",
@@ -1543,7 +1543,7 @@ struct TelemetryBuildConfigTests {
 
         let tracker = config.auditTrackerConfig()
 
-        #expect(tracker.endpoint == nil)
+        #expect(tracker.endpoint == "https://goggles.example/upload")
         // Must carry the dedicated audit-log token, NOT the OTLP/telemetry token.
         #expect(tracker.authorizationBearerToken == "audit-token")
         #expect(tracker.source.deviceLabel == "iPhone99,9")
