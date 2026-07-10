@@ -13,6 +13,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     private let remoteNotificationRegistrar: (() -> Void)?
     private weak var appState: AppState?
     private var pendingRoutes: [LocalNotificationRoute] = []
+    private var pendingActionOperations: [NotificationActionOperation] = []
+    private var actionOperationTask: Task<Void, Never>?
+    private var languageChangeObserver: (any NSObjectProtocol)?
 
     private(set) var apnsTokenHex: String?
     private(set) var lastRegistrationError: String?
@@ -32,12 +35,51 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     func installDelegate() {
         center.delegate = self
+        registerNotificationCategories()
+        guard languageChangeObserver == nil else { return }
+        // Action titles are baked into the registered category; re-register on
+        // in-app language changes so they don't stay in the launch language.
+        languageChangeObserver = NotificationCenter.default.addObserver(
+            forName: AppLanguage.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.registerNotificationCategories()
+            }
+        }
     }
 
     func configure(appState: AppState) {
         self.appState = appState
         installDelegate()
         flushPendingRoutes()
+        flushPendingActionOperations()
+    }
+
+    func registerNotificationCategories() {
+        center.setNotificationCategories([Self.messageNotificationCategory()])
+    }
+
+    static func messageNotificationCategory() -> UNNotificationCategory {
+        let reply = UNTextInputNotificationAction(
+            identifier: NotificationActionCategory.replyActionIdentifier,
+            title: L10n.string("Reply"),
+            options: [],
+            textInputButtonTitle: L10n.string("Send"),
+            textInputPlaceholder: L10n.string("Message")
+        )
+        let markRead = UNNotificationAction(
+            identifier: NotificationActionCategory.markReadActionIdentifier,
+            title: L10n.string("Mark as read"),
+            options: []
+        )
+        return UNNotificationCategory(
+            identifier: NotificationActionCategory.message,
+            actions: [reply, markRead],
+            intentIdentifiers: [],
+            options: []
+        )
     }
 
     func requestAuthorizationAndRegister() async throws -> Bool {
@@ -178,7 +220,19 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         guard let route = LocalNotificationProjection.route(
             from: response.notification.request.content.userInfo
         ) else { return }
-        handle(route: route)
+        guard let operation = NotificationActionRouting.operation(
+            actionIdentifier: response.actionIdentifier,
+            userText: (response as? UNTextInputNotificationResponse)?.userText,
+            route: route
+        ) else { return }
+        switch operation {
+        case .openChat(let route):
+            handle(route: route)
+        case .reply, .markRead:
+            // Await completion: returning from the async delegate method ends
+            // the system's response-handling grace period.
+            await performOrBufferAction(operation)
+        }
     }
 
     /// Notification taps that arrive before `appState` is wired up are buffered.
@@ -209,6 +263,96 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             appState.presentNotification(route: route)
         }
         pendingRoutes.removeAll()
+    }
+
+    private func performOrBufferAction(_ operation: NotificationActionOperation) async {
+        guard let appState else {
+            pendingActionOperations = Self.appendingBounded(
+                operation,
+                to: pendingActionOperations,
+                limit: Self.maxPendingRoutes
+            )
+            return
+        }
+        await enqueueActionOperations([operation], appState: appState).value
+    }
+
+    private func flushPendingActionOperations() {
+        guard let appState, !pendingActionOperations.isEmpty else { return }
+        let operations = pendingActionOperations
+        pendingActionOperations.removeAll()
+        _ = enqueueActionOperations(operations, appState: appState)
+    }
+
+    /// Serializes reply/mark-read work so two responses can't interleave two
+    /// runtime restart/suspend cycles over the same App Group store.
+    private func enqueueActionOperations(
+        _ operations: [NotificationActionOperation],
+        appState: AppState
+    ) -> Task<Void, Never> {
+        let previousTask = actionOperationTask
+        let task = Task { @MainActor in
+            await previousTask?.value
+            for operation in operations {
+                await appState.performNotificationAction(operation)
+            }
+        }
+        actionOperationTask = task
+        return task
+    }
+
+    /// Visible failure surface for a notification action: a toast is invisible
+    /// while backgrounded, so post a local notification carrying the
+    /// conversation route; fall back to a toast when the scene is active (or
+    /// when posting fails). Bodies stay generic — no backend error text.
+    func presentNotificationActionFailure(
+        title: String,
+        body: String,
+        route: LocalNotificationRoute
+    ) async {
+        if appState?.isAppSceneActive == true {
+            appState?.present(.error(title, message: body))
+            return
+        }
+        let presentation = LocalNotificationPresentation(
+            identifier: "action-failure:\(route.notificationKey)",
+            threadIdentifier: "\(route.accountRef):\(route.groupIdHex)",
+            title: title,
+            body: body,
+            route: route,
+            timestamp: Date(),
+            userInfo: LocalNotificationProjection.userInfo(for: route)
+        )
+        let request = UNNotificationRequest(
+            identifier: presentation.identifier,
+            content: NotificationContentDecorator.makeContent(for: presentation),
+            trigger: nil
+        )
+        do {
+            try await center.add(request)
+        } catch {
+            appState?.present(.error(title, message: body))
+        }
+    }
+
+    /// Clears the conversation's remaining delivered notifications after its
+    /// read marker advanced, so already-read messages don't linger in
+    /// Notification Center.
+    func removeDeliveredConversationNotifications(
+        accountRef: String,
+        groupIdHex: String
+    ) async {
+        let delivered = await center.deliveredNotifications()
+        let identifiers = delivered
+            .filter { notification in
+                guard let route = LocalNotificationProjection.route(
+                    from: notification.request.content.userInfo
+                ) else { return false }
+                return route.accountRef == accountRef && route.groupIdHex == groupIdHex
+            }
+            .map(\.request.identifier)
+        guard !identifiers.isEmpty else { return }
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 }
 

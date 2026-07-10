@@ -9319,6 +9319,20 @@
         }
       }
     },
+    "Couldn't mark as read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als gelesen markieren fehlgeschlagen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo marcar como leído" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de marquer comme lu" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Impossibile segnare come letto" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível marcar como lida" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось отметить как прочитанное" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Okundu olarak işaretlenemedi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法标为已读" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法標為已讀" } }
+      }
+    },
     "Couldn't publish profile" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17923,6 +17937,20 @@
         }
       }
     },
+    "Mark as read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Als gelesen markieren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Marcar como leído" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Marquer comme lu" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Segna come letto" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Marcar como lida" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отметить как прочитанное" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Okundu olarak işaretle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标为已读" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "標為已讀" } }
+      }
+    },
     "Marmot returned these key packages without a local or relay marker. They may come from an older or future runtime; delete to retire them." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -21971,6 +21999,20 @@
         }
       }
     },
+    "Open the chat to try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Öffne den Chat, um es erneut zu versuchen." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Abre el chat para intentarlo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ouvrez la discussion pour réessayer." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Apri la chat per riprovare." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Abra a conversa para tentar novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Откройте чат, чтобы повторить попытку." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tekrar denemek için sohbeti açın." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开聊天以重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "開啟聊天以重試。" } }
+      }
+    },
     "Open video fullscreen" : {
       "localizations" : {
         "de" : {
@@ -26009,6 +26051,20 @@
             "value" : "回覆"
           }
         }
+      }
+    },
+    "Reply not sent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Antwort nicht gesendet" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Respuesta no enviada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réponse non envoyée" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Risposta non inviata" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Resposta não enviada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ответ не отправлен" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yanıt gönderilemedi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "回复未发送" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "回覆未傳送" } }
       }
     },
     "Replying to %@" : {
