@@ -183,6 +183,15 @@ final class AppState {
     var isAppSceneActive = true
     private(set) var profileRefreshGeneration = 0
 
+    /// Foreground expiration-sweep loop for disappearing messages. Started
+    /// with the other `.ready` foreground maintenance and cancelled on
+    /// background suspension.
+    @ObservationIgnored private let retentionSweeper = MessageRetentionSweeper()
+    /// Bumped after a sweep pruned expired records; open conversations observe
+    /// it and reload their timeline window when their group is affected.
+    private(set) var retentionSweepGeneration = 0
+    private(set) var retentionSweepPrunedGroupIds: Set<String> = []
+
     /// Forwarders to `RuntimeLifecycle`, which owns the runtime-gate state. Keep
     /// the `appState.runtimeSuspendedForBackground` / `isRuntimeWarmingUp` /
     /// `runtimeGeneration` call sites (views, view models, policies, tests) and
@@ -344,6 +353,26 @@ final class AppState {
             host: self,
             scheduleNativePushRegistration: scheduleNativePushRegistration
         )
+        startRetentionSweeps()
+    }
+
+    /// Internal (not `private`) so the `RuntimeLifecycle` resume path can
+    /// restart the sweep loop once a `.ready` runtime is back online.
+    @MainActor
+    func startRetentionSweeps() {
+        retentionSweeper.start(appState: self)
+    }
+
+    /// Awaited drain used by `RuntimeLifecycle.cancelForegroundMaintenance` so
+    /// no sweep FFI call is in flight when suspension releases the runtime.
+    func cancelRetentionSweeps() async {
+        await retentionSweeper.cancel()
+    }
+
+    @MainActor
+    func noteRetentionSweepCompleted(prunedGroupIds: Set<String>) {
+        retentionSweepPrunedGroupIds = prunedGroupIds
+        retentionSweepGeneration += 1
     }
 
     /// Internal (not `private`) so the `RuntimeLifecycle` resume path can start
@@ -523,6 +552,7 @@ final class AppState {
             cancelProfileFetchQueue()
             profileStore.clearForSignOut()
             stopNotificationSubscription()
+            retentionSweeper.cancelWithoutAwaiting()
             phase = .onboarding
         } else {
             if let signingOutAccountIdHex {
@@ -684,6 +714,7 @@ final class AppState {
     @MainActor
     func beginForegroundMaintenanceCancellation() -> Task<Void, Never>? {
         notificationCoordinator.cancelNativePushRegistrationTaskWithoutAwaiting()
+        retentionSweeper.cancelWithoutAwaiting()
         return cancelProfileFetchQueue()
     }
 

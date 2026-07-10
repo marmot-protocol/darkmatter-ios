@@ -444,6 +444,7 @@ final class RuntimeLifecycle {
         appState?.scheduleNativePushRegistrationIfEnabled()
         appState?.resumeProfileFetchQueueIfNeeded()
         appState?.scheduleAccountUnreadSummaryRefresh()
+        appState?.startRetentionSweeps()
     }
 
     private func ownsForegroundActivation(id: UUID) -> Bool {
@@ -549,6 +550,7 @@ final class RuntimeLifecycle {
 
         await foregroundTask?.value
         await appState?.cancelNativePushRegistrationTask()
+        await appState?.cancelRetentionSweeps()
         await profileTask?.value
     }
 
