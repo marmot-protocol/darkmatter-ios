@@ -1296,7 +1296,7 @@ struct ConversationView: View {
                     initialEmoji: emoji
                 )
             },
-            onLoadMedia: { media in
+            onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
             }
         )

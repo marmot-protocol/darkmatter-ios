@@ -55,7 +55,7 @@ struct GroupSharedMediaSection: View {
     let isLoading: Bool
     let error: String?
     let onRetry: () -> Void
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpenGallery: (MessageMediaGallery) -> Void
 
     @State private var selectedCategory = GroupSharedMediaCategory.media
@@ -228,7 +228,7 @@ struct GroupSharedMediaSection: View {
         loadingFileID = item.id
         defer { loadingFileID = nil }
         do {
-            let data = try await onLoadMedia(item.attachment)
+            let data = try await onLoadMedia.data(for: item.attachment)
             guard !Task.isCancelled,
                   let url = await MediaPlaybackFileStore.fileURL(
                     for: item.attachment,
@@ -251,7 +251,7 @@ private struct GroupSharedMediaFileShare: Identifiable {
 
 private struct GroupSharedMediaThumbnail: View {
     let item: MessageMediaAttachment
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpen: (Data?) -> Void
 
     @Environment(\.displayScale) private var displayScale
@@ -346,7 +346,7 @@ private struct GroupSharedMediaThumbnail: View {
         didFail = false
         defer { isLoading = false }
         do {
-            let data = try await onLoadMedia(item)
+            let data = try await onLoadMedia.data(for: item)
             guard !Task.isCancelled else { return }
             if item.isImage {
                 guard let decoded = await MessageMediaThumbnailDecoder.image(
