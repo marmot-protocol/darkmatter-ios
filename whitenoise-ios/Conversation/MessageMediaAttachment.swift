@@ -1130,6 +1130,8 @@ nonisolated private enum DecryptedMediaCacheEvictor {
     }
 }
 
+// Thread-safe: every access to lastSweepByDirectory happens under `lock`.
+// swiftlint:disable:next no_unchecked_sendable
 nonisolated private final class DecryptedMediaCacheSweepGate: @unchecked Sendable {
     private let minimumInterval: TimeInterval
     private let lock = NSLock()

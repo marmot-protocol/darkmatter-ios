@@ -1,18 +1,21 @@
 import Foundation
 
 /// App deep links. Formats: `<scheme>://profile/<profile-ref>` and
-/// `<scheme>://chat/<groupIdHex>`, where `<scheme>` is the per-flavor Marmot
-/// interop scheme (`marmot` in production, `marmot-staging` in staging).
+/// `<scheme>://chat/<groupIdHex>`.
 ///
-/// Used both for the QR codes the app generates and for routing inbound
-/// links — whether from the in-app scanner (which reads the raw string) or
-/// the system (via `.onOpenURL`, once the URL scheme is registered in
-/// Info.plist).
+/// Generation always uses the canonical `marmot` scheme — shared QR/link
+/// content is environment-independent, so the flavor scheme would only make
+/// other Marmot clients reject it. Inbound routing stays scheme-liberal:
+/// the in-app scanner reads the raw string, and the system delivers only the
+/// flavor schemes registered in Info.plist via `.onOpenURL`.
 nonisolated enum DeepLink: Equatable {
     /// Profile reference accepted by Marmot. This is usually an `npub`, but
     /// may be hex or `nprofile` when the source includes relay hints.
     case profile(npub: String)
     case chat(groupIdHex: String)
+
+    /// Canonical scheme for generated links, independent of build flavor.
+    static let canonicalScheme = "marmot"
 
     /// The URL scheme is flavor-specific (`marmot` vs. `marmot-staging`) so
     /// side-by-side installs route their own links.
@@ -58,7 +61,7 @@ nonisolated enum DeepLink: Equatable {
 
     private static func url(host: String, pathComponent: String) -> URL {
         var components = URLComponents()
-        components.scheme = scheme
+        components.scheme = canonicalScheme
         components.host = host
         components.percentEncodedPath = "/" + encodedPathComponent(pathComponent)
         guard let url = components.url else {
