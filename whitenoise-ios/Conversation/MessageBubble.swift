@@ -5,6 +5,23 @@ import ImageIO
 import AVFoundation
 import AVKit
 
+/// Reference box for the media-load callback. Passing the bare async closure
+/// through every media view layer builds a deep reabstraction-thunk chain
+/// that corrupts the indirect argument in debug builds — one shared box keeps
+/// each hop a plain reference copy and the call a direct method dispatch.
+@MainActor
+final class ConversationMediaLoader {
+    private let load: (MessageMediaAttachment) async throws -> Data
+
+    init(_ load: @escaping (MessageMediaAttachment) async throws -> Data) {
+        self.load = load
+    }
+
+    func data(for media: MessageMediaAttachment) async throws -> Data {
+        try await load(media)
+    }
+}
+
 enum MessageBubbleReplyLayout {
     static let bodyHorizontalInset: CGFloat = 14
     static let bodyTopInset: CGFloat = 9
@@ -32,7 +49,7 @@ struct MessageBubble: View {
     var markdownBlocks: [MarkdownDisplayBlock]? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
     var onShowReactionDetails: (String) -> Void = { _ in }
-    var onLoadMedia: (MessageMediaAttachment) async throws -> Data = { _ in Data() }
+    var onLoadMedia = ConversationMediaLoader { _ in Data() }
 
     @State private var mediaGallery: MessageMediaGallery?
     @State private var pendingExternalLink: PendingMessageExternalLink?
@@ -657,7 +674,7 @@ private struct MessageMediaGrid: View {
     let items: [MessageMediaAttachment]
     let isFromMe: Bool
     let maxWidth: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
@@ -783,7 +800,7 @@ private struct MessageMediaAttachmentContent: View {
     let items: [MessageMediaAttachment]
     let isFromMe: Bool
     let maxWidth: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
@@ -860,7 +877,7 @@ private struct MessageSingleVideoBubble: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
     let maxWidth: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     private let cornerRadius: CGFloat = 14
 
@@ -1047,7 +1064,7 @@ private struct MessageMediaTile: View {
     let isFromMe: Bool
     let sideLength: CGFloat
     let hiddenCount: Int
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
@@ -1169,7 +1186,7 @@ private struct MessageMediaTile: View {
         didFail = false
         defer { isLoading = false }
         do {
-            let data = try await onLoadMedia(item)
+            let data = try await onLoadMedia.data(for: item)
             guard !Task.isCancelled else { return nil }
             guard let decoded = await MessageMediaThumbnailDecoder.image(
                 data: data,
@@ -1311,7 +1328,7 @@ private struct MessageVideoAttachmentView: View {
     let isFromMe: Bool
     let width: CGFloat
     let height: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onOpenFullscreen: (() -> Void)?
 
     @State private var player: AVPlayer?
@@ -1505,7 +1522,7 @@ private struct MessageVideoAttachmentView: View {
         if let playbackURL {
             return playbackURL
         }
-        let data = try await onLoadMedia(item)
+        let data = try await onLoadMedia.data(for: item)
         guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
             throw MessageVideoAttachmentError.playbackFileUnavailable
         }
@@ -1651,7 +1668,7 @@ private struct MessageAudioAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
     let width: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     @State private var player: AVAudioPlayer?
     @State private var isLoading = false
@@ -1674,7 +1691,7 @@ private struct MessageAudioAttachmentView: View {
         item: MessageMediaAttachment,
         isFromMe: Bool,
         width: CGFloat,
-        onLoadMedia: @escaping (MessageMediaAttachment) async throws -> Data
+        onLoadMedia: ConversationMediaLoader
     ) {
         self.item = item
         self.isFromMe = isFromMe
@@ -1783,7 +1800,7 @@ private struct MessageAudioAttachmentView: View {
         didFail = false
         defer { isLoading = false }
         do {
-            let data = try await onLoadMedia(item)
+            let data = try await onLoadMedia.data(for: item)
             // The view may have disappeared (and `stopPlayback` cancelled this
             // task) while the decrypt/download was in flight. Bail before
             // touching player state or acquiring the audio-session lease so a
@@ -1988,7 +2005,7 @@ private struct MessageDocumentAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
     let width: CGFloat
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     @State private var isLoading = false
     @State private var didFail = false
@@ -2051,7 +2068,7 @@ private struct MessageDocumentAttachmentView: View {
         didFail = false
         defer { isLoading = false }
         do {
-            let data = try await onLoadMedia(item)
+            let data = try await onLoadMedia.data(for: item)
             guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
                 didFail = true
                 return
@@ -2307,7 +2324,7 @@ nonisolated enum MessageMediaFullscreenGalleryPresentation {
 
 struct MessageMediaFullscreenGalleryView: View {
     let gallery: MessageMediaGallery
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -2315,7 +2332,7 @@ struct MessageMediaFullscreenGalleryView: View {
 
     init(
         gallery: MessageMediaGallery,
-        onLoadMedia: @escaping (MessageMediaAttachment) async throws -> Data,
+        onLoadMedia: ConversationMediaLoader,
         onDismiss: @escaping () -> Void
     ) {
         self.gallery = gallery
@@ -2407,7 +2424,7 @@ private struct MessageMediaFullscreenPage: View {
     let item: MessageMediaAttachment
     let isSelected: Bool
     let initialImageData: Data?
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     var body: some View {
         if item.isVideo {
@@ -2429,7 +2446,7 @@ private struct MessageMediaFullscreenPage: View {
 private struct MessageMediaFullscreenVideoPage: View {
     let item: MessageMediaAttachment
     let isSelected: Bool
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     @State private var player: AVPlayer?
     @State private var playbackURL: URL?
@@ -2535,7 +2552,7 @@ private struct MessageMediaFullscreenVideoPage: View {
         if let playbackURL {
             return playbackURL
         }
-        let data = try await onLoadMedia(item)
+        let data = try await onLoadMedia.data(for: item)
         guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
             throw MessageVideoAttachmentError.playbackFileUnavailable
         }
@@ -2553,7 +2570,7 @@ private struct MessageMediaFullscreenVideoPage: View {
 
 private struct MessageMediaFullscreenImagePage: View {
     let item: MessageMediaAttachment
-    let onLoadMedia: (MessageMediaAttachment) async throws -> Data
+    let onLoadMedia: ConversationMediaLoader
 
     @State private var imageData: Data?
     @State private var image: UIImage?
@@ -2565,7 +2582,7 @@ private struct MessageMediaFullscreenImagePage: View {
     init(
         item: MessageMediaAttachment,
         initialImageData: Data?,
-        onLoadMedia: @escaping (MessageMediaAttachment) async throws -> Data
+        onLoadMedia: ConversationMediaLoader
     ) {
         self.item = item
         self.onLoadMedia = onLoadMedia
@@ -2643,7 +2660,7 @@ private struct MessageMediaFullscreenImagePage: View {
         didFail = false
         defer { isLoading = false }
         do {
-            let data = try await onLoadMedia(item)
+            let data = try await onLoadMedia.data(for: item)
             guard !Task.isCancelled else { return }
             guard let decoded = await MessageMediaFullscreenPresentation.decodedImage(
                 from: data,
