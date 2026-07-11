@@ -317,7 +317,7 @@ final class GroupDetailsViewModel {
 
     func updateGroupImage(url: String?, using appState: AppState) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
-        guard !membershipActionInFlight else { return }
+        guard !membershipActionInFlight else { throw GroupDetailsActionError.operationInFlight }
         let normalizedURL: String?
         if let url {
             guard let sanitized = GroupImageURLSheet.validatedImageURL(url) else {

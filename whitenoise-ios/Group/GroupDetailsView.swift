@@ -796,9 +796,10 @@ struct GroupDetailsView: View {
 
 }
 
-enum GroupDetailsActionError: LocalizedError {
+enum GroupDetailsActionError: Equatable, LocalizedError {
     case noActiveAccount
     case invalidImageURL
+    case operationInFlight
 
     var errorDescription: String? {
         switch self {
@@ -806,6 +807,8 @@ enum GroupDetailsActionError: LocalizedError {
             L10n.string("No active account is selected.")
         case .invalidImageURL:
             L10n.string("Use a public HTTPS image URL.")
+        case .operationInFlight:
+            L10n.string("Another group update is still in progress.")
         }
     }
 }
