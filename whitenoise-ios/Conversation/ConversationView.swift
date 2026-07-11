@@ -179,22 +179,6 @@ enum TimelineBottomScrollCoordinator {
     }
 }
 
-nonisolated enum ConversationLongMessageCollapsePreference {
-    static let disabledKeyPrefix = "conversation.longMessageCollapseDisabled."
-
-    static func disabledKey(forGroupIdHex groupIdHex: String) -> String {
-        "\(disabledKeyPrefix)\(groupIdHex)"
-    }
-
-    static func isEnabled(forGroupIdHex groupIdHex: String, defaults: UserDefaults = .standard) -> Bool {
-        !defaults.bool(forKey: disabledKey(forGroupIdHex: groupIdHex))
-    }
-
-    static func setEnabled(_ enabled: Bool, forGroupIdHex groupIdHex: String, defaults: UserDefaults = .standard) {
-        defaults.set(!enabled, forKey: disabledKey(forGroupIdHex: groupIdHex))
-    }
-}
-
 enum ScrollViewBottomClamp {
     static let tolerance: CGFloat = 0.5
 
@@ -539,7 +523,6 @@ struct ConversationView: View {
     @State private var showPhotoLibraryPicker = false
     @State private var showFileImporter = false
     @State private var showDetails = false
-    @State private var collapseLongMessages = true
     @State private var actionsTarget: ActionsTarget?
     @State private var emojiPickerTarget: ActionsTarget?
     @State private var messageInfoTarget: ActionsTarget?
@@ -622,9 +605,6 @@ struct ConversationView: View {
         self.initialTargetMessageIdHex = targetMessageId?.isEmpty == false ? targetMessageId : nil
         let unreadMessageId = initialUnreadMessageIdHex?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.initialUnreadMessageIdHex = unreadMessageId?.isEmpty == false ? unreadMessageId : nil
-        _collapseLongMessages = State(
-            initialValue: ConversationLongMessageCollapsePreference.isEnabled(forGroupIdHex: chat.groupIdHex)
-        )
         _viewModel = State(
             initialValue: initialAppState.map {
                 ConversationViewModel(
@@ -670,16 +650,6 @@ struct ConversationView: View {
                         Image(systemName: "magnifyingglass")
                     }
                     .accessibilityLabel("Search")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Toggle(isOn: collapseLongMessagesBinding) {
-                            Label(L10n.string("Collapse long messages"), systemImage: "text.alignleft")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .accessibilityLabel("Conversation display")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -841,19 +811,6 @@ struct ConversationView: View {
                 onDraftChanged?()
                 Task { await appState.conversationDraftStore.flush() }
             }
-    }
-
-    private var collapseLongMessagesBinding: Binding<Bool> {
-        Binding(
-            get: { collapseLongMessages },
-            set: { enabled in
-                collapseLongMessages = enabled
-                ConversationLongMessageCollapsePreference.setEnabled(
-                    enabled,
-                    forGroupIdHex: chat.groupIdHex
-                )
-            }
-        )
     }
 
     // MARK: - Composer + reply
@@ -1365,8 +1322,7 @@ struct ConversationView: View {
             },
             onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
-            },
-            collapseLongMessages: collapseLongMessages
+            }
         )
         .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
             beginReply(to: record, viewModel: viewModel)

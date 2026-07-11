@@ -37,8 +37,8 @@ nonisolated enum MessageBodyCollapsePresentation {
     static let maxCollapsedLines = 12
     static let collapsedBodyMaxHeight: CGFloat = 260
 
-    static func shouldCollapse(_ text: String, collapseLongMessages: Bool = true) -> Bool {
-        collapseLongMessages && (text.count > maxCollapsedCharacters || lineCount(text) > maxCollapsedLines)
+    static func shouldCollapse(_ text: String) -> Bool {
+        text.count > maxCollapsedCharacters || lineCount(text) > maxCollapsedLines
     }
 
     static func lineCount(_ text: String) -> Int {
@@ -65,7 +65,6 @@ struct MessageBubble: View {
     var reactions: [ConversationViewModel.ReactionTally] = []
     var onShowReactionDetails: (String) -> Void = { _ in }
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
-    var collapseLongMessages = true
 
     @State private var mediaGallery: MessageMediaGallery?
     @State private var fullBodyPresentation: MessageFullBodyPresentation?
@@ -359,10 +358,7 @@ struct MessageBubble: View {
     }
 
     private func messageBodyText(hasReply: Bool) -> some View {
-        let shouldCollapse = MessageBodyCollapsePresentation.shouldCollapse(
-            sanitizedBodyText,
-            collapseLongMessages: collapseLongMessages
-        )
+        let shouldCollapse = MessageBodyCollapsePresentation.shouldCollapse(sanitizedBodyText)
         return VStack(alignment: .leading, spacing: 7) {
             messageBodyContent
                 .frame(

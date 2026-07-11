@@ -49,24 +49,9 @@ struct MessageBodyCollapsePresentationTests {
         #expect(MessageBodyCollapsePresentation.shouldCollapse(body))
     }
 
-    @Test func disabledCollapseKeepsLongMessagesExpanded() {
-        let body = String(repeating: "x", count: MessageBodyCollapsePresentation.maxCollapsedCharacters + 1)
-        #expect(!MessageBodyCollapsePresentation.shouldCollapse(body, collapseLongMessages: false))
-    }
-
     @Test func manyLineMessagesCollapseByLineCount() {
         let body = Array(repeating: "line", count: MessageBodyCollapsePresentation.maxCollapsedLines + 1)
             .joined(separator: "\n")
         #expect(MessageBodyCollapsePresentation.shouldCollapse(body))
-    }
-}
-
-struct ConversationLongMessageCollapsePreferenceTests {
-    @Test func disabledKeyIsScopedByGroupId() {
-        #expect(ConversationLongMessageCollapsePreference.disabledKey(forGroupIdHex: "abc").hasSuffix(".abc"))
-        #expect(
-            ConversationLongMessageCollapsePreference.disabledKey(forGroupIdHex: "abc")
-                != ConversationLongMessageCollapsePreference.disabledKey(forGroupIdHex: "def")
-        )
     }
 }
