@@ -3,6 +3,10 @@ import MarmotKit
 
 enum NotificationServiceRenderDecision: Equatable {
     case decorate(LocalNotificationPresentation, additionalPresentations: [LocalNotificationPresentation])
+    /// Every presentable record in the wake belongs to a muted chat. The alert
+    /// that woke the extension must still be delivered, but with generic
+    /// content and no banner or sound.
+    case deliverQuietly
     case fallback
 }
 
@@ -64,12 +68,14 @@ nonisolated enum NotificationServiceProjection {
     static func decision(
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },
-        isArchived: (String, String) -> Bool = { _, _ in false }
+        isArchived: (String, String) -> Bool = { _, _ in false },
+        isMuted: (String, String) -> Bool = { _, _ in false }
     ) -> NotificationServiceRenderDecision {
         NotificationPresentationPolicy.serviceDecision(
             for: collection,
             localNotificationsEnabled: localNotificationsEnabled,
-            isArchived: isArchived
+            isArchived: isArchived,
+            isMuted: isMuted
         )
     }
 

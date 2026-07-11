@@ -189,6 +189,10 @@ final class NotificationCoordinator {
                     accountRef: update.accountRef,
                     host: host
                 )
+                let isMuted = ChatMuteStore.isMuted(
+                    accountIdHex: update.accountIdHex,
+                    groupIdHex: update.groupIdHex
+                )
                 guard self.canPresentRuntimeNotificationUpdate(host: host) else { return }
                 let shouldPresent = await MainActor.run {
                     guard self.canPresentRuntimeNotificationUpdate(host: host) else { return false }
@@ -196,6 +200,7 @@ final class NotificationCoordinator {
                     return self.shouldPresentLocalNotification(
                         update,
                         localNotificationsEnabled: localNotificationsEnabled,
+                        isMuted: isMuted,
                         host: host
                     )
                 }
@@ -235,10 +240,12 @@ final class NotificationCoordinator {
     private func shouldPresentLocalNotification(
         _ update: NotificationUpdateFfi,
         localNotificationsEnabled: Bool,
+        isMuted: Bool,
         host: NotificationCoordinatorHost
     ) -> Bool {
         LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: localNotificationsEnabled,
+            isMuted: isMuted,
             appSceneActive: host.isAppSceneActive,
             updateAccountRef: update.accountRef,
             updateGroupIdHex: update.groupIdHex,

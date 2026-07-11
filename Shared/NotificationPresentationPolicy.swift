@@ -7,23 +7,27 @@ nonisolated enum NotificationPresentationPolicy {
     static func shouldPresent(
         localNotificationsEnabled: Bool,
         isArchived: Bool = false,
+        isMuted: Bool = false,
         appSceneActive: Bool,
         updateAccountRef: String,
         updateGroupIdHex: String,
         visibleAccountRef: String?,
         visibleGroupIdHex: String?
     ) -> Bool {
-        guard localNotificationsEnabled, !isArchived else { return false }
+        guard localNotificationsEnabled, !isArchived, !isMuted else { return false }
         guard appSceneActive else { return true }
         guard let visibleAccountRef, let visibleGroupIdHex else { return true }
         return visibleAccountRef != updateAccountRef
             || visibleGroupIdHex != updateGroupIdHex
     }
 
+    /// `isMuted` is keyed by (accountIdHex, groupIdHex) — the mute store's key —
+    /// unlike `isArchived`, which takes the update's accountRef.
     static func serviceDecision(
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },
-        isArchived: (String, String) -> Bool = { _, _ in false }
+        isArchived: (String, String) -> Bool = { _, _ in false },
+        isMuted: (String, String) -> Bool = { _, _ in false }
     ) -> NotificationServiceRenderDecision {
         switch collection.status {
         case .newData:
@@ -32,7 +36,16 @@ nonisolated enum NotificationPresentationPolicy {
                 localNotificationsEnabled: localNotificationsEnabled,
                 isArchived: isArchived
             )
-            guard let primaryUpdate = updates.first,
+            let unmutedUpdates = updates.filter {
+                !isMuted($0.accountIdHex, $0.groupIdHex)
+            }
+            // The alert that woke the extension cannot be dropped, so a wake
+            // whose every presentable record is muted delivers quietly instead
+            // of falling back to audible generic content.
+            if unmutedUpdates.isEmpty, !updates.isEmpty {
+                return .deliverQuietly
+            }
+            guard let primaryUpdate = unmutedUpdates.first,
                   let primary = LocalNotificationProjection.makePresentation(for: primaryUpdate)
             else {
                 return .fallback
@@ -40,7 +53,7 @@ nonisolated enum NotificationPresentationPolicy {
             return .decorate(
                 primary,
                 additionalPresentations: boundedAdditionalPresentations(
-                    from: Array(updates.dropFirst())
+                    from: Array(unmutedUpdates.dropFirst())
                 )
             )
         case .noData, .failed:

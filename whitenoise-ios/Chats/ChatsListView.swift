@@ -354,6 +354,9 @@ struct ChatsListView: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .swipeActions(edge: .leading) {
+                        leadingSwipeActions(for: item)
+                    }
                     .swipeActions(edge: .trailing) {
                         swipeActions(for: item)
                     }
@@ -416,6 +419,28 @@ struct ChatsListView: View {
                 unreadMessageIdHex: item.firstUnreadMessageIdHex
             )
         )
+    }
+
+    @ViewBuilder
+    private func leadingSwipeActions(for item: ChatsListViewModel.Item) -> some View {
+        let actions = ChatListSwipeActionsPresentation.leadingActions(isMuted: item.isMuted)
+
+        if actions.contains(.unmute) {
+            Button {
+                setMuted(groupIdHex: item.id, muted: false)
+            } label: {
+                Label(L10n.string("Unmute"), systemImage: "bell.fill")
+            }
+            .tint(.indigo)
+        }
+        if actions.contains(.mute) {
+            Button {
+                setMuted(groupIdHex: item.id, muted: true)
+            } label: {
+                Label(L10n.string("Mute"), systemImage: "bell.slash.fill")
+            }
+            .tint(.indigo)
+        }
     }
 
     @ViewBuilder
@@ -545,6 +570,16 @@ struct ChatsListView: View {
             Haptics.error()
             appState.present(.error(L10n.string("Couldn't leave chat"), message: error.localizedDescription))
         }
+    }
+
+    /// Mute is a local, per-device preference: no Marmot publish, so the row
+    /// projection is refreshed directly instead of via a group record change.
+    @MainActor
+    private func setMuted(groupIdHex: String, muted: Bool) {
+        guard let accountIdHex = appState.activeAccount?.accountIdHex else { return }
+        ChatMuteStore.setMuted(muted, accountIdHex: accountIdHex, groupIdHex: groupIdHex)
+        viewModel?.refreshDisplayProjections()
+        Haptics.success()
     }
 
     @MainActor

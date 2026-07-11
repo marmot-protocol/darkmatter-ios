@@ -201,6 +201,7 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
+                isMuted: isRouteMuted(route),
                 appSceneActive: appState?.isAppSceneActive ?? true,
                 updateAccountRef: route.accountRef,
                 updateGroupIdHex: route.groupIdHex,
@@ -211,6 +212,16 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             }
         }
         return [.banner, .list, .sound]
+    }
+
+    /// Notification routes carry the account label, while the mute store keys
+    /// by account id; an unresolvable account fails open (presents).
+    private func isRouteMuted(_ route: LocalNotificationRoute) -> Bool {
+        guard let accountIdHex = appState?.accounts
+            .first(where: { $0.label == route.accountRef })?
+            .accountIdHex
+        else { return false }
+        return ChatMuteStore.isMuted(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
     }
 
     func userNotificationCenter(

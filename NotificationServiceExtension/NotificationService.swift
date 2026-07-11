@@ -74,6 +74,9 @@ final class NotificationService: UNNotificationServiceExtension {
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
                 )
+                // One shared-defaults read per wake; per-record lookups hit the
+                // in-memory snapshot.
+                let mutedChatKeys = ChatMuteStore.mutedChatKeys()
                 let decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: NotificationServiceSettingsReadPolicy
@@ -83,7 +86,14 @@ final class NotificationService: UNNotificationServiceExtension {
                                     accountRef: accountRef
                                 ).localNotificationsEnabled
                             }
-                        }
+                        },
+                    isMuted: { accountIdHex, groupIdHex in
+                        ChatMuteStore.isMuted(
+                            accountIdHex: accountIdHex,
+                            groupIdHex: groupIdHex,
+                            in: mutedChatKeys
+                        )
+                    }
                 )
                 await apply(decision, to: content)
             } catch {
@@ -121,6 +131,8 @@ final class NotificationService: UNNotificationServiceExtension {
             decorate(content, with: presentation)
             await additionalPresentationTask?.value
             self.additionalPresentationTask = nil
+        case .deliverQuietly:
+            applyQuietDelivery(to: content)
         case .fallback:
             applyFallback(to: content)
         }
@@ -149,6 +161,15 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         additionalPresentationTask = task
         return task
+    }
+
+    /// Without the filtering entitlement the extension cannot drop the alert
+    /// that woke it, so a fully muted wake keeps the generic content but sheds
+    /// its banner and sound: the record lands silently in Notification Center.
+    private func applyQuietDelivery(to content: UNMutableNotificationContent) {
+        applyFallback(to: content)
+        content.sound = nil
+        content.interruptionLevel = .passive
     }
 
     private func applyFallback(to content: UNMutableNotificationContent) {

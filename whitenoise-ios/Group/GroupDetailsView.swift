@@ -23,7 +23,7 @@ enum GroupDetailsConfirmation: Identifiable {
 }
 
 /// Inspector for a single group. Name, members + admin management,
-/// invite/remove, archive, leave, and (in developer mode) MLS internals.
+/// invite/remove, mute, archive, leave, and (in developer mode) MLS internals.
 struct GroupDetailsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -189,6 +189,7 @@ struct GroupDetailsView: View {
             await model.refreshVisibleDebugState(using: appState)
         }
         .task(id: viewModel.group.groupIdHex) {
+            model.loadMuteState(using: appState)
             await model.loadSharedMedia(using: appState)
         }
         .refreshable {
@@ -432,6 +433,15 @@ struct GroupDetailsView: View {
 
     private var groupActionsSection: some View {
         Section {
+            groupActionRow(
+                title: model.isMuted ? L10n.string("Unmute Group") : L10n.string("Mute Group"),
+                systemImage: model.isMuted ? "bell.fill" : "bell.slash",
+                isDisabled: false,
+                help: .mute
+            ) {
+                model.setMuted(!model.isMuted, using: appState)
+            }
+
             groupActionRow(
                 title: viewModel.group.archived ? L10n.string("Unarchive Group") : L10n.string("Archive Group"),
                 systemImage: viewModel.group.archived ? "tray.and.arrow.up" : "archivebox",
@@ -815,6 +825,7 @@ enum GroupDetailsActionError: Equatable, LocalizedError {
 
 enum GroupActionHelp {
     case stepDown
+    case mute
     case archive
     case leave(message: String)
     case deleteLocal
@@ -823,6 +834,8 @@ enum GroupActionHelp {
         switch self {
         case .stepDown:
             return L10n.string("Step Down as Admin")
+        case .mute:
+            return L10n.string("Mute Group")
         case .archive:
             return L10n.string("Archive Group")
         case .leave:
@@ -836,6 +849,8 @@ enum GroupActionHelp {
         switch self {
         case .stepDown:
             return L10n.string("You'll stay in the group, but another admin will need to restore your admin status.")
+        case .mute:
+            return L10n.string("Muting silences this group's notification banners and sounds on this device. Messages still arrive and count as unread.")
         case .archive:
             return L10n.string("Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone.")
         case .leave(let message):
