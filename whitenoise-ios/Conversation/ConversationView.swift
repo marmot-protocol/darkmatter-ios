@@ -551,6 +551,7 @@ struct ConversationView: View {
     @State private var lastAutomaticBottomScrollTargetID: String?
     @State private var isInitialBottomStabilizationScheduled = false
     @State private var pendingKeyboardDismissTask: Task<Void, Never>?
+    @State private var pendingSearchMatchScrollTask: Task<Void, Never>?
     @State private var visibleChatRoute: VisibleChatRoute?
     /// Global Y bounds of the visible timeline (between nav bar and composer).
     /// The bottom shrinks when the keyboard rises, so placement accounts for it.
@@ -633,6 +634,7 @@ struct ConversationView: View {
 
     var body: some View {
         timeline
+            .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
             .bottomInputChromeAccessory { composerArea }
             .overlay { centeredActionsOverlay }
             .navigationTitle(conversationChrome.title)
@@ -640,6 +642,14 @@ struct ConversationView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     conversationTitle
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        viewModel?.search.activate()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .accessibilityLabel("Search")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -794,6 +804,7 @@ struct ConversationView: View {
                     appState.endViewingChat(visibleChatRoute)
                 }
                 voiceRecorder.cancelIfActive()
+                viewModel?.search.end()
                 cancelPendingTimelineFollowUpWork()
                 dismissKeyboard()
                 persistDraft(draft)
@@ -1093,6 +1104,9 @@ struct ConversationView: View {
                                         }
                                         row(for: item, viewModel: viewModel)
                                             .background {
+                                                searchMatchHighlight(for: item, viewModel: viewModel)
+                                            }
+                                            .background {
                                                 GeometryReader { rowGeometry in
                                                     Color.clear.preference(
                                                         key: TimelineRowViewportFramesKey.self,
@@ -1203,7 +1217,12 @@ struct ConversationView: View {
                             }
                         }
                         .onChange(of: viewModel.timelineProjectionGeneration) { _, _ in
+                            viewModel.search.refreshAfterTimelineChange()
                             handleTimelineProjectionChange(proxy: proxy, viewModel: viewModel)
+                        }
+                        .onChange(of: viewModel.search.scrollRequest) { _, request in
+                            guard let request else { return }
+                            scheduleSearchMatchScroll(to: request.itemId, proxy: proxy)
                         }
                         .onChange(of: outer.size.height) { _, _ in
                             let wasAtBottom = isAtTimelineBottom
@@ -1230,6 +1249,7 @@ struct ConversationView: View {
                             initialScrollFollowUpTask = nil
                             isInitialBottomStabilizationScheduled = false
                             cancelPendingBottomScroll()
+                            cancelPendingSearchMatchScroll()
                         }
                     }
                 }
@@ -2048,8 +2068,56 @@ struct ConversationView: View {
         initialScrollFollowUpTask?.cancel()
         initialScrollFollowUpTask = nil
         cancelPendingBottomScroll()
+        cancelPendingSearchMatchScroll()
         cancelPendingKeyboardDismiss()
         cancelActionFrameMeasurement()
+    }
+
+    // MARK: - In-conversation search
+
+    @ViewBuilder
+    private var searchBarInset: some View {
+        if let viewModel, viewModel.search.isActive {
+            ConversationSearchBar(
+                search: viewModel.search,
+                onClose: { closeSearch() }
+            )
+        }
+    }
+
+    private func closeSearch() {
+        cancelPendingSearchMatchScroll()
+        viewModel?.search.end()
+    }
+
+    @ViewBuilder
+    private func searchMatchHighlight(for item: TimelineItem, viewModel: ConversationViewModel) -> some View {
+        if viewModel.search.isActive, viewModel.search.currentMatch?.itemId == item.id {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.accentColor.opacity(0.16))
+        }
+    }
+
+    /// Jump the timeline to a search match. Deferred through a cancellable
+    /// main-actor task like the bottom-follow coordinator, and any queued
+    /// bottom-follow is cancelled so it cannot race the targeted jump.
+    private func scheduleSearchMatchScroll(to itemId: String, proxy: ScrollViewProxy) {
+        cancelPendingBottomScroll()
+        pendingSearchMatchScrollTask?.cancel()
+        pendingSearchMatchScrollTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            pendingSearchMatchScrollTask = nil
+            isAtTimelineBottom = false
+            withAnimation(.smooth(duration: 0.2)) {
+                proxy.scrollTo(itemId, anchor: .center)
+            }
+        }
+    }
+
+    private func cancelPendingSearchMatchScroll() {
+        pendingSearchMatchScrollTask?.cancel()
+        pendingSearchMatchScrollTask = nil
     }
 
     // MARK: - Message actions placement
