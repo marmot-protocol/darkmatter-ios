@@ -767,7 +767,7 @@ struct GroupDetailsView: View {
 
 }
 
-enum GroupDetailsActionError: LocalizedError {
+enum GroupDetailsActionError: Equatable, LocalizedError {
     case noActiveAccount
     case invalidImageURL
     case operationInFlight
