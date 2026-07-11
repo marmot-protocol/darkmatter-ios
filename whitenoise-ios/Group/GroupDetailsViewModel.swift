@@ -33,6 +33,7 @@ final class GroupDetailsViewModel {
     var sharedMediaRecords: [MediaRecordFfi] = []
     var isLoadingSharedMedia = false
     var sharedMediaError: String?
+    var isMuted = false
     private var didLoadSharedMedia = false
 
     // Bound by the view at the top of `body` (both @ObservationIgnored, so the
@@ -411,6 +412,36 @@ final class GroupDetailsViewModel {
             handleActionError(error, title: L10n.string("Couldn't update disappearing messages"), using: appState)
             return false
         }
+    }
+
+    func loadMuteState(using appState: AppState) {
+        guard let conversation,
+              let accountIdHex = appState.activeAccount?.accountIdHex
+        else { return }
+        isMuted = ChatMuteStore.isMuted(
+            accountIdHex: accountIdHex,
+            groupIdHex: conversation.group.groupIdHex
+        )
+    }
+
+    /// Mute is a local, per-device preference; unlike archive it publishes
+    /// nothing and doesn't touch the group record.
+    func setMuted(_ muted: Bool, using appState: AppState) {
+        guard let conversation,
+              let accountIdHex = appState.activeAccount?.accountIdHex
+        else { return }
+        ChatMuteStore.setMuted(
+            muted,
+            accountIdHex: accountIdHex,
+            groupIdHex: conversation.group.groupIdHex
+        )
+        isMuted = muted
+        Haptics.success()
+        appState.present(
+            muted
+                ? .warning(L10n.string("Group muted"))
+                : .success(L10n.string("Group unmuted"))
+        )
     }
 
     func setArchived(_ archived: Bool, using appState: AppState) async {

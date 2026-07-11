@@ -20,9 +20,17 @@ struct ChatRow: View {
             .frame(width: 52, height: 52)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(item.hasUnread ? .headline.weight(.semibold) : .headline)
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(item.hasUnread ? .headline.weight(.semibold) : .headline)
+                        .lineLimit(1)
+                    if item.isMuted {
+                        Image(systemName: MuteBadgePresentation.systemImageName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(L10n.string("Muted")))
+                    }
+                }
                 Text(subtitle)
                     .font(.subheadline)
                     .fontWeight(item.draftPreview != nil || item.hasUnread ? .semibold : .regular)
@@ -105,6 +113,10 @@ struct MentionBadge: View {
 
 nonisolated enum MentionBadgePresentation {
     static let systemImageName = "at"
+}
+
+nonisolated enum MuteBadgePresentation {
+    static let systemImageName = "bell.slash.fill"
 }
 
 /// Circular avatar. Renders the profile picture when a URL is provided,

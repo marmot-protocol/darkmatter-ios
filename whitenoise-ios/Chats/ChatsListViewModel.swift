@@ -18,6 +18,7 @@ final class ChatsListViewModel {
         let row: ChatListRowFfi
         let avatarURL: URL?
         let title: String
+        let isMuted: Bool
         let previewText: String?
         let draftPreview: String?
         let searchHaystack: String
@@ -26,6 +27,7 @@ final class ChatsListViewModel {
             row: ChatListRowFfi,
             avatarURL: URL?,
             title: String,
+            isMuted: Bool = false,
             draftText: String? = nil,
             mentionDisplayName: MarkdownMentionResolver? = nil
         ) {
@@ -36,6 +38,7 @@ final class ChatsListViewModel {
             self.row = row
             self.avatarURL = avatarURL
             self.title = title
+            self.isMuted = isMuted
             self.previewText = previewText
             self.draftPreview = ConversationDraftPreview.text(from: draftText)
             self.searchHaystack = Self.makeSearchHaystack(
@@ -323,9 +326,10 @@ final class ChatsListViewModel {
         var nextRows: [String: ChatListRowFfi] = [:]
         var nextItems: [String: Item] = [:]
         var changed = false
+        let muteLookup = currentMuteLookup()
         for row in snapshot {
             updateCachedGroupDetails(with: row)
-            let item = makeItem(for: row)
+            let item = makeItem(for: row, muteLookup: muteLookup)
             nextRows[row.groupIdHex] = row
             nextItems[row.groupIdHex] = item
             if previousRows[row.groupIdHex] != row || previousItems[row.groupIdHex] != item {
@@ -466,8 +470,9 @@ final class ChatsListViewModel {
         pendingChatListRowsByGroupId = [:]
         guard !pendingRows.isEmpty else { return }
         var changed = false
+        let muteLookup = currentMuteLookup()
         for row in pendingRows {
-            changed = storeRow(row) || changed
+            changed = storeRow(row, muteLookup: muteLookup) || changed
         }
         if changed {
             publishItems()
@@ -476,9 +481,9 @@ final class ChatsListViewModel {
     }
 
     @discardableResult
-    private func storeRow(_ row: ChatListRowFfi) -> Bool {
+    private func storeRow(_ row: ChatListRowFfi, muteLookup: MuteLookup? = nil) -> Bool {
         updateCachedGroupDetails(with: row)
-        let item = makeItem(for: row)
+        let item = makeItem(for: row, muteLookup: muteLookup)
         let changed = itemByGroupId[row.groupIdHex] != item
         rowByGroupId[row.groupIdHex] = row
         itemByGroupId[row.groupIdHex] = item
@@ -488,8 +493,9 @@ final class ChatsListViewModel {
     func refreshDisplayProjections() {
         guard !rowByGroupId.isEmpty else { return }
         var changed = false
+        let muteLookup = currentMuteLookup()
         for (groupId, row) in rowByGroupId {
-            let item = makeItem(for: row)
+            let item = makeItem(for: row, muteLookup: muteLookup)
             if itemByGroupId[groupId] != item {
                 itemByGroupId[groupId] = item
                 changed = true
@@ -500,13 +506,28 @@ final class ChatsListViewModel {
         }
     }
 
-    private func makeItem(for row: ChatListRowFfi) -> Item {
+    /// Batch loops hoist one `MuteLookup` so the mute-store defaults read and
+    /// the account scan run once per pass, not once per row.
+    private struct MuteLookup {
+        let accountIdHex: String?
+        let mutedChatKeys: Set<String>
+    }
+
+    private func currentMuteLookup() -> MuteLookup {
+        MuteLookup(accountIdHex: currentAccountIdHex, mutedChatKeys: ChatMuteStore.mutedChatKeys())
+    }
+
+    private func makeItem(for row: ChatListRowFfi, muteLookup: MuteLookup? = nil) -> Item {
         let display = display(for: row, details: groupDetailsCache[row.groupIdHex])
         let draftAccountRef = currentAccount ?? appState?.activeAccountRef
+        let muteLookup = muteLookup ?? currentMuteLookup()
         return Item(
             row: row,
             avatarURL: display.avatarURL,
             title: display.title,
+            isMuted: muteLookup.accountIdHex.map {
+                ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
+            } ?? false,
             draftText: draftAccountRef.flatMap {
                 draftStore.draft(accountRef: $0, groupIdHex: row.groupIdHex)
             },
@@ -519,6 +540,15 @@ final class ChatsListViewModel {
                 return appState?.mentionDisplayName(for: entity)
             }
         )
+    }
+
+    /// The mute store keys by account id, while this model binds to the
+    /// account label; resolve through the account summaries.
+    private var currentAccountIdHex: String? {
+        guard let appState,
+              let accountRef = currentAccount ?? appState.activeAccountRef
+        else { return nil }
+        return appState.accounts.first { $0.label == accountRef }?.accountIdHex
     }
 
     private func updateCachedGroupDetails(with row: ChatListRowFfi) {
@@ -688,6 +718,7 @@ final class ChatsListViewModel {
                 var changed = false
                 var failedAvatarGroupIds: Set<String> = []
                 var failedDisplayGroupIds: Set<String> = []
+                let muteLookup = self.currentMuteLookup()
                 for groupId in groupIds where !Task.isCancelled {
                     let details: GroupDetailsFfi
                     do {
@@ -740,7 +771,7 @@ final class ChatsListViewModel {
                         }
                     }
 
-                    let item = self.makeItem(for: row)
+                    let item = self.makeItem(for: row, muteLookup: muteLookup)
                     if self.itemByGroupId[groupId] != item {
                         self.itemByGroupId[groupId] = item
                         changed = true
