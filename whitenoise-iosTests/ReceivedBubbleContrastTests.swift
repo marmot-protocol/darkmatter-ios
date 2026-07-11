@@ -38,3 +38,20 @@ struct MessageBubbleReplyChromeTests {
         #expect(MessageBubbleReplyLayout.sentHeaderOverlayOpacity < 0.25)
     }
 }
+
+struct MessageBodyCollapsePresentationTests {
+    @Test func shortMessagesStayExpanded() {
+        #expect(!MessageBodyCollapsePresentation.shouldCollapse("Short message"))
+    }
+
+    @Test func veryLongMessagesCollapseByCharacterCount() {
+        let body = String(repeating: "x", count: MessageBodyCollapsePresentation.maxCollapsedCharacters + 1)
+        #expect(MessageBodyCollapsePresentation.shouldCollapse(body))
+    }
+
+    @Test func manyLineMessagesCollapseByLineCount() {
+        let body = Array(repeating: "line", count: MessageBodyCollapsePresentation.maxCollapsedLines + 1)
+            .joined(separator: "\n")
+        #expect(MessageBodyCollapsePresentation.shouldCollapse(body))
+    }
+}
