@@ -18,6 +18,7 @@ final class ChatsListViewModel {
         let row: ChatListRowFfi
         let avatarURL: URL?
         let title: String
+        let isMuted: Bool
         let previewText: String?
         let draftPreview: String?
         let searchHaystack: String
@@ -26,6 +27,7 @@ final class ChatsListViewModel {
             row: ChatListRowFfi,
             avatarURL: URL?,
             title: String,
+            isMuted: Bool = false,
             draftText: String? = nil,
             mentionDisplayName: MarkdownMentionResolver? = nil
         ) {
@@ -36,6 +38,7 @@ final class ChatsListViewModel {
             self.row = row
             self.avatarURL = avatarURL
             self.title = title
+            self.isMuted = isMuted
             self.previewText = previewText
             self.draftPreview = ConversationDraftPreview.text(from: draftText)
             self.searchHaystack = Self.makeSearchHaystack(
@@ -507,6 +510,7 @@ final class ChatsListViewModel {
             row: row,
             avatarURL: display.avatarURL,
             title: display.title,
+            isMuted: isChatMuted(groupIdHex: row.groupIdHex),
             draftText: draftAccountRef.flatMap {
                 draftStore.draft(accountRef: $0, groupIdHex: row.groupIdHex)
             },
@@ -519,6 +523,20 @@ final class ChatsListViewModel {
                 return appState?.mentionDisplayName(for: entity)
             }
         )
+    }
+
+    private func isChatMuted(groupIdHex: String) -> Bool {
+        guard let accountIdHex = currentAccountIdHex else { return false }
+        return ChatMuteStore.isMuted(accountIdHex: accountIdHex, groupIdHex: groupIdHex)
+    }
+
+    /// The mute store keys by account id, while this model binds to the
+    /// account label; resolve through the account summaries.
+    private var currentAccountIdHex: String? {
+        guard let appState,
+              let accountRef = currentAccount ?? appState.activeAccountRef
+        else { return nil }
+        return appState.accounts.first { $0.label == accountRef }?.accountIdHex
     }
 
     private func updateCachedGroupDetails(with row: ChatListRowFfi) {
