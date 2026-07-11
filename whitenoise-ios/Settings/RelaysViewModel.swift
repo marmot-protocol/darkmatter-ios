@@ -141,7 +141,7 @@ final class RelaysViewModel {
             queueRelayDeletes(urls)
             return
         }
-        Task { await deleteRelayURLs(urls, using: dataSource) }
+        Task { _ = await deleteRelayURLs(urls, using: dataSource) }
     }
 
     @discardableResult
@@ -205,22 +205,26 @@ final class RelaysViewModel {
         }
     }
 
-    private func deleteRelayURLs(_ urls: [String], using dataSource: any RelaysViewModelDataSource) async {
+    @discardableResult
+    private func deleteRelayURLs(_ urls: [String], using dataSource: any RelaysViewModelDataSource) async -> Bool {
         guard !isSaving else {
             queueRelayDeletes(urls)
-            return
+            return false
         }
         let deleteSet = Set(urls)
         let relays = currentRelays
         let next = relays.filter { !deleteSet.contains($0) }
-        guard next != relays else { return }
-        _ = await save(next, using: dataSource)
+        guard next != relays else { return true }
+        return await save(next, using: dataSource)
     }
 
     private func drainQueuedRelayDeletes(using dataSource: any RelaysViewModelDataSource) async {
         guard !queuedRelayDeletes.isEmpty else { return }
         let urls = queuedRelayDeletes
         queuedRelayDeletes.removeAll()
-        await deleteRelayURLs(urls, using: dataSource)
+        let deleted = await deleteRelayURLs(urls, using: dataSource)
+        if !deleted {
+            queueRelayDeletes(urls)
+        }
     }
 }
