@@ -502,6 +502,34 @@ struct ChatsListView: View {
         guard let ref = appState.activeAccountRef else { return }
         do {
             let client = try appState.currentMarmotClient()
+            let managementState = try await client.groupManagementState(
+                accountRef: ref,
+                groupIdHex: groupIdHex
+            )
+            guard GroupManagementPresentation.canLeave(
+                state: managementState,
+                fallbackIsLastAdmin: false
+            ) else {
+                Haptics.error()
+                appState.present(.error(
+                    L10n.string("Couldn't leave chat"),
+                    message: GroupManagementPresentation.leaveFooter(
+                        state: managementState,
+                        fallbackIsLastAdmin: false
+                    )
+                ))
+                return
+            }
+            if GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: managementState) {
+                appState.present(.warning(
+                    L10n.string("Stepping down before leaving…"),
+                    message: L10n.string("Publishing group update.")
+                ))
+                _ = try await client.selfDemoteAdminDetailed(
+                    accountRef: ref,
+                    groupIdHex: groupIdHex
+                )
+            }
             _ = try await client.leaveGroup(
                 accountRef: ref,
                 groupIdHex: groupIdHex

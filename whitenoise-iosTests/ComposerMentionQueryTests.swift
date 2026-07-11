@@ -162,6 +162,31 @@ struct ComposerMentionQueryTests {
         )
     }
 
+    @Test func fallbackMemberCandidateEncodesNpubWithoutMarmotClient() throws {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        let accountIdHex = try #require(NostrProfileReference.pubkeyHex(fromBech32: npub))
+        let member = AppGroupMemberRecordFfi(
+            memberIdHex: "mls-member-id",
+            account: accountIdHex,
+            local: false
+        )
+
+        let candidate = try #require(ComposerMentionCandidate(member: member, appState: AppState()))
+
+        #expect(candidate.npub == npub)
+        #expect(candidate.displayName == IdentityFormatter.short(accountIdHex))
+    }
+
+    @Test func fallbackMemberCandidateRejectsInvalidAccountHex() {
+        let member = AppGroupMemberRecordFfi(
+            memberIdHex: "mls-member-id",
+            account: "account-label",
+            local: false
+        )
+
+        #expect(ComposerMentionCandidate(member: member, appState: AppState()) == nil)
+    }
+
     @Test func mentionCandidateCacheKeyTreatsSameGenerationsAsEqual() {
         // Regression for #300: ConversationViewModel caches the `@`-mention
         // candidate list and reuses it across keystrokes, rebuilding only when

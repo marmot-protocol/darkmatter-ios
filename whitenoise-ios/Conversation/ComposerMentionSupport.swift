@@ -34,8 +34,7 @@ struct ComposerMentionCandidate: Identifiable, Equatable {
     init?(member: AppGroupMemberRecordFfi, appState: AppState) {
         guard !member.local else { return nil }
         let accountHex = member.account ?? member.memberIdHex
-        guard let npub = (try? appState.currentMarmotClient())?.npub(accountIdHex: accountHex),
-            npub.hasPrefix("npub1")
+        guard let npub = NostrProfileReference.npub(fromAccountIdHex: accountHex)
         else { return nil }
         memberIdHex = member.memberIdHex
         self.npub = npub
