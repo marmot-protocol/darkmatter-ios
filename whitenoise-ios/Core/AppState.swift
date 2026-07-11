@@ -819,15 +819,14 @@ final class AppState {
 
     @MainActor
     private func activateNewIdentity(_ summary: AccountSummaryFfi) async {
+        cacheActivatedAccountSummaryIfNeeded(summary)
         do {
             try await refreshAccounts()
         } catch {
-            cacheActivatedAccountSummaryIfNeeded(summary)
             updateProfileProjectionLocalAccountLabels()
             warmProfileProjection(forAccountIdHex: summary.accountIdHex)
         }
 
-        cacheActivatedAccountSummaryIfNeeded(summary)
         activeAccountRef = summary.label
         completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
         await enableNotificationsByDefault(for: summary.label)

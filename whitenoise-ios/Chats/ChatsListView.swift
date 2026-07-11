@@ -516,6 +516,9 @@ struct ChatsListView: View {
                     message: GroupManagementPresentation.leaveFooter(
                         state: managementState,
                         fallbackIsLastAdmin: false
+                    ) ?? GroupManagementPresentation.leaveHelpMessage(
+                        state: managementState,
+                        fallbackIsLastAdmin: false
                     )
                 ))
                 return

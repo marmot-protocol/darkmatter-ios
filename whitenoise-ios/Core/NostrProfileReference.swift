@@ -250,9 +250,7 @@ nonisolated enum NostrProfileReference {
     }
 
     private static func bech32CreateChecksum(hrp: String, values: [UInt8]) -> [UInt8] {
-        var expanded: [UInt8] = hrp.unicodeScalars.map { UInt8($0.value >> 5) }
-        expanded.append(0)
-        expanded.append(contentsOf: hrp.unicodeScalars.map { UInt8($0.value & 31) })
+        var expanded = bech32HrpExpand(hrp)
         expanded.append(contentsOf: values)
         expanded.append(contentsOf: Array(repeating: UInt8(0), count: 6))
         let polymod = bech32Polymod(expanded) ^ 1
@@ -262,11 +260,16 @@ nonisolated enum NostrProfileReference {
     }
 
     private static func bech32VerifyChecksum(hrp: String, values: [UInt8]) -> Bool {
+        var expanded = bech32HrpExpand(hrp)
+        expanded.append(contentsOf: values)
+        return bech32Polymod(expanded) == 1
+    }
+
+    private static func bech32HrpExpand(_ hrp: String) -> [UInt8] {
         var expanded: [UInt8] = hrp.unicodeScalars.map { UInt8($0.value >> 5) }
         expanded.append(0)
         expanded.append(contentsOf: hrp.unicodeScalars.map { UInt8($0.value & 31) })
-        expanded.append(contentsOf: values)
-        return bech32Polymod(expanded) == 1
+        return expanded
     }
 
     private static func bech32Polymod(_ values: [UInt8]) -> Int {
