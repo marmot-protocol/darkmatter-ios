@@ -78,11 +78,15 @@ nonisolated enum L10n {
 
     private static func bundle(for language: AppLanguage, in base: Bundle = .main) -> Bundle {
         guard let localeIdentifier = language.localeIdentifier else { return base }
-        return localizedBundle(forPreferences: [localeIdentifier], in: base)
+        return bundleCache.bundle(forPreference: localeIdentifier, in: base) {
+            localizedBundle(forPreferences: [localeIdentifier], in: base)
+        }
     }
 
     private static func bundle(for locale: Locale, in base: Bundle) -> Bundle {
-        localizedBundle(forPreferences: [locale.identifier], in: base)
+        bundleCache.bundle(forPreference: locale.identifier, in: base) {
+            localizedBundle(forPreferences: [locale.identifier], in: base)
+        }
     }
 
     private static func localizedBundle(forPreferences preferences: [String], in base: Bundle) -> Bundle {
@@ -94,5 +98,92 @@ nonisolated enum L10n {
             let localized = Bundle(path: path)
         else { return base }
         return localized
+    }
+
+    private static let bundleCache = L10nBundleCache()
+
+#if DEBUG
+    static func resetBundleCacheForTesting() {
+        bundleCache.removeAll()
+    }
+
+    static var bundleCacheCountForTesting: Int {
+        bundleCache.count
+    }
+
+    static func bundleCacheCountForTesting(in base: Bundle) -> Int {
+        bundleCache.count(in: base)
+    }
+#endif
+}
+
+// L10n remains synchronous; NSLock guards all mutable cache state across actors.
+// swiftlint:disable:next no_unchecked_sendable
+private nonisolated final class L10nBundleCache: @unchecked Sendable {
+    private struct Key: Hashable {
+        let base: ObjectIdentifier
+        let preference: String
+    }
+
+    private let lock = NSLock()
+    private let notificationCenter: NotificationCenter
+    private var observer: NSObjectProtocol?
+    private var bundles: [Key: Bundle] = [:]
+
+    init(notificationCenter: NotificationCenter = .default) {
+        self.notificationCenter = notificationCenter
+        observer = notificationCenter.addObserver(
+            forName: AppLanguage.didChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.removeAll()
+        }
+    }
+
+    deinit {
+        if let observer {
+            notificationCenter.removeObserver(observer)
+        }
+    }
+
+    func bundle(forPreference preference: String, in base: Bundle, resolve: () -> Bundle) -> Bundle {
+        let key = Key(base: ObjectIdentifier(base), preference: preference)
+        lock.lock()
+        if let cached = bundles[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let resolved = resolve()
+
+        lock.lock()
+        if let cached = bundles[key] {
+            lock.unlock()
+            return cached
+        }
+        bundles[key] = resolved
+        lock.unlock()
+        return resolved
+    }
+
+    func removeAll() {
+        lock.lock()
+        bundles.removeAll()
+        lock.unlock()
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return bundles.count
+    }
+
+    func count(in base: Bundle) -> Int {
+        let baseID = ObjectIdentifier(base)
+        lock.lock()
+        defer { lock.unlock() }
+        return bundles.keys.filter { $0.base == baseID }.count
     }
 }

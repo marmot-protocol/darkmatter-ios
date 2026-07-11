@@ -799,11 +799,7 @@ final class AppState {
             defaultRelays: relays,
             bootstrapRelays: relays
         )
-        try await refreshAccounts()
-        activeAccountRef = summary.label
-        completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
-        await enableNotificationsByDefault(for: summary.label)
-        scheduleNativePushRegistrationIfEnabled()
+        await activateNewIdentity(summary)
         return summary
     }
 
@@ -817,12 +813,30 @@ final class AppState {
             defaultRelays: relays,
             bootstrapRelays: relays
         )
-        try await refreshAccounts()
+        await activateNewIdentity(summary)
+        return summary
+    }
+
+    @MainActor
+    private func activateNewIdentity(_ summary: AccountSummaryFfi) async {
+        cacheActivatedAccountSummaryIfNeeded(summary)
+        do {
+            try await refreshAccounts()
+        } catch {
+            updateProfileProjectionLocalAccountLabels()
+            warmProfileProjection(forAccountIdHex: summary.accountIdHex)
+        }
+
         activeAccountRef = summary.label
         completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
         await enableNotificationsByDefault(for: summary.label)
         scheduleNativePushRegistrationIfEnabled()
-        return summary
+    }
+
+    @MainActor
+    private func cacheActivatedAccountSummaryIfNeeded(_ summary: AccountSummaryFfi) {
+        guard !accountStore.accounts.contains(where: { $0.label == summary.label }) else { return }
+        accountStore.accounts.append(summary)
     }
 
     var activeAccount: AccountSummaryFfi? { accountStore.activeAccount }

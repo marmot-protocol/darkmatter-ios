@@ -2263,6 +2263,26 @@ struct LocalizationCatalogTests {
         )
     }
 
+    @Test func localizationBundleLookupIsMemoizedForSelectedLanguage() {
+        let bundle = Bundle(for: L10nBundleCacheProbe.self)
+        L10n.resetBundleCacheForTesting()
+        #expect(L10n.bundleCacheCountForTesting(in: bundle) == 0)
+        _ = L10n.formatted(
+            "Settings",
+            arguments: [],
+            locale: Locale(identifier: "fr"),
+            baseBundle: bundle
+        )
+        #expect(L10n.bundleCacheCountForTesting(in: bundle) == 1)
+        _ = L10n.formatted(
+            "Done",
+            arguments: [],
+            locale: Locale(identifier: "fr"),
+            baseBundle: bundle
+        )
+        #expect(L10n.bundleCacheCountForTesting(in: bundle) == 1)
+    }
+
     @Test func infoPlistCatalogLocalizesCameraPermissionCopy() throws {
         let catalog = try readCatalog("whitenoise-ios/InfoPlist.xcstrings")
         let strings = try #require(catalog["strings"] as? [String: Any])
@@ -2368,6 +2388,8 @@ struct LocalizationCatalogTests {
         }
     }
 }
+
+private final class L10nBundleCacheProbe {}
 
 struct AppearancePreferencesTests {
     @Test func themePreferencesResolveToExpectedColorSchemes() {
@@ -5959,6 +5981,15 @@ struct GroupManagementPresentationTests {
         #expect(
             NostrProfileReference.memberRef(from: "3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D") == "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
         )
+    }
+
+    @Test func encodesNpubFromHexWithoutMarmotFfi() throws {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        let hex = try #require(NostrProfileReference.pubkeyHex(fromBech32: npub))
+
+        #expect(NostrProfileReference.npub(fromAccountIdHex: hex) == npub)
+        #expect(NostrProfileReference.npub(fromAccountIdHex: hex.uppercased()) == npub)
+        #expect(NostrProfileReference.npub(fromAccountIdHex: "not hex") == nil)
     }
 
     @Test func addMembersScannerRejectsCorruptNpubReferences() {
