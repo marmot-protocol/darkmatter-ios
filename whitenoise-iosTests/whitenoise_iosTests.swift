@@ -4529,6 +4529,17 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.firstUnreadMessageIdHex == hex("c2"))
     }
 
+    @Test func successfulSnapshotClearsPreviousLoadError() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: hex("a1"), title: "Recovered", updatedAt: 10)
+
+        viewModel.setLoadErrorForTesting("Couldn't load chats")
+        viewModel.applyChatListSnapshot([row])
+
+        #expect(viewModel.loadError == nil)
+        #expect(viewModel.items.map(\.id) == [row.groupIdHex])
+    }
+
     @Test func itemByGroupIdAccessorResolvesActiveAndArchivedRowsAndMissesUnknownId() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let active = chatListRow(groupIdHex: hex("a1"), title: "Active", updatedAt: 10)
