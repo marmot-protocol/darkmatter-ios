@@ -316,6 +316,7 @@ final class ChatsListViewModel {
     }
 
     func applyChatListSnapshot(_ snapshot: [ChatListRowFfi]) {
+        loadError = nil
         pendingChatListRowsByGroupId = [:]
         let previousRows = rowByGroupId
         let previousItems = itemByGroupId
@@ -796,6 +797,10 @@ final class ChatsListViewModel {
                 publishItems()
             }
         }
+    }
+
+    func setLoadErrorForTesting(_ error: String?) {
+        loadError = error
     }
 
     var avatarEnrichmentTaskIDForTesting: UUID? { avatarEnrichmentTaskID }

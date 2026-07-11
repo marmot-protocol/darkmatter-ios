@@ -124,7 +124,9 @@ struct GroupDetailsArchiveActionTests {
         let second = Task { @MainActor in
             try await model.updateGroupImage(url: "https://example.com/avatar.png", using: appState)
         }
-        try await second.value
+        await #expect(throws: GroupDetailsActionError.operationInFlight) {
+            try await second.value
+        }
 
         #expect(publisher.requests == [
             GroupAvatarPublishProbe.Request(
