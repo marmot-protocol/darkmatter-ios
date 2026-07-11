@@ -35,7 +35,7 @@ nonisolated enum ForegroundRuntimeWorkGate {
 @Observable
 final class AppState {
 
-    enum Phase: Equatable {
+    nonisolated enum Phase: Equatable {
         case bootstrapping
         case onboarding
         case ready
