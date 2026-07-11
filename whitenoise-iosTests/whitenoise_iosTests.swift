@@ -4756,6 +4756,32 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/new.png")
     }
 
+    @Test func liveRowWithoutNameOrAvatarKeepsEnrichedGroupDetails() throws {
+        let groupId = hex("da")
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        viewModel.applyChatListSnapshot([chatListRow(groupIdHex: groupId, title: "Enriched name", groupName: "")])
+        viewModel.seedGroupDetailsCacheForTesting(GroupDetailsFfi(
+            group: group(name: "Enriched name", id: groupId, avatarUrl: "https://cdn.example.com/enriched.png"),
+            members: [groupMember(memberIdHex: hex("11"), isAdmin: true, isSelf: true)]
+        ))
+
+        // A routine live update (new message / unread change) carries neither
+        // a name nor an avatar; it must not wipe the enriched values.
+        viewModel.applyChatListRow(chatListRow(
+            groupIdHex: groupId,
+            title: groupId,
+            groupName: "",
+            avatarUrl: nil,
+            unreadCount: 1
+        ))
+
+        let cached = viewModel.groupDetailsCacheEntryForTesting(groupIdHex: groupId)
+        #expect(cached?.group.name == "Enriched name")
+        #expect(cached?.group.avatarUrl == "https://cdn.example.com/enriched.png")
+        #expect(viewModel.items.first?.avatarURL?.absoluteString == "https://cdn.example.com/enriched.png")
+        #expect(viewModel.items.first?.unreadCount == 1)
+    }
+
     @Test func profileRefreshRebuildsNamedGroupMentionPreviews() throws {
         let bech32 = "npub1" + String(repeating: "q", count: 58)
         let tokens = MarkdownDocumentFfi(blocks: [
