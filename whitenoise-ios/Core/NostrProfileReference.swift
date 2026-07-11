@@ -86,6 +86,13 @@ nonisolated enum NostrProfileReference {
         return nil
     }
 
+    static func npub(fromAccountIdHex accountIdHex: String) -> String? {
+        guard let bytes = pubkeyBytes(fromHex: accountIdHex),
+              let data = convertBits(bytes, from: 8, to: 5, pad: true)
+        else { return nil }
+        return bech32Encode(hrp: "npub", data: data)
+    }
+
     static func memberRef(fromReference reference: String) -> String? {
         guard isWithinReferenceLimit(reference) else { return nil }
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -153,6 +160,37 @@ nonisolated enum NostrProfileReference {
         return nil
     }
 
+    private static func pubkeyBytes(fromHex raw: String) -> [UInt8]? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Hex.is32Bytes(trimmed) else { return nil }
+
+        let bytes = Array(trimmed.utf8)
+        var result: [UInt8] = []
+        result.reserveCapacity(32)
+        var index = 0
+        while index < bytes.count {
+            guard let high = hexNibble(bytes[index]),
+                  let low = hexNibble(bytes[index + 1])
+            else { return nil }
+            result.append((high << 4) | low)
+            index += 2
+        }
+        return result
+    }
+
+    private static func hexNibble(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case 0x30...0x39:
+            return byte - 0x30
+        case 0x41...0x46:
+            return byte - 0x41 + 10
+        case 0x61...0x66:
+            return byte - 0x61 + 10
+        default:
+            return nil
+        }
+    }
+
     private static func looksLikeProfileReference(_ raw: String) -> Bool {
         hasCaseInsensitivePrefix(raw, "npub1")
             || hasCaseInsensitivePrefix(raw, "nprofile1")
@@ -199,12 +237,39 @@ nonisolated enum NostrProfileReference {
         return (hrp, Array(values.dropLast(6)))
     }
 
+    private static func bech32Encode(hrp: String, data: [UInt8]) -> String? {
+        let lowerHrp = hrp.lowercased()
+        guard !lowerHrp.isEmpty,
+              lowerHrp.unicodeScalars.allSatisfy({ (33...126).contains($0.value) }),
+              data.allSatisfy({ $0 < 32 })
+        else { return nil }
+
+        let values = data + bech32CreateChecksum(hrp: lowerHrp, values: data)
+        let dataPart = values.map { String(bech32Charset[Int($0)]) }.joined()
+        return lowerHrp + "1" + dataPart
+    }
+
+    private static func bech32CreateChecksum(hrp: String, values: [UInt8]) -> [UInt8] {
+        var expanded = bech32HrpExpand(hrp)
+        expanded.append(contentsOf: values)
+        expanded.append(contentsOf: Array(repeating: UInt8(0), count: 6))
+        let polymod = bech32Polymod(expanded) ^ 1
+        return (0..<6).map { index in
+            UInt8((polymod >> (5 * (5 - index))) & 31)
+        }
+    }
+
     private static func bech32VerifyChecksum(hrp: String, values: [UInt8]) -> Bool {
+        var expanded = bech32HrpExpand(hrp)
+        expanded.append(contentsOf: values)
+        return bech32Polymod(expanded) == 1
+    }
+
+    private static func bech32HrpExpand(_ hrp: String) -> [UInt8] {
         var expanded: [UInt8] = hrp.unicodeScalars.map { UInt8($0.value >> 5) }
         expanded.append(0)
         expanded.append(contentsOf: hrp.unicodeScalars.map { UInt8($0.value & 31) })
-        expanded.append(contentsOf: values)
-        return bech32Polymod(expanded) == 1
+        return expanded
     }
 
     private static func bech32Polymod(_ values: [UInt8]) -> Int {
