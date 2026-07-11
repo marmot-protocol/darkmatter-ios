@@ -7,7 +7,7 @@ import MarmotKit
 /// `content_tokens` and JSON in `plaintext`. Clients SHOULD render from
 /// `system_type` plus structured `data` so rows can be localized and
 /// re-resolved as display names change.
-enum GroupSystemEventPresentation {
+nonisolated enum GroupSystemEventPresentation {
 
     typealias DisplayNameResolver = (String) -> String
 

@@ -32,6 +32,21 @@ enum MessageBubbleReplyLayout {
     static let sentHeaderOverlayOpacity = 0.16
 }
 
+nonisolated enum MessageBodyCollapsePresentation {
+    static let maxCollapsedCharacters = 900
+    static let maxCollapsedLines = 12
+    static let collapsedBodyMaxHeight: CGFloat = 260
+
+    static func shouldCollapse(_ text: String, collapseLongMessages: Bool = true) -> Bool {
+        collapseLongMessages && (text.count > maxCollapsedCharacters || lineCount(text) > maxCollapsedLines)
+    }
+
+    static func lineCount(_ text: String) -> Int {
+        guard !text.isEmpty else { return 0 }
+        return text.split(separator: "\n", omittingEmptySubsequences: false).count
+    }
+}
+
 /// One chat bubble. Aligned right for our own messages, left for everyone
 /// else. Renders an optional quoted reply header, the message body, a
 /// time/delivery caption, and any reaction chips.
@@ -50,8 +65,10 @@ struct MessageBubble: View {
     var reactions: [ConversationViewModel.ReactionTally] = []
     var onShowReactionDetails: (String) -> Void = { _ in }
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
+    var collapseLongMessages = true
 
     @State private var mediaGallery: MessageMediaGallery?
+    @State private var fullBodyPresentation: MessageFullBodyPresentation?
     @State private var pendingExternalLink: PendingMessageExternalLink?
 
     private var isFromMe: Bool { record.direction == "sent" }
@@ -147,6 +164,13 @@ struct MessageBubble: View {
             ) {
                 mediaGallery = nil
             }
+        }
+        .fullScreenCover(item: $fullBodyPresentation) { presentation in
+            MessageFullBodyView(
+                presentation: presentation,
+                onClose: { fullBodyPresentation = nil }
+            )
+            .environment(\.openURL, OpenURLAction(handler: handleMessageLink))
         }
         .alert(L10n.string("Open link?"), isPresented: externalLinkConfirmationPresented) {
             Button(L10n.string("Open")) {
@@ -335,24 +359,53 @@ struct MessageBubble: View {
     }
 
     private func messageBodyText(hasReply: Bool) -> some View {
-        Group {
-            if let blocks = markdownBlocks {
-                MarkdownMessageView(
-                    blocks: blocks,
-                    quoteBar: isFromMe ? Color.white.opacity(0.8) : Color.accentColor
+        let shouldCollapse = MessageBodyCollapsePresentation.shouldCollapse(
+            sanitizedBodyText,
+            collapseLongMessages: collapseLongMessages
+        )
+        return VStack(alignment: .leading, spacing: 7) {
+            messageBodyContent
+                .frame(
+                    maxHeight: shouldCollapse ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
+                    alignment: .top
                 )
-                .tint(isFromMe ? Color.white : Color.accentColor)
-                .environment(\.openURL, OpenURLAction(handler: handleMessageLink))
-            } else {
-                // Records without parsed tokens (non-chat kinds, optimistic
-                // stream bubbles, pre-markdown history) keep the plain path.
-                Text(sanitizedBodyText)
+                .clipped()
+
+            if shouldCollapse {
+                Button {
+                    fullBodyPresentation = MessageFullBodyPresentation(
+                        id: record.messageIdHex.isEmpty ? "pending-\(record.recordedAt)" : record.messageIdHex,
+                        text: sanitizedBodyText,
+                        blocks: markdownBlocks
+                    )
+                } label: {
+                    Text(L10n.string("Read more"))
+                        .font(.footnote.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
             }
         }
         .foregroundStyle(isFromMe ? Color.white : Color.primary)
         .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
         .padding(.top, hasReply ? MessageBubbleReplyLayout.bodyTopInsetAfterReply : MessageBubbleReplyLayout.bodyTopInset)
         .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
+    }
+
+    @ViewBuilder
+    private var messageBodyContent: some View {
+        if let blocks = markdownBlocks {
+            MarkdownMessageView(
+                blocks: blocks,
+                quoteBar: isFromMe ? Color.white.opacity(0.8) : Color.accentColor
+            )
+            .tint(isFromMe ? Color.white : Color.accentColor)
+            .environment(\.openURL, OpenURLAction(handler: handleMessageLink))
+        } else {
+            // Records without parsed tokens (non-chat kinds, optimistic
+            // stream bubbles, pre-markdown history) keep the plain path.
+            Text(sanitizedBodyText)
+        }
     }
 
     private func handleMessageLink(_ url: URL) -> OpenURLAction.Result {
@@ -493,6 +546,42 @@ struct MessageBubble: View {
     static func timeLabel(recordedAt: UInt64, locale: Locale = .autoupdatingCurrent) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(recordedAt))
         return RelativeTime.shortTime(date, locale: locale)
+    }
+}
+
+private struct MessageFullBodyPresentation: Identifiable {
+    let id: String
+    let text: String
+    let blocks: [MarkdownDisplayBlock]?
+}
+
+private struct MessageFullBodyView: View {
+    let presentation: MessageFullBodyPresentation
+    let onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                if let blocks = presentation.blocks {
+                    MarkdownMessageView(blocks: blocks)
+                        .tint(.accentColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                } else {
+                    Text(presentation.text)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .textSelection(.enabled)
+                }
+            }
+            .navigationTitle(L10n.string("Full message"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L10n.string("Done"), action: onClose)
+                }
+            }
+        }
     }
 }
 

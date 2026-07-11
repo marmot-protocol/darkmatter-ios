@@ -336,6 +336,7 @@ struct ComposerBar: View {
             .background(Circle().fill(Color.accentColor))
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.return, modifiers: .command)
         .disabled(!canSend)
         .opacity(canSend ? 1 : 0.55)
         .accessibilityLabel("Send")
