@@ -79,9 +79,110 @@ struct AsyncReloadGateTests {
         ])
 
         dataSource.completeNextSave(with: relayLists(["wss://c.example"]))
-        for _ in 0..<5 { await Task.yield() }
+        await dataSource.waitUntilPresentedToastCount(2)
 
         #expect(model.currentRelays == ["wss://c.example"])
+    }
+
+    @Test func failedQueuedRelayDeleteRetriesAfterNextSuccessfulSave() async {
+        let model = RelaysViewModel()
+        let dataSource = RelaysViewModelDataSourceStub()
+        model.lists = relayLists([
+            "wss://a.example",
+            "wss://b.example",
+            "wss://c.example",
+        ])
+        dataSource.saveResponses = [
+            .suspended,
+            .suspended,
+            .immediate(relayLists([
+                "wss://b.example",
+                "wss://c.example",
+            ])),
+            .immediate(relayLists([
+                "wss://c.example",
+            ])),
+        ]
+
+        model.deleteRelays(at: IndexSet(integer: 0), using: dataSource)
+        await dataSource.waitUntilSaveCallCount(1)
+
+        model.deleteRelays(at: IndexSet(integer: 1), using: dataSource)
+        dataSource.completeNextSave(with: relayLists([
+            "wss://b.example",
+            "wss://c.example",
+        ]))
+        await dataSource.waitUntilSaveCallCount(2)
+
+        #expect(dataSource.saveRequests == [
+            ["wss://b.example", "wss://c.example"],
+            ["wss://c.example"],
+        ])
+        #expect(model.currentRelays == ["wss://b.example", "wss://c.example"])
+
+        dataSource.failNextSave(with: RelaysViewModelDataSourceStub.SaveError())
+        await dataSource.waitUntilPresentedToastCount(2)
+        #expect(model.saveError == "Save failed")
+
+        let saved = await model.save([
+            "wss://b.example",
+            "wss://c.example",
+        ], using: dataSource)
+
+        #expect(saved)
+        #expect(dataSource.saveRequests == [
+            ["wss://b.example", "wss://c.example"],
+            ["wss://c.example"],
+            ["wss://b.example", "wss://c.example"],
+            ["wss://c.example"],
+        ])
+        #expect(model.currentRelays == ["wss://c.example"])
+    }
+
+    @Test func failedQueuedRelayDeleteDoesNotRemoveRelayReintroducedByNewerSave() async {
+        let model = RelaysViewModel()
+        let dataSource = RelaysViewModelDataSourceStub()
+        model.lists = relayLists([
+            "wss://a.example",
+            "wss://b.example",
+            "wss://c.example",
+        ])
+        dataSource.saveResponses = [
+            .suspended,
+            .suspended,
+            .immediate(relayLists([
+                "wss://b.example",
+                "wss://c.example",
+                "wss://d.example",
+            ])),
+        ]
+
+        model.deleteRelays(at: IndexSet(integer: 0), using: dataSource)
+        await dataSource.waitUntilSaveCallCount(1)
+
+        model.deleteRelays(at: IndexSet(integer: 1), using: dataSource)
+        dataSource.completeNextSave(with: relayLists([
+            "wss://b.example",
+            "wss://c.example",
+        ]))
+        await dataSource.waitUntilSaveCallCount(2)
+
+        dataSource.failNextSave(with: RelaysViewModelDataSourceStub.SaveError())
+        await dataSource.waitUntilPresentedToastCount(2)
+
+        let saved = await model.save([
+            "wss://b.example",
+            "wss://c.example",
+            "wss://d.example",
+        ], using: dataSource)
+
+        #expect(saved)
+        #expect(dataSource.saveRequests == [
+            ["wss://b.example", "wss://c.example"],
+            ["wss://c.example"],
+            ["wss://b.example", "wss://c.example", "wss://d.example"],
+        ])
+        #expect(model.currentRelays == ["wss://b.example", "wss://c.example", "wss://d.example"])
     }
 }
 
@@ -142,6 +243,10 @@ private final class PrivacySecuritySettingsDataSourceStub: PrivacySecuritySettin
 
 @MainActor
 private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
+    struct SaveError: LocalizedError {
+        var errorDescription: String? { "Save failed" }
+    }
+
     var activeAccountRef: String? = "account-1"
     var loadResponses: [SuspendingResponse<AccountRelayListsFfi>] = []
     var saveResponses: [SuspendingResponse<AccountRelayListsFfi>] = []
@@ -152,6 +257,7 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
 
     private var loadWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var saveWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    private var toastWaiters: [(Int, CheckedContinuation<Void, Never>)] = []
     private var loadContinuations: [CheckedContinuation<AccountRelayListsFfi, Error>] = []
     private var saveContinuations: [CheckedContinuation<AccountRelayListsFfi, Error>] = []
 
@@ -190,6 +296,7 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
 
     func present(_ toast: Toast) {
         presentedToasts.append(toast)
+        resumeToastWaiters()
     }
 
     func waitUntilLoadCallCount(_ count: Int) async {
@@ -206,12 +313,23 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
         }
     }
 
+    func waitUntilPresentedToastCount(_ count: Int) async {
+        guard presentedToasts.count < count else { return }
+        await withCheckedContinuation { continuation in
+            toastWaiters.append((count, continuation))
+        }
+    }
+
     func completeNextLoad(with lists: AccountRelayListsFfi) {
         loadContinuations.removeFirst().resume(returning: lists)
     }
 
     func completeNextSave(with lists: AccountRelayListsFfi) {
         saveContinuations.removeFirst().resume(returning: lists)
+    }
+
+    func failNextSave(with error: any Error) {
+        saveContinuations.removeFirst().resume(throwing: error)
     }
 
     private func resumeLoadWaiters() {
@@ -223,6 +341,12 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
     private func resumeSaveWaiters() {
         let ready = saveWaiters.filter { saveCallCount >= $0.0 }
         saveWaiters.removeAll { saveCallCount >= $0.0 }
+        ready.forEach { $0.1.resume() }
+    }
+
+    private func resumeToastWaiters() {
+        let ready = toastWaiters.filter { presentedToasts.count >= $0.0 }
+        toastWaiters.removeAll { presentedToasts.count >= $0.0 }
         ready.forEach { $0.1.resume() }
     }
 }

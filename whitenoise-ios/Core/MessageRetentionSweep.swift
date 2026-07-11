@@ -88,6 +88,10 @@ final class MessageRetentionSweeper {
     private var sweepTask: Task<Void, Never>?
     private weak var appState: AppState?
 
+    deinit {
+        sweepTask?.cancel()
+    }
+
     func start(appState: AppState) {
         self.appState = appState
         guard appState.phase == .ready else { return }

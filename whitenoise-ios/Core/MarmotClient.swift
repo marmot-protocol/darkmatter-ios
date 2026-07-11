@@ -75,6 +75,14 @@ final class MarmotClient {
         }.value
     }
 
+    /// Reads the telemetry install id off the main actor before runtime startup
+    /// config is applied.
+    func telemetryInstallId() async throws -> String {
+        try await Task.detached(priority: .utility) { [marmot] in
+            try marmot.telemetryInstallId()
+        }.value
+    }
+
     /// Reads published account relay-list projections off the main actor.
     /// `Marmot.accountRelayLists` is synchronous FFI backed by local storage, so
     /// MainActor-bound settings screens should await this wrapper.
@@ -568,7 +576,7 @@ final class MarmotClient {
     }
 
     func configureTelemetryRuntime() async throws {
-        let installId = try marmot.telemetryInstallId()
+        let installId = try await telemetryInstallId()
         try await marmot.setRelayTelemetryRuntimeConfig(
             config: telemetryConfig.runtimeConfig(installId: installId)
         )
