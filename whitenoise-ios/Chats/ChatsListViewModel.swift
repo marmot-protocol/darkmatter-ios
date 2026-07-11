@@ -525,18 +525,24 @@ final class ChatsListViewModel {
         guard var details = groupDetailsCache[row.groupIdHex] else { return }
         var group = details.group
         var changed = false
-        if group.name != row.groupName {
+        // A live row is a projection, not authority: an absent name/avatar
+        // means "not carried", not "cleared" — enrichment exists to backfill
+        // exactly these fields. Clears arrive through the group-record path,
+        // so only concrete row values are adopted here.
+        if !row.groupName.isEmpty, group.name != row.groupName {
             group.name = row.groupName
             changed = true
         }
-        if group.avatarUrl != row.avatarUrl {
-            group.avatarUrl = row.avatarUrl
+        if let rowAvatarUrl = row.avatarUrl, group.avatarUrl != rowAvatarUrl {
+            group.avatarUrl = rowAvatarUrl
             changed = true
         }
         guard changed else { return }
         details.group = group
         groupDetailsCache[row.groupIdHex] = details
-        avatarURLByGroupId[row.groupIdHex] = row.avatarUrl
+        if let rowAvatarUrl = row.avatarUrl {
+            avatarURLByGroupId[row.groupIdHex] = rowAvatarUrl
+        }
     }
 
     private func updateCachedGroupDetails(with group: AppGroupRecordFfi) {
@@ -782,6 +788,10 @@ final class ChatsListViewModel {
     }
 
     #if DEBUG
+    func groupDetailsCacheEntryForTesting(groupIdHex: String) -> GroupDetailsFfi? {
+        groupDetailsCache[groupIdHex]
+    }
+
     func seedGroupDetailsCacheForTesting(_ details: GroupDetailsFfi) {
         let groupId = details.group.groupIdHex
         groupDetailsCache[groupId] = details
