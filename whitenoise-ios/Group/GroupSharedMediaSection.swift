@@ -68,19 +68,9 @@ struct GroupSharedMediaSection: View {
         count: 3
     )
 
-    private var items: [GroupSharedMediaItem] {
-        GroupSharedMediaPresentation.items(from: records)
-    }
-
-    private var visualItems: [GroupSharedMediaItem] {
-        GroupSharedMediaPresentation.visualItems(from: items)
-    }
-
-    private var fileItems: [GroupSharedMediaItem] {
-        GroupSharedMediaPresentation.fileItems(from: items)
-    }
-
     var body: some View {
+        let items = GroupSharedMediaPresentation.items(from: records)
+
         Section {
             Picker("Shared media type", selection: $selectedCategory) {
                 ForEach(GroupSharedMediaCategory.allCases) { category in
@@ -107,9 +97,9 @@ struct GroupSharedMediaSection: View {
             } else {
                 switch selectedCategory {
                 case .media:
-                    mediaGrid
+                    mediaGrid(items: items)
                 case .files:
-                    filesList
+                    filesList(items: items)
                 }
             }
         } header: {
@@ -132,7 +122,9 @@ struct GroupSharedMediaSection: View {
     }
 
     @ViewBuilder
-    private var mediaGrid: some View {
+    private func mediaGrid(items: [GroupSharedMediaItem]) -> some View {
+        let visualItems = GroupSharedMediaPresentation.visualItems(from: items)
+
         if visualItems.isEmpty {
             sharedMediaEmptyState(
                 title: "No photos or videos",
@@ -160,7 +152,9 @@ struct GroupSharedMediaSection: View {
     }
 
     @ViewBuilder
-    private var filesList: some View {
+    private func filesList(items: [GroupSharedMediaItem]) -> some View {
+        let fileItems = GroupSharedMediaPresentation.fileItems(from: items)
+
         if fileItems.isEmpty {
             sharedMediaEmptyState(title: "No files", systemImage: "doc")
         } else {

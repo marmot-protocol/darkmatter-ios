@@ -45,6 +45,18 @@ extension AppState: RelaysViewModelDataSource {
 @MainActor
 @Observable
 final class RelaysViewModel {
+    private struct QueuedRelayDelete {
+        var urls: [String]
+        let accountRef: String
+        let expectedRelays: [String]?
+
+        func canApply(accountRef: String?, relays: [String]) -> Bool {
+            guard self.accountRef == accountRef else { return false }
+            guard let expectedRelays else { return true }
+            return expectedRelays == relays
+        }
+    }
+
     var lists: AccountRelayListsFfi?
     var pendingUrl = ""
     var saveError: String?
@@ -52,7 +64,7 @@ final class RelaysViewModel {
 
     private var actionGate = AsyncActionGate()
     private var reloadRequestedAfterSave = false
-    private var queuedRelayDeletes: [String] = []
+    private var queuedRelayDeletes: [QueuedRelayDelete] = []
 
     var isSaving: Bool { actionGate.isRunning }
 
@@ -138,10 +150,10 @@ final class RelaysViewModel {
         }
         guard !urls.isEmpty else { return }
         if isSaving {
-            queueRelayDeletes(urls)
+            queueRelayDeletes(urls, using: dataSource)
             return
         }
-        Task { await deleteRelayURLs(urls, using: dataSource) }
+        Task { _ = await deleteRelayURLs(urls, using: dataSource) }
     }
 
     @discardableResult
@@ -199,28 +211,60 @@ final class RelaysViewModel {
         }
     }
 
-    private func queueRelayDeletes(_ urls: [String]) {
-        for url in urls where !queuedRelayDeletes.contains(url) {
-            queuedRelayDeletes.append(url)
+    private func queueRelayDeletes(
+        _ urls: [String],
+        using dataSource: any RelaysViewModelDataSource,
+        expectedRelays: [String]? = nil
+    ) {
+        guard let accountRef = dataSource.activeAccountRef else { return }
+        if let index = queuedRelayDeletes.firstIndex(
+            where: { $0.accountRef == accountRef && $0.expectedRelays == expectedRelays }
+        ) {
+            for url in urls where !queuedRelayDeletes[index].urls.contains(url) {
+                queuedRelayDeletes[index].urls.append(url)
+            }
+        } else {
+            queuedRelayDeletes.append(
+                QueuedRelayDelete(
+                    urls: urls,
+                    accountRef: accountRef,
+                    expectedRelays: expectedRelays
+                )
+            )
         }
     }
 
-    private func deleteRelayURLs(_ urls: [String], using dataSource: any RelaysViewModelDataSource) async {
+    @discardableResult
+    private func deleteRelayURLs(_ urls: [String], using dataSource: any RelaysViewModelDataSource) async -> Bool {
         guard !isSaving else {
-            queueRelayDeletes(urls)
-            return
+            queueRelayDeletes(urls, using: dataSource)
+            return false
         }
         let deleteSet = Set(urls)
         let relays = currentRelays
         let next = relays.filter { !deleteSet.contains($0) }
-        guard next != relays else { return }
-        _ = await save(next, using: dataSource)
+        guard next != relays else { return true }
+        return await save(next, using: dataSource)
     }
 
     private func drainQueuedRelayDeletes(using dataSource: any RelaysViewModelDataSource) async {
         guard !queuedRelayDeletes.isEmpty else { return }
-        let urls = queuedRelayDeletes
+        let deletes = queuedRelayDeletes
         queuedRelayDeletes.removeAll()
-        await deleteRelayURLs(urls, using: dataSource)
+        for queuedDelete in deletes {
+            let relays = currentRelays
+            guard queuedDelete.canApply(
+                accountRef: dataSource.activeAccountRef,
+                relays: relays
+            ) else { continue }
+            let deleted = await deleteRelayURLs(queuedDelete.urls, using: dataSource)
+            if !deleted {
+                queueRelayDeletes(
+                    queuedDelete.urls,
+                    using: dataSource,
+                    expectedRelays: relays
+                )
+            }
+        }
     }
 }
