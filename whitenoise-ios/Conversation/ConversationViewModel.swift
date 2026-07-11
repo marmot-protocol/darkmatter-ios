@@ -124,6 +124,10 @@ final class ConversationViewModel {
     /// Hands optimistic rows to `timelineStore`. See `ComposerModel`.
     @ObservationIgnored let composer: ComposerModel
 
+    /// In-conversation message search: query, ordered matches over the loaded
+    /// window, current-match cursor, and the budgeted older-history step.
+    @ObservationIgnored let search: ConversationSearchModel
+
     // Timeline surface forwarded from `timelineStore` (observation propagates
     // through these computed reads because `timelineStore` is `@Observable`).
     var timeline: [TimelineItem] { timelineStore.timeline }
@@ -513,6 +517,10 @@ final class ConversationViewModel {
         self.timelineStore = TimelineStore(appState: appState, groupIdHex: group.groupIdHex)
         self.streamWatcher = StreamWatcher(appState: appState, groupIdHex: group.groupIdHex)
         self.composer = ComposerModel(appState: appState, groupIdHex: group.groupIdHex, timelineStore: timelineStore)
+        self.search = ConversationSearchModel()
+        search.entriesProvider = { [weak self] in self?.searchableTimelineEntries() ?? [] }
+        search.hasMoreBefore = { [weak self] in self?.hasMoreBefore ?? false }
+        search.loadOlderPage = { [weak self] in await self?.loadOlderTimelinePage() }
         streamWatcher.sink = timelineStore
         timelineStore.streamWatcher = streamWatcher
         timelineStore.mentionResolver = { [weak appState] entity in
@@ -1183,6 +1191,26 @@ final class ConversationViewModel {
 
     private var newestLoadedTimelineMessageId: String? {
         timeline.lazy.compactMap(Self.messageId(in:)).last
+    }
+
+    /// Haystack rows for in-conversation search: confirmed, previewable,
+    /// non-deleted message rows flattened to plain text through the budgeted
+    /// preview path (`MessagePreview.body` → `MarkdownPlainText.flatten`).
+    private func searchableTimelineEntries() -> [ConversationSearchEntry] {
+        timeline.compactMap { item in
+            guard case .message(let record, _) = item.kind,
+                  !record.messageIdHex.isEmpty,
+                  MessagePreview.isPreviewable(record),
+                  !isDeleted(record.messageIdHex)
+            else { return nil }
+            let text = displayBody(of: record)
+            guard !text.isEmpty else { return nil }
+            return ConversationSearchEntry(
+                itemId: item.id,
+                messageIdHex: record.messageIdHex,
+                text: text
+            )
+        }
     }
 
     func data(for media: MessageMediaAttachment) async throws -> Data {
