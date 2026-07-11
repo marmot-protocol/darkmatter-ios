@@ -529,8 +529,8 @@ final class ChatsListViewModel {
         // means "not carried", not "cleared" — enrichment exists to backfill
         // exactly these fields. Clears arrive through the group-record path,
         // so only concrete row values are adopted here.
-        if !row.groupName.isEmpty, group.name != row.groupName {
-            group.name = row.groupName
+        if let rowName = ContentSanitizer.groupName(row.groupName), group.name != rowName {
+            group.name = rowName
             changed = true
         }
         if let rowAvatarUrl = row.avatarUrl, group.avatarUrl != rowAvatarUrl {
