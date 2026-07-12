@@ -558,6 +558,15 @@ struct ConversationView: View {
     @State private var contentTopY: CGFloat = 0
     @State private var contentBottomY: CGFloat = 0
 
+    @ScaledMetric(relativeTo: .caption)
+    private var replyCloseIconSize = ReplyPreviewLayout.closeIconSize
+    @ScaledMetric(relativeTo: .caption)
+    private var replyCloseHitSize = ReplyPreviewLayout.closeHitSize
+    @ScaledMetric(relativeTo: .body)
+    private var scrollToBottomIconSize: CGFloat = 18
+    @ScaledMetric(relativeTo: .body)
+    private var scrollToBottomDiameter: CGFloat = 42
+
     private static let timelineBottomID = "conversation-timeline-bottom"
     private static let timelineCoordinateSpace = "conversation-timeline-viewport"
     private static let actionFrameMeasurementClearDelayNanoseconds: UInt64 = 250_000_000
@@ -941,12 +950,12 @@ struct ConversationView: View {
                 viewModel.replyingTo = nil
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: ReplyPreviewLayout.closeIconSize, weight: .semibold))
+                    .font(.system(size: replyCloseIconSize, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(.secondary)
                     .frame(
-                        width: ReplyPreviewLayout.closeHitSize,
-                        height: ReplyPreviewLayout.closeHitSize,
+                        width: replyCloseHitSize,
+                        height: replyCloseHitSize,
                         alignment: ReplyPreviewLayout.closeAlignment.swiftUI
                     )
                     .contentShape(Rectangle())
@@ -1443,9 +1452,9 @@ struct ConversationView: View {
                 }
             } label: {
                 Image(systemName: "arrow.down")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: scrollToBottomIconSize, weight: .bold))
                     .foregroundStyle(.primary)
-                    .frame(width: 42, height: 42)
+                    .frame(width: scrollToBottomDiameter, height: scrollToBottomDiameter)
                     .background {
                         ZStack {
                             Circle().fill(.regularMaterial)

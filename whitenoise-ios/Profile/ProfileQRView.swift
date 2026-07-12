@@ -15,6 +15,9 @@ struct ProfileQRView: View {
     @State private var scanned: AppState.ProfileLink?
     @State private var qrImage: UIImage?
 
+    @ScaledMetric(relativeTo: .title)
+    private var nameFontSize: CGFloat = 30
+
     private var npub: String { appState.npub(forAccountIdHex: accountIdHex) }
     private var deepLink: String { DeepLink.profile(npub: npub).url.absoluteString }
 
@@ -31,7 +34,7 @@ struct ProfileQRView: View {
                         .frame(width: 150, height: 150)
 
                         Text(appState.displayName(forAccountIdHex: accountIdHex))
-                            .font(.system(size: 30, weight: .bold))
+                            .font(.system(size: nameFontSize, weight: .bold))
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
                             .minimumScaleFactor(0.6)

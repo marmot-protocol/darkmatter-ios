@@ -162,6 +162,11 @@ struct FullScreenConfirmationDialog: View {
     var onConfirm: () -> Void
     var onCancel: () -> Void
 
+    @ScaledMetric(relativeTo: .largeTitle)
+    private var heroIconSize: CGFloat = 44
+    @ScaledMetric(relativeTo: .largeTitle)
+    private var heroBadgeSize: CGFloat = 76
+
     var body: some View {
         ZStack {
             Color(.systemBackground)
@@ -172,9 +177,9 @@ struct FullScreenConfirmationDialog: View {
 
                 VStack(spacing: 18) {
                     Image(systemName: systemImage)
-                        .font(.system(size: 44, weight: .semibold))
+                        .font(.system(size: heroIconSize, weight: .semibold))
                         .foregroundStyle(.red)
-                        .frame(width: 76, height: 76)
+                        .frame(width: heroBadgeSize, height: heroBadgeSize)
                         .background(Color.red.opacity(0.12), in: Circle())
 
                     VStack(spacing: 10) {

@@ -313,22 +313,27 @@ struct VoiceRecordingBanner: View {
     let onCancel: () -> Void
     let onStop: () -> Void
 
+    @ScaledMetric(relativeTo: .subheadline)
+    private var stopIconSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .subheadline)
+    private var controlSlotSize: CGFloat = 34
+
     var body: some View {
         HStack(spacing: 10) {
             if isLocked {
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.red)
-                        .frame(width: 34, height: 34)
+                        .frame(width: controlSlotSize, height: controlSlotSize)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cancel recording")
             } else {
                 Image(systemName: "lock.open")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 34, height: 34)
+                    .frame(width: controlSlotSize, height: controlSlotSize)
             }
 
             AudioWaveformView(
@@ -348,18 +353,18 @@ struct VoiceRecordingBanner: View {
             if isLocked {
                 Button(action: onStop) {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: stopIconSize, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                        .frame(width: controlSlotSize, height: controlSlotSize)
                         .background(Color.accentColor, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Finish recording")
             } else {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 34, height: 34)
+                    .frame(width: controlSlotSize, height: controlSlotSize)
             }
         }
         .padding(.horizontal, 10)
