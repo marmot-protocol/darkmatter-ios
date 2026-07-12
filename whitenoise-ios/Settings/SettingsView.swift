@@ -111,6 +111,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section {
+                NavigationLink {
+                    DonateView()
+                } label: {
+                    Label("Donate", systemImage: "heart.fill")
+                }
+            }
+
             Section("About") {
                 LabeledContent("Version") {
                     Text(appVersion)
