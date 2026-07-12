@@ -27,7 +27,8 @@ nonisolated enum NotificationPresentationPolicy {
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },
         isArchived: (String, String) -> Bool = { _, _ in false },
-        isMuted: (String, String) -> Bool = { _, _ in false }
+        isMuted: (String, String) -> Bool = { _, _ in false },
+        nickname: (String, String) -> String? = { _, _ in nil }
     ) -> NotificationServiceRenderDecision {
         switch collection.status {
         case .newData:
@@ -46,14 +47,18 @@ nonisolated enum NotificationPresentationPolicy {
                 return .deliverQuietly
             }
             guard let primaryUpdate = unmutedUpdates.first,
-                  let primary = LocalNotificationProjection.makePresentation(for: primaryUpdate)
+                  let primary = LocalNotificationProjection.makePresentation(
+                      for: primaryUpdate,
+                      nickname: nickname
+                  )
             else {
                 return .fallback
             }
             return .decorate(
                 primary,
                 additionalPresentations: boundedAdditionalPresentations(
-                    from: Array(unmutedUpdates.dropFirst())
+                    from: Array(unmutedUpdates.dropFirst()),
+                    nickname: nickname
                 )
             )
         case .noData, .failed:
@@ -82,16 +87,21 @@ nonisolated enum NotificationPresentationPolicy {
     }
 
     static func boundedAdditionalPresentations(
-        from additionalUpdates: [NotificationUpdateFfi]
+        from additionalUpdates: [NotificationUpdateFfi],
+        nickname: (String, String) -> String? = { _, _ in nil }
     ) -> [LocalNotificationPresentation] {
         guard additionalUpdates.count > maxAdditionalPresentations + 1 else {
-            return additionalUpdates.compactMap(LocalNotificationProjection.makePresentation(for:))
+            return additionalUpdates.compactMap {
+                LocalNotificationProjection.makePresentation(for: $0, nickname: nickname)
+            }
         }
 
         let shownUpdates = Array(additionalUpdates.prefix(maxAdditionalPresentations))
         let overflowUpdates = Array(additionalUpdates.dropFirst(maxAdditionalPresentations))
-        return shownUpdates.compactMap(LocalNotificationProjection.makePresentation(for:))
-            + overflowSummaryPresentations(from: overflowUpdates)
+        return shownUpdates.compactMap {
+            LocalNotificationProjection.makePresentation(for: $0, nickname: nickname)
+        }
+            + overflowSummaryPresentations(from: overflowUpdates, nickname: nickname)
     }
 
     static func boundedAdditionalPresentations(
@@ -108,7 +118,8 @@ nonisolated enum NotificationPresentationPolicy {
     }
 
     static func overflowSummaryPresentations(
-        from overflowUpdates: [NotificationUpdateFfi]
+        from overflowUpdates: [NotificationUpdateFfi],
+        nickname: (String, String) -> String? = { _, _ in nil }
     ) -> [LocalNotificationPresentation] {
         var buckets: [OverflowRouteKey: (first: NotificationUpdateFfi, count: Int)] = [:]
         var order: [OverflowRouteKey] = []
@@ -124,7 +135,7 @@ nonisolated enum NotificationPresentationPolicy {
 
         return order.compactMap { key in
             guard let bucket = buckets[key],
-                  let base = LocalNotificationProjection.makePresentation(for: bucket.first)
+                  let base = LocalNotificationProjection.makePresentation(for: bucket.first, nickname: nickname)
             else { return nil }
             return summaryPresentation(after: base, overflowCount: bucket.count)
         }

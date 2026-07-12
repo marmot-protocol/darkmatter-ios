@@ -69,13 +69,15 @@ nonisolated enum NotificationServiceProjection {
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },
         isArchived: (String, String) -> Bool = { _, _ in false },
-        isMuted: (String, String) -> Bool = { _, _ in false }
+        isMuted: (String, String) -> Bool = { _, _ in false },
+        nickname: (String, String) -> String? = { _, _ in nil }
     ) -> NotificationServiceRenderDecision {
         NotificationPresentationPolicy.serviceDecision(
             for: collection,
             localNotificationsEnabled: localNotificationsEnabled,
             isArchived: isArchived,
-            isMuted: isMuted
+            isMuted: isMuted,
+            nickname: nickname
         )
     }
 

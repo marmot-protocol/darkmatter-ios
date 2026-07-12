@@ -18,6 +18,8 @@ struct ProfileView: View {
     let npub: String
 
     @State private var model = ProfileViewModel()
+    @State private var editingNickname = false
+    @State private var nicknameDraft = ""
 
     var body: some View {
         NavigationStack {
@@ -31,9 +33,33 @@ struct ProfileView: View {
                 )
                 .frame(width: 96, height: 96)
 
-                Text(title)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.title2.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                    if canEditNickname {
+                        Button(action: beginEditingNickname) {
+                            Image(systemName: "pencil")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(nickname == nil
+                            ? L10n.string("Set nickname")
+                            : L10n.string("Edit nickname"))
+                    }
+                }
+
+                // When a private nickname overrides the header, keep the real
+                // profile name visible as secondary text so the override is
+                // never silently confused for the contact's published name.
+                if nickname != nil, let profileName {
+                    Text(L10n.formatted("Name from profile: %@", profileName))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
 
                 Button(action: copyProfileReference) {
                     HStack(spacing: 8) {
@@ -88,12 +114,51 @@ struct ProfileView: View {
                 }
             }
             .task { await model.resolve(npub: npub, using: appState) }
+            .alert(nicknameAlertTitle, isPresented: $editingNickname) {
+                TextField(L10n.string("Nickname"), text: $nicknameDraft)
+                Button(L10n.string("Save"), action: saveNickname)
+                Button(L10n.string("Cancel"), role: .cancel) {}
+            } message: {
+                Text("Only you see this on this device. Clearing it restores their profile name.")
+            }
         }
     }
 
     private var title: String {
         if let hex = model.hex { return appState.displayName(forAccountIdHex: hex) }
         return IdentityFormatter.short(npub)
+    }
+
+    /// The active account's private nickname for this contact, if set.
+    private var nickname: String? {
+        model.hex.flatMap { appState.contactNickname(forAccountIdHex: $0) }
+    }
+
+    /// The contact's resolved kind:0 name, ignoring any local nickname.
+    private var profileName: String? {
+        model.hex.flatMap { appState.knownProfileDisplayName(forAccountIdHex: $0) }
+    }
+
+    /// Nicknames apply to other people, not this device's own accounts, and
+    /// only once the profile reference resolves to an account id.
+    private var canEditNickname: Bool {
+        model.hex != nil && !isSelf
+    }
+
+    private var nicknameAlertTitle: String {
+        nickname == nil ? L10n.string("Set nickname") : L10n.string("Edit nickname")
+    }
+
+    private func beginEditingNickname() {
+        nicknameDraft = nickname ?? ""
+        editingNickname = true
+    }
+
+    private func saveNickname() {
+        guard let hex = model.hex else { return }
+        // An empty/whitespace draft clears the nickname (store-side sanitize).
+        appState.setContactNickname(nicknameDraft, forAccountIdHex: hex)
+        Haptics.selection()
     }
 
     private var displayReference: String {

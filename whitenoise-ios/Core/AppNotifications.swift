@@ -168,7 +168,18 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func present(update: NotificationUpdateFfi) async {
-        guard let presentation = LocalNotificationProjection.makePresentation(for: update) else {
+        // A private contact nickname (App-Group-backed, owner→contact keyed)
+        // overrides the kind:0 sender name in the foreground-presented alert,
+        // matching what the in-app UI and the NSE render.
+        guard let presentation = LocalNotificationProjection.makePresentation(
+            for: update,
+            nickname: { ownerAccountIdHex, contactAccountIdHex in
+                ContactNicknameStore.nickname(
+                    ownerAccountIdHex: ownerAccountIdHex,
+                    contactAccountIdHex: contactAccountIdHex
+                )
+            }
+        ) else {
             return
         }
 

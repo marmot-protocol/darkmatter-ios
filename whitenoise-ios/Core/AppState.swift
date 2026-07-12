@@ -547,6 +547,12 @@ final class AppState {
             await conversationDraftStore.flush()
         }
 
+        // Drop the departing account's private contact nicknames from the
+        // shared defaults so they don't outlive the identity on this device.
+        if let removedAccountIdHex {
+            profileStore.clearContactNicknames(ownerAccountIdHex: removedAccountIdHex)
+        }
+
         do {
             try await refreshAccounts()
         } catch {
