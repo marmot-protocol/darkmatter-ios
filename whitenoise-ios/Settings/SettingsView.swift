@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var showProfileEdit = false
     @State private var showAccounts = false
     @State private var showSignOutConfirm = false
+    @State private var wipeModel = SignOutAndWipeModel()
 
     var body: some View {
         Form {
@@ -140,6 +141,24 @@ struct SettingsView: View {
                 Text("Signing out removes this profile and its local key material from this device.")
                     .font(.footnote)
             }
+
+            Section {
+                Button(role: .destructive) {
+                    wipeModel.present()
+                } label: {
+                    Label {
+                        Text("Sign Out & Wipe")
+                    } icon: {
+                        Image(systemName: "trash.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .tint(.red)
+                .disabled(appState.activeAccount == nil)
+            } footer: {
+                Text("Permanently removes this profile, its local data, keys, and relay key packages from this device. This can't be undone.")
+                    .font(.footnote)
+            }
         }
         .localizedNavigationTitle("Settings")
         .task(id: appState.activeAccount?.accountIdHex) {
@@ -168,6 +187,14 @@ struct SettingsView: View {
                     Task { await appState.signOut() }
                 },
                 onCancel: { showSignOutConfirm = false }
+            )
+            .appAppearance()
+        }
+        .fullScreenCover(isPresented: $wipeModel.isPresented) {
+            SignOutAndWipeCover(
+                model: wipeModel,
+                onConfirm: { wipeModel.confirmWipe(using: appState) },
+                onCancel: { wipeModel.cancel() }
             )
             .appAppearance()
         }
