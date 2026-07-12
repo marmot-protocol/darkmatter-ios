@@ -9,12 +9,14 @@ struct MessageActionsMenu: View {
     let canInteract: Bool
     let canForward: Bool
     let canEdit: Bool
+    let canViewEditHistory: Bool
     let quickReactions: [String]
     let onReact: (String) -> Void
     let onReply: () -> Void
     let onCopy: () -> Void
     let onForward: () -> Void
     let onEdit: () -> Void
+    let onViewEditHistory: () -> Void
     let onInfo: () -> Void
     let onDelete: () -> Void
     let onMoreEmoji: () -> Void
@@ -41,6 +43,10 @@ struct MessageActionsMenu: View {
             if canEdit {
                 Divider().padding(.leading, 46)
                 actionRow("Edit", systemImage: "pencil", action: onEdit)
+            }
+            if canViewEditHistory {
+                Divider().padding(.leading, 46)
+                actionRow("View edit history", systemImage: "clock.arrow.circlepath", action: onViewEditHistory)
             }
             Divider().padding(.leading, 46)
             actionRow("Message info", systemImage: "info.circle", action: onInfo)

@@ -450,6 +450,14 @@ final class ConversationViewModel {
         timelineStore.isEdited(messageIdHex)
     }
 
+    func hasEditHistory(_ messageIdHex: String) -> Bool {
+        timelineStore.hasEditHistory(messageIdHex)
+    }
+
+    func editHistory(for messageIdHex: String) -> [EditHistoryPresentation.Row] {
+        timelineStore.editHistory(for: messageIdHex)
+    }
+
     func mediaItems(for item: TimelineItem) -> [MessageMediaAttachment] {
         timelineStore.mediaItems(for: item)
     }

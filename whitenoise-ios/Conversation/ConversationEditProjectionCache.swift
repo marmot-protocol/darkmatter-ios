@@ -101,6 +101,23 @@ final class ConversationEditProjectionCache {
         optimisticByTarget.removeAll()
     }
 
+    /// Durable, usable edit records for `base` in chronological order (ties
+    /// broken by message id). Optimistic edits are excluded — they have no
+    /// authoritative record or source timestamp yet.
+    func editRecords(for base: AppMessageRecordFfi) -> [AppMessageRecordFfi] {
+        guard let editIds = editIdsByTarget[base.messageIdHex] else { return [] }
+        return editIds
+            .compactMap { editsById[$0] }
+            .filter { $0.isUsable && $0.record.sender == base.sender }
+            .map(\.record)
+            .sorted { lhs, rhs in
+                if lhs.recordedAt != rhs.recordedAt {
+                    return lhs.recordedAt < rhs.recordedAt
+                }
+                return lhs.messageIdHex < rhs.messageIdHex
+            }
+    }
+
     private func replacement(
         for base: AppMessageRecordFfi
     ) -> (plaintext: String, contentTokens: MarkdownDocumentFfi)? {
@@ -109,18 +126,8 @@ final class ConversationEditProjectionCache {
             return (optimistic.plaintext, optimistic.contentTokens)
         }
 
-        guard let editIds = editIdsByTarget[base.messageIdHex] else { return nil }
-        let edit = editIds
-            .compactMap { editsById[$0] }
-            .filter { $0.isUsable && $0.record.sender == base.sender }
-            .max { lhs, rhs in
-                if lhs.record.recordedAt != rhs.record.recordedAt {
-                    return lhs.record.recordedAt < rhs.record.recordedAt
-                }
-                return lhs.record.messageIdHex < rhs.record.messageIdHex
-            }
-        guard let edit else { return nil }
-        return (edit.record.plaintext, edit.record.contentTokens)
+        guard let edit = editRecords(for: base).last else { return nil }
+        return (edit.plaintext, edit.contentTokens)
     }
 
     private func removeStoredEdit(messageIdHex: String) -> Set<String> {

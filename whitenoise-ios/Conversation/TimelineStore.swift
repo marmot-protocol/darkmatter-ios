@@ -307,6 +307,28 @@ final class TimelineStore {
         return editProjections.isEdited(record)
     }
 
+    /// Whether the actions menu should offer "View edit history".
+    func hasEditHistory(_ messageIdHex: String) -> Bool {
+        _ = timelineProjectionGeneration
+        guard let record = messageById[messageIdHex] else { return false }
+        return EditHistoryPresentation.shouldOffer(
+            editCount: editProjections.editRecords(for: record).count,
+            isDeleted: deletedProjections.contains(messageIdHex)
+        )
+    }
+
+    /// Edit-history rows for a message, newest-first. The stored base record
+    /// keeps the original body; its durable edits supply the later versions.
+    func editHistory(for messageIdHex: String) -> [EditHistoryPresentation.Row] {
+        _ = timelineProjectionGeneration
+        guard let record = messageById[messageIdHex] else { return [] }
+        return EditHistoryPresentation.rows(
+            original: record,
+            edits: editProjections.editRecords(for: record),
+            mentionDisplayName: mentionDisplayNameResolver
+        )
+    }
+
     func mediaItems(for item: TimelineItem) -> [MessageMediaAttachment] {
         _ = timelineProjectionGeneration
         return mediaProjections.items(for: item)
