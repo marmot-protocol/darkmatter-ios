@@ -8627,6 +8627,65 @@
         }
       }
     },
+    "Choose whether White Noise follows your device appearance or always uses a light or dark theme. True Black is a dark theme with pure black backgrounds for OLED displays." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle, ob White Noise dem Erscheinungsbild deines Geräts folgt oder immer ein helles oder dunkles Design verwendet. Tiefschwarz ist ein dunkles Design mit rein schwarzen Hintergründen für OLED-Displays."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige si White Noise sigue la apariencia de tu dispositivo o usa siempre un tema claro u oscuro. Negro puro es un tema oscuro con fondos completamente negros para pantallas OLED."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisissez si White Noise suit l’apparence de votre appareil ou utilise toujours un thème clair ou sombre. Noir absolu est un thème sombre avec des fonds d’un noir pur pour les écrans OLED."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli se White Noise segue l’aspetto del dispositivo o usa sempre un tema chiaro o scuro. Nero assoluto è un tema scuro con sfondi completamente neri per gli schermi OLED."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolha se o White Noise segue a aparência do dispositivo ou sempre usa um tema claro ou escuro. Preto puro é um tema escuro com fundos totalmente pretos para telas OLED."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выберите, будет ли White Noise следовать оформлению устройства или всегда использовать светлую либо тёмную тему. «Чисто чёрная» — тёмная тема с абсолютно чёрным фоном для OLED-экранов."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "White Noise’ın cihaz görünümünü mü izleyeceğini yoksa her zaman açık ya da koyu tema mı kullanacağını seçin. Saf siyah, OLED ekranlar için tamamen siyah arka planlar kullanan koyu bir temadır."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 White Noise 是跟随设备外观，还是始终使用浅色或深色主题。纯黑是为 OLED 屏幕提供纯黑色背景的深色主题。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇 White Noise 要跟隨裝置外觀，還是永遠使用淺色或深色主題。純黑是為 OLED 螢幕提供純黑色背景的深色主題。"
+          }
+        }
+      }
+    },
     "Clear" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10961,6 +11020,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "深色"
+          }
+        }
+      }
+    },
+    "True Black" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tiefschwarz"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Negro puro"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noir absolu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nero assoluto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preto puro"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чисто чёрная"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saf siyah"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纯黑"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "純黑"
           }
         }
       }

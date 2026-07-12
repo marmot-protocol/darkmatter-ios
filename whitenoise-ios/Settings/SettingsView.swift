@@ -168,6 +168,7 @@ struct SettingsView: View {
                     .font(.footnote)
             }
         }
+        .trueBlackScaffoldBackground()
         .localizedNavigationTitle("Settings")
         .task(id: appState.activeAccount?.accountIdHex) {
             guard let id = appState.activeAccount?.accountIdHex else { return }

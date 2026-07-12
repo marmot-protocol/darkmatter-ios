@@ -18,7 +18,7 @@ struct AppearanceSettingsView: View {
             } header: {
                 Text("Theme")
             } footer: {
-                Text("Choose whether White Noise follows your device appearance or always uses a light or dark theme.")
+                Text("Choose whether White Noise follows your device appearance or always uses a light or dark theme. True Black is a dark theme with pure black backgrounds for OLED displays.")
             }
 
             Section {
@@ -41,6 +41,7 @@ struct AppearanceSettingsView: View {
                 Text("System follows your device language. Other choices update White Noise immediately.")
             }
         }
+        .trueBlackScaffoldBackground()
         .localizedNavigationTitle("Appearance")
         .onAppear {
             languageRawValue = AppLanguage.currentRawValue
