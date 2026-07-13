@@ -529,6 +529,7 @@ struct ConversationView: View {
     @State private var reactionDetailsTarget: ReactionDetailsTarget?
     @State private var forwardTarget: ActionsTarget?
     @State private var editTarget: ActionsTarget?
+    @State private var editHistoryTarget: ActionsTarget?
     /// When the long-pressed bubble sits too low for the actions popover to fit
     /// below it, flip the popover above the bubble instead.
     @State private var actionsAbove = false
@@ -721,6 +722,12 @@ struct ConversationView: View {
             .sheet(item: $editTarget) { target in
                 if let viewModel {
                     EditMessageSheet(message: target.record, viewModel: viewModel)
+                        .appAppearance()
+                }
+            }
+            .sheet(item: $editHistoryTarget) { target in
+                if let viewModel {
+                    EditHistorySheet(rows: viewModel.editHistory(for: target.record.messageIdHex))
                         .appAppearance()
                 }
             }
@@ -2200,6 +2207,7 @@ struct ConversationView: View {
                 isDeleted: viewModel.isDeleted(record.messageIdHex),
                 canSendMessages: viewModel.canSendMessages
             ),
+            canViewEditHistory: viewModel.hasEditHistory(record.messageIdHex),
             quickReactions: appState.quickReactions,
             onReact: { emoji in
                 Task { await viewModel.toggleReaction(emoji, on: record) }
@@ -2224,6 +2232,11 @@ struct ConversationView: View {
                 let target = ActionsTarget(record: record, status: status)
                 dismissActions()
                 editTarget = target
+            },
+            onViewEditHistory: {
+                let target = ActionsTarget(record: record, status: status)
+                dismissActions()
+                editHistoryTarget = target
             },
             onInfo: {
                 let target = ActionsTarget(record: record, status: status)
