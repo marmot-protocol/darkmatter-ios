@@ -139,27 +139,31 @@ final class ConversationReadMarker {
     }
 
     private func flushPendingReadMarks(accountRef: String) async -> Bool {
-        let messageIds = pendingReadMessageIds
-        pendingReadMessageIds = []
-        guard !messageIds.isEmpty else {
+        guard !pendingReadMessageIds.isEmpty else {
             pendingReadMessageIdSet = []
             pruneMarkedReadMessageIds(force: true)
             return false
         }
+        // Check availability BEFORE draining. If the runtime or account is
+        // unavailable at flush time (e.g. the app backgrounded during the
+        // coalescing window), leave the ids queued so the next flush retries —
+        // draining first would drop the reads, and the weak re-arm only fires on
+        // a viewport frame change that a same-rows foreground resume won't emit.
+        guard let appState,
+              appState.canUseRuntimeForForegroundWork,
+              appState.activeAccountRef == accountRef
+        else {
+            return false
+        }
+
+        let messageIds = pendingReadMessageIds
+        pendingReadMessageIds = []
         let signpost = Self.performanceSignposter.beginInterval("ConversationReadMarker.flushPendingReadMarks")
         defer { Self.performanceSignposter.endInterval("ConversationReadMarker.flushPendingReadMarks", signpost) }
 
         defer {
             pendingReadMessageIdSet.subtract(messageIds)
             pruneMarkedReadMessageIds(force: true)
-        }
-        guard let appState, appState.canUseRuntimeForForegroundWork else {
-            markedReadMessageIds.subtract(messageIds)
-            return false
-        }
-        guard appState.activeAccountRef == accountRef else {
-            markedReadMessageIds.subtract(messageIds)
-            return false
         }
 
         do {
