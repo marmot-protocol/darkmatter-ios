@@ -4439,14 +4439,28 @@ struct ConversationChromeTests {
     }
 
     @Test func initialChromeReservesKnownMemberSubtitle() {
+        // A named group (not a DM) keeps its member-count subtitle.
         let chrome = ConversationChromePresentation.initial(
-            chat: group(name: "", id: hex("aa")),
-            initialTitle: "Project Room",
+            chat: group(name: "Project Room", id: hex("aa")),
+            initialTitle: nil,
             initialMemberCount: 2
         )
 
         #expect(chrome.title == "Project Room")
         #expect(chrome.subtitle == "2 members")
+    }
+
+    @Test func initialChromeHidesMemberSubtitleForDirectMessageTitledByContactName() {
+        // A DM's title hint is the contact's name; it must still be detected as
+        // a DM (no member count) from the empty group name.
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: "Alice",
+            initialMemberCount: 2
+        )
+
+        #expect(chrome.title == "Alice")
+        #expect(chrome.subtitle == nil)
     }
 
     @Test func initialChromeHidesMemberSubtitleForDirectMessage() {
