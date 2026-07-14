@@ -1017,8 +1017,12 @@ final class TimelineStore {
         for previousItem in previousItems where !retainedIds.contains(previousItem.id) {
             changed = removeTimelineItem(id: previousItem.id) || changed
         }
-        if systemTimelineItems.contains(where: { $0.id == item.id }) {
-            changed = upsertTimelineItem(item) || changed
+        // Publish the last retained row, not `item`: a same-kind append collapses
+        // into the previous row (keeping its id, taking the new timestamp), so
+        // `item`'s fresh id is absent and its new timestamp would never reach the
+        // timeline until an unrelated full rebuild.
+        if let published = systemTimelineItems.last {
+            changed = upsertTimelineItem(published) || changed
         }
         if changed {
             noteProjectionChanged()
