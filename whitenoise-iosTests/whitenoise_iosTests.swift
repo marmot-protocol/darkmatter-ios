@@ -4444,6 +4444,17 @@ struct ConversationChromeTests {
         #expect(chrome.subtitle == "2 members")
     }
 
+    @Test func initialChromeHidesMemberSubtitleForDirectMessage() {
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: nil,
+            initialMemberCount: 2
+        )
+
+        // An unnamed 2-person chat is a DM: no member-count subtitle.
+        #expect(chrome.subtitle == nil)
+    }
+
     @Test func directMessageTitleUsesInitialChatListHintsBeforeRosterLoads() throws {
         let appState = AppState(client: try MarmotClient.testClient())
         let other = hex("22")
@@ -4455,10 +4466,11 @@ struct ConversationChromeTests {
             initialMemberCount: 2
         )
 
-        // The initial-member-count hint drives the 2-person title/subtitle before
-        // the roster loads; with no known profile the title is the peer's npub.
+        // The initial-member-count hint drives the 2-person title before the
+        // roster loads; with no known profile the title is the peer's npub. A DM
+        // shows just the contact's name — no member-count subtitle.
         #expect(viewModel.displayTitle == appState.shortNpub(forAccountIdHex: other))
-        #expect(viewModel.displaySubtitle == "2 members")
+        #expect(viewModel.displaySubtitle == nil)
     }
 
     @Test func headerSecondaryShowsConnectingWhileRuntimeWarmsUp() {

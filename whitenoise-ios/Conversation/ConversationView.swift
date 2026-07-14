@@ -365,11 +365,14 @@ nonisolated struct ConversationChromePresentation: Equatable {
         initialTitle: String?,
         initialMemberCount: Int?
     ) -> ConversationChromePresentation {
-        ConversationChromePresentation(
-            title: ContentSanitizer.groupName(initialTitle)
-                ?? ContentSanitizer.groupName(chat.name)
-                ?? IdentityFormatter.short(chat.groupIdHex),
-            subtitle: initialMemberCount.flatMap(memberSubtitle)
+        let sanitizedName = ContentSanitizer.groupName(initialTitle)
+            ?? ContentSanitizer.groupName(chat.name)
+        // A DM (unnamed 2-person) shows just the contact's name — no member
+        // count — so don't flash one in the pre-roster initial chrome either.
+        let isDirectMessage = sanitizedName == nil && initialMemberCount == 2
+        return ConversationChromePresentation(
+            title: sanitizedName ?? IdentityFormatter.short(chat.groupIdHex),
+            subtitle: isDirectMessage ? nil : initialMemberCount.flatMap(memberSubtitle)
         )
     }
 
