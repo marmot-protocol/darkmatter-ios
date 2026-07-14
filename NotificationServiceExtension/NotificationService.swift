@@ -75,9 +75,10 @@ final class NotificationService: UNNotificationServiceExtension {
                     source: .apnsNse
                 )
                 // One shared-defaults read per wake; per-record lookups hit the
-                // in-memory snapshot. A nil snapshot means the shared suite
+                // in-memory snapshots. A nil mute snapshot means the shared suite
                 // couldn't be resolved, so mute fails safe (all muted).
                 let mutedSnapshot = ChatMuteStore.mutedChatKeysSnapshot()
+                let contactNicknames = ContactNicknameStore.nicknamesByKey()
                 let decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: NotificationServiceSettingsReadPolicy
@@ -93,6 +94,13 @@ final class NotificationService: UNNotificationServiceExtension {
                             accountIdHex: accountIdHex,
                             groupIdHex: groupIdHex,
                             snapshot: mutedSnapshot
+                        )
+                    },
+                    nickname: { ownerAccountIdHex, contactAccountIdHex in
+                        ContactNicknameStore.nickname(
+                            ownerAccountIdHex: ownerAccountIdHex,
+                            contactAccountIdHex: contactAccountIdHex,
+                            in: contactNicknames
                         )
                     }
                 )

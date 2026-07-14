@@ -365,11 +365,17 @@ nonisolated struct ConversationChromePresentation: Equatable {
         initialTitle: String?,
         initialMemberCount: Int?
     ) -> ConversationChromePresentation {
-        ConversationChromePresentation(
-            title: ContentSanitizer.groupName(initialTitle)
-                ?? ContentSanitizer.groupName(chat.name)
-                ?? IdentityFormatter.short(chat.groupIdHex),
-            subtitle: initialMemberCount.flatMap(memberSubtitle)
+        let sanitizedName = ContentSanitizer.groupName(initialTitle)
+            ?? ContentSanitizer.groupName(chat.name)
+        // A DM (unnamed 2-person) shows just the contact's name — no member
+        // count — so don't flash one in the pre-roster initial chrome either.
+        // Detect it from the group's own name, not the rendered title: a DM's
+        // title hint is the contact's display name, which would otherwise read
+        // as a named group. Mirrors `GroupDisplay.isDirectMessage`.
+        let isDirectMessage = ContentSanitizer.groupName(chat.name) == nil && initialMemberCount == 2
+        return ConversationChromePresentation(
+            title: sanitizedName ?? IdentityFormatter.short(chat.groupIdHex),
+            subtitle: isDirectMessage ? nil : initialMemberCount.flatMap(memberSubtitle)
         )
     }
 
@@ -985,11 +991,32 @@ struct ConversationView: View {
     @ViewBuilder
     private var conversationTitle: some View {
         let chrome = conversationChrome
-        VStack(spacing: 0) {
-            Text(chrome.title)
-                .font(.headline)
-                .lineLimit(1)
-            conversationHeaderSecondary(subtitle: chrome.subtitle)
+        Button {
+            openConversationHeaderDestination()
+        } label: {
+            VStack(spacing: 0) {
+                Text(chrome.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                conversationHeaderSecondary(subtitle: chrome.subtitle)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Header tap target: a DM opens the contact's profile (where a private
+    /// nickname can be set); a group opens the details/settings sheet. For a DM
+    /// whose counterpart hasn't resolved yet, fall back to details rather than
+    /// mistaking it for a group.
+    private func openConversationHeaderDestination() {
+        guard let viewModel, viewModel.groupDisplay.isDirectMessage else {
+            showDetails = true
+            return
+        }
+        if let npub = viewModel.directMessageCounterpartNpub {
+            appState.presentProfile(npub: npub)
+        } else {
+            showDetails = true
         }
     }
 

@@ -326,10 +326,19 @@ final class ConversationViewModel {
         return GroupDisplay.title(for: groupDisplay, appState: appState)
     }
 
-    var displaySubtitle: String {
+    var displaySubtitle: String? {
+        // A DM header shows just the contact's name — no member count.
+        if groupDisplay.isDirectMessage { return nil }
         let memberCount = displayMemberCount
         if memberCount == 0 { return L10n.string("Just you") }
         return L10n.plural("%lld members", Int64(memberCount))
+    }
+
+    /// The other participant's npub in a DM, so the conversation header can open
+    /// their profile. `nil` for groups or before member details have loaded.
+    var directMessageCounterpartNpub: String? {
+        guard groupDisplay.isDirectMessage else { return nil }
+        return groupMemberDetails.first { !$0.isSelf }?.npub
     }
 
     var isSelfAdmin: Bool {

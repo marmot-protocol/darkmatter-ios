@@ -29,7 +29,14 @@ nonisolated enum LocalNotificationProjection {
 
     private static let maxPreviewLength = 240
 
-    static func makePresentation(for update: NotificationUpdateFfi) -> LocalNotificationPresentation? {
+    /// `nickname` resolves the viewer's private label for a (owner, contact)
+    /// pair — the same App-Group-backed override the in-app UI reads — so a set
+    /// nickname wins over the kind:0 sender name in notification titles too.
+    /// Defaults to none so the many test/summary call sites stay unchanged.
+    static func makePresentation(
+        for update: NotificationUpdateFfi,
+        nickname: (String, String) -> String? = { _, _ in nil }
+    ) -> LocalNotificationPresentation? {
         guard !update.isFromSelf else { return nil }
 
         let route = LocalNotificationRoute(
@@ -39,7 +46,10 @@ nonisolated enum LocalNotificationProjection {
             messageIdHex: update.messageIdHex
         )
 
-        let senderName = displayName(for: update.sender)
+        let senderName = displayName(
+            for: update.sender,
+            nickname: nickname(update.accountIdHex, update.sender.accountIdHex)
+        )
         let preview = sanitizedPreview(update.previewText)
         let content = contentText(
             trigger: update.trigger,
@@ -125,7 +135,12 @@ nonisolated enum LocalNotificationProjection {
         }
     }
 
-    private static func displayName(for user: NotificationUserFfi) -> String {
+    private static func displayName(for user: NotificationUserFfi, nickname: String?) -> String {
+        // A private nickname overrides the kind:0 sender name; it is already
+        // sanitized at the store boundary but re-checked here for safety.
+        if let nickname = ContentSanitizer.displayName(nickname) {
+            return nickname
+        }
         if let name = ContentSanitizer.displayName(user.displayName) {
             return name
         }
