@@ -5,11 +5,11 @@ import MarmotKit
 /// message: a row of the most-recent reaction emojis with a full-picker
 /// button, then message actions such as reply, forward, edit, info, and delete.
 struct MessageActionsMenu: View {
-    let isMine: Bool
     let canInteract: Bool
     let canForward: Bool
     let canEdit: Bool
     let canViewEditHistory: Bool
+    let canDelete: Bool
     let quickReactions: [String]
     let onReact: (String) -> Void
     let onReply: () -> Void
@@ -54,7 +54,7 @@ struct MessageActionsMenu: View {
             Divider().padding(.leading, 46)
             actionRow("Select", systemImage: "checkmark.circle", action: onSelect)
 
-            if isMine && canInteract {
+            if canDelete {
                 Divider().padding(.leading, 46)
                 actionRow("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             }

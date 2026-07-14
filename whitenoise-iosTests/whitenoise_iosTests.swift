@@ -5440,19 +5440,6 @@ struct ConversationTimelineProjectionTests {
         #expect(retained == Set([hex("33"), hex("22")]))
     }
 
-    @Test func canDeleteMessageRequiresSenderOrAdminPermission() {
-        let me = hex("11")
-        let mine = message(id: hex("a1"), sender: me)
-        let other = message(id: hex("a2"), sender: hex("22"))
-        let emptyId = message(id: "", sender: me)
-
-        #expect(ConversationViewModel.canDeleteMessage(mine, myAccountId: me, isSelfAdmin: false))
-        #expect(ConversationViewModel.canDeleteMessage(other, myAccountId: me, isSelfAdmin: true))
-        #expect(!ConversationViewModel.canDeleteMessage(other, myAccountId: me, isSelfAdmin: false))
-        #expect(!ConversationViewModel.canDeleteMessage(mine, myAccountId: nil, isSelfAdmin: false))
-        #expect(!ConversationViewModel.canDeleteMessage(emptyId, myAccountId: me, isSelfAdmin: true))
-    }
-
     @Test func liveSubscriptionRetryDelayDoublesUntilCapped() {
         #expect(ConversationViewModel.nextLiveSubscriptionRetryDelay(after: 500_000_000) == 1_000_000_000)
         #expect(ConversationViewModel.nextLiveSubscriptionRetryDelay(after: 4_000_000_000) == 8_000_000_000)

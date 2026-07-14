@@ -556,6 +556,7 @@ struct ConversationView: View {
     @State private var editSession: ComposerEditSession?
     @State private var editSaveInFlight = false
     @State private var editHistoryTarget: ActionsTarget?
+    @State private var deleteTarget: ActionsTarget?
     /// When the long-pressed bubble sits too low for the actions popover to fit
     /// below it, flip the popover above the bubble instead.
     @State private var actionsAbove = false
@@ -815,6 +816,21 @@ struct ConversationView: View {
                 if let viewModel {
                     EditHistorySheet(rows: viewModel.editHistory(for: target.record.messageIdHex))
                         .appAppearance()
+                }
+            }
+            .sheet(item: $deleteTarget) { target in
+                if let viewModel {
+                    MessageDeleteSheet(
+                        capability: viewModel.deleteCapability(for: target.record),
+                        isMine: viewModel.isMessageMine(target.record),
+                        onDeleteForMe: {
+                            viewModel.deleteMessageForMe(target.record)
+                        },
+                        onDeleteForEveryone: {
+                            await viewModel.deleteMessageForEveryone(target.record)
+                        }
+                    )
+                    .appAppearance()
                 }
             }
             .sheet(isPresented: $showCameraCapture) {
@@ -2818,7 +2834,6 @@ struct ConversationView: View {
         viewModel: ConversationViewModel
     ) -> some View {
         MessageActionsMenu(
-            isMine: record.direction == "sent",
             canInteract: viewModel.canSendMessages,
             canForward: MessageForwardingPolicy.forwardableText(for: record) != nil,
             canEdit: MessageEditingPolicy.canEdit(
@@ -2827,6 +2842,7 @@ struct ConversationView: View {
                 canSendMessages: viewModel.canSendMessages
             ),
             canViewEditHistory: viewModel.hasEditHistory(record.messageIdHex),
+            canDelete: viewModel.deleteCapability(for: record).canDelete,
             quickReactions: appState.quickReactions,
             onReact: { emoji in
                 Task { await viewModel.toggleReaction(emoji, on: record) }
@@ -2866,8 +2882,9 @@ struct ConversationView: View {
                 beginMessageSelection(with: record)
             },
             onDelete: {
-                Task { await viewModel.deleteMessage(record) }
+                let target = ActionsTarget(record: record, status: status)
                 dismissActions()
+                deleteTarget = target
             },
             onMoreEmoji: {
                 let target = record

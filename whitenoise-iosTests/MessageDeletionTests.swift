@@ -1,0 +1,434 @@
+import Foundation
+import Testing
+@testable import whitenoise_ios
+@testable import MarmotKit
+
+@MainActor
+struct MessageDeletionTests {
+    @Test func capabilityCoversOwnershipRoleAndConversationType() {
+        struct Row {
+            let name: String
+            let isDirect: Bool
+            let isMine: Bool
+            let isAdmin: Bool
+            let expectedForMe: Bool
+            let expectedForEveryone: Bool
+        }
+
+        let rows = [
+            Row(name: "own direct", isDirect: true, isMine: true, isAdmin: false, expectedForMe: true, expectedForEveryone: true),
+            Row(name: "other direct", isDirect: true, isMine: false, isAdmin: false, expectedForMe: true, expectedForEveryone: false),
+            Row(name: "other direct admin", isDirect: true, isMine: false, isAdmin: true, expectedForMe: true, expectedForEveryone: false),
+            Row(name: "own group", isDirect: false, isMine: true, isAdmin: false, expectedForMe: true, expectedForEveryone: true),
+            Row(name: "other group admin", isDirect: false, isMine: false, isAdmin: true, expectedForMe: true, expectedForEveryone: true),
+            Row(name: "other group member", isDirect: false, isMine: false, isAdmin: false, expectedForMe: true, expectedForEveryone: false),
+        ]
+
+        for row in rows {
+            let capability = MessageDeletePolicy.capability(
+                isDirectMessage: row.isDirect,
+                isMine: row.isMine,
+                isSelfAdmin: row.isAdmin,
+                localDeleteSupported: true,
+                remoteDeleteSupported: true,
+                isDeleted: false,
+                isHidden: false
+            )
+            #expect(capability.canDeleteForMe == row.expectedForMe, "\(row.name): local scope")
+            #expect(capability.canDeleteForEveryone == row.expectedForEveryone, "\(row.name): remote scope")
+            #expect(capability.canDelete == (row.expectedForMe || row.expectedForEveryone))
+        }
+    }
+
+    @Test func capabilityRejectsUnavailableOrAlreadyRemovedMessages() {
+        let base = MessageDeletePolicy.capability(
+            isDirectMessage: false,
+            isMine: true,
+            isSelfAdmin: false,
+            localDeleteSupported: false,
+            remoteDeleteSupported: false,
+            isDeleted: false,
+            isHidden: false
+        )
+        let deleted = MessageDeletePolicy.capability(
+            isDirectMessage: false,
+            isMine: true,
+            isSelfAdmin: true,
+            localDeleteSupported: true,
+            remoteDeleteSupported: true,
+            isDeleted: true,
+            isHidden: false
+        )
+        let hidden = MessageDeletePolicy.capability(
+            isDirectMessage: false,
+            isMine: true,
+            isSelfAdmin: true,
+            localDeleteSupported: true,
+            remoteDeleteSupported: true,
+            isDeleted: false,
+            isHidden: true
+        )
+
+        #expect(base == .unavailable)
+        #expect(deleted == .unavailable)
+        #expect(hidden == .unavailable)
+    }
+
+    @Test func presentationChoosesScopeLocalAndModerationCopy() {
+        let both = MessageDeleteCapability(canDeleteForMe: true, canDeleteForEveryone: true)
+        let local = MessageDeleteCapability(canDeleteForMe: true, canDeleteForEveryone: false)
+
+        #expect(MessageDeletePresentation.supportingCopy(capability: both, isMine: true) == .chooseScope)
+        #expect(MessageDeletePresentation.supportingCopy(capability: local, isMine: false) == .localOnly)
+        #expect(MessageDeletePresentation.supportingCopy(capability: both, isMine: false) == .moderation)
+    }
+
+    @Test func viewModelCapabilityRejectsMissingAccountAndMalformedMessageIds() throws {
+        let accountRef = "delete-capability-\(UUID().uuidString)"
+        let me = hex("11")
+        let group = groupRecord(id: hex("aa"), name: "Capability test")
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        defer { appState.activeAccountRef = accountRef }
+        let viewModel = ConversationViewModel(appState: appState, group: group)
+        let valid = appRecord(id: hex("44"), groupId: group.groupIdHex, sender: me, direction: "sent")
+        let malformed = appRecord(id: "not-hex", groupId: group.groupIdHex, sender: me, direction: "sent")
+
+        #expect(viewModel.deleteCapability(for: malformed) == .unavailable)
+        appState.activeAccountRef = nil
+        #expect(viewModel.deleteCapability(for: valid) == .unavailable)
+        #expect(!viewModel.deleteMessageForMe(valid))
+    }
+
+    @Test func localHideIsScopedIdempotentAndClearedPerAccount() throws {
+        let suiteName = "MessageDeletionTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let messageId = hex("11")
+
+        let first = MessageHideStore.hideMessage(
+            accountRef: "account:a",
+            groupIdHex: hex("aa"),
+            messageIdHex: messageId.uppercased(),
+            defaults: defaults
+        )
+        let second = MessageHideStore.hideMessage(
+            accountRef: "account:a",
+            groupIdHex: hex("aa"),
+            messageIdHex: messageId,
+            defaults: defaults
+        )
+        MessageHideStore.hideMessage(
+            accountRef: "account:b",
+            groupIdHex: hex("aa"),
+            messageIdHex: hex("22"),
+            defaults: defaults
+        )
+
+        #expect(first == [messageId])
+        #expect(second == [messageId])
+        #expect(MessageHideStore.hiddenMessageIds(
+            accountRef: "account:a",
+            groupIdHex: hex("bb"),
+            defaults: defaults
+        ).isEmpty)
+        #expect(MessageHideStore.conversationKey(accountRef: "ab:c", groupIdHex: hex("aa"))
+                != MessageHideStore.conversationKey(accountRef: "ab", groupIdHex: hex("aa")))
+        #expect(MessageHideStore.conversationKey(accountRef: "account:a", groupIdHex: "not-hex") == nil)
+        #expect(MessageHideStore.hideMessage(
+            accountRef: "account:a",
+            groupIdHex: hex("aa"),
+            messageIdHex: "not-hex",
+            defaults: defaults
+        ).isEmpty)
+
+        MessageHideStore.clearAll(accountRef: "account:a", defaults: defaults)
+
+        #expect(MessageHideStore.hiddenMessageIds(
+            accountRef: "account:a",
+            groupIdHex: hex("aa"),
+            defaults: defaults
+        ).isEmpty)
+        #expect(MessageHideStore.hiddenMessageIds(
+            accountRef: "account:b",
+            groupIdHex: hex("aa"),
+            defaults: defaults
+        ) == [hex("22")])
+    }
+
+    @Test func timelineFiltersPersistedHiddenRowsWithoutDroppingProjectionRecords() throws {
+        let hiddenId = hex("11")
+        let visibleId = hex("22")
+        let replyId = hex("33")
+        let store = TimelineStore(appState: nil, groupIdHex: hex("aa"), hiddenMessageIds: [hiddenId])
+        let page = TimelinePageFfi(
+            messages: [
+                timelineRecord(id: hiddenId, at: 1),
+                timelineRecord(id: visibleId, at: 2),
+                timelineRecord(id: replyId, at: 3, replyToMessageIdHex: hiddenId),
+            ],
+            hasMoreBefore: false,
+            hasMoreAfter: false
+        )
+
+        store.applyTimelinePage(page, placement: .window)
+
+        #expect(renderedMessageIds(in: store) == [visibleId, replyId])
+        #expect(store.record(for: hiddenId) != nil)
+        #expect(store.replyPreview(for: try #require(store.record(for: replyId))) != nil)
+
+        store.setHiddenMessageIds([hiddenId, visibleId])
+        #expect(renderedMessageIds(in: store) == [replyId])
+
+        store.setHiddenMessageIds([hiddenId])
+        #expect(renderedMessageIds(in: store) == [visibleId, replyId])
+    }
+
+    @Test func deleteForMePublishesNothingAndSurvivesViewModelRecreation() throws {
+        let accountRef = "delete-local-\(UUID().uuidString)"
+        let me = hex("11")
+        let group = groupRecord(id: hex("aa"), name: "Local delete test")
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        var remoteDeleteCalls = 0
+        let operation: ConversationViewModel.DeleteMessageOperation = { _, _, _, _ in
+            remoteDeleteCalls += 1
+            return SendSummaryFfi(published: 1, messageIds: [])
+        }
+        let message = appRecord(id: hex("44"), groupId: group.groupIdHex, sender: hex("22"), direction: "received")
+        let page = TimelinePageFfi(
+            messages: [timelineRecord(id: message.messageIdHex, groupId: group.groupIdHex, sender: message.sender, at: 1)],
+            hasMoreBefore: false,
+            hasMoreAfter: false
+        )
+        defer { MessageHideStore.clearAll(accountRef: accountRef) }
+
+        let first = ConversationViewModel(
+            appState: appState,
+            group: group,
+            deleteMessageOperation: operation
+        )
+        first.applyTimelinePage(page, placement: .window)
+        #expect(first.deleteMessageForMe(message))
+        #expect(first.timeline.isEmpty)
+        #expect(remoteDeleteCalls == 0)
+
+        let recreated = ConversationViewModel(
+            appState: appState,
+            group: group,
+            deleteMessageOperation: operation
+        )
+        recreated.applyTimelinePage(page, placement: .window)
+        #expect(recreated.timeline.isEmpty)
+        #expect(remoteDeleteCalls == 0)
+    }
+
+    @Test func directMessageAdminCannotDeleteAnotherSendersMessageForEveryone() async throws {
+        let accountRef = "delete-dm-\(UUID().uuidString)"
+        let me = hex("11")
+        let group = groupRecord(id: hex("aa"), name: "", admins: [me])
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        var remoteDeleteCalls = 0
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group,
+            initialMemberCount: 2,
+            deleteMessageOperation: { _, _, _, _ in
+                remoteDeleteCalls += 1
+                return SendSummaryFfi(published: 1, messageIds: [])
+            }
+        )
+        let message = appRecord(id: hex("55"), groupId: group.groupIdHex, sender: hex("22"), direction: "received")
+
+        #expect(viewModel.deleteCapability(for: message).canDeleteForMe)
+        #expect(!viewModel.deleteCapability(for: message).canDeleteForEveryone)
+        let deleted = await viewModel.deleteMessageForEveryone(message)
+        #expect(!deleted)
+        #expect(remoteDeleteCalls == 0)
+    }
+
+    @Test func failedRemoteDeleteRollsBackAndCanBeRetried() async throws {
+        let accountRef = "delete-failure-\(UUID().uuidString)"
+        let me = hex("11")
+        let group = groupRecord(id: hex("aa"), name: "Failure test")
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        var remoteDeleteCalls = 0
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group,
+            deleteMessageOperation: { _, _, _, _ in
+                remoteDeleteCalls += 1
+                throw DeleteTestError.failed
+            }
+        )
+        let message = appRecord(id: hex("66"), groupId: group.groupIdHex, sender: me, direction: "sent")
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [timelineRecord(id: message.messageIdHex, groupId: group.groupIdHex, sender: me, at: 1)],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
+
+        let deleted = await viewModel.deleteMessageForEveryone(message)
+        #expect(!deleted)
+        #expect(remoteDeleteCalls == 1)
+        #expect(!viewModel.isDeleted(message.messageIdHex))
+        #expect(viewModel.timeline.count == 1)
+        #expect(viewModel.deleteCapability(for: message).canDeleteForEveryone)
+    }
+
+    @Test func repeatedRemoteDeleteStartsOnlyOneMutation() async throws {
+        let accountRef = "delete-repeat-\(UUID().uuidString)"
+        let me = hex("11")
+        let group = groupRecord(id: hex("aa"), name: "Repeat test")
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        var remoteDeleteCalls = 0
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group,
+            deleteMessageOperation: { _, _, _, _ in
+                remoteDeleteCalls += 1
+                try await Task.sleep(nanoseconds: 30_000_000)
+                return SendSummaryFfi(published: 1, messageIds: [])
+            }
+        )
+        let message = appRecord(id: hex("77"), groupId: group.groupIdHex, sender: me, direction: "sent")
+
+        let first = Task { await viewModel.deleteMessageForEveryone(message) }
+        await Task.yield()
+        let repeated = await viewModel.deleteMessageForEveryone(message)
+        let firstResult = await first.value
+
+        #expect(firstResult)
+        #expect(!repeated)
+        #expect(remoteDeleteCalls == 1)
+        #expect(viewModel.isDeleted(message.messageIdHex))
+    }
+
+    private func appState(accountRef: String, accountIdHex: String) throws -> AppState {
+        let state = AppState(client: try MarmotClient.testClient())
+        state.accountStore.accounts = [
+            AccountSummaryFfi(
+                label: accountRef,
+                accountIdHex: accountIdHex,
+                localSigning: true,
+                signedOut: false,
+                running: true
+            ),
+        ]
+        state.activeAccountRef = accountRef
+        return state
+    }
+
+    private func groupRecord(
+        id: String,
+        name: String,
+        admins: [String] = []
+    ) -> AppGroupRecordFfi {
+        AppGroupRecordFfi(
+            groupIdHex: id,
+            endpoint: "",
+            name: name,
+            description: "",
+            admins: admins,
+            relays: [],
+            nostrGroupIdHex: "",
+            avatarUrl: nil,
+            avatarDim: nil,
+            avatarThumbhash: nil,
+            encryptedMedia: AppGroupEncryptedMediaComponentFfi(
+                componentId: 0,
+                component: "",
+                required: false,
+                mediaFormat: "",
+                allowedLocatorKinds: [],
+                defaultBlobEndpoints: []
+            ),
+            archived: false,
+            pendingConfirmation: false,
+            selfMembership: .member,
+            welcomerAccountIdHex: nil,
+            viaWelcomeMessageIdHex: nil
+        )
+    }
+
+    private func appRecord(
+        id: String,
+        groupId: String,
+        sender: String,
+        direction: String
+    ) -> AppMessageRecordFfi {
+        AppMessageRecordFfi(
+            messageIdHex: id,
+            direction: direction,
+            groupIdHex: groupId,
+            sender: sender,
+            plaintext: "message",
+            contentTokens: .emptyDocument,
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 1,
+            receivedAt: 1
+        )
+    }
+
+    private func timelineRecord(
+        id: String,
+        groupId: String = String(repeating: "aa", count: 32),
+        sender: String = String(repeating: "22", count: 32),
+        at: UInt64,
+        replyToMessageIdHex: String? = nil
+    ) -> TimelineMessageRecordFfi {
+        TimelineMessageRecordFfi(
+            messageIdHex: id,
+            sourceMessageIdHex: id,
+            direction: "received",
+            groupIdHex: groupId,
+            sender: sender,
+            plaintext: "message \(at)",
+            contentTokens: .emptyDocument,
+            kind: MessageSemantics.kindChat,
+            tags: replyToMessageIdHex.map {
+                [MessageTagFfi(values: [MessageSemantics.eventRefTag, $0])]
+            } ?? [],
+            timelineAt: at,
+            receivedAt: at,
+            replyToMessageIdHex: replyToMessageIdHex,
+            replyPreview: replyToMessageIdHex.map {
+                TimelineReplyPreviewFfi(
+                    messageIdHex: $0,
+                    sender: hex("22"),
+                    plaintext: "hidden target",
+                    kind: MessageSemantics.kindChat,
+                    mediaJson: nil,
+                    media: [],
+                    agentTextStreamJson: nil,
+                    deleted: false
+                )
+            },
+            mediaJson: nil,
+            media: [],
+            agentTextStreamJson: nil,
+            groupSystem: nil,
+            reactions: TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
+            deleted: false,
+            deletedByMessageIdHex: nil,
+            invalidationStatus: nil
+        )
+    }
+
+    private func renderedMessageIds(in store: TimelineStore) -> [String] {
+        store.timeline.compactMap { item in
+            guard case .message(let record, _) = item.kind else { return nil }
+            return record.messageIdHex
+        }
+    }
+
+    private func hex(_ byte: String) -> String {
+        String(repeating: byte, count: 32)
+    }
+}
+
+private enum DeleteTestError: Error {
+    case failed
+}
