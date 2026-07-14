@@ -9,11 +9,14 @@ struct ConversationSearchBar: View {
 
     @FocusState private var isFieldFocused: Bool
 
+    @ScaledMetric(relativeTo: .body)
+    private var closeIconSize: CGFloat = 18
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 TextField("", text: $search.query, prompt: Text(L10n.string("Search messages")))
                     .textFieldStyle(.plain)
@@ -72,7 +75,7 @@ struct ConversationSearchBar: View {
                 Task { await search.goToOlderMatch() }
             } label: {
                 Image(systemName: "chevron.up")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .frame(width: 34, height: 34)
                     .contentShape(Rectangle())
             }
@@ -84,7 +87,7 @@ struct ConversationSearchBar: View {
                 search.goToNewerMatch()
             } label: {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .frame(width: 34, height: 34)
                     .contentShape(Rectangle())
             }
@@ -98,7 +101,7 @@ struct ConversationSearchBar: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 18))
+                .font(.system(size: closeIconSize))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
                 .frame(width: 34, height: 34)
