@@ -13,6 +13,17 @@ enum TelemetrySettingsActionError: LocalizedError {
     }
 }
 
+enum AuditLogActionError: LocalizedError {
+    case runtimeNotReady
+
+    var errorDescription: String? {
+        switch self {
+        case .runtimeNotReady:
+            "The secure runtime isn't ready yet. Try again in a moment."
+        }
+    }
+}
+
 struct TelemetryBuildConfig: Equatable {
     static let defaultOtlpEndpoint = "https://otlp.ipf.dev/v1/metrics"
 
