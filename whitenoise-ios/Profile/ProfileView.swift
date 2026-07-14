@@ -140,9 +140,11 @@ struct ProfileView: View {
     }
 
     /// Nicknames apply to other people, not this device's own accounts, and
-    /// only once the profile reference resolves to an account id.
+    /// only once the profile reference resolves to an account id. Requires an
+    /// active account too, since the nickname is scoped to (owner, contact) —
+    /// without one, saving would silently no-op.
     private var canEditNickname: Bool {
-        model.hex != nil && !isSelf
+        model.hex != nil && !isSelf && appState.activeAccountRef != nil
     }
 
     private var nicknameAlertTitle: String {
