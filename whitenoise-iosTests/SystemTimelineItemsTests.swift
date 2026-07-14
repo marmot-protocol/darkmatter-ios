@@ -68,6 +68,25 @@ struct SystemTimelineItemsTests {
         })
     }
 
+    @Test func consecutiveSameKindSystemEventPublishesUpdatedTimestamp() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+
+        viewModel.appendSystemEventForTesting(.rosterChanged, timestamp: 1)
+        viewModel.appendSystemEventForTesting(.rosterChanged, timestamp: 2)
+
+        // The two same-kind events collapse into one row, and the published
+        // timeline row must carry the newer timestamp — not the stale first one.
+        let systemRows = viewModel.timeline.filter { item in
+            if case .systemEvent(.rosterChanged) = item.kind { return true }
+            return false
+        }
+        #expect(systemRows.count == 1)
+        #expect(systemRows.first?.timestamp == 2)
+    }
+
     @Test func resetOptimisticStateClearsTransientMessageRows() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),

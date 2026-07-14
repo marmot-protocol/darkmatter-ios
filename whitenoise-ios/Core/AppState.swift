@@ -665,7 +665,11 @@ final class AppState {
 
     @MainActor
     func deleteAllAuditLogFiles() async throws {
-        guard phase == .ready else { return }
+        // Fail loudly when the runtime isn't ready (e.g. a suspend window). A
+        // silent success-shaped return would let the UI clear the list and play
+        // a success haptic while nothing was deleted, then the files reappear on
+        // the next foreground reload — a false confirmation for a privacy action.
+        guard phase == .ready else { throw AuditLogActionError.runtimeNotReady }
         let client = try runtimeClient()
         let files = try await client.auditLogFiles()
         for file in files {
