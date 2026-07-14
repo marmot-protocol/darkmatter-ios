@@ -11,6 +11,12 @@ import MarmotKit
 /// state, while the marked-set bookkeeping stays self-contained.
 @MainActor
 final class ConversationReadMarker {
+    enum PendingFlushDecision: Equatable {
+        case stop
+        case retryWhenRuntimeReturns
+        case flush
+    }
+
     private static let performanceSignposter = OSSignposter(
         subsystem: "dev.ipf.whitenoise.ios",
         category: "Performance"
@@ -139,22 +145,30 @@ final class ConversationReadMarker {
     }
 
     private func flushPendingReadMarks(accountRef: String) async -> Bool {
-        guard !pendingReadMessageIds.isEmpty else {
+        let appState = appState
+        switch Self.pendingFlushDecision(
+            hasPendingMessages: !pendingReadMessageIds.isEmpty,
+            canUseRuntime: appState?.canUseRuntimeForForegroundWork == true,
+            activeAccountMatches: appState?.activeAccountRef == accountRef
+        ) {
+        case .stop:
             pendingReadMessageIdSet = []
             pruneMarkedReadMessageIds(force: true)
             return false
+        case .retryWhenRuntimeReturns:
+            // Keep the task and queue alive while the app is backgrounded. The
+            // task resumes its coalesced retry loop when the process/runtime is
+            // available again, even if the viewport never emits another frame.
+            return true
+        case .flush:
+            break
         }
         // Check availability BEFORE draining. If the runtime or account is
         // unavailable at flush time (e.g. the app backgrounded during the
         // coalescing window), leave the ids queued so the next flush retries —
         // draining first would drop the reads, and the weak re-arm only fires on
         // a viewport frame change that a same-rows foreground resume won't emit.
-        guard let appState,
-              appState.canUseRuntimeForForegroundWork,
-              appState.activeAccountRef == accountRef
-        else {
-            return false
-        }
+        guard let appState else { return false }
 
         let messageIds = pendingReadMessageIds
         pendingReadMessageIds = []
@@ -184,6 +198,15 @@ final class ConversationReadMarker {
         }
 
         return !pendingReadMessageIds.isEmpty && appState.activeAccountRef == accountRef
+    }
+
+    nonisolated static func pendingFlushDecision(
+        hasPendingMessages: Bool,
+        canUseRuntime: Bool,
+        activeAccountMatches: Bool
+    ) -> PendingFlushDecision {
+        guard hasPendingMessages, activeAccountMatches else { return .stop }
+        return canUseRuntime ? .flush : .retryWhenRuntimeReturns
     }
 
     func cancelPendingReadMarks() {

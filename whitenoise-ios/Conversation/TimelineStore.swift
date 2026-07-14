@@ -535,7 +535,7 @@ final class TimelineStore {
         groupSystemDisplayCache[appRecord.messageIdHex] = nil
         messageById[appRecord.messageIdHex] = appRecord
         messageStatusById[appRecord.messageIdHex] = appRecord.direction == "sent" ? .sent : .received
-        confirmedPendingTimelineRecordIds.remove(appRecord.messageIdHex)
+        let replacedConfirmedPendingRow = confirmedPendingTimelineRecordIds.remove(appRecord.messageIdHex) != nil
         replyProjectionKnownMessageIds.insert(appRecord.messageIdHex)
         if let projectedReplyTarget = record.replyToMessageIdHex, !projectedReplyTarget.isEmpty {
             replyTargetByMessageId[appRecord.messageIdHex] = projectedReplyTarget
@@ -548,6 +548,14 @@ final class TimelineStore {
         // Media now arrives resolved on the row (Marmot resolves imeta + epoch);
         // mirror it instead of re-classifying tags or a separate listMedia pass.
         mediaProjections.setReferences(record.media, forMessageId: appRecord.messageIdHex)
+        if replacedConfirmedPendingRow {
+            // `confirmSent` keeps the freshly-picked bytes attached to the real
+            // row until Marmot mirrors its authoritative record. At that point
+            // the bounded decrypted-media cache owns the bytes and the pending
+            // projection must be released so it cannot mask canonical metadata
+            // for the lifetime of the conversation.
+            mediaProjections.removePending(forRowId: "msg:\(appRecord.messageIdHex)")
+        }
         reactionProjections.setSummary(record.reactions, forMessageId: appRecord.messageIdHex)
         reactionProjections.pruneConfirmedOptimistic(
             target: appRecord.messageIdHex,
