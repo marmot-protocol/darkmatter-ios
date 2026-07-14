@@ -44,7 +44,7 @@ extension AppState {
                     accountRef: route.accountRef,
                     groupIdHex: route.groupIdHex
                 )
-                await self.refreshAccountUnreadSummaries()
+                await self.refreshAccountUnreadSummaries(using: client)
             }
         case .markRead(let route, let messageIdHex):
             await runNotificationAction(
@@ -69,7 +69,7 @@ extension AppState {
                     accountRef: route.accountRef,
                     groupIdHex: route.groupIdHex
                 )
-                await self.refreshAccountUnreadSummaries()
+                await self.refreshAccountUnreadSummaries(using: client)
             }
         }
     }

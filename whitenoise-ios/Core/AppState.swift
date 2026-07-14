@@ -757,7 +757,7 @@ final class AppState {
     /// refreshes can complete out of order — only the newest may commit, so an
     /// older fetch can't overwrite fresher badge counts.
     @MainActor
-    func refreshAccountUnreadSummaries() async {
+    func refreshAccountUnreadSummaries(using leasedClient: MarmotClient? = nil) async {
         guard !accounts.isEmpty else {
             accountUnreadStore.refreshed(from: [], accounts: [])
             return
@@ -765,7 +765,13 @@ final class AppState {
         unreadSummaryRefreshGeneration += 1
         let generation = unreadSummaryRefreshGeneration
         do {
-            let summaries = try await runtimeClient().accountUnreadSummary()
+            let summaryClient: MarmotClient
+            if let leasedClient {
+                summaryClient = leasedClient
+            } else {
+                summaryClient = try runtimeClient()
+            }
+            let summaries = try await summaryClient.accountUnreadSummary()
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(from: summaries, accounts: accounts)
         } catch {

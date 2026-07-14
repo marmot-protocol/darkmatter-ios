@@ -868,6 +868,13 @@ struct AppStateBootstrapTests {
         #expect(!accounts.isEmpty)
         #expect(appState.client == nil)
 
+        // Notification actions refresh badges through the lease too. Calling
+        // the ordinary runtime accessor here would silently rebuild a durable
+        // client while the app is still suspended.
+        await appState.refreshAccountUnreadSummaries(using: lease.client)
+        #expect(appState.client == nil)
+        #expect(appState.runtimeGeneration == generation)
+
         await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
 
         #expect(!appState.isAppSceneActive)
