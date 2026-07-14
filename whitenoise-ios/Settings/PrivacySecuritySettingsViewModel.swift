@@ -38,6 +38,9 @@ final class PrivacySecuritySettingsViewModel {
     private var actionGate = AsyncActionGate()
     private var fullReloadRequestedAfterAction = false
     private var auditFilesReloadRequestedAfterAction = false
+    /// Account whose privacy state is currently shown. Used to clear
+    /// account-scoped state before awaiting a *different* account's projection.
+    private var loadedAccountRef: String?
 
     var telemetryToggleDisabled: Bool {
         actionGate.isRunning || telemetrySaving || telemetrySettings == nil
@@ -115,6 +118,16 @@ final class PrivacySecuritySettingsViewModel {
             return
         }
         let accountRef = dataSource.activeAccountRef
+        // Switching accounts: clear the previous account's toggles, audit rows,
+        // and save banner before awaiting the new projection, so this privacy
+        // screen never shows or lets you act on another account's state during
+        // the suspended read.
+        if accountRef != loadedAccountRef {
+            telemetrySettings = nil
+            auditSettings = nil
+            auditFileRows = []
+            savedAt = nil
+        }
         filesLoading = true
         errorMessage = nil
         telemetryErrorMessage = nil
@@ -133,6 +146,7 @@ final class PrivacySecuritySettingsViewModel {
                 telemetrySettings = nil
                 auditSettings = nil
                 auditFileRows = []
+                loadedAccountRef = accountRef
                 return
             }
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
@@ -142,6 +156,7 @@ final class PrivacySecuritySettingsViewModel {
             telemetrySettings = projection.telemetrySettings
             auditSettings = projection.auditSettings
             auditFileRows = projection.auditFileRows
+            loadedAccountRef = accountRef
         } catch {
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.full, using: dataSource)
