@@ -1045,8 +1045,8 @@ struct AppStateBootstrapTests {
         #expect(appState.profileStore.profileProjectionLoadVersions == [hex("99"): 1])
     }
 
-    @Test func fullSignOutClearsProfileProjectionState() async throws {
-        // Full sign-out into onboarding is the one place a whole-map reset is
+    @Test func destructiveWipeClearsProfileProjectionState() async throws {
+        // A destructive wipe into onboarding is the one place a whole-map reset is
         // safe: with no active account `canRefreshProfiles` is false, so no
         // in-flight load can re-bump a token for the gone account ids or
         // repopulate the cache and race the reset. Signing out the last account
@@ -1062,7 +1062,7 @@ struct AppStateBootstrapTests {
         ]
         appState.profileStore.profileProjectionLoadVersions = [hex("aa"): 9, account.accountIdHex: 2]
 
-        await appState.signOut()
+        await appState.signOutAndWipeActiveAccount()
 
         #expect(appState.activeAccountRef == nil)
         #expect(appState.phase == .onboarding)
@@ -1070,13 +1070,9 @@ struct AppStateBootstrapTests {
         #expect(appState.profileStore.profileProjectionLoadVersions.isEmpty)
     }
 
-    @Test func partialSignOutEvictsDepartedLocalAccountProjectionState() async throws {
-        // A partial sign-out keeps the app in the ready phase, but the departed
-        // local account must not remain as a cached peer projection. If that
-        // pubkey later appears as a DM/group peer, the UI should miss the app
-        // cache and refresh instead of rendering the removed account's stale
-        // display name/avatar (#430). Its stale load token must also be removed
-        // or superseded so suspended loads cannot re-apply it after sign-out.
+    @Test func nonDestructiveSignOutPreservesRetainedAccountProjectionState() async throws {
+        // A normal sign-out keeps the account and its local state available for
+        // reactivation, including its cached local-account projection.
         let seeded = try await readyAppStateWithCreatedIdentities(accountCount: 2)
         let appState = seeded.appState
         let accountA = seeded.accounts[0]
@@ -1105,10 +1101,10 @@ struct AppStateBootstrapTests {
 
         #expect(appState.activeAccountRef == accountB.label)
         #expect(appState.phase == .ready)
-        #expect(appState.profileStore.profileProjectionCache[accountA.accountIdHex] == nil)
+        #expect(appState.profileStore.profileProjectionCache[accountA.accountIdHex]?.projectedName == "Departed account")
         #expect(appState.profileStore.profileProjectionCache[accountB.accountIdHex]?.localAccountLabel == accountB.label)
         #expect(appState.profileStore.profileProjectionCache[peerID]?.projectedName == "Existing peer")
-        #expect(appState.profileStore.profileProjectionLoadVersions[accountA.accountIdHex] != 3)
+        #expect(appState.profileStore.profileProjectionLoadVersions[accountA.accountIdHex] == 3)
 
         await stopReadyRuntime(appState)
     }
@@ -1135,10 +1131,11 @@ struct AppStateBootstrapTests {
 
         await appState.signOut()
 
-        let removedSettings = await appState.notificationSettings(for: accountA.label)
+        let signedOutSettings = await appState.notificationSettings(for: accountA.label)
         #expect(appState.activeAccountRef == accountB.label)
-        #expect(appState.accounts.map(\.label) == [accountB.label])
-        #expect(removedSettings == nil)
+        #expect(appState.accounts.map(\.label) == [accountA.label, accountB.label])
+        #expect(appState.accounts.first(where: { $0.label == accountA.label })?.signedOut == true)
+        #expect(signedOutSettings?.nativePushEnabled == false)
         // A remaining account means we stay in the main interface.
         #expect(appState.phase == .ready)
 
@@ -1215,7 +1212,7 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
-    @Test func signOutOfOnlyAccountClearsAccountStateAndReturnsToOnboarding() async throws {
+    @Test func signOutOfOnlyAccountKeepsItAvailableForReactivation() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
         let only = seeded.accounts[0]
@@ -1223,13 +1220,20 @@ struct AppStateBootstrapTests {
 
         await appState.signOut()
 
-        let removedSettings = await appState.notificationSettings(for: only.label)
-        #expect(appState.accounts.isEmpty)
+        let signedOutSettings = await appState.notificationSettings(for: only.label)
+        #expect(appState.accounts.map(\.label) == [only.label])
+        #expect(appState.accounts.first?.signedOut == true)
         #expect(appState.activeAccountRef == nil)
-        #expect(removedSettings == nil)
-        // Signing out of the last account must route back to onboarding
-        // rather than leaving the main UI up with no active account.
-        #expect(appState.phase == .onboarding)
+        #expect(signedOutSettings?.nativePushEnabled == false)
+        // Keep the main shell available so Settings → Profiles can sign the
+        // retained local account back in without importing its keys again.
+        #expect(appState.phase == .ready)
+
+        await appState.activateAccount(only.label)
+
+        #expect(appState.activeAccountRef == only.label)
+        #expect(appState.accounts.first?.signedOut == false)
+        await stopReadyRuntime(appState)
     }
 
     @Test func signOutOfOnlyAccountClearsPersistedActiveAccountRef() async throws {
