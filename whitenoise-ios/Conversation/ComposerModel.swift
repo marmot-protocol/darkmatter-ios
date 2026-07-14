@@ -2,6 +2,30 @@ import Foundation
 import Observation
 import MarmotKit
 
+nonisolated struct VerifiedMediaUploadAttachment {
+    let data: Data
+    let reference: MediaAttachmentReferenceFfi
+}
+
+nonisolated enum MediaUploadIntegrity {
+    static func verifiedAttachments(
+        plaintexts: [Data],
+        references: [MediaAttachmentReferenceFfi]
+    ) async -> [VerifiedMediaUploadAttachment] {
+        var verified: [VerifiedMediaUploadAttachment] = []
+        for (data, reference) in zip(plaintexts, references) {
+            guard await MediaPlaintextHash.matches(
+                data,
+                expectedSha256: reference.plaintextSha256
+            ) else {
+                continue
+            }
+            verified.append(VerifiedMediaUploadAttachment(data: data, reference: reference))
+        }
+        return verified
+    }
+}
+
 /// Owns the conversation composer's send pipeline: the in-flight send guard, the
 /// reply target, and the text/media send FFI orchestration. Optimistic rows are
 /// handed to `TimelineStore` (the overlay is timeline-mirror state, not composer
@@ -155,15 +179,13 @@ final class ComposerModel {
                     blossomServer: nil
                 )
             )
-            let references = result.attachments.map(\.reference)
-            for (attachment, uploaded) in zip(attachments, result.attachments) {
-                guard await MediaPlaintextHash.matches(
-                    attachment.data,
-                    expectedSha256: uploaded.reference.plaintextSha256
-                ) else {
-                    continue
-                }
-                await MessageMediaCache.store(attachment.data, for: uploaded.reference)
+            let verifiedAttachments = await MediaUploadIntegrity.verifiedAttachments(
+                plaintexts: attachments.map(\.data),
+                references: result.attachments.map(\.reference)
+            )
+            let references = verifiedAttachments.map(\.reference)
+            for attachment in verifiedAttachments {
+                await MessageMediaCache.store(attachment.data, for: attachment.reference)
             }
             let confirmed = AppMessageRecordFfi(
                 messageIdHex: "",

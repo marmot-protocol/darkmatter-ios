@@ -247,6 +247,21 @@ struct TimelineProjectionBoundaryTests {
         #expect(cached.storedPayloads.isEmpty)
     }
 
+    @Test func mediaUploadIntegrityDropsMismatchedReferences() async {
+        let acceptedData = Data([0x01, 0x02])
+        let rejectedData = Data([0x03, 0x04])
+        let acceptedReference = mediaReference(sourceEpoch: 7, plaintext: acceptedData)
+        let rejectedReference = mediaReference(sourceEpoch: 8, plaintext: Data([0xff]))
+
+        let verified = await MediaUploadIntegrity.verifiedAttachments(
+            plaintexts: [acceptedData, rejectedData],
+            references: [acceptedReference, rejectedReference]
+        )
+
+        #expect(verified.map(\.data) == [acceptedData])
+        #expect(verified.map(\.reference.plaintextSha256) == [acceptedReference.plaintextSha256])
+    }
+
     @Test func mediaDownloaderIgnoresHashMismatchedCacheHit() async throws {
         let downloadedData = Data([0x0c, 0x0d, 0x0e])
         let reference = mediaReference(sourceEpoch: 7, plaintext: downloadedData)
