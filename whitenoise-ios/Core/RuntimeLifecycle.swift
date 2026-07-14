@@ -2,9 +2,15 @@ import Foundation
 import Observation
 import MarmotKit
 
+/// Runtime handle for one notification action: either the live foreground
+/// client (durable) or a lease-private frozen runtime built while the app's
+/// durable runtime stays suspended.
 struct NotificationActionRuntimeLease {
     let client: MarmotClient
-    let restoredFromSuspension: Bool
+    /// True when the lease owns a private ephemeral frozen runtime. It is
+    /// never the app's client slot and must be shut down when the action
+    /// completes; foreground never adopts it.
+    let ownsEphemeralRuntime: Bool
 }
 
 enum NotificationActionError: Error {
@@ -453,48 +459,77 @@ final class RuntimeLifecycle {
 
     // MARK: - Background notification actions
 
-    /// Started runtime for a notification action (reply / mark-read), which can
-    /// arrive while the app is backgrounded and the runtime is suspended.
-    /// Reuses the suspension machinery rather than a second lifecycle: an
-    /// in-flight teardown is awaited first, and a suspended runtime is rebuilt
-    /// under the same claim/waiter gate foreground resume honors, so a racing
-    /// `resumeAfterForegroundActivation` waits for this restart instead of
-    /// building a second runtime over the same App Group store.
+    /// Runtime for a notification action (reply / mark-read), which can arrive
+    /// while the app is backgrounded and the runtime is suspended. With a live
+    /// foreground client, the action leases that durable runtime. Otherwise
+    /// the lease owns an exclusive ephemeral runtime with `.frozen` cursor
+    /// persistence: it still ingests, decrypts, and publishes, but cannot
+    /// ratchet the durable transport-cursor floor past events a short
+    /// background pass did not receive. It is never assigned to the client
+    /// slot and never survives into foreground use, so a foregrounded app
+    /// cannot end up running indefinitely on a frozen cursor. The suspension
+    /// claim is held for the whole action; a foreground activation that lands
+    /// mid-action parks on the waiter machinery for the action's duration
+    /// (seconds) and then resumes with a fresh durable runtime.
     func startRuntimeForNotificationAction() async throws -> NotificationActionRuntimeLease {
+        // Let an in-flight foreground activation finish first so the live
+        // durable client serves the action, instead of building a second
+        // runtime over the same App Group store mid-activation.
+        await foregroundActivationTask?.value
         await runtimeSuspensionTask?.value
         await waitForRuntimeSuspensionToFinish()
         guard phaseOwnsLiveRuntime else {
             throw NotificationActionError.runtimeUnavailable
         }
         if !runtimeSuspendedForBackground, let client {
-            return NotificationActionRuntimeLease(client: client, restoredFromSuspension: false)
+            return NotificationActionRuntimeLease(client: client, ownsEphemeralRuntime: false)
         }
-        // Claim the restart before the first await so a concurrent suspension
-        // or foreground activation waits (same waiter machinery) instead of
-        // interleaving a teardown or a duplicate rebuild.
+        // Claim the suspension gate for the whole action so concurrent
+        // suspensions and foreground activations park on the waiter machinery
+        // instead of tearing down or adopting the ephemeral runtime. The
+        // foreground work gates stay closed for the action's duration, which
+        // matches the durable runtime's actual availability.
         isRuntimeSuspending = true
+        let ephemeral: MarmotClient
         do {
-            let restored = try runtimeClient()
-            try await restored.startRuntime()
-            noteRuntimeForegroundReadyAfterSuspension()
-            return NotificationActionRuntimeLease(client: restored, restoredFromSuspension: true)
+            ephemeral = try MarmotClient(
+                rootPath: runtimeRootPath,
+                relayUrls: runtimeRelayUrls,
+                cursorPersistence: .frozen
+            )
         } catch {
-            // Release the partial runtime like the bootstrap failure path, so a
-            // later resume rebuilds a fresh one.
-            await shutdownAndReleaseCurrentClient()
             finishRuntimeSuspensionWait()
             throw error
         }
+        do {
+            try await ephemeral.startRuntime()
+        } catch {
+            // Release the partial runtime like the bootstrap failure path.
+            await ephemeral.marmot.shutdown()
+            finishRuntimeSuspensionWait()
+            throw error
+        }
+        // `client` stays nil and `runtimeSuspendedForBackground` stays true:
+        // the app's durable runtime really is still suspended, and nothing
+        // app-visible changed runtimes (no generation bump).
+        return NotificationActionRuntimeLease(client: ephemeral, ownsEphemeralRuntime: true)
     }
 
-    /// Re-enters the normal suspension entry point after a notification action
-    /// restarted the runtime, so the rebuilt runtime does not keep the App
-    /// Group SQLite lock while the app stays suspended (0xdead10cc). A scene
-    /// that became active meanwhile owns the runtime through the regular
-    /// foreground activation instead.
+    /// Ends a notification-action lease. A lease on the live foreground client
+    /// changes nothing. An ephemeral lease shuts its frozen runtime down
+    /// unconditionally — it must never outlive the action — then releases the
+    /// suspension claim; the durable slot is already in the suspended state
+    /// (`client == nil`, `runtimeSuspendedForBackground == true`). A scene
+    /// that activated mid-action then gets a fresh durable runtime through the
+    /// normal resume path. Both race directions are safe because the standard
+    /// entry points re-check the authoritative scene flag.
     func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
-        guard lease.restoredFromSuspension, !isAppSceneActive else { return }
-        await startRuntimeSuspension().value
+        guard lease.ownsEphemeralRuntime else { return }
+        await lease.client.marmot.shutdown()
+        finishRuntimeSuspensionWait()
+        if isAppSceneActive {
+            startForegroundActivation()
+        }
     }
 
     private func noteRuntimeForegroundReadyAfterSuspension() {

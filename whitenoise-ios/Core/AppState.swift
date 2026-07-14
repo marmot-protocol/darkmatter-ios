@@ -881,15 +881,23 @@ final class AppState {
     /// refreshes can complete out of order — only the newest may commit, so an
     /// older fetch can't overwrite fresher badge counts.
     @MainActor
-    func refreshAccountUnreadSummaries() async {
+    func refreshAccountUnreadSummaries(using leasedClient: MarmotClient? = nil) async {
         guard !accounts.isEmpty else {
             accountUnreadStore.refreshed(from: [], accounts: [])
             return
         }
+        // A badge refresh has no foreground UI to update while the durable
+        // runtime is down, so it must never resurrect it: rebuilding a suspended
+        // runtime in the background would strand a durable `.advance` runtime
+        // holding the App Group SQLite lock (`0xdead10cc`). Foreground callers
+        // have a live `client`; a notification action passes its leased runtime.
+        // With neither, degrade to a no-op rather than reach the rebuilding
+        // `runtimeClient()` accessor.
+        guard let summaryClient = leasedClient ?? client else { return }
         unreadSummaryRefreshGeneration += 1
         let generation = unreadSummaryRefreshGeneration
         do {
-            let summaries = try await runtimeClient().accountUnreadSummary()
+            let summaries = try await summaryClient.accountUnreadSummary()
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(from: summaries, accounts: accounts)
         } catch {

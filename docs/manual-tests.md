@@ -154,6 +154,15 @@ before every release tag.
       show a duplicate local banner while the app is foreground-active.
 - [ ] A generic APNS wake with no local notification update shows a coherent
       generic fallback notification, not a blank title/body.
+- [ ] Replying from the notification (long-press → Reply) while the app is
+      fully backgrounded delivers the reply, marks the notified message read,
+      and dismisses the conversation's notifications; reopening shows the
+      reply in place. A failed reply surfaces the "Reply not sent" fallback.
+- [ ] Marking read from the notification while backgrounded clears the
+      conversation's notifications and unread badge. (Both action paths run on
+      a short-lived frozen-cursor runtime that must not disturb the suspended
+      app runtime — after the action, backgrounding stays clean and a later
+      foreground resume still catches up normally.)
 
 ## Diagnostics
 
