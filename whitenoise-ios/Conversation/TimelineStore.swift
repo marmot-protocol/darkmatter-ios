@@ -386,6 +386,10 @@ final class TimelineStore {
         var changedReactionTargets: Set<String> = []
         let shouldEvictAbsentRecords = shouldEvictAbsentTimelineRecords(from: page)
         let canUpdateTimelineIncrementally = !shouldEvictAbsentRecords
+        // Appending a multi-record page one row at a time re-sorts the whole
+        // window per record; consolidate into a single rebuild for a batch.
+        let consolidateTimelineRebuild = canUpdateTimelineIncrementally && page.messages.count > 1
+        let perRecordTimelineUpdate = canUpdateTimelineIncrementally && !consolidateTimelineRebuild
         let hasCompleteAuthoritativeWindow = !page.hasMoreBefore && !page.hasMoreAfter
         if shouldEvictAbsentRecords {
             let incomingMessageIds = Set(page.messages.map(\.messageIdHex).filter { !$0.isEmpty })
@@ -405,7 +409,7 @@ final class TimelineStore {
             collectReactionTargets(affectedBy: ConversationViewModel.appMessageRecord(from: record), into: &changedReactionTargets)
             projectionChanged = applyTimelineRecord(
                 record,
-                updateTimeline: canUpdateTimelineIncrementally
+                updateTimeline: perRecordTimelineUpdate
             ) || projectionChanged
         }
         if shouldEvictAbsentRecords {
@@ -415,7 +419,7 @@ final class TimelineStore {
         hasMoreBefore = page.hasMoreBefore
         hasMoreAfter = page.hasMoreAfter
         rebuildProjectedState(
-            rebuildTimeline: !canUpdateTimelineIncrementally,
+            rebuildTimeline: !canUpdateTimelineIncrementally || consolidateTimelineRebuild,
             projectionChanged: projectionChanged,
             changedReactionTargets: shouldEvictAbsentRecords ? nil : changedReactionTargets
         )
@@ -429,6 +433,10 @@ final class TimelineStore {
         var projectionChanged = false
         var changedReactionTargets: Set<String> = []
         // `changes` is authoritative for live deltas; the snapshot is still a bounded window.
+        // A multi-change batch (e.g. relay catch-up) re-sorts the whole loaded
+        // window once per record on the per-record path; instead defer to one
+        // consolidated rebuild, which yields the same order in O((n+m) log n).
+        let consolidateTimelineRebuild = update.changes.count > 1
         for change in update.changes {
             switch change {
             case .upsert(let trigger, let record):
@@ -442,7 +450,7 @@ final class TimelineStore {
                 streamWatcher?.recordFinalizedStreams(in: [record])
                 projectionChanged = applyTimelineRecord(
                     record,
-                    updateTimeline: true,
+                    updateTimeline: !consolidateTimelineRebuild,
                     trigger: trigger
                 ) || projectionChanged
             case .remove(let messageIdHex, _):
@@ -456,14 +464,14 @@ final class TimelineStore {
                 }
                 projectionChanged = removeTimelineRecord(
                     messageIdHex: messageIdHex,
-                    updateTimeline: true
+                    updateTimeline: !consolidateTimelineRebuild
                 ) || projectionChanged
             }
         }
         readMarker?.pruneMarkedReadMessageIds(force: true)
         streamWatcher?.pruneScannedFinalizedMessageIds(keeping: Set(messageById.keys))
         rebuildProjectedState(
-            rebuildTimeline: false,
+            rebuildTimeline: consolidateTimelineRebuild,
             projectionChanged: projectionChanged,
             changedReactionTargets: changedReactionTargets
         )
@@ -491,7 +499,10 @@ final class TimelineStore {
         streamWatcher?.pruneScannedFinalizedMessageIds(keeping: Set(messageById.keys))
         readMarker?.pruneMarkedReadMessageIds(force: true)
         if !hasMoreAfter {
-            hasMoreBefore = page.hasMoreBefore
+            // A tail refresh only re-reads the newest rows, so its page always
+            // reports more history exists; never widen a backward edge the user
+            // already exhausted, or it re-arms a redundant "load older" fetch.
+            hasMoreBefore = hasMoreBefore && page.hasMoreBefore
             hasMoreAfter = page.hasMoreAfter
         }
         rebuildProjectedState(
@@ -897,15 +908,15 @@ final class TimelineStore {
         let removedPendingMedia = mediaProjections.removePending(forRowId: "msg:\(tempId)")
         projectionChanged = (removedPendingMedia != nil) || projectionChanged
         projectionChanged = removeTimelineItem(id: "msg:\(tempId)") || projectionChanged
+        // Re-stage the just-picked bytes under the confirmed row id (real or
+        // temp) so the sent bubble keeps rendering from memory instead of
+        // re-downloading and re-decrypting the attachment we just uploaded. The
+        // real-id branches previously dropped these, forcing a needless fetch.
+        if let removedPendingMedia {
+            mediaProjections.setPending(removedPendingMedia, forRowId: rowId)
+        }
         if realId.isEmpty {
             // No server message id: the row stays transient under "msg:\(tempId)".
-            // Restore the pending media we just removed so the just-sent
-            // attachments keep rendering — without a real message id there is no
-            // resolved-references entry to fall back on, so dropping this would
-            // silently blank the bubble's images.
-            if let removedPendingMedia {
-                mediaProjections.setPending(removedPendingMedia, forRowId: rowId)
-            }
             let item = TimelineItem(
                 id: rowId,
                 kind: .message(record: confirmed, status: .sent),

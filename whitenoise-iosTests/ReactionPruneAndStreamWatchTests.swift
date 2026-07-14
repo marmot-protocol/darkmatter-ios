@@ -344,6 +344,41 @@ struct ReactionTargetTallyTests {
         #expect(viewModel.reactions[otherTarget] == nil)
     }
 
+    @MainActor
+    @Test func multiRecordProjectionUpdateRebuildsTimelineOnce() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [timelineRecord(messageIdHex: target, timelineAt: 1)],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
+
+        let rebuildsBefore = viewModel.timelineRebuildCountForTesting
+        let idA = otherTarget
+        let idB = String(repeating: "d", count: 64)
+        let idC = String(repeating: "e", count: 64)
+        // A batch of three new records in one projection update must trigger a
+        // single consolidated rebuild, not a full re-sort per record.
+        viewModel.applyTimelineSubscriptionUpdate(.projection(update: projectionUpdate(changes: [
+            .upsert(trigger: .newMessage, message: timelineRecord(messageIdHex: idA, timelineAt: 2)),
+            .upsert(trigger: .newMessage, message: timelineRecord(messageIdHex: idB, timelineAt: 3)),
+            .upsert(trigger: .newMessage, message: timelineRecord(messageIdHex: idC, timelineAt: 4)),
+        ])))
+
+        #expect(viewModel.timelineRebuildCountForTesting - rebuildsBefore == 1)
+        let ids = viewModel.timeline.compactMap { item -> String? in
+            if case .message(let record, _) = item.kind { return record.messageIdHex }
+            return nil
+        }
+        #expect(ids.suffix(3) == [idA, idB, idC])
+    }
+
     private func reactionSummary(emoji: String, senders: [String]) -> TimelineReactionSummaryFfi {
         TimelineReactionSummaryFfi(
             byEmoji: [TimelineReactionEmojiFfi(emoji: emoji, count: UInt32(senders.count), senders: senders)],
