@@ -139,7 +139,7 @@ struct PrivacySecuritySettingsView: View {
         }
         .navigationTitle("Privacy & Security")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.reload(using: appState) }
+        .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
         .alert(
             "Delete all audit logs?",

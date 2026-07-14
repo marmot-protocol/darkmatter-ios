@@ -38,6 +38,9 @@ final class PrivacySecuritySettingsViewModel {
     private var actionGate = AsyncActionGate()
     private var fullReloadRequestedAfterAction = false
     private var auditFilesReloadRequestedAfterAction = false
+    /// Account whose privacy state is currently shown. Used to clear
+    /// account-scoped state before awaiting a *different* account's projection.
+    private var loadedAccountRef: String?
 
     var telemetryToggleDisabled: Bool {
         actionGate.isRunning || telemetrySaving || telemetrySettings == nil
@@ -115,6 +118,19 @@ final class PrivacySecuritySettingsViewModel {
             return
         }
         let accountRef = dataSource.activeAccountRef
+        // Switching away from a *previously loaded* account: clear that account's
+        // toggles, audit rows, and save banner before awaiting the new
+        // projection, so this privacy screen never shows or lets you act on
+        // another account's state during the suspended read. Deliberately not on
+        // the first load (loadedAccountRef == nil): initial state is already
+        // empty, and clearing there would wipe optimistic/seeded state a reload
+        // started before a save is expected to preserve.
+        if let loadedAccountRef, loadedAccountRef != accountRef {
+            telemetrySettings = nil
+            auditSettings = nil
+            auditFileRows = []
+            savedAt = nil
+        }
         filesLoading = true
         errorMessage = nil
         telemetryErrorMessage = nil
@@ -122,7 +138,20 @@ final class PrivacySecuritySettingsViewModel {
         defer { filesLoading = false }
 
         do {
-            guard let projection = try await dataSource.privacySecuritySettingsProjection() else { return }
+            guard let projection = try await dataSource.privacySecuritySettingsProjection() else {
+                guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
+                    await deferOrReload(.full, using: dataSource)
+                    return
+                }
+                // No active account / suspended runtime: clear so a previous
+                // account's telemetry toggle and audit rows can't linger,
+                // matching the sibling settings screens.
+                telemetrySettings = nil
+                auditSettings = nil
+                auditFileRows = []
+                loadedAccountRef = accountRef
+                return
+            }
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.full, using: dataSource)
                 return
@@ -130,6 +159,7 @@ final class PrivacySecuritySettingsViewModel {
             telemetrySettings = projection.telemetrySettings
             auditSettings = projection.auditSettings
             auditFileRows = projection.auditFileRows
+            loadedAccountRef = accountRef
         } catch {
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.full, using: dataSource)
@@ -150,7 +180,14 @@ final class PrivacySecuritySettingsViewModel {
         defer { filesLoading = false }
 
         do {
-            guard let rows = try await dataSource.auditLogFileRows() else { return }
+            guard let rows = try await dataSource.auditLogFileRows() else {
+                guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
+                    await deferOrReload(.auditFiles, using: dataSource)
+                    return
+                }
+                auditFileRows = []
+                return
+            }
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.auditFiles, using: dataSource)
                 return

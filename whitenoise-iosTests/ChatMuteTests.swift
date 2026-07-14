@@ -20,6 +20,25 @@ struct ChatMuteStoreTests {
         #expect(ChatMuteStore.key(accountIdHex: "abcd", groupIdHex: " \n") == nil)
     }
 
+    @Test func keyRejectsSeparatorBearingComponents() {
+        // A `:` inside a component would make the account:group join ambiguous
+        // (("aa:bb","cc") vs ("aa","bb:cc") would collide), so both are rejected.
+        #expect(ChatMuteStore.key(accountIdHex: "aa:bb", groupIdHex: "cc") == nil)
+        #expect(ChatMuteStore.key(accountIdHex: "aa", groupIdHex: "bb:cc") == nil)
+        #expect(ChatMuteStore.key(accountIdHex: ":", groupIdHex: "cc") == nil)
+    }
+
+    @Test func nilSnapshotFailsSafeAsMuted() {
+        // A nil snapshot means the shared suite could not be resolved; mute
+        // fails safe (muted) so the extension never renders audible content for
+        // a chat the user may have silenced.
+        #expect(ChatMuteStore.isMuted(accountIdHex: "account-1", groupIdHex: "group-a", snapshot: nil))
+        // An empty resolved snapshot is a real read: nothing is muted.
+        #expect(!ChatMuteStore.isMuted(accountIdHex: "account-1", groupIdHex: "group-a", snapshot: []))
+        let key = ChatMuteStore.key(accountIdHex: "account-1", groupIdHex: "group-a")!
+        #expect(ChatMuteStore.isMuted(accountIdHex: "account-1", groupIdHex: "group-a", snapshot: [key]))
+    }
+
     @Test func keySeparatesAccountsAndGroups() {
         #expect(
             ChatMuteStore.key(accountIdHex: "account-1", groupIdHex: "group-a")
