@@ -407,5 +407,6 @@ struct MessageDeleteSheet: View {
         .buttonStyle(.plain)
         .disabled(isDeleting)
         .accessibilityElement(children: .combine)
+        .accessibilityValue(activeDeleteScope == scope ? Text("Deleting…") : Text(""))
     }
 }

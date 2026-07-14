@@ -94,6 +94,7 @@ struct MessageDeletionTests {
         let malformed = appRecord(id: "not-hex", groupId: group.groupIdHex, sender: me, direction: "sent")
 
         #expect(viewModel.deleteCapability(for: malformed) == .unavailable)
+        #expect(viewModel.deleteCapability(for: valid) == .unavailable)
         appState.activeAccountRef = nil
         #expect(viewModel.deleteCapability(for: valid) == .unavailable)
         #expect(!viewModel.deleteMessageForMe(valid))
@@ -153,6 +154,34 @@ struct MessageDeletionTests {
             groupIdHex: hex("aa"),
             defaults: defaults
         ) == [hex("22")])
+    }
+
+    @Test func concurrentLocalHidesDoNotLoseUpdates() async throws {
+        let suiteName = "MessageDeletionConcurrencyTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountRef = "account:concurrent"
+        let groupId = hex("aa")
+        let messageIds = (1...32).map { String(format: "%064x", $0) }
+
+        await withTaskGroup(of: Void.self) { tasks in
+            for messageId in messageIds {
+                tasks.addTask {
+                    _ = MessageHideStore.hideMessage(
+                        accountRef: accountRef,
+                        groupIdHex: groupId,
+                        messageIdHex: messageId,
+                        defaults: defaults
+                    )
+                }
+            }
+        }
+
+        #expect(MessageHideStore.hiddenMessageIds(
+            accountRef: accountRef,
+            groupIdHex: groupId,
+            defaults: defaults
+        ) == Set(messageIds))
     }
 
     @Test func timelineFiltersPersistedHiddenRowsWithoutDroppingProjectionRecords() throws {
@@ -237,10 +266,62 @@ struct MessageDeletionTests {
             }
         )
         let message = appRecord(id: hex("55"), groupId: group.groupIdHex, sender: hex("22"), direction: "received")
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [timelineRecord(
+                    id: message.messageIdHex,
+                    groupId: group.groupIdHex,
+                    sender: message.sender,
+                    at: 1
+                )],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
 
         #expect(viewModel.deleteCapability(for: message).canDeleteForMe)
         #expect(!viewModel.deleteCapability(for: message).canDeleteForEveryone)
         let deleted = await viewModel.deleteMessageForEveryone(message)
+        #expect(!deleted)
+        #expect(remoteDeleteCalls == 0)
+    }
+
+    @Test func canonicalTimelineRecordPreventsSpoofedSenderAuthorization() async throws {
+        let accountRef = "delete-spoof-\(UUID().uuidString)"
+        let me = hex("11")
+        let other = hex("22")
+        let messageId = hex("56")
+        let group = groupRecord(id: hex("aa"), name: "Authorization test")
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        var remoteDeleteCalls = 0
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group,
+            deleteMessageOperation: { _, _, _, _ in
+                remoteDeleteCalls += 1
+                return SendSummaryFfi(published: 1, messageIds: [])
+            }
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [timelineRecord(
+                    id: messageId,
+                    groupId: group.groupIdHex,
+                    sender: other,
+                    at: 1
+                )],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
+        let spoofed = appRecord(id: messageId, groupId: group.groupIdHex, sender: me, direction: "sent")
+
+        let capability = viewModel.deleteCapability(for: spoofed)
+        #expect(capability.canDeleteForMe)
+        #expect(!capability.canDeleteForEveryone)
+        let deleted = await viewModel.deleteMessageForEveryone(spoofed)
         #expect(!deleted)
         #expect(remoteDeleteCalls == 0)
     }
@@ -282,21 +363,38 @@ struct MessageDeletionTests {
         let me = hex("11")
         let group = groupRecord(id: hex("aa"), name: "Repeat test")
         let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        let barrier = DeleteOperationBarrier()
         var remoteDeleteCalls = 0
         let viewModel = ConversationViewModel(
             appState: appState,
             group: group,
             deleteMessageOperation: { _, _, _, _ in
                 remoteDeleteCalls += 1
-                try await Task.sleep(nanoseconds: 30_000_000)
+                if remoteDeleteCalls == 1 {
+                    await barrier.arriveAndWait()
+                }
                 return SendSummaryFfi(published: 1, messageIds: [])
             }
         )
         let message = appRecord(id: hex("77"), groupId: group.groupIdHex, sender: me, direction: "sent")
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [timelineRecord(
+                    id: message.messageIdHex,
+                    groupId: group.groupIdHex,
+                    sender: me,
+                    at: 1
+                )],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
 
         let first = Task { await viewModel.deleteMessageForEveryone(message) }
-        await Task.yield()
+        await barrier.waitUntilStarted()
         let repeated = await viewModel.deleteMessageForEveryone(message)
+        await barrier.release()
         let firstResult = await first.value
 
         #expect(firstResult)
@@ -431,4 +529,34 @@ struct MessageDeletionTests {
 
 private enum DeleteTestError: Error {
     case failed
+}
+
+private actor DeleteOperationBarrier {
+    private var started = false
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func arriveAndWait() async {
+        started = true
+        let waiters = startWaiters
+        startWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+        await withCheckedContinuation { continuation in
+            releaseWaiter = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { continuation in
+            startWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        releaseWaiter?.resume()
+        releaseWaiter = nil
+    }
 }

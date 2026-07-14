@@ -4,6 +4,7 @@ import Foundation
 /// account and conversation and are never published through Marmot.
 nonisolated enum MessageHideStore {
     static let storageKey = "messages.hiddenMessageIdsByConversation"
+    private static let storageLock = NSLock()
 
     static var defaults: UserDefaults {
         UserDefaults(suiteName: AppContainerConfig.appGroupIdentifier) ?? .standard
@@ -24,7 +25,9 @@ nonisolated enum MessageHideStore {
         guard let key = conversationKey(accountRef: accountRef, groupIdHex: groupIdHex) else {
             return []
         }
-        return Set(hiddenMessageIdsByConversation(defaults: defaults)[key] ?? [])
+        return withStorageLock {
+            Set(hiddenMessageIdsByConversation(defaults: defaults)[key] ?? [])
+        }
     }
 
     @discardableResult
@@ -38,12 +41,14 @@ nonisolated enum MessageHideStore {
               let messageId = Hex.normalized32Bytes(messageIdHex)
         else { return [] }
 
-        var entries = hiddenMessageIdsByConversation(defaults: defaults)
-        var hidden = Set(entries[key] ?? [])
-        hidden.insert(messageId)
-        entries[key] = hidden.sorted()
-        defaults.set(entries, forKey: storageKey)
-        return hidden
+        return withStorageLock {
+            var entries = hiddenMessageIdsByConversation(defaults: defaults)
+            var hidden = Set(entries[key] ?? [])
+            hidden.insert(messageId)
+            entries[key] = hidden.sorted()
+            defaults.set(entries, forKey: storageKey)
+            return hidden
+        }
     }
 
     /// Removes local-hide state only when the identity itself is destructively
@@ -53,13 +58,15 @@ nonisolated enum MessageHideStore {
         defaults: UserDefaults = MessageHideStore.defaults
     ) {
         guard let prefix = accountKeyPrefix(accountRef) else { return }
-        var entries = hiddenMessageIdsByConversation(defaults: defaults)
-        let keys = entries.keys.filter { $0.hasPrefix(prefix) }
-        guard !keys.isEmpty else { return }
-        for key in keys {
-            entries.removeValue(forKey: key)
+        withStorageLock {
+            var entries = hiddenMessageIdsByConversation(defaults: defaults)
+            let keys = entries.keys.filter { $0.hasPrefix(prefix) }
+            guard !keys.isEmpty else { return }
+            for key in keys {
+                entries.removeValue(forKey: key)
+            }
+            defaults.set(entries, forKey: storageKey)
         }
-        defaults.set(entries, forKey: storageKey)
     }
 
     private static func hiddenMessageIdsByConversation(defaults: UserDefaults) -> [String: [String]] {
@@ -78,6 +85,12 @@ nonisolated enum MessageHideStore {
     private static func normalizedAccountRef(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func withStorageLock<T>(_ operation: () -> T) -> T {
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        return operation()
     }
 
 }

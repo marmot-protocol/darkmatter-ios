@@ -667,19 +667,31 @@ final class ConversationViewModel {
     }
 
     func deleteCapability(for message: AppMessageRecordFfi) -> MessageDeleteCapability {
+        guard let canonical = canonicalDeleteRecord(for: message) else {
+            return .unavailable
+        }
         let hasActiveAccount = appState?.activeAccountRef?.trimmingCharacters(
             in: .whitespacesAndNewlines
         ).isEmpty == false
-        let hasMessageId = Hex.normalized32Bytes(message.messageIdHex) != nil
         return MessageDeletePolicy.capability(
             isDirectMessage: groupDisplay.isDirectMessage,
-            isMine: isMessageMine(message),
+            isMine: isMessageMine(canonical),
             isSelfAdmin: isSelfAdmin,
-            localDeleteSupported: hasActiveAccount && hasMessageId,
-            remoteDeleteSupported: hasActiveAccount && canSendMessages && hasMessageId,
-            isDeleted: isDeleted(message.messageIdHex),
-            isHidden: timelineStore.isHidden(message.messageIdHex)
+            localDeleteSupported: hasActiveAccount,
+            remoteDeleteSupported: hasActiveAccount && canSendMessages,
+            isDeleted: isDeleted(canonical.messageIdHex),
+            isHidden: timelineStore.isHidden(canonical.messageIdHex)
         )
+    }
+
+    private func canonicalDeleteRecord(for message: AppMessageRecordFfi) -> AppMessageRecordFfi? {
+        guard let messageId = Hex.normalized32Bytes(message.messageIdHex),
+              let canonical = timelineStore.record(for: messageId),
+              let canonicalGroupId = Hex.normalized32Bytes(canonical.groupIdHex),
+              let currentGroupId = Hex.normalized32Bytes(group.groupIdHex),
+              canonicalGroupId == currentGroupId
+        else { return nil }
+        return canonical
     }
 
     func isMessageMine(_ message: AppMessageRecordFfi) -> Bool {
@@ -1946,18 +1958,19 @@ final class ConversationViewModel {
     /// invokes Marmot and therefore cannot publish a delete event.
     @discardableResult
     func deleteMessageForMe(_ message: AppMessageRecordFfi) -> Bool {
-        guard deleteCapability(for: message).canDeleteForMe,
+        guard let canonical = canonicalDeleteRecord(for: message),
+              deleteCapability(for: canonical).canDeleteForMe,
               let accountRef = appState?.activeAccountRef
         else { return false }
 
         let hidden = MessageHideStore.hideMessage(
             accountRef: accountRef,
             groupIdHex: group.groupIdHex,
-            messageIdHex: message.messageIdHex
+            messageIdHex: canonical.messageIdHex
         )
         guard !hidden.isEmpty else { return false }
         timelineStore.setHiddenMessageIds(hidden)
-        guard timelineStore.isHidden(message.messageIdHex) else { return false }
+        guard timelineStore.isHidden(canonical.messageIdHex) else { return false }
         Haptics.warning()
         return true
     }
@@ -1966,10 +1979,11 @@ final class ConversationViewModel {
     /// here so stale UI state cannot request a broader delete scope.
     @discardableResult
     func deleteMessageForEveryone(_ message: AppMessageRecordFfi) async -> Bool {
-        guard deleteCapability(for: message).canDeleteForEveryone,
+        guard let canonical = canonicalDeleteRecord(for: message),
+              deleteCapability(for: canonical).canDeleteForEveryone,
               let appState, let accountRef = appState.activeAccountRef
         else { return false }
-        timelineStore.deletedProjections.insertOptimistic(message.messageIdHex)
+        timelineStore.deletedProjections.insertOptimistic(canonical.messageIdHex)
         if timelineStore.deletedProjections.rebuild() {
             timelineStore.noteProjectionChanged()
         }
@@ -1979,12 +1993,12 @@ final class ConversationViewModel {
                 client,
                 accountRef,
                 group.groupIdHex,
-                message.messageIdHex
+                canonical.messageIdHex
             )
             Haptics.warning()
             return true
         } catch {
-            timelineStore.deletedProjections.removeOptimistic(message.messageIdHex)
+            timelineStore.deletedProjections.removeOptimistic(canonical.messageIdHex)
             if timelineStore.deletedProjections.rebuild() {
                 timelineStore.noteProjectionChanged()
             }
