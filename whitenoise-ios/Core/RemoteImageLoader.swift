@@ -18,8 +18,13 @@ nonisolated final class RemoteImageRedirectGuard: NSObject, URLSessionTaskDelega
     /// URL allowlist (HTTPS scheme + non-private/non-loopback/non-link-local
     /// host, including legacy IPv4 and IPv4-mapped IPv6 spellings).
     static func isRedirectAllowed(to url: URL?) -> Bool {
-        guard let url else { return false }
-        return ContentSanitizer.imageURL(url.absoluteString) != nil
+        guard let url, ContentSanitizer.imageURL(url.absoluteString) != nil else { return false }
+        // The allowlist above only sees the host string; also refuse a redirect
+        // to a public name that resolves to a private/internal address.
+        if let host = url.host, HostResolutionGuard.resolvesToPrivateAddress(host) {
+            return false
+        }
+        return true
     }
 
     func urlSession(
@@ -220,6 +225,13 @@ nonisolated enum RemoteImageFetch {
         _ request: URLRequest,
         maximumResponseBytes cap: Int
     ) async throws -> (Data, URLResponse) {
+        // Refuse before connecting if the (HTTPS, non-literal-private) host
+        // resolves to a private/internal address — the DNS-based SSRF the
+        // string allowlist can't see. Resolution runs off the cooperative pool
+        // because getaddrinfo blocks.
+        if let host = request.url?.host, await hostResolvesToPrivateAddress(host) {
+            throw HostResolutionGuard.GuardError.resolvesToPrivateAddress
+        }
         let collector = BoundedDataCollector(maximumResponseBytes: cap)
         let task = session.dataTask(with: request)
         task.delegate = collector
@@ -232,6 +244,12 @@ nonisolated enum RemoteImageFetch {
         } onCancel: {
             cancellation.cancel()
         }
+    }
+
+    private static func hostResolvesToPrivateAddress(_ host: String) async -> Bool {
+        await Task.detached(priority: .utility) {
+            HostResolutionGuard.resolvesToPrivateAddress(host)
+        }.value
     }
 
     static func request(for url: URL, accept: String) -> URLRequest {
