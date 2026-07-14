@@ -283,6 +283,37 @@ struct TimelineProjectionBoundaryTests {
         #expect(downloaded.referenceHashes == [reference.plaintextSha256])
     }
 
+    @Test func mediaDownloaderCoalescesConcurrentCacheVerification() async throws {
+        let cachedData = Data(repeating: 0x5a, count: 512 * 1024)
+        let reference = mediaReference(sourceEpoch: 7, plaintext: cachedData)
+        let media = MessageMediaAttachment(
+            id: "message-a:\(reference.plaintextSha256):0:0",
+            reference: reference,
+            fileName: reference.fileName,
+            mediaType: reference.mediaType,
+            dim: nil,
+            localData: nil
+        )
+        let cached = CountingConversationMediaCache()
+        cached.cachedDataToReturn = cachedData
+        cached.cachedDataDelayNanoseconds = 20_000_000
+        let downloader = ConversationMediaDownloader(cache: cached)
+
+        let first = Task {
+            try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
+        }
+        let second = Task {
+            try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
+        }
+
+        let firstResult = try await first.value
+        let secondResult = try await second.value
+        #expect(firstResult == cachedData)
+        #expect(secondResult == cachedData)
+        #expect(cached.cachedDataCalls == 1)
+        #expect(cached.storedPayloads.isEmpty)
+    }
+
     private func timelineRecord(
         messageIdHex: String,
         plaintext: String,
@@ -398,9 +429,13 @@ private final class CountingConversationMediaCache: ConversationMediaCacheAccess
     private(set) var storedReferenceHashes: [String] = []
     private(set) var storedSourceEpochs: [UInt64] = []
     var cachedDataToReturn: Data?
+    var cachedDataDelayNanoseconds: UInt64 = 0
 
     func cachedData(for reference: MediaAttachmentReferenceFfi) async -> Data? {
         cachedDataCalls += 1
+        if cachedDataDelayNanoseconds > 0 {
+            try? await Task.sleep(nanoseconds: cachedDataDelayNanoseconds)
+        }
         return cachedDataToReturn
     }
 

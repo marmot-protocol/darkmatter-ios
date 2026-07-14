@@ -156,9 +156,13 @@ final class ComposerModel {
                 )
             )
             let references = result.attachments.map(\.reference)
-            for (attachment, uploaded) in zip(attachments, result.attachments)
-                where MediaPlaintextHash.matches(attachment.data, reference: uploaded.reference)
-            {
+            for (attachment, uploaded) in zip(attachments, result.attachments) {
+                guard await MediaPlaintextHash.matches(
+                    attachment.data,
+                    expectedSha256: uploaded.reference.plaintextSha256
+                ) else {
+                    continue
+                }
                 await MessageMediaCache.store(attachment.data, for: uploaded.reference)
             }
             let confirmed = AppMessageRecordFfi(

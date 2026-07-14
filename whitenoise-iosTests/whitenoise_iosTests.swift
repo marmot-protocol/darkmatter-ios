@@ -8391,6 +8391,41 @@ struct MediaAttachmentPolicyTests {
     }
 }
 
+struct ThumbHashDecoderTests {
+
+    @Test func rejectsMalformedAndOversizedHashes() {
+        #expect(ThumbHash.decodedImage(from: "") == nil)
+        #expect(ThumbHash.decodedImage(from: "!!!!") == nil)
+        #expect(ThumbHash.decodedImage(from: Data([0, 1, 2, 3]).base64EncodedString()) == nil)
+        #expect(ThumbHash.decodedImage(from: Data(repeating: 0, count: 65).base64EncodedString()) == nil)
+        #expect(ThumbHash.decodedImage(from: String(repeating: "A", count: 65)) == nil)
+    }
+
+    @Test func decodesNeutralPortraitPixelsWithinNaturalBounds() throws {
+        let bytes: [UInt8] = [0x20, 0x08, 0x02, 0x05, 0x00] + Array(repeating: 0, count: 16)
+        let decoded = try #require(ThumbHash.decodedImage(from: Data(bytes).base64EncodedString()))
+
+        #expect(decoded.width == 23)
+        #expect(decoded.height == 32)
+        #expect(decoded.rgba.count == decoded.width * decoded.height * 4)
+        let center = ((decoded.height / 2) * decoded.width + decoded.width / 2) * 4
+        #expect(abs(Int(decoded.rgba[center]) - 127) <= 8)
+        #expect(abs(Int(decoded.rgba[center + 1]) - 127) <= 8)
+        #expect(abs(Int(decoded.rgba[center + 2]) - 127) <= 8)
+        #expect(decoded.rgba[center + 3] == 255)
+    }
+
+    @Test func decodesLandscapeAndUnpaddedBase64() throws {
+        let bytes: [UInt8] = [0x20, 0x08, 0x02, 0x04, 0x80] + Array(repeating: 0, count: 15)
+        let unpadded = Data(bytes).base64EncodedString().replacingOccurrences(of: "=", with: "")
+        let decoded = try #require(ThumbHash.decodedImage(from: unpadded))
+
+        #expect(decoded.width == 32)
+        #expect(decoded.height == 18)
+        #expect(decoded.rgba.count == decoded.width * decoded.height * 4)
+    }
+}
+
 struct AudioWaveformPresentationTests {
 
     @Test func liveRecordingStartsWithBlankWaveform() {
@@ -8825,6 +8860,34 @@ struct MessageMediaThumbnailPresentationTests {
             dim: reference?.dim,
             localData: nil
         )
+    }
+}
+
+struct MessageImageBubblePresentationTests {
+
+    @Test func landscapeImageUsesActualAspectRatio() {
+        let size = MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: "640x360")
+
+        #expect(size.width == 300)
+        #expect(size.height == 169)
+    }
+
+    @Test func portraitImageNarrowsAndCapsItsHeight() {
+        let size = MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: "1080x1920")
+
+        #expect(size.width == 228)
+        #expect(size.height == 405)
+    }
+
+    @Test func missingOrMalformedImageDimensionsUseSquareFallback() {
+        #expect(MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: nil) == CGSize(width: 300, height: 300))
+        #expect(MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: "bad") == CGSize(width: 300, height: 300))
+        #expect(MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: "0x400") == CGSize(width: 300, height: 300))
+    }
+
+    @Test func extremeImageDimensionsAreClamped() {
+        #expect(MessageImageBubblePresentation.aspectRatio(dim: "10000x1") == 4)
+        #expect(MessageImageBubblePresentation.aspectRatio(dim: "1x10000") == 0.25)
     }
 }
 

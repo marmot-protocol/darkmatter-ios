@@ -833,7 +833,7 @@ private struct MessageMediaGrid: View {
             MessageMediaTile(
                 item: visibleItems[index],
                 isFromMe: isFromMe,
-                sideLength: tileSize,
+                size: CGSize(width: tileSize, height: tileSize),
                 hiddenCount: index == MessageMediaGridPresentation.maxVisibleItems - 1 ? hiddenCount : 0,
                 onLoadMedia: onLoadMedia,
                 onOpenImage: onOpenImage,
@@ -907,8 +907,21 @@ private struct MessageMediaAttachmentContent: View {
         items.count == 1 && items[0].isVideo ? items[0] : nil
     }
 
+    private var singleImage: MessageMediaAttachment? {
+        items.count == 1 && items[0].isImage ? items[0] : nil
+    }
+
     var body: some View {
-        if let singleVideo {
+        if let singleImage {
+            MessageSingleImageBubble(
+                item: singleImage,
+                isFromMe: isFromMe,
+                maxWidth: maxWidth,
+                onLoadMedia: onLoadMedia,
+                onOpenImage: onOpenImage,
+                onOpenVideo: onOpenVideo
+            )
+        } else if let singleVideo {
             MessageSingleVideoBubble(
                 item: singleVideo,
                 isFromMe: isFromMe,
@@ -932,7 +945,7 @@ private struct MessageMediaAttachmentContent: View {
                         MessageMediaTile(
                             item: item,
                             isFromMe: isFromMe,
-                            sideLength: maxWidth,
+                            size: MessageImageBubblePresentation.displaySize(maxWidth: maxWidth, dim: item.dim),
                             hiddenCount: 0,
                             onLoadMedia: onLoadMedia,
                             onOpenImage: onOpenImage,
@@ -963,7 +976,39 @@ private struct MessageMediaAttachmentContent: View {
                     }
                 }
             }
-            .frame(width: maxWidth, alignment: .leading)
+            .frame(width: maxWidth, alignment: isFromMe ? .trailing : .leading)
+        }
+    }
+}
+
+private struct MessageSingleImageBubble: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let maxWidth: CGFloat
+    let onLoadMedia: ConversationMediaLoader
+    let onOpenImage: (MessageMediaAttachment, Data) -> Void
+    let onOpenVideo: (MessageMediaAttachment) -> Void
+
+    private let cornerRadius: CGFloat = 14
+
+    private var size: CGSize {
+        MessageImageBubblePresentation.displaySize(maxWidth: maxWidth, dim: item.dim)
+    }
+
+    var body: some View {
+        MessageMediaTile(
+            item: item,
+            isFromMe: isFromMe,
+            size: size,
+            hiddenCount: 0,
+            onLoadMedia: onLoadMedia,
+            onOpenImage: onOpenImage,
+            onOpenVideo: onOpenVideo
+        )
+        .clipShape(.rect(cornerRadius: cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(Color.primary.opacity(isFromMe ? 0.16 : 0.08), lineWidth: 1)
         }
     }
 }
@@ -1065,15 +1110,11 @@ enum MessageMediaGridPresentation {
     }
 }
 
-nonisolated enum MessageVideoBubblePresentation {
-    private static let fallbackAspectRatio: CGFloat = 16.0 / 9.0
+nonisolated private enum MessageVisualMediaBubblePresentation {
     private static let maximumHeightRatio: CGFloat = 1.35
-    static let fullscreenButtonSize: CGFloat = 36
-    static let fullscreenButtonIconSize: CGFloat = 15
-    static let fullscreenButtonInset: CGFloat = 8
 
-    static func aspectRatio(dim: String?) -> CGFloat {
-        guard let dim else { return fallbackAspectRatio }
+    static func aspectRatio(dim: String?, fallback: CGFloat) -> CGFloat {
+        guard let dim else { return fallback }
         let parts = dim
             .lowercased()
             .split(separator: "x", maxSplits: 1)
@@ -1084,16 +1125,16 @@ nonisolated enum MessageVideoBubblePresentation {
               width > 0,
               height > 0
         else {
-            return fallbackAspectRatio
+            return fallback
         }
         let aspectRatio = CGFloat(width / height)
-        guard aspectRatio.isFinite else { return fallbackAspectRatio }
+        guard aspectRatio.isFinite else { return fallback }
         return min(4, max(0.25, aspectRatio))
     }
 
-    static func displaySize(maxWidth: CGFloat, dim: String?) -> CGSize {
+    static func displaySize(maxWidth: CGFloat, dim: String?, fallback: CGFloat) -> CGSize {
         let boundedMaxWidth = max(1, maxWidth)
-        let aspectRatio = aspectRatio(dim: dim)
+        let aspectRatio = aspectRatio(dim: dim, fallback: fallback)
         if aspectRatio >= 1 {
             return roundedSize(width: boundedMaxWidth, height: boundedMaxWidth / aspectRatio)
         }
@@ -1107,6 +1148,35 @@ nonisolated enum MessageVideoBubblePresentation {
         CGSize(
             width: max(1, width.rounded(.toNearestOrAwayFromZero)),
             height: max(1, height.rounded(.toNearestOrAwayFromZero))
+        )
+    }
+}
+
+nonisolated enum MessageImageBubblePresentation {
+    static func aspectRatio(dim: String?) -> CGFloat {
+        MessageVisualMediaBubblePresentation.aspectRatio(dim: dim, fallback: 1)
+    }
+
+    static func displaySize(maxWidth: CGFloat, dim: String?) -> CGSize {
+        MessageVisualMediaBubblePresentation.displaySize(maxWidth: maxWidth, dim: dim, fallback: 1)
+    }
+}
+
+nonisolated enum MessageVideoBubblePresentation {
+    private static let fallbackAspectRatio: CGFloat = 16.0 / 9.0
+    static let fullscreenButtonSize: CGFloat = 36
+    static let fullscreenButtonIconSize: CGFloat = 15
+    static let fullscreenButtonInset: CGFloat = 8
+
+    static func aspectRatio(dim: String?) -> CGFloat {
+        MessageVisualMediaBubblePresentation.aspectRatio(dim: dim, fallback: fallbackAspectRatio)
+    }
+
+    static func displaySize(maxWidth: CGFloat, dim: String?) -> CGSize {
+        MessageVisualMediaBubblePresentation.displaySize(
+            maxWidth: maxWidth,
+            dim: dim,
+            fallback: fallbackAspectRatio
         )
     }
 }
@@ -1157,7 +1227,7 @@ private struct MessageFullscreenVideo: Identifiable {
 private struct MessageMediaTile: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
-    let sideLength: CGFloat
+    let size: CGSize
     let hiddenCount: Int
     let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
@@ -1179,7 +1249,7 @@ private struct MessageMediaTile: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: sideLength, height: sideLength)
+                    .frame(width: size.width, height: size.height)
                     .clipped()
             } else if item.isImage {
                 imagePlaceholder
@@ -1187,8 +1257,8 @@ private struct MessageMediaTile: View {
                 MessageVideoAttachmentView(
                     item: item,
                     isFromMe: isFromMe,
-                    width: sideLength,
-                    height: sideLength,
+                    width: size.width,
+                    height: size.height,
                     onLoadMedia: onLoadMedia,
                     onOpenFullscreen: {
                         onOpenVideo(item)
@@ -1205,7 +1275,7 @@ private struct MessageMediaTile: View {
                     .foregroundStyle(.white)
             }
         }
-        .frame(width: sideLength, height: sideLength)
+        .frame(width: size.width, height: size.height)
         .clipped()
         .contentShape(Rectangle())
         .task(id: item.id) {
@@ -1223,13 +1293,18 @@ private struct MessageMediaTile: View {
                 }
             }
         }
-        .frame(width: sideLength, height: sideLength)
+        .frame(width: size.width, height: size.height)
     }
 
     @ViewBuilder
     private var imagePlaceholder: some View {
         ZStack {
-            Color(.tertiarySystemFill)
+            MessageMediaPlaceholderBackground(
+                thumbhash: item.reference?.thumbhash,
+                fallbackSystemName: isLoading || didFail ? nil : "photo",
+                width: size.width,
+                height: size.height
+            )
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
@@ -1240,10 +1315,6 @@ private struct MessageMediaTile: View {
                         .font(.caption2.weight(.semibold))
                 }
                 .foregroundStyle(.secondary)
-            } else {
-                Image(systemName: "photo")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -1265,7 +1336,7 @@ private struct MessageMediaTile: View {
 
     private func loadImageIfNeeded(scale: CGFloat, force: Bool = false) async -> Data? {
         guard item.isImage else { return nil }
-        let maxPixelSize = max(1, Int(ceil(sideLength * scale)))
+        let maxPixelSize = max(1, Int(ceil(max(size.width, size.height) * scale)))
         if !force {
             if let cachedThumbnail = MessageMediaThumbnailDecoder.cachedThumbnail(
                 for: thumbnailCacheKey,
@@ -1307,6 +1378,40 @@ private struct MessageMediaTile: View {
             loadedImageID = item.id
             didFail = true
             return nil
+        }
+    }
+}
+
+private struct MessageMediaPlaceholderBackground: View {
+    let thumbhash: String?
+    let fallbackSystemName: String?
+    let width: CGFloat
+    let height: CGFloat
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color(.tertiarySystemFill)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width, height: height)
+                    .clipped()
+            } else if let fallbackSystemName {
+                Image(systemName: fallbackSystemName)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: width, height: height)
+        .task(id: thumbhash) {
+            image = nil
+            guard let thumbhash else { return }
+            let decoded = await ThumbHashImageCache.shared.image(for: thumbhash)
+            guard !Task.isCancelled else { return }
+            image = decoded
         }
     }
 }
@@ -1564,12 +1669,12 @@ private struct MessageVideoAttachmentView: View {
     }
 
     private var videoPlaceholder: some View {
-        ZStack {
-            Color(.tertiarySystemFill)
-            Image(systemName: "play.rectangle")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-        }
+        MessageMediaPlaceholderBackground(
+            thumbhash: item.reference?.thumbhash,
+            fallbackSystemName: "play.rectangle",
+            width: width,
+            height: height
+        )
     }
 
     private func loadAndPlay(scale: CGFloat) async {
