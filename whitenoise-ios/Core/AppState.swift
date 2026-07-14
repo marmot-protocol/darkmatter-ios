@@ -463,11 +463,16 @@ final class AppState {
         scheduleNativePushRegistrationIfEnabled()
     }
 
-    /// Signs out of the active account: clears its native push registration
-    /// (so the push server stops delivering its notifications to this device)
-    /// and disables its `nativePushEnabled` preference, removes the local
-    /// account, then switches the active account to the next available local
-    /// account (or returns to onboarding when none remain).
+    /// Set after a destructive Sign Out & Wipe finished with best-effort
+    /// failures, so the partial-failure report survives the account teardown:
+    /// routing to onboarding (last account) or switching accounts pops the
+    /// screen that started the wipe. Hosted by `RootView`. Observed by SwiftUI.
+    var pendingWipeReport: WipeReport?
+
+    /// Non-destructively signs out of the active account: clears its native
+    /// push registration, deactivates it in Marmot, and switches to the next
+    /// signed-in local account. The account row, keys, encrypted store, media,
+    /// and drafts stay on device so the Profiles screen can sign it back in.
     ///
     /// Push cleanup is best-effort — a transient marmot error here must not
     /// block the user from signing out.
@@ -500,7 +505,7 @@ final class AppState {
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
         do {
-            let outcome = try await marmot.signOutAndWipe(accountRef: signingOut)
+            let outcome = try await currentMarmotClient().signOut(accountRef: signingOut)
             guard outcome.localCleanup.completed else {
                 let message = outcome.localCleanup.reason
                     ?? L10n.string("Local account cleanup did not finish.")
@@ -520,13 +525,34 @@ final class AppState {
             return
         }
 
-        conversationDraftStore.removeDrafts(accountRef: signingOut)
-        await conversationDraftStore.flush()
+        await completeSignOut(
+            removedRef: signingOut,
+            removedAccountIdHex: signingOutAccountIdHex,
+            destructive: false
+        )
+    }
+
+    /// App-state cleanup shared by normal sign-out and destructive wipe. A
+    /// normal sign-out keeps account-scoped local state and leaves a signed-out
+    /// row available for reactivation; a wipe removes its drafts/projections
+    /// and may return the app to onboarding when no accounts remain.
+    @MainActor
+    private func completeSignOut(
+        removedRef: String,
+        removedAccountIdHex: String?,
+        destructive: Bool
+    ) async {
+        if destructive {
+            conversationDraftStore.removeDrafts(accountRef: removedRef)
+            await conversationDraftStore.flush()
+        }
 
         do {
             try await refreshAccounts()
         } catch {
-            accountStore.accounts.removeAll { $0.label == signingOut }
+            if destructive {
+                accountStore.accounts.removeAll { $0.label == removedRef }
+            }
             accountUnreadStore.pruneToCurrentAccounts(accounts)
             present(.error(L10n.string("Couldn't refresh accounts"), message: error.localizedDescription))
         }
@@ -537,8 +563,10 @@ final class AppState {
         // active account below is not suppressed (the trailing `defer` then
         // becomes a no-op redo).
         isSigningOut = false
-        activeAccountRef = accounts.first?.label
-        if activeAccountRef == nil {
+        activeAccountRef = accounts.first { account in
+            account.label != removedRef && !account.signedOut
+        }?.label
+        if accounts.isEmpty {
             // Last account signed out: tear the profile-projection state back
             // down to empty so cached peer data (#366), the per-account version
             // map (#353), and their sibling queues do not survive a full sign-out
@@ -554,11 +582,95 @@ final class AppState {
             stopNotificationSubscription()
             retentionSweeper.cancelWithoutAwaiting()
             phase = .onboarding
-        } else {
-            if let signingOutAccountIdHex {
-                profileStore.clearForAccountRemoval(accountIdHex: signingOutAccountIdHex)
+        } else if activeAccountRef != nil {
+            if destructive, let removedAccountIdHex {
+                profileStore.clearForAccountRemoval(accountIdHex: removedAccountIdHex)
             }
             scheduleNativePushRegistrationIfEnabled()
+        } else {
+            // Every retained account is signed out. Keep the main shell alive
+            // so Settings → Profiles can reactivate one; stop account-bound
+            // foreground maintenance until that happens.
+            stopNotificationSubscription()
+            retentionSweeper.cancelWithoutAwaiting()
+            phase = .ready
+        }
+    }
+
+    /// Destructive "Sign Out & Wipe" of the active account. Drives the engine's
+    /// `signOutAndWipe` (leave MLS groups, delete relay KeyPackages, wipe the
+    /// local store, keys, and media) then runs the same post-sign-out cleanup
+    /// the normal sign-out does. Native push is cleared per the existing
+    /// sign-out rules before the wipe; a total FFI failure rolls push back and
+    /// toasts. A finished wipe with best-effort failures surfaces a `WipeReport`
+    /// (what remains) rather than aborting — the local removal proceeds either
+    /// way, mirroring the Android outcome semantics.
+    ///
+    /// Suspension safety: the destructive teardown only begins with a live
+    /// foreground runtime (scene active, not suspended/suspending, client
+    /// present) so it can never reopen the App Group SQLite store after
+    /// suspension released it (`0xdead10cc`). This is the union of the guarded
+    /// settings-read gate and the `.ready` gate the audit-log delete uses.
+    @MainActor
+    func signOutAndWipeActiveAccount() async {
+        guard let wipingRef = activeAccountRef else { return }
+        guard DestructiveWipeGate.canBegin(
+            isReady: phase == .ready,
+            isAppSceneActive: isAppSceneActive,
+            runtimeSuspendedForBackground: runtimeSuspendedForBackground,
+            isRuntimeSuspending: isRuntimeSuspending,
+            hasRuntimeClient: client != nil
+        ) else {
+            present(.error(L10n.string("Couldn't wipe profile")))
+            return
+        }
+        let wipingAccountIdHex = accounts
+            .first(where: { $0.label == wipingRef })?
+            .accountIdHex
+
+        // Same #320 guard the normal sign-out uses: block any APNS-token-driven
+        // push reschedule for the whole teardown; cleared before routing so a
+        // reschedule for the *new* active account is not suppressed.
+        isSigningOut = true
+        defer { isSigningOut = false }
+        let nativePushWasEnabled = (
+            try? await runtimeClient()
+                .notificationSettings(accountRef: wipingRef)
+                .nativePushEnabled
+        ) ?? false
+        // Sign-out push rule: cancel and await the in-flight native-push
+        // registration sync before clearing the departing account's registration.
+        await notificationCoordinator.cancelNativePushRegistrationTask()
+        try? await marmot.clearPushRegistration(accountRef: wipingRef)
+        _ = try? await marmot.setNativePushEnabled(accountRef: wipingRef, enabled: false)
+
+        let outcome: WipeOutcomeFfi
+        do {
+            outcome = try await currentMarmotClient().signOutAndWipe(accountRef: wipingRef)
+        } catch {
+            // Total FFI failure: nothing was wiped. Roll native push back and toast.
+            await restoreNativePushAfterFailedSignOut(
+                accountRef: wipingRef,
+                wasEnabled: nativePushWasEnabled
+            )
+            present(.error(L10n.string("Couldn't wipe profile"), message: error.localizedDescription))
+            return
+        }
+
+        // The wipe returned: the account ref is invalid now. Do the same local
+        // removal + routing the normal sign-out does — regardless of per-stage
+        // best-effort failures — then surface a report only when something remains.
+        await completeSignOut(
+            removedRef: wipingRef,
+            removedAccountIdHex: wipingAccountIdHex,
+            destructive: true
+        )
+
+        let report = WipeReportProjection.report(from: outcome)
+        if report.clean {
+            present(.success(L10n.string("Profile wiped from this device")))
+        } else {
+            pendingWipeReport = report
         }
     }
 
