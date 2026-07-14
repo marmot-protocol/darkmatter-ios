@@ -107,7 +107,7 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .system:
-            "System"
+            L10n.string("System")
         case .english:
             "English"
         case .german:

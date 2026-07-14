@@ -17320,6 +17320,65 @@
         }
       }
     },
+    "Leave this group before deleting the local copy." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlasse diese Gruppe, bevor du die lokale Kopie löschst."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sal de este grupo antes de eliminar la copia local."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quittez ce groupe avant de supprimer la copie locale."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esci da questo gruppo prima di eliminare la copia locale."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saia deste grupo antes de excluir a cópia local."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Покиньте эту группу, прежде чем удалять локальную копию."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yerel kopyayı silmeden önce bu gruptan ayrılın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先退出此群组，再删除本地副本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請先退出此群組，再刪除本機副本。"
+          }
+        }
+      }
+    },
     "Leave this group?" : {
       "extractionState" : "manual",
       "localizations" : {

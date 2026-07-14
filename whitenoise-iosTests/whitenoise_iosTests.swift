@@ -2421,6 +2421,12 @@ struct AppearancePreferencesTests {
         #expect(localeIDs == ["en", "de", "es", "fr", "it", "pt", "ru", "tr", "zh-Hans", "zh-Hant"])
     }
 
+    @Test func systemLanguageDisplayNameUsesSelectedAppLanguage() {
+        withAppLanguage(.french) {
+            #expect(AppLanguage.system.displayName == "Système")
+        }
+    }
+
     @Test func languageChangeNotificationCarriesLanguageInUserInfoNotObject() throws {
         let suiteName = "dev.ipf.WhiteNoise.language-notification-test.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

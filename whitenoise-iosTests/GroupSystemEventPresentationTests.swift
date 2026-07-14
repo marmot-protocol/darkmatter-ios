@@ -193,8 +193,10 @@ struct GroupSystemEventPresentationTests {
         #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
         #expect(viewModel.groupSystemProjectionBuildCountForTesting == 1)
 
+        let projectionGeneration = viewModel.timelineProjectionGeneration
         viewModel.refreshProfileDependentTimelineProjections()
 
+        #expect(viewModel.timelineProjectionGeneration == projectionGeneration + 1)
         #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
         #expect(viewModel.groupSystemProjectionBuildCountForTesting == 2)
     }
