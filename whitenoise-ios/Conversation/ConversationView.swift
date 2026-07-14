@@ -985,11 +985,26 @@ struct ConversationView: View {
     @ViewBuilder
     private var conversationTitle: some View {
         let chrome = conversationChrome
-        VStack(spacing: 0) {
-            Text(chrome.title)
-                .font(.headline)
-                .lineLimit(1)
-            conversationHeaderSecondary(subtitle: chrome.subtitle)
+        Button {
+            openConversationHeaderDestination()
+        } label: {
+            VStack(spacing: 0) {
+                Text(chrome.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                conversationHeaderSecondary(subtitle: chrome.subtitle)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Header tap target: a DM opens the contact's profile (where a private
+    /// nickname can be set); a group opens the details/settings sheet.
+    private func openConversationHeaderDestination() {
+        if let npub = viewModel?.directMessageCounterpartNpub {
+            appState.presentProfile(npub: npub)
+        } else {
+            showDetails = true
         }
     }
 

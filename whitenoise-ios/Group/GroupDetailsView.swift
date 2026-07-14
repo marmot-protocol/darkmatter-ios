@@ -34,6 +34,8 @@ struct GroupDetailsView: View {
 
     @State private var model = GroupDetailsViewModel()
     @State private var sharedMediaGallery: MessageMediaGallery?
+    /// Pushes the tapped member's profile within this details navigation stack.
+    @State private var memberProfileNpub: String?
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var memberCount: Int {
@@ -70,6 +72,9 @@ struct GroupDetailsView: View {
         }
         .navigationTitle("Details")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $memberProfileNpub) { npub in
+            ProfileView(npub: npub)
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
@@ -401,7 +406,13 @@ struct GroupDetailsView: View {
             } else {
                 ForEach(viewModel.groupMemberDetails, id: \.memberIdHex) { member in
                     HStack(spacing: 8) {
-                        GroupMemberDetailsRow(member: member)
+                        Button {
+                            memberProfileNpub = member.npub
+                        } label: {
+                            GroupMemberDetailsRow(member: member)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                         memberActionsMenu(for: member)
                     }
                     .swipeActions(edge: .trailing) {
