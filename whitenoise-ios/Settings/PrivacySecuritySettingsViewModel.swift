@@ -122,7 +122,19 @@ final class PrivacySecuritySettingsViewModel {
         defer { filesLoading = false }
 
         do {
-            guard let projection = try await dataSource.privacySecuritySettingsProjection() else { return }
+            guard let projection = try await dataSource.privacySecuritySettingsProjection() else {
+                guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
+                    await deferOrReload(.full, using: dataSource)
+                    return
+                }
+                // No active account / suspended runtime: clear so a previous
+                // account's telemetry toggle and audit rows can't linger,
+                // matching the sibling settings screens.
+                telemetrySettings = nil
+                auditSettings = nil
+                auditFileRows = []
+                return
+            }
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.full, using: dataSource)
                 return
@@ -150,7 +162,14 @@ final class PrivacySecuritySettingsViewModel {
         defer { filesLoading = false }
 
         do {
-            guard let rows = try await dataSource.auditLogFileRows() else { return }
+            guard let rows = try await dataSource.auditLogFileRows() else {
+                guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
+                    await deferOrReload(.auditFiles, using: dataSource)
+                    return
+                }
+                auditFileRows = []
+                return
+            }
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(.auditFiles, using: dataSource)
                 return
