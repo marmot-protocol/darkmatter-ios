@@ -118,11 +118,14 @@ final class PrivacySecuritySettingsViewModel {
             return
         }
         let accountRef = dataSource.activeAccountRef
-        // Switching accounts: clear the previous account's toggles, audit rows,
-        // and save banner before awaiting the new projection, so this privacy
-        // screen never shows or lets you act on another account's state during
-        // the suspended read.
-        if accountRef != loadedAccountRef {
+        // Switching away from a *previously loaded* account: clear that account's
+        // toggles, audit rows, and save banner before awaiting the new
+        // projection, so this privacy screen never shows or lets you act on
+        // another account's state during the suspended read. Deliberately not on
+        // the first load (loadedAccountRef == nil): initial state is already
+        // empty, and clearing there would wipe optimistic/seeded state a reload
+        // started before a save is expected to preserve.
+        if let loadedAccountRef, loadedAccountRef != accountRef {
             telemetrySettings = nil
             auditSettings = nil
             auditFileRows = []
