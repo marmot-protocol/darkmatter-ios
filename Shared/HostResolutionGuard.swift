@@ -7,18 +7,18 @@ import Foundation
 /// host and re-checks each resolved address against the same private-range
 /// classifier.
 ///
-/// This is a pre-fetch check, not a pinned connect-time check: a name that
-/// rebinds between this resolution and `URLSession`'s own resolution is not
-/// covered. Full DNS-rebinding protection needs a custom connection path that
-/// validates the socket peer; this closes the reported public-name → private-IP
-/// vector, which is the practical exposure.
+/// Remote image fetches consume `resolvedPublicAddresses` and connect directly
+/// to one of those numeric endpoints while preserving the original hostname for
+/// TLS SNI/trust evaluation. DNS is therefore not consulted again at connect
+/// time, closing the DNS-rebinding window between validation and connection.
 nonisolated enum HostResolutionGuard {
     /// Resolves a host to its numeric address strings. Injectable so tests can
     /// map a public-looking host to a private address without real DNS.
     typealias Resolver = @Sendable (String) -> [String]
 
-    enum GuardError: Error {
+    enum GuardError: Error, Equatable {
         case resolvesToPrivateAddress
+        case resolutionFailed
     }
 
     /// `true` when `host` resolves to at least one private/loopback/link-local
@@ -30,6 +30,21 @@ nonisolated enum HostResolutionGuard {
         resolver: Resolver = systemResolver
     ) -> Bool {
         resolver(host).contains { ContentSanitizer.isPrivateOrLoopbackAddressLiteral($0) }
+    }
+
+    /// Returns the complete resolved address set only when every answer is
+    /// public. Empty/failed resolution is rejected rather than falling through
+    /// to a second resolver that could produce a different, private answer.
+    static func resolvedPublicAddresses(
+        _ host: String,
+        resolver: Resolver = systemResolver
+    ) throws -> [String] {
+        let addresses = resolver(host)
+        guard !addresses.isEmpty else { throw GuardError.resolutionFailed }
+        guard !addresses.contains(where: ContentSanitizer.isPrivateOrLoopbackAddressLiteral) else {
+            throw GuardError.resolvesToPrivateAddress
+        }
+        return addresses
     }
 
     /// Default resolver backed by `getaddrinfo`, returning each resolved address

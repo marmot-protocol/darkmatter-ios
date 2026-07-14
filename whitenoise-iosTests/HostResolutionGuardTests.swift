@@ -3,14 +3,17 @@ import Testing
 @testable import whitenoise_ios
 
 /// The DNS-resolution SSRF gate: a public-looking host that resolves to a
-/// private/loopback/link-local address must be refused, while a genuinely
-/// public or unresolvable host is not blocked. Uses an injected resolver so no
-/// real DNS is involved.
+/// private/loopback/link-local address must be refused. Uses an injected
+/// resolver so no real DNS is involved.
 struct HostResolutionGuardTests {
 
-    @Test func publicResolvedAddressIsAllowed() {
+    @Test func publicResolvedAddressIsAllowed() throws {
         let resolver: HostResolutionGuard.Resolver = { _ in ["93.184.216.34"] }
         #expect(!HostResolutionGuard.resolvesToPrivateAddress("example.com", resolver: resolver))
+        #expect(
+            try HostResolutionGuard.resolvedPublicAddresses("example.com", resolver: resolver)
+                == ["93.184.216.34"]
+        )
     }
 
     @Test func loopbackResolvedAddressIsBlocked() {
@@ -38,11 +41,15 @@ struct HostResolutionGuardTests {
         // closed on the private one.
         let resolver: HostResolutionGuard.Resolver = { _ in ["93.184.216.34", "192.168.1.10"] }
         #expect(HostResolutionGuard.resolvesToPrivateAddress("rebind.example", resolver: resolver))
+        #expect(throws: HostResolutionGuard.GuardError.resolvesToPrivateAddress) {
+            try HostResolutionGuard.resolvedPublicAddresses("rebind.example", resolver: resolver)
+        }
     }
 
-    @Test func unresolvableHostIsNotBlocked() {
-        // Nothing resolved: don't pre-block — the real fetch fails on its own.
+    @Test func unresolvableHostFailsClosedForPinnedFetch() {
         let resolver: HostResolutionGuard.Resolver = { _ in [] }
-        #expect(!HostResolutionGuard.resolvesToPrivateAddress("nxdomain.example", resolver: resolver))
+        #expect(throws: HostResolutionGuard.GuardError.resolutionFailed) {
+            try HostResolutionGuard.resolvedPublicAddresses("nxdomain.example", resolver: resolver)
+        }
     }
 }

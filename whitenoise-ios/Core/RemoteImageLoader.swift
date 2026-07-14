@@ -1,178 +1,7 @@
 import Foundation
 import ImageIO
-import Synchronization
 import UIKit
 import UniformTypeIdentifiers
-
-/// Re-validates every HTTP redirect target through the same SSRF allowlist that
-/// gates the initial URL (`ContentSanitizer.imageURL`: HTTPS + public host).
-///
-/// `URLSession` follows `3xx` redirects automatically, so without this delegate
-/// a peer-controlled allowlisted HTTPS endpoint could `302` the fetch to
-/// `http://127.0.0.1:<port>/…`, `https://[::1]/…`, or any internal/link-local
-/// host — defeating the allowlist and downgrading HTTPS→HTTP. Refusing a
-/// disallowed redirect (completing with `nil`) terminates the redirect chain
-/// and surfaces the response of the refused hop rather than dereferencing it.
-nonisolated final class RemoteImageRedirectGuard: NSObject, URLSessionTaskDelegate {
-    /// A redirect target is allowed only if it independently passes the image
-    /// URL allowlist (HTTPS scheme + non-private/non-loopback/non-link-local
-    /// host, including legacy IPv4 and IPv4-mapped IPv6 spellings).
-    static func isRedirectAllowed(to url: URL?) -> Bool {
-        guard let url, ContentSanitizer.imageURL(url.absoluteString) != nil else { return false }
-        // The allowlist above only sees the host string; also refuse a redirect
-        // to a public name that resolves to a private/internal address.
-        if let host = url.host, HostResolutionGuard.resolvesToPrivateAddress(host) {
-            return false
-        }
-        return true
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
-    ) {
-        // `nil` refuses the redirect; the original task completes with the
-        // redirect response instead of following it to an unvalidated host.
-        completionHandler(Self.isRedirectAllowed(to: request.url) ? request : nil)
-    }
-}
-
-/// Per-fetch download delegate that buffers a response in whole `Data` chunks
-/// (one delegate callback per network read), enforcing a hard byte cap on the
-/// running total. This replaces consuming `URLSession.bytes(for:)` one `UInt8`
-/// at a time, which drove millions of async-sequence iterations per response
-/// (#407): a 2 MB avatar is now a few dozen chunk appends, not ~2,000,000.
-///
-/// Each instance owns the state for a single task, so the continuation /
-/// recorded-error storage is touched only from that task's delegate callbacks:
-/// instances are not shared across tasks and `URLSession` serializes a task's
-/// delegate callbacks. The per-instance state still lives behind a `Mutex` so
-/// the class is a checked `Sendable` (the delegate reference crosses isolation
-/// domains) without resorting to `@unchecked Sendable`.
-nonisolated final class BoundedDataCollector: NSObject, URLSessionDataDelegate, Sendable {
-    let maximumResponseBytes: Int
-
-    private struct State {
-        var data = Data()
-        var continuation: CheckedContinuation<(Data, URLResponse), Error>?
-        var recordedError: Error?
-        var didResume = false
-    }
-    private let state = Mutex(State())
-
-    init(maximumResponseBytes: Int) {
-        self.maximumResponseBytes = maximumResponseBytes
-    }
-
-    var data: Data {
-        state.withLock { $0.data }
-    }
-
-    /// Pure, byte-cap decision point (#407). Appends the whole `chunk` in a
-    /// single `Data.append(_:)` only if it fits within `maximumResponseBytes`;
-    /// returns `false` WITHOUT appending when it would exceed the cap. Never
-    /// iterates byte-by-byte.
-    func appendWithinLimit(_ chunk: Data) -> Bool {
-        state.withLock { state in
-            guard state.data.count + chunk.count <= maximumResponseBytes else { return false }
-            state.data.append(chunk)
-            return true
-        }
-    }
-
-    /// Stores the continuation that `didCompleteWithError` resumes. Set before
-    /// `task.resume()`.
-    func setContinuation(_ continuation: CheckedContinuation<(Data, URLResponse), Error>) {
-        state.withLock { $0.continuation = continuation }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        dataTask: URLSessionDataTask,
-        didReceive response: URLResponse,
-        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
-    ) {
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode)
-        else {
-            state.withLock { $0.recordedError = URLError(.badServerResponse) }
-            completionHandler(.cancel)
-            return
-        }
-
-        if response.expectedContentLength > Int64(maximumResponseBytes) {
-            state.withLock { $0.recordedError = URLError(.dataLengthExceedsMaximum) }
-            completionHandler(.cancel)
-            return
-        }
-
-        if response.expectedContentLength > 0 {
-            let reserve = Int(min(response.expectedContentLength, Int64(maximumResponseBytes)))
-            state.withLock { $0.data.reserveCapacity(reserve) }
-        }
-        completionHandler(.allow)
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        dataTask: URLSessionDataTask,
-        didReceive data: Data
-    ) {
-        guard appendWithinLimit(data) else {
-            state.withLock { $0.recordedError = URLError(.dataLengthExceedsMaximum) }
-            dataTask.cancel()
-            return
-        }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
-        // Resolve the resume decision under the lock, but resume the continuation
-        // outside it so no caller code runs while the mutex is held.
-        let pending: (continuation: CheckedContinuation<(Data, URLResponse), Error>, recordedError: Error?, data: Data)? =
-            state.withLock { state in
-                guard !state.didResume else { return nil }
-                state.didResume = true
-                guard let continuation = state.continuation else { return nil }
-                state.continuation = nil
-                return (continuation, state.recordedError, state.data)
-            }
-        guard let pending else { return }
-
-        if let recordedError = pending.recordedError {
-            pending.continuation.resume(throwing: recordedError)
-            return
-        }
-        if let error {
-            pending.continuation.resume(throwing: error)
-            return
-        }
-        guard let response = task.response else {
-            pending.continuation.resume(throwing: URLError(.badServerResponse))
-            return
-        }
-        pending.continuation.resume(returning: (pending.data, response))
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
-    ) {
-        // Preserve the SSRF redirect allowlist even though a per-task delegate
-        // is set: a per-task delegate overrides the session delegate, so the
-        // redirect guard must be re-applied here.
-        completionHandler(RemoteImageRedirectGuard.isRedirectAllowed(to: request.url) ? request : nil)
-    }
-}
 
 nonisolated enum RemoteImageFetch {
     static let maximumImageBytes = 2 * 1024 * 1024
@@ -194,21 +23,9 @@ nonisolated enum RemoteImageFetch {
         "*/*;q=0.8",
     ].joined(separator: ",")
 
-    private static let redirectGuard = RemoteImageRedirectGuard()
-
-    private static let session = URLSession(
-        configuration: ephemeralConfiguration(),
-        delegate: redirectGuard,
-        delegateQueue: nil
-    )
-
     static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        // A `BoundedDataCollector` per-task delegate receives whole `Data`
-        // chunks (one callback per network read) and enforces the byte cap on
-        // the running total, cancelling the task the moment it would exceed
-        // `maximumResponseBytes`. The non-2xx guard, the oversized
-        // `expectedContentLength` rejection, and the SSRF redirect guard all
-        // live in the collector's delegate callbacks (#407).
+        // The pinned transport receives whole network chunks and rejects the
+        // response as soon as headers plus body exceed the configured cap.
         return try await download(request, maximumResponseBytes: maximumResponseBytes)
     }
 
@@ -225,31 +42,10 @@ nonisolated enum RemoteImageFetch {
         _ request: URLRequest,
         maximumResponseBytes cap: Int
     ) async throws -> (Data, URLResponse) {
-        // Refuse before connecting if the (HTTPS, non-literal-private) host
-        // resolves to a private/internal address — the DNS-based SSRF the
-        // string allowlist can't see. Resolution runs off the cooperative pool
-        // because getaddrinfo blocks.
-        if let host = request.url?.host, await hostResolvesToPrivateAddress(host) {
-            throw HostResolutionGuard.GuardError.resolvesToPrivateAddress
-        }
-        let collector = BoundedDataCollector(maximumResponseBytes: cap)
-        let task = session.dataTask(with: request)
-        task.delegate = collector
-        let cancellation = RemoteImageDownloadCancellation(task: task)
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                collector.setContinuation(continuation)
-                task.resume()
-            }
-        } onCancel: {
-            cancellation.cancel()
-        }
-    }
-
-    private static func hostResolvesToPrivateAddress(_ host: String) async -> Bool {
-        await Task.detached(priority: .utility) {
-            HostResolutionGuard.resolvesToPrivateAddress(host)
-        }.value
+        // Resolve exactly once and connect to that validated numeric address.
+        // Keeping the original host only for HTTP Host and TLS SNI closes the
+        // DNS-rebinding gap between a preflight lookup and URLSession's lookup.
+        try await PinnedHTTPSFetcher.fetch(request, maximumResponseBytes: cap)
     }
 
     static func request(for url: URL, accept: String) -> URLRequest {
@@ -263,29 +59,6 @@ nonisolated enum RemoteImageFetch {
         return request
     }
 
-    private static func ephemeralConfiguration() -> URLSessionConfiguration {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieAcceptPolicy = .never
-        configuration.httpShouldSetCookies = false
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.urlCache = nil
-        return configuration
-    }
-}
-
-// Thread-safe: the only stored property is immutable, and URLSessionDataTask
-// documents cancel() as callable from any thread.
-// swiftlint:disable:next no_unchecked_sendable
-nonisolated private final class RemoteImageDownloadCancellation: @unchecked Sendable {
-    private let task: URLSessionDataTask
-
-    init(task: URLSessionDataTask) {
-        self.task = task
-    }
-
-    func cancel() {
-        task.cancel()
-    }
 }
 
 nonisolated enum RemoteImageDecoder {
