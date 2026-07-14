@@ -176,6 +176,15 @@ nonisolated enum ContentSanitizer {
         return "\(local)@\(domain)"
     }
 
+    /// Classifies an IP-literal (or literal-shaped) host string as
+    /// private/loopback/link-local, in every spelling the string allowlist
+    /// already blocks. Exposed for connect-time resolution checks: a DNS name
+    /// that is not an IP literal returns `false` here, so callers resolve the
+    /// host first and pass each resolved address string through this.
+    static func isPrivateOrLoopbackAddressLiteral(_ host: String) -> Bool {
+        isPrivateOrLoopbackHost(host)
+    }
+
     private static func isPrivateOrLoopbackHost(_ host: String) -> Bool {
         let normalized = host
             .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
