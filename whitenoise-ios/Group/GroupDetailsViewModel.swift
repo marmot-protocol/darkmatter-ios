@@ -547,7 +547,7 @@ final class GroupDetailsViewModel {
     func deleteLocal(using appState: AppState, dismiss: () -> Void) async {
         guard let conversation, let accountRef = appState.activeAccountRef else { return }
         guard !conversation.canSendMessages else {
-            actionError = "Leave this group before deleting the local copy."
+            actionError = L10n.string("Leave this group before deleting the local copy.")
             return
         }
         guard !membershipActionInFlight else { return }

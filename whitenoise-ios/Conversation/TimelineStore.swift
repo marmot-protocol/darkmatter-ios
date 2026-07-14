@@ -717,9 +717,8 @@ final class TimelineStore {
     func refreshProfileDependentTimelineProjections() {
         replyPreviewDisplayCache.removeAll()
         groupSystemDisplayCache.removeAll()
-        if markdownProjections.rebuild(for: timeline, onlyRowsWithMentions: true, resolver: mentionDisplayNameResolver) {
-            noteProjectionChanged()
-        }
+        markdownProjections.rebuild(for: timeline, onlyRowsWithMentions: true, resolver: mentionDisplayNameResolver)
+        noteProjectionChanged()
     }
 
     private func visibleTimelineItem(

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import whitenoise_ios
 @testable import MarmotKit
@@ -252,7 +253,7 @@ struct GroupDetailsArchiveActionTests {
         await model.deleteLocal(using: appState, dismiss: {})
 
         #expect(deleteRequests.isEmpty)
-        #expect(model.actionError == "Leave this group before deleting the local copy.")
+        #expect(model.actionError == L10n.string("Leave this group before deleting the local copy."))
     }
 
     @Test func deleteLocalRemovesInactiveGroupFromParent() async throws {
