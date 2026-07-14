@@ -21,26 +21,39 @@ final class MarmotClient {
     let marmot: Marmot
     let rootPath: String
     let relayUrls: [String]
+    /// Durable transport-cursor policy this runtime was constructed with.
+    let cursorPersistence: CursorPersistenceFfi
     let telemetryConfig: TelemetryBuildConfig
 
     convenience init() throws {
         try self.init(rootPath: AppContainerConfig.productionMarmotRoot().path, relayUrls: Self.seedRelays)
     }
 
-    /// Test-friendly init that lets callers override the on-disk root and
-    /// relay set. Production code goes through the no-arg convenience init.
-    /// Throwing because the keychain-backed account store can fail to
+    /// Designated init that lets callers override the on-disk root, relay set,
+    /// and cursor policy. The app's durable runtime goes through the no-arg
+    /// convenience init (`.advance`); short-lived background passes construct
+    /// with `.frozen` so they cannot ratchet the durable transport-cursor
+    /// floor. Throwing because the keychain-backed account store can fail to
     /// initialize (account secrets are stored in the Keychain, not on disk).
-    init(rootPath: String, relayUrls: [String]) throws {
+    init(
+        rootPath: String,
+        relayUrls: [String],
+        cursorPersistence: CursorPersistenceFfi = .advance
+    ) throws {
         self.rootPath = rootPath
         self.relayUrls = relayUrls
+        self.cursorPersistence = cursorPersistence
         self.telemetryConfig = TelemetryBuildConfig.current()
-        self.marmot = try Marmot(rootPath: rootPath, relayUrls: relayUrls)
+        self.marmot = try Marmot.newWithCursorPersistence(
+            rootPath: rootPath,
+            relayUrls: relayUrls,
+            cursorPersistence: cursorPersistence
+        )
         try configureAuditLogTracker()
     }
 
     func freshRuntime() throws -> MarmotClient {
-        try MarmotClient(rootPath: rootPath, relayUrls: relayUrls)
+        try MarmotClient(rootPath: rootPath, relayUrls: relayUrls, cursorPersistence: cursorPersistence)
     }
 
     /// Lists local accounts off the main actor. `Marmot.listAccounts()` is a

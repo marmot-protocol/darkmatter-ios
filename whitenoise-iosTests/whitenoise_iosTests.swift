@@ -844,6 +844,99 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// A notification action arriving while the runtime is suspended must run
+    /// on a lease-owned ephemeral frozen runtime, never the app's client slot:
+    /// the durable slot stays suspended for the whole lease (no generation
+    /// bump), and the frozen runtime is shut down when the action completes. A
+    /// later foreground activation rebuilds a fresh durable client.
+    @Test func notificationActionFromSuspensionUsesLeaseOwnedRuntimeAndLeavesSlotSuspended() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let generation = appState.runtimeGeneration
+
+        await appState.startRuntimeSuspension().value
+        #expect(appState.client == nil)
+
+        let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
+
+        #expect(lease.ownsEphemeralRuntime)
+        #expect(lease.client.cursorPersistence == .frozen)
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.runtimeGeneration == generation)
+        let accounts = try await lease.client.listAccounts()
+        #expect(!accounts.isEmpty)
+        #expect(appState.client == nil)
+
+        await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+
+        #expect(!appState.isAppSceneActive)
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.runtimeGeneration == generation)
+
+        await appState.startForegroundActivation().value
+
+        #expect(appState.client != nil)
+        #expect(appState.client !== lease.client)
+        #expect(!appState.runtimeSuspendedForBackground)
+        #expect(appState.runtimeGeneration == generation + 1)
+
+        await stopReadyRuntime(appState)
+    }
+
+    /// A scene that activates mid-action must not adopt the lease's frozen
+    /// runtime. The activation parks on the action's suspension claim, then
+    /// resumes with a fresh durable runtime once the lease ends.
+    @Test func foregroundActivationDuringNotificationActionHandsOffToFreshDurableRuntime() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        await appState.startRuntimeSuspension().value
+
+        let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
+        #expect(lease.ownsEphemeralRuntime)
+
+        let activation = appState.startForegroundActivation()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Still parked on the action's suspension claim: the durable slot must
+        // not be rebuilt while the frozen lease runtime is live.
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+
+        await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+        await activation.value
+        await appState.drainRuntimeLifecycleTasksForTesting()
+
+        #expect(appState.isAppSceneActive)
+        #expect(!appState.runtimeSuspendedForBackground)
+        #expect(appState.client != nil)
+        #expect(appState.client !== lease.client)
+
+        await stopReadyRuntime(appState)
+    }
+
+    /// With a live foreground runtime, a notification action leases the
+    /// durable client directly and builds nothing ephemeral.
+    @Test func notificationActionWithLiveRuntimeReusesDurableClient() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
+
+        #expect(!lease.ownsEphemeralRuntime)
+        #expect(lease.client === appState.client)
+        #expect(lease.client.cursorPersistence == .advance)
+
+        await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+
+        #expect(appState.client === lease.client)
+        #expect(appState.phase == .ready)
+
+        await stopReadyRuntime(appState)
+    }
+
     @Test func auditLogSettingChangeHotSwapsWithoutRestartingRuntime() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState

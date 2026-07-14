@@ -1,11 +1,13 @@
 import Foundation
 
 extension AppState {
-    /// Executes a notification-action response. Reply and mark-read may arrive
-    /// while the app is backgrounded with the runtime suspended; the runtime is
-    /// brought up and released again through the regular lifecycle pathways,
-    /// held open by the same idempotent UIKit background-task helper the
-    /// suspension path uses.
+    /// Executes a notification-action response. Reply and mark-read run against
+    /// a runtime leased for the action: the live foreground runtime when the app
+    /// is active, or — when it arrives while backgrounded with the runtime
+    /// suspended — a lease-owned frozen ephemeral runtime that is shut down when
+    /// the action completes, leaving the durable runtime suspended. Either way
+    /// the work is held open by the same idempotent UIKit background-task helper
+    /// the suspension path uses.
     @MainActor
     func performNotificationAction(_ operation: NotificationActionOperation) async {
         switch operation {
