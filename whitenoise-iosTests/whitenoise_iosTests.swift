@@ -905,7 +905,11 @@ struct AppStateBootstrapTests {
         #expect(lease.ownsEphemeralRuntime)
 
         let activation = appState.startForegroundActivation()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // Hand the MainActor to the activation so it runs to its first await —
+        // `waitForRuntimeSuspensionToFinish` — and parks on the action's claim.
+        // One yield suffices (the activation touches the client slot only after
+        // that await), so the assertions below hold without a wall-clock delay.
+        await Task.yield()
 
         // Still parked on the action's suspension claim: the durable slot must
         // not be rebuilt while the frozen lease runtime is live.
