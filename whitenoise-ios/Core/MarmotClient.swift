@@ -198,6 +198,12 @@ final class MarmotClient {
         try await marmot.signOutAndWipe(accountRef: accountRef)
     }
 
+    /// Non-destructive sign-out: deactivate the account while preserving its
+    /// local store, keys, media, and drafts for a later sign-in.
+    func signOut(accountRef: String, deleteKeyPackages: Bool = true) async throws -> SignOutOutcomeFfi {
+        try await marmot.signOut(accountRef: accountRef, deleteKeyPackages: deleteKeyPackages)
+    }
+
     /// Reactivates a locally signed-out account without re-importing keys.
     func signInAccount(accountRef: String) async throws -> AccountSummaryFfi {
         try await marmot.signInAccount(accountRef: accountRef)

@@ -21,6 +21,20 @@ struct RootView: View {
         }
         .animation(.smooth(duration: 0.25), value: appState.phase)
         .toastHost()
+        // Hosted at the root so a partial-failure wipe report survives the
+        // account teardown (routing to onboarding / switching accounts pops the
+        // Settings screen that started the wipe).
+        .sheet(isPresented: Binding(
+            get: { appState.pendingWipeReport != nil },
+            set: { if !$0 { appState.pendingWipeReport = nil } }
+        )) {
+            if let report = appState.pendingWipeReport {
+                WipeOutcomeReportView(report: report) {
+                    appState.pendingWipeReport = nil
+                }
+                .appAppearance()
+            }
+        }
     }
 }
 
