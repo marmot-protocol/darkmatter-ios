@@ -65,6 +65,9 @@ struct MessageBubble: View {
     var reactions: [ConversationViewModel.ReactionTally] = []
     var onShowReactionDetails: (String) -> Void = { _ in }
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
+    /// Set when the message has viewable edit history; makes the inline "Edited"
+    /// label tap to open the history sheet, the same sheet the actions menu opens.
+    var onViewEditHistory: (() -> Void)? = nil
 
     @State private var mediaGallery: MessageMediaGallery?
     @State private var fullBodyPresentation: MessageFullBodyPresentation?
@@ -477,7 +480,14 @@ struct MessageBubble: View {
             Text(timeLabel)
             if isEdited, !isDeleted {
                 Text("·")
-                Text("Edited")
+                if let onViewEditHistory {
+                    Button(action: onViewEditHistory) {
+                        Text("Edited")
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Text("Edited")
+                }
             }
             // Show the status caption for our own messages, and the live
             // "streaming" indicator regardless of side.

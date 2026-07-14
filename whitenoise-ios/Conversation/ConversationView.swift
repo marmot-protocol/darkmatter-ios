@@ -1329,7 +1329,10 @@ struct ConversationView: View {
             },
             onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
-            }
+            },
+            onViewEditHistory: viewModel.hasEditHistory(record.messageIdHex)
+                ? { editHistoryTarget = ActionsTarget(record: record, status: status) }
+                : nil
         )
         .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
             beginReply(to: record, viewModel: viewModel)
