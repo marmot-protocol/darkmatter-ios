@@ -1662,6 +1662,9 @@ private struct MessageFullscreenVideoPlayerView: View {
     @State private var audioSession = ObservableVideoPlaybackAudioSession()
     @State private var dismissDragOffset: CGFloat = 0
 
+    @ScaledMetric(relativeTo: .body)
+    private var closeButtonSize: CGFloat = 42
+
     init(video: MessageFullscreenVideo, onDismiss: @escaping () -> Void) {
         self.video = video
         self.onDismiss = onDismiss
@@ -1677,9 +1680,9 @@ private struct MessageFullscreenVideoPlayerView: View {
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.body.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
+                    .frame(width: closeButtonSize, height: closeButtonSize)
                     .background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
@@ -1777,6 +1780,13 @@ private struct MessageAudioAttachmentView: View {
     @State private var playbackLoadTask: Task<Void, Never>?
     @State private var audioSessionLease: VoiceAudioSession.Lease?
 
+    @ScaledMetric(relativeTo: .subheadline)
+    private var playButtonSize: CGFloat = 36
+    @ScaledMetric(relativeTo: .caption)
+    private var speedBadgeWidth: CGFloat = 38
+    @ScaledMetric(relativeTo: .caption)
+    private var speedBadgeHeight: CGFloat = 28
+
     private let speeds: [Float] = [1, 1.5, 2]
     private var metadataCacheKey: String {
         MessageAudioBubblePresentation.cacheKey(for: item)
@@ -1805,10 +1815,10 @@ private struct MessageAudioAttachmentView: View {
                             .controlSize(.small)
                     } else {
                         Image(systemName: isPlaying ? "pause.fill" : didFail ? "arrow.clockwise" : "play.fill")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(.subheadline.weight(.bold))
                     }
                 }
-                .frame(width: 36, height: 36)
+                .frame(width: playButtonSize, height: playButtonSize)
                 .foregroundStyle(isFromMe ? Color.accentColor : Color.white)
                 .background(isFromMe ? Color.white.opacity(0.95) : Color.accentColor, in: Circle())
             }
@@ -1833,7 +1843,7 @@ private struct MessageAudioAttachmentView: View {
             Button(action: cycleSpeed) {
                 Text(speedLabel)
                     .font(.caption.weight(.bold))
-                    .frame(width: 38, height: 28)
+                    .frame(width: speedBadgeWidth, height: speedBadgeHeight)
                     .background(isFromMe ? Color.white.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
             }
             .buttonStyle(.plain)
@@ -2106,15 +2116,18 @@ private struct MessageDocumentAttachmentView: View {
     @State private var didFail = false
     @State private var shareItem: MessageDocumentShareItem?
 
+    @ScaledMetric(relativeTo: .title2)
+    private var iconTileSize: CGFloat = 38
+
     var body: some View {
         Button {
             Task { await openDocument() }
         } label: {
             HStack(spacing: 11) {
                 Image(systemName: item.kind.systemImageName)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(isFromMe ? Color.white : Color.accentColor)
-                    .frame(width: 38, height: 38)
+                    .frame(width: iconTileSize, height: iconTileSize)
                     .background(isFromMe ? Color.white.opacity(0.15) : Color.accentColor.opacity(0.10), in: .rect(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -2133,7 +2146,7 @@ private struct MessageDocumentAttachmentView: View {
                         .tint(isFromMe ? .white : .accentColor)
                 } else if didFail {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                 }
             }
             .foregroundStyle(isFromMe ? Color.white : Color.primary)
@@ -2425,6 +2438,9 @@ struct MessageMediaFullscreenGalleryView: View {
     @State private var selectedItemID: String
     @State private var dismissDragOffset: CGFloat = 0
 
+    @ScaledMetric(relativeTo: .body)
+    private var closeButtonSize: CGFloat = 42
+
     init(
         gallery: MessageMediaGallery,
         onLoadMedia: ConversationMediaLoader,
@@ -2469,9 +2485,9 @@ struct MessageMediaFullscreenGalleryView: View {
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.body.weight(.bold))
                     .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
+                    .frame(width: closeButtonSize, height: closeButtonSize)
                     .background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)

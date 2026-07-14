@@ -15,6 +15,15 @@ struct ChatsListView: View {
     @State private var isKeyboardVisible = false
     @Environment(\.colorScheme) private var colorScheme
 
+    @ScaledMetric(relativeTo: .body)
+    private var searchIconSize = BottomInputChromeLayout.inlineAccessoryIconSize
+    @ScaledMetric(relativeTo: .body)
+    private var searchFieldFontSize = BottomInputChromeLayout.fieldFontSize
+    @ScaledMetric(relativeTo: .body)
+    private var sideControlIconSize = BottomInputChromeLayout.sideControlIconSize
+    @ScaledMetric(relativeTo: .body)
+    private var searchControlSize = BottomInputChromeLayout.controlSize
+
     private var hasSearchText: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -187,13 +196,13 @@ struct ChatsListView: View {
         HStack(alignment: .bottom, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: BottomInputChromeLayout.inlineAccessoryIconSize, weight: .medium))
+                    .font(.system(size: searchIconSize, weight: .medium))
                     .foregroundStyle(.secondary)
 
                 ZStack(alignment: .leading) {
                     if searchText.isEmpty {
                         Text("Search")
-                            .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                            .font(.system(size: searchFieldFontSize))
                             .foregroundStyle(searchPlaceholderColor)
                             .allowsHitTesting(false)
                     }
@@ -202,7 +211,7 @@ struct ChatsListView: View {
                         searchEditing = isEditing
                     })
                     .focused($searchFocused)
-                    .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                    .font(.system(size: searchFieldFontSize))
                     .submitLabel(.search)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -215,7 +224,7 @@ struct ChatsListView: View {
             .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
             .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
         }
-        .frame(minHeight: BottomInputChromeLayout.controlSize)
+        .frame(minHeight: searchControlSize)
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded { focusSearchField() })
@@ -232,9 +241,9 @@ struct ChatsListView: View {
                         .offset(x: 0.85, y: -1.25)
                 }
             }
-            .font(.system(size: BottomInputChromeLayout.sideControlIconSize, weight: .semibold))
+            .font(.system(size: sideControlIconSize, weight: .semibold))
             .foregroundStyle(searchCancellationActive ? Color.secondary : Color.primary)
-            .frame(width: BottomInputChromeLayout.controlSize, height: BottomInputChromeLayout.controlSize)
+            .frame(width: searchControlSize, height: searchControlSize)
             .compatibleInputCircleChrome()
         }
         .buttonStyle(.plain)

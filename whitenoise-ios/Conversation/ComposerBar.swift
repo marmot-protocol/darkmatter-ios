@@ -150,8 +150,21 @@ struct ComposerBar: View {
     @State private var attachmentPopover: ComposerAttachmentPopover?
     @State private var showEmojiPicker = false
 
-    private var controlSize: CGFloat { BottomInputChromeLayout.controlSize }
-    private var inlineSendSize: CGFloat { BottomInputChromeLayout.inlineSendSize }
+    @ScaledMetric(relativeTo: .body)
+    private var controlSize = BottomInputChromeLayout.controlSize
+    @ScaledMetric(relativeTo: .body)
+    private var inlineSendSize = BottomInputChromeLayout.inlineSendSize
+    @ScaledMetric(relativeTo: .body)
+    private var fieldFontSize = BottomInputChromeLayout.fieldFontSize
+    @ScaledMetric(relativeTo: .body)
+    private var sideControlIconSize = BottomInputChromeLayout.sideControlIconSize
+    @ScaledMetric(relativeTo: .body)
+    private var inlineEmojiIconSize = BottomInputChromeLayout.inlineEmojiIconSize
+    @ScaledMetric(relativeTo: .body)
+    private var inlineSendIconSize = BottomInputChromeLayout.inlineSendIconSize
+    @ScaledMetric(relativeTo: .body)
+    private var inlineAccessoryWidth = BottomInputChromeLayout.inlineAccessoryWidth
+
     private var inputEnabled: Bool { disabledMessage == nil }
 
     var body: some View {
@@ -224,7 +237,7 @@ struct ComposerBar: View {
             sideCircleIcon(
                 "paperclip",
                 weight: .medium,
-                size: BottomInputChromeLayout.sideControlIconSize,
+                size: sideControlIconSize,
                 tone: appearance.iconTone,
                 interactive: appearance.chromeInteractive
             )
@@ -278,7 +291,7 @@ struct ComposerBar: View {
                 TextField("Message", text: $draft, axis: .vertical)
                     .focused($focused)
                     .lineLimit(1...5)
-                    .font(.system(size: BottomInputChromeLayout.fieldFontSize))
+                    .font(.system(size: fieldFontSize))
                     .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
                     .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
                     .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
@@ -309,9 +322,9 @@ struct ComposerBar: View {
             showEmojiPicker = true
         } label: {
             Image(systemName: "face.smiling")
-                .font(.system(size: BottomInputChromeLayout.inlineEmojiIconSize))
+                .font(.system(size: inlineEmojiIconSize))
                 .foregroundStyle(.secondary)
-                .frame(width: BottomInputChromeLayout.inlineAccessoryWidth, height: controlSize)
+                .frame(width: inlineAccessoryWidth, height: controlSize)
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
@@ -327,7 +340,7 @@ struct ComposerBar: View {
                         .tint(.white)
                 } else {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: BottomInputChromeLayout.inlineSendIconSize, weight: .semibold))
+                        .font(.system(size: inlineSendIconSize, weight: .semibold))
                         .foregroundStyle(.white)
                         .offset(x: -1, y: 1)
                 }
@@ -352,7 +365,7 @@ struct ComposerBar: View {
             sideCircleIcon(
                 "mic.fill",
                 weight: .semibold,
-                size: BottomInputChromeLayout.sideControlIconSize,
+                size: sideControlIconSize,
                 tone: inputEnabled ? .primary : .disabled
             )
             .scaleEffect(voiceRecordingActive ? 1.08 : 1)
@@ -455,13 +468,16 @@ private struct ComposerAudioDraftInput: View {
     @State private var progressTask: Task<Void, Never>?
     @State private var audioSessionLease: VoiceAudioSession.Lease?
 
+    @ScaledMetric(relativeTo: .footnote)
+    private var draftControlSize: CGFloat = 28
+
     var body: some View {
         HStack(spacing: 8) {
             Button(action: onRemove) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
+                    .frame(width: draftControlSize, height: draftControlSize)
                     .background(Color.primary.opacity(0.10), in: Circle())
             }
             .buttonStyle(.plain)
@@ -478,11 +494,11 @@ private struct ComposerAudioDraftInput: View {
                             isPlaying: isPlaying,
                             didFail: didFail
                         ))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.footnote.weight(.bold))
                     }
                 }
                 .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
+                .frame(width: draftControlSize, height: draftControlSize)
                 .background(Color.accentColor, in: Circle())
             }
             .buttonStyle(.plain)
