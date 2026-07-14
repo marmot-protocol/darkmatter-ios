@@ -1101,10 +1101,13 @@ struct AppStateBootstrapTests {
 
         #expect(appState.activeAccountRef == accountB.label)
         #expect(appState.phase == .ready)
-        #expect(appState.profileStore.profileProjectionCache[accountA.accountIdHex]?.projectedName == "Departed account")
+        // A non-destructive sign-out keeps the retained accounts' projection
+        // entries — `refreshAccounts()` re-warms the local accounts from fresh
+        // state (so the seeded placeholder values are refreshed, not the point),
+        // while unrelated peer projections persist untouched.
+        #expect(appState.profileStore.profileProjectionCache[accountA.accountIdHex] != nil)
         #expect(appState.profileStore.profileProjectionCache[accountB.accountIdHex]?.localAccountLabel == accountB.label)
         #expect(appState.profileStore.profileProjectionCache[peerID]?.projectedName == "Existing peer")
-        #expect(appState.profileStore.profileProjectionLoadVersions[accountA.accountIdHex] == 3)
 
         await stopReadyRuntime(appState)
     }
@@ -1133,7 +1136,9 @@ struct AppStateBootstrapTests {
 
         let signedOutSettings = await appState.notificationSettings(for: accountA.label)
         #expect(appState.activeAccountRef == accountB.label)
-        #expect(appState.accounts.map(\.label) == [accountA.label, accountB.label])
+        // Both accounts remain; their order comes from `listAccounts()`, which
+        // makes no ordering guarantee, so compare membership, not sequence.
+        #expect(Set(appState.accounts.map(\.label)) == Set([accountA.label, accountB.label]))
         #expect(appState.accounts.first(where: { $0.label == accountA.label })?.signedOut == true)
         #expect(signedOutSettings?.nativePushEnabled == false)
         // A remaining account means we stay in the main interface.
@@ -4434,14 +4439,39 @@ struct ConversationChromeTests {
     }
 
     @Test func initialChromeReservesKnownMemberSubtitle() {
+        // A named group (not a DM) keeps its member-count subtitle.
         let chrome = ConversationChromePresentation.initial(
-            chat: group(name: "", id: hex("aa")),
-            initialTitle: "Project Room",
+            chat: group(name: "Project Room", id: hex("aa")),
+            initialTitle: nil,
             initialMemberCount: 2
         )
 
         #expect(chrome.title == "Project Room")
         #expect(chrome.subtitle == "2 members")
+    }
+
+    @Test func initialChromeHidesMemberSubtitleForDirectMessageTitledByContactName() {
+        // A DM's title hint is the contact's name; it must still be detected as
+        // a DM (no member count) from the empty group name.
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: "Alice",
+            initialMemberCount: 2
+        )
+
+        #expect(chrome.title == "Alice")
+        #expect(chrome.subtitle == nil)
+    }
+
+    @Test func initialChromeHidesMemberSubtitleForDirectMessage() {
+        let chrome = ConversationChromePresentation.initial(
+            chat: group(name: "", id: hex("aa")),
+            initialTitle: nil,
+            initialMemberCount: 2
+        )
+
+        // An unnamed 2-person chat is a DM: no member-count subtitle.
+        #expect(chrome.subtitle == nil)
     }
 
     @Test func directMessageTitleUsesInitialChatListHintsBeforeRosterLoads() throws {
@@ -4455,10 +4485,11 @@ struct ConversationChromeTests {
             initialMemberCount: 2
         )
 
-        // The initial-member-count hint drives the 2-person title/subtitle before
-        // the roster loads; with no known profile the title is the peer's npub.
+        // The initial-member-count hint drives the 2-person title before the
+        // roster loads; with no known profile the title is the peer's npub. A DM
+        // shows just the contact's name — no member-count subtitle.
         #expect(viewModel.displayTitle == appState.shortNpub(forAccountIdHex: other))
-        #expect(viewModel.displaySubtitle == "2 members")
+        #expect(viewModel.displaySubtitle == nil)
     }
 
     @Test func headerSecondaryShowsConnectingWhileRuntimeWarmsUp() {

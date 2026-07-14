@@ -545,6 +545,14 @@ final class AppState {
         if destructive {
             conversationDraftStore.removeDrafts(accountRef: removedRef)
             await conversationDraftStore.flush()
+
+            // Drop the wiped account's private contact nicknames so they don't
+            // outlive the identity on this device. Only on a destructive wipe —
+            // a normal sign-out retains the account (and its local state,
+            // including nicknames) for reactivation.
+            if let removedAccountIdHex {
+                profileStore.clearContactNicknames(ownerAccountIdHex: removedAccountIdHex)
+            }
         }
 
         do {
