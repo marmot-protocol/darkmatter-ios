@@ -4970,6 +4970,30 @@ struct ConversationTimelineProjectionTests {
         #expect(!ConversationReadMarker.shouldMarkRead(emptyId, isDeleted: false, alreadyMarked: false))
     }
 
+    @Test func pendingReadMarksRetryWhenRuntimeReturnsWithoutAnotherViewportUpdate() {
+        #expect(
+            ConversationReadMarker.pendingFlushDecision(
+                hasPendingMessages: true,
+                canUseRuntime: false,
+                activeAccountMatches: true
+            ) == .retryWhenRuntimeReturns
+        )
+        #expect(
+            ConversationReadMarker.pendingFlushDecision(
+                hasPendingMessages: true,
+                canUseRuntime: true,
+                activeAccountMatches: true
+            ) == .flush
+        )
+        #expect(
+            ConversationReadMarker.pendingFlushDecision(
+                hasPendingMessages: true,
+                canUseRuntime: false,
+                activeAccountMatches: false
+            ) == .stop
+        )
+    }
+
     @Test func markedReadDedupDropsMessagesOutsideCurrentTimelineWindow() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
@@ -5581,6 +5605,69 @@ struct ConversationTimelineProjectionTests {
 
         let mediaRow = try #require(viewModel.timeline.first { $0.id == tempRowId })
         #expect(viewModel.mediaItems(for: mediaRow) == [attachment])
+    }
+
+    @MainActor
+    @Test func authoritativeMediaRowReleasesConfirmedPendingBytes() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let messageId = hex("b2")
+        let tempId = "pending-media-real-id"
+        let tempRowId = "msg:\(tempId)"
+        let realRowId = "msg:\(messageId)"
+        let reference = encryptedMediaReference(
+            fileName: "canonical.jpg",
+            plaintextByte: "31",
+            ciphertextByte: "41",
+            sourceEpoch: 42
+        )
+        let pending = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [MessageSemantics.imetaTag(for: reference)],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+        let localAttachment = MessageMediaAttachment(
+            id: "local",
+            reference: nil,
+            fileName: "local.jpg",
+            mediaType: "image/jpeg",
+            dim: "640x480",
+            localData: Data([0xDE, 0xAD, 0xBE, 0xEF])
+        )
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+
+        viewModel.installPendingMediaForTesting(rowId: tempRowId, items: [localAttachment])
+        viewModel.applyPendingOutgoingMessage(tempId: tempId, record: pending)
+        viewModel.confirmSent(tempId: tempId, record: pending, messageId: messageId)
+        #expect(viewModel.pendingMediaForTesting(rowId: realRowId) == [localAttachment])
+
+        let authoritative = timelineRecord(
+            messageIdHex: messageId,
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "",
+            tags: pending.tags,
+            timelineAt: 20,
+            media: [reference]
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [authoritative], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        #expect(viewModel.pendingMediaForTesting(rowId: realRowId) == nil)
+        let mediaRow = try #require(viewModel.timeline.first { $0.id == realRowId })
+        #expect(viewModel.mediaItems(for: mediaRow).map(\.fileName) == ["canonical.jpg"])
     }
 
     @Test func projectedOutgoingMessageReconcilesClosestPendingBubbleWhenContentMatches() throws {
@@ -9744,6 +9831,7 @@ private func timelineRecord(
     replyToMessageIdHex: String? = nil,
     replyPreview: TimelineReplyPreviewFfi? = nil,
     mediaJson: String? = nil,
+    media: [MediaAttachmentReferenceFfi] = [],
     agentTextStreamJson: String? = nil,
     reactions: TimelineReactionSummaryFfi = TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
     deleted: Bool = false,
@@ -9763,7 +9851,7 @@ private func timelineRecord(
         replyToMessageIdHex: replyToMessageIdHex,
         replyPreview: replyPreview,
         mediaJson: mediaJson,
-        media: [],
+        media: media,
         agentTextStreamJson: agentTextStreamJson,
         reactions: reactions,
         deleted: deleted,

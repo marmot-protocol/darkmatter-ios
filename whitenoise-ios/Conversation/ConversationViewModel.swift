@@ -1201,10 +1201,27 @@ final class ConversationViewModel {
         timeline.lazy.compactMap(Self.messageId(in:)).last
     }
 
-    /// Haystack rows for in-conversation search: confirmed, previewable,
-    /// non-deleted message rows flattened to plain text through the budgeted
-    /// preview path (`MessagePreview.body` → `MarkdownPlainText.flatten`).
+    @ObservationIgnored private var searchEntriesCache: (generation: Int, entries: [ConversationSearchEntry])?
+
+    /// Haystack rows for in-conversation search, memoized by
+    /// `timelineProjectionGeneration`. Search recomputes matches on every
+    /// keystroke, and the flattened haystack only changes when the projection
+    /// does, so caching it avoids re-flattening every previewable row (a
+    /// budgeted markdown AST walk) on the typing hot path.
     private func searchableTimelineEntries() -> [ConversationSearchEntry] {
+        let generation = timelineProjectionGeneration
+        if let cache = searchEntriesCache, cache.generation == generation {
+            return cache.entries
+        }
+        let entries = computeSearchableTimelineEntries()
+        searchEntriesCache = (generation, entries)
+        return entries
+    }
+
+    /// Confirmed, previewable, non-deleted message rows flattened to plain text
+    /// through the budgeted preview path (`MessagePreview.body` →
+    /// `MarkdownPlainText.flatten`).
+    private func computeSearchableTimelineEntries() -> [ConversationSearchEntry] {
         timeline.compactMap { item in
             guard case .message(let record, _) = item.kind,
                   !record.messageIdHex.isEmpty,
