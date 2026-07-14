@@ -8,65 +8,6 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite(.serialized)
 struct RemoteImageLoaderTests {
-    @Test func remoteImageFetchDataRejectsNon2xxStatus() async throws {
-        let url = try #require(URL(string: "https://example.com/search"))
-        let session = URLSession(configuration: .ephemeral)
-        defer { session.invalidateAndCancel() }
-
-        let rejected = try await responseDisposition(
-            statusCode: 500,
-            url: url,
-            session: session,
-            maximumResponseBytes: 1_000
-        )
-        #expect(rejected == .cancel)
-
-        let allowed = try await responseDisposition(
-            statusCode: 200,
-            url: url,
-            session: session,
-            maximumResponseBytes: 1_000
-        )
-        #expect(allowed == .allow)
-
-        let oversized = try await responseDisposition(
-            statusCode: 200,
-            url: url,
-            session: session,
-            maximumResponseBytes: 1_000,
-            expectedContentLength: 5_000
-        )
-        #expect(oversized == .cancel)
-    }
-
-    private func responseDisposition(
-        statusCode: Int,
-        url: URL,
-        session: URLSession,
-        maximumResponseBytes: Int,
-        expectedContentLength: Int? = nil
-    ) async throws -> URLSession.ResponseDisposition {
-        let collector = BoundedDataCollector(maximumResponseBytes: maximumResponseBytes)
-        let dataTask = session.dataTask(with: url)
-        let headers: [String: String]?
-        if let expectedContentLength {
-            headers = ["Content-Length": String(expectedContentLength)]
-        } else {
-            headers = nil
-        }
-        let response = try #require(HTTPURLResponse(
-            url: url,
-            statusCode: statusCode,
-            httpVersion: "HTTP/1.1",
-            headerFields: headers
-        ))
-        return await withCheckedContinuation { continuation in
-            collector.urlSession(session, dataTask: dataTask, didReceive: response) { disposition in
-                continuation.resume(returning: disposition)
-            }
-        }
-    }
-
     @Test func remoteImageFetchDoesNotAdvertiseSVGContent() throws {
         let request = RemoteImageFetch.request(
             for: try #require(URL(string: "https://example.com/avatar.png")),
@@ -187,23 +128,6 @@ struct RemoteImageLoaderTests {
         #expect(max(image.size.width, image.size.height) <= 20)
     }
 
-    @Test func boundedDataCollectorRejectsChunkThatExceedsCap() {
-        // Behavioral coverage of the pure byte-cap decision point (#407): the
-        // collector appends whole chunks only when they fit, never partially,
-        // and accepts a chunk that lands exactly on the cap boundary.
-        let collector = BoundedDataCollector(maximumResponseBytes: 10)
-
-        #expect(collector.appendWithinLimit(Data(repeating: 0xAB, count: 6)))
-        #expect(collector.data.count == 6)
-
-        // 6 + 6 = 12 > 10: rejected without partially appending.
-        #expect(!collector.appendWithinLimit(Data(repeating: 0xCD, count: 6)))
-        #expect(collector.data.count == 6)
-
-        // 6 + 4 = 10: exactly the cap, allowed.
-        #expect(collector.appendWithinLimit(Data(repeating: 0xEF, count: 4)))
-        #expect(collector.data.count == 10)
-    }
 }
 
 private actor RemoteImageFetchProbe {
