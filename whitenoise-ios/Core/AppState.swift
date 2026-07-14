@@ -762,15 +762,17 @@ final class AppState {
             accountUnreadStore.refreshed(from: [], accounts: [])
             return
         }
+        // A badge refresh has no foreground UI to update while the durable
+        // runtime is down, so it must never resurrect it: rebuilding a suspended
+        // runtime in the background would strand a durable `.advance` runtime
+        // holding the App Group SQLite lock (`0xdead10cc`). Foreground callers
+        // have a live `client`; a notification action passes its leased runtime.
+        // With neither, degrade to a no-op rather than reach the rebuilding
+        // `runtimeClient()` accessor.
+        guard let summaryClient = leasedClient ?? client else { return }
         unreadSummaryRefreshGeneration += 1
         let generation = unreadSummaryRefreshGeneration
         do {
-            let summaryClient: MarmotClient
-            if let leasedClient {
-                summaryClient = leasedClient
-            } else {
-                summaryClient = try runtimeClient()
-            }
             let summaries = try await summaryClient.accountUnreadSummary()
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(from: summaries, accounts: accounts)

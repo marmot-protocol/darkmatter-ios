@@ -944,6 +944,31 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// A badge refresh with no leased client must never resurrect the durable
+    /// runtime while it is suspended — that would strand a background `.advance`
+    /// runtime holding the App Group SQLite lock (the notification-action lease
+    /// exists precisely to avoid this). The refresh degrades to a no-op instead
+    /// of rebuilding the slot. This is the fleet-footed guard for the class of
+    /// bug where background code reaches the plain runtime accessor: it can be
+    /// driven without a relay, which the notification-action content operations
+    /// (send / mark-read) would require.
+    @Test func unreadSummaryRefreshWithoutLeaseNeverRebuildsSuspendedRuntime() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let generation = appState.runtimeGeneration
+
+        await appState.startRuntimeSuspension().value
+        #expect(appState.client == nil)
+
+        await appState.refreshAccountUnreadSummaries()
+
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.runtimeGeneration == generation)
+
+        await stopReadyRuntime(appState)
+    }
+
     @Test func auditLogSettingChangeHotSwapsWithoutRestartingRuntime() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
