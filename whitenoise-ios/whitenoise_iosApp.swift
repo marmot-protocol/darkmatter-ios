@@ -65,6 +65,7 @@ struct whitenoise_iosApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
     @State private var appLockOverlay = AppLockOverlayPresenter()
+    @State private var captureProtection = WindowCaptureProtection()
 
     var body: some Scene {
         WindowGroup {
@@ -76,6 +77,7 @@ struct whitenoise_iosApp: App {
                 .task {
                     appState.setAppSceneActive(scenePhase == .active)
                     appLockOverlay.update(for: appState.appLock.shield, controller: appState.appLock)
+                    syncCaptureProtection()
                     if scenePhase == .active {
                         appState.appLock.handleScenePhaseActive()
                         Task { await appState.appLock.requestUnlock() }
@@ -105,6 +107,9 @@ struct whitenoise_iosApp: App {
                 .onChange(of: appState.appLock.shield) { _, shield in
                     appLockOverlay.update(for: shield, controller: appState.appLock)
                 }
+                .onChange(of: appState.blockScreenshots) { _, _ in
+                    syncCaptureProtection()
+                }
         }
     }
 
@@ -113,6 +118,16 @@ struct whitenoise_iosApp: App {
         let backgroundTask = BackgroundRuntimeSuspensionTask(name: "Suspend Marmot runtime")
         let suspensionTask = appState.startRuntimeSuspension()
         backgroundTask.endWhenSuspensionCompletes(suspensionTask)
+    }
+
+    @MainActor
+    private func syncCaptureProtection() {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?
+            .windows
+            .first { $0.isKeyWindow }
+        captureProtection.setActive(appState.blockScreenshots, window: window)
     }
 
 }
