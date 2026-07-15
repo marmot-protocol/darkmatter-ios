@@ -1,55 +1,65 @@
 import Foundation
 import MarmotKit
 
-/// Screen store for `AddMembersSheet`: owns invite flow and delegates member
-/// collection to the shared picker also used by new-chat.
+/// Screen store for `AddMembersSheet`: the people directory, the search
+/// query, the multi-select, and the invite submission.
 @MainActor
 @Observable
 final class AddMembersSheetViewModel {
-    let memberPicker = MemberPickerViewModel()
+    let directory = RecipientDirectory()
+    let query = RecipientQueryModel()
+    let selection = RecipientSelection()
     var isInviting = false
+    var error: String?
+
+    func toggle(_ candidate: RecipientCandidate, excludedAccountIds: Set<String>) {
+        selection.toggle(
+            RecipientSelection.member(for: candidate),
+            excludedAccountIds: excludedAccountIds
+        )
+        if selection.isSelected(accountIdHex: candidate.accountIdHex) {
+            query.clear()
+        }
+    }
+
+    /// Normalizes a resolved identifier through Marmot before selecting it so
+    /// the staged member carries the validated reference form.
+    func selectResolved(
+        _ resolved: ResolvedRecipient,
+        excludedAccountIds: Set<String>,
+        normalize: (String) async throws -> MemberRefFfi
+    ) async {
+        guard !isInviting else { return }
+        let result = await AddMembersPresentation.normalizedMember(
+            resolved.memberRef,
+            normalize: normalize
+        )
+        // Re-check after the await: a selection resumed mid-submit would
+        // stage a recipient the in-flight invite never sends.
+        guard !isInviting else { return }
+        guard case .normalized(let member) = result else { return }
+        if selection.add(member, excludedAccountIds: excludedAccountIds) {
+            Haptics.selection()
+            query.clear()
+        }
+    }
 
     func invite(
-        normalize: @escaping MemberPickerViewModel.Normalize,
-        excludedAccountIds: Set<String>,
-        excludedMemberMessage: String,
         onSubmit: ([String]) async throws -> Void,
-        using appState: AppState,
         dismiss: () -> Void
     ) async {
-        // Take the in-flight guard synchronously before the first await so a
-        // fast double-tap can't start two concurrent invite tasks while the
-        // off-main member normalization is still in flight (#260/#274).
-        guard !isInviting else { return }
+        // The in-flight guard is taken synchronously before the first await
+        // so a fast double-tap can't start two concurrent invite tasks.
+        guard !isInviting, !selection.isEmpty else { return }
         isInviting = true
-        // Fold the still-in-field text before clearing any prior validation error
-        // (`addPending` sets its own error on invalid input). The in-flight guard
-        // stays ahead of the await so a double-tap can't start two invites.
-        guard await memberPicker.addPending(
-            excludedAccountIds: excludedAccountIds,
-            excludedMemberMessage: excludedMemberMessage,
-            normalize: normalize,
-            warmProfile: warmProfile(using: appState)
-        ) else {
-            isInviting = false
-            return
-        }
-        guard !memberPicker.members.isEmpty else {
-            isInviting = false
-            return
-        }
-        memberPicker.error = nil
+        error = nil
         do {
-            try await onSubmit(memberPicker.members.map(\.memberRef))
+            try await onSubmit(selection.memberRefs)
             isInviting = false
             dismiss()
         } catch {
             isInviting = false
-            memberPicker.error = error.localizedDescription
+            self.error = error.localizedDescription
         }
-    }
-
-    private func warmProfile(using appState: AppState) -> MemberPickerViewModel.ProfileWarmup {
-        { _ = appState.profile(forAccountIdHex: $0) }
     }
 }

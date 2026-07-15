@@ -28,7 +28,7 @@ struct GroupSharedMediaPresentationTests {
 
         let items = GroupSharedMediaPresentation.items(from: [document, image, video])
         let visual = GroupSharedMediaPresentation.visualItems(from: items)
-        let files = GroupSharedMediaPresentation.fileItems(from: items)
+        let files = SharedMediaLibraryPresentation.fileItems(from: items)
 
         #expect(items.map(\.attachment.fileName) == ["clip.mp4", "photo.jpg", "notes.pdf"])
         #expect(visual.map(\.attachment.fileName) == ["clip.mp4", "photo.jpg"])

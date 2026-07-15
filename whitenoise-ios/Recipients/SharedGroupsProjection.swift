@@ -1,0 +1,84 @@
+import Foundation
+
+/// Groups a profile subject shares with the active account: named groups
+/// where both are on the roster and the viewer is still a member. The
+/// unnamed two-person chat is the DM itself and stays excluded; a *named*
+/// pair group counts. Derived from the same screen-lifetime snapshots the
+/// recipient directory loads.
+nonisolated enum SharedGroupsProjection {
+    struct SharedGroup: Equatable, Identifiable {
+        let groupIdHex: String
+        let title: String
+        let avatarUrl: String?
+        let memberCount: Int
+
+        var id: String { groupIdHex }
+    }
+
+    static func sharedGroups(
+        snapshots: [RecipientGroupSnapshot],
+        targetAccountIdHex: String?,
+        myAccountIdHex: String?
+    ) -> [SharedGroup] {
+        guard let target = normalized(targetAccountIdHex), let mine = normalized(myAccountIdHex),
+              target != mine
+        else { return [] }
+        return snapshots
+            .filter { snapshot in
+                guard snapshot.sanitizedName != nil,
+                      snapshot.isSelfMember,
+                      snapshot.memberIdsHex.count >= 2
+                else { return false }
+                let roster = Set(snapshot.memberIdsHex.map { $0.lowercased() })
+                return roster.contains(target) && roster.contains(mine)
+            }
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+            .map { snapshot in
+                SharedGroup(
+                    groupIdHex: snapshot.groupIdHex,
+                    title: snapshot.title,
+                    avatarUrl: snapshot.avatarUrl,
+                    memberCount: snapshot.memberIdsHex.count
+                )
+            }
+    }
+
+    /// Groups the viewer could add the subject to: named groups where the
+    /// viewer is an admin member and the subject isn't on the roster. The
+    /// engine still enforces admin rights on the invite itself.
+    static func addableGroups(
+        snapshots: [RecipientGroupSnapshot],
+        targetAccountIdHex: String?,
+        myAccountIdHex: String?
+    ) -> [SharedGroup] {
+        guard let target = normalized(targetAccountIdHex), let mine = normalized(myAccountIdHex),
+              target != mine
+        else { return [] }
+        return snapshots
+            .filter { snapshot in
+                guard snapshot.sanitizedName != nil,
+                      snapshot.isSelfMember,
+                      !snapshot.memberIdsHex.isEmpty
+                else { return false }
+                let roster = Set(snapshot.memberIdsHex.map { $0.lowercased() })
+                let admins = Set(snapshot.adminIdsHex.map { $0.lowercased() })
+                return admins.contains(mine) && roster.contains(mine) && !roster.contains(target)
+            }
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+            .map { snapshot in
+                SharedGroup(
+                    groupIdHex: snapshot.groupIdHex,
+                    title: snapshot.title,
+                    avatarUrl: snapshot.avatarUrl,
+                    memberCount: snapshot.memberIdsHex.count
+                )
+            }
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+}

@@ -653,48 +653,40 @@ struct ConversationView: View {
             .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
             .bottomInputChromeAccessory { composerArea }
             .overlay { centeredActionsOverlay }
-            .navigationTitle(conversationChrome.title)
+            // The identity cluster lives leading-aligned next to the back
+            // chevron; an inline system title would double it up.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarRole(.editor)
             .toolbar {
-                ToolbarItem(placement: .principal) {
+                ToolbarItem(placement: .topBarLeading) {
                     conversationTitle
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        viewModel?.search.activate()
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    .accessibilityLabel("Search")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showDetails = true
-                    } label: {
-                        Image(systemName: "info.circle")
-                    }
-                    .accessibilityLabel("Group details")
+            }
+            // An isPresented push fights navigation-path swaps: unwind it
+            // before the pending chat replaces the stack, or the details page
+            // re-asserts itself over the new conversation.
+            .onChange(of: appState.pendingChatId) { _, pending in
+                if pending != nil {
+                    showDetails = false
                 }
             }
-            .sheet(isPresented: $showDetails) {
+            .navigationDestination(isPresented: $showDetails) {
                 if let viewModel {
-                    NavigationStack {
-                        GroupDetailsView(
-                            viewModel: viewModel,
-                            onGroupChanged: { group in
-                                onGroupChanged?(group)
-                            },
-                            onGroupLeft: { groupIdHex in
-                                showDetails = false
-                                onGroupLeft?(groupIdHex)
-                            },
-                            onGroupDeleted: { groupIdHex in
-                                showDetails = false
-                                onGroupDeleted?(groupIdHex)
-                            }
-                        )
-                    }
-                    .appAppearance()
+                    GroupDetailsView(
+                        viewModel: viewModel,
+                        onGroupChanged: { group in
+                            onGroupChanged?(group)
+                        },
+                        onGroupLeft: { groupIdHex in
+                            showDetails = false
+                            onGroupLeft?(groupIdHex)
+                        },
+                        onGroupDeleted: { groupIdHex in
+                            showDetails = false
+                            onGroupDeleted?(groupIdHex)
+                        }
+                    )
                 }
             }
             .sheet(item: $emojiPickerTarget) { target in
@@ -997,36 +989,48 @@ struct ConversationView: View {
         .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
     }
 
+    /// Leading identity cluster: avatar beside the back chevron, then the
+    /// name (with a timer glyph while disappearing messages are on) over the
+    /// member count. Tapping it is the single way into the details page for
+    /// both direct messages and groups.
     @ViewBuilder
     private var conversationTitle: some View {
         let chrome = conversationChrome
         Button {
-            openConversationHeaderDestination()
+            // The destination renders only once the model exists; a tap in
+            // the load window would push an empty page.
+            guard viewModel != nil else { return }
+            showDetails = true
         } label: {
-            VStack(spacing: 0) {
-                Text(chrome.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                conversationHeaderSecondary(subtitle: chrome.subtitle)
+            HStack(spacing: 10) {
+                if let viewModel {
+                    let groupDisplay = viewModel.groupDisplay
+                    AvatarBubble(
+                        seed: GroupDisplay.avatarSeed(for: groupDisplay),
+                        title: chrome.title,
+                        pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+                    )
+                    .frame(width: 34, height: 34)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 4) {
+                        Text(chrome.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
+                            Image(systemName: "timer")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(L10n.string("Disappearing messages on"))
+                        }
+                    }
+                    conversationHeaderSecondary(subtitle: chrome.subtitle)
+                }
             }
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
-    }
-
-    /// Header tap target: a DM opens the contact's profile (where a private
-    /// nickname can be set); a group opens the details/settings sheet. For a DM
-    /// whose counterpart hasn't resolved yet, fall back to details rather than
-    /// mistaking it for a group.
-    private func openConversationHeaderDestination() {
-        guard let viewModel, viewModel.groupDisplay.isDirectMessage else {
-            showDetails = true
-            return
-        }
-        if let npub = viewModel.directMessageCounterpartNpub {
-            appState.presentProfile(npub: npub)
-        } else {
-            showDetails = true
-        }
+        .accessibilityHint(L10n.string("Shows conversation details"))
     }
 
     @ViewBuilder
@@ -1045,11 +1049,14 @@ struct ConversationView: View {
             }
             .lineLimit(1)
         case .subtitle(let value):
-            Text(value ?? " ")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .opacity(value == nil ? 0 : 1)
+            // No placeholder line when there is no subtitle (direct messages):
+            // reserving the space pushes the name off vertical center.
+            if let value {
+                Text(value)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 

@@ -171,12 +171,29 @@ enum DuckDuckGoImageSearchError: LocalizedError {
     }
 }
 
+
+/// Reference box for the save callback — the same toolchain hazard
+/// `GroupRetentionSubmitter` works around: an async closure stored in a view
+/// struct garbles its argument in debug builds, which crashed the save path.
+@MainActor
+final class GroupImageSaveSubmitter {
+    private let run: (String?) async throws -> Void
+
+    init(_ run: @escaping (String?) async throws -> Void) {
+        self.run = run
+    }
+
+    func save(_ urlString: String?) async throws {
+        try await run(urlString)
+    }
+}
+
 struct GroupImageURLSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let initialURL: String?
     var searchClient = DuckDuckGoImageSearchClient()
-    let onSave: (String?) async throws -> Void
+    let onSave: GroupImageSaveSubmitter
 
     @State private var imageURLDraft: String
     @State private var searchQuery = ""
@@ -193,7 +210,7 @@ struct GroupImageURLSheet: View {
     init(
         initialURL: String?,
         searchClient: DuckDuckGoImageSearchClient = DuckDuckGoImageSearchClient(),
-        onSave: @escaping (String?) async throws -> Void
+        onSave: GroupImageSaveSubmitter
     ) {
         self.initialURL = initialURL
         self.searchClient = searchClient
@@ -481,7 +498,7 @@ struct GroupImageURLSheet: View {
         saveError = nil
         defer { isSaving = false }
         do {
-            try await onSave(urlString)
+            try await onSave.save(urlString)
             dismiss()
         } catch {
             saveError = error.localizedDescription

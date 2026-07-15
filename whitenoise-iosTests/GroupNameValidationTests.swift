@@ -23,19 +23,19 @@ struct GroupNameValidationTests {
         #expect(sanitized.count == ContentSanitizer.maxGroupNameLength)
     }
 
-    @Test func newChatGroupNameUsesSanitizedEmptyStringSentinel() {
-        #expect(NewChatSheet.normalizedGroupName("") == "")
-        #expect(NewChatSheet.normalizedGroupName(" \n\t ") == "")
-        #expect(NewChatSheet.normalizedGroupName(" \u{202E}Research\nLab ") == "Research Lab")
+    @Test func newGroupNameUsesSanitizedEmptyStringSentinel() {
+        #expect(NewGroupPresentation.normalizedName("") == "")
+        #expect(NewGroupPresentation.normalizedName(" \n\t ") == "")
+        #expect(NewGroupPresentation.normalizedName(" \u{202E}Research\nLab ") == "Research Lab")
     }
 
-    @Test func newChatGroupDescriptionSanitizesCapsAndDropsBlankValues() {
-        #expect(NewChatSheet.normalizedGroupDescription("") == nil)
-        #expect(NewChatSheet.normalizedGroupDescription(" \n\t ") == nil)
-        let description = NewChatSheet.normalizedGroupDescription("  Mission\u{202E}\n\n\nnotes  ")
+    @Test func newGroupDescriptionSanitizesCapsAndDropsBlankValues() {
+        #expect(NewGroupPresentation.normalizedDescription("") == nil)
+        #expect(NewGroupPresentation.normalizedDescription(" \n\t ") == nil)
+        let description = NewGroupPresentation.normalizedDescription("  Mission\u{202E}\n\n\nnotes  ")
         #expect(description == "Mission\n\nnotes")
 
-        let oversized = NewChatSheet.normalizedGroupDescription(String(repeating: "x", count: 500))
+        let oversized = NewGroupPresentation.normalizedDescription(String(repeating: "x", count: 500))
         #expect(oversized?.count == ContentSanitizer.maxGroupDescriptionLength)
     }
 
