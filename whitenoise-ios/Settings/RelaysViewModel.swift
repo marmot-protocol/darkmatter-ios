@@ -59,6 +59,11 @@ final class RelaysViewModel {
 
     var lists: AccountRelayListsFfi?
     var pendingUrl = ""
+    @ObservationIgnored private var actionTasks: [UUID: Task<Void, Never>] = [:]
+
+    deinit {
+        for task in actionTasks.values { task.cancel() }
+    }
     var saveError: String?
     var savedAt: Date?
 
@@ -136,9 +141,10 @@ final class RelaysViewModel {
 
     func addPending(using dataSource: any RelaysViewModelDataSource) {
         guard let normalized = RelaySettings.normalizedRelayURL(pendingUrl), canAdd else { return }
-        Task {
-            if await save(currentRelays + [normalized], using: dataSource) {
-                pendingUrl = ""
+        trackActionTask { [weak self] in
+            guard let self else { return }
+            if await self.save(self.currentRelays + [normalized], using: dataSource) {
+                self.pendingUrl = ""
             }
         }
     }
@@ -153,7 +159,21 @@ final class RelaysViewModel {
             queueRelayDeletes(urls, using: dataSource)
             return
         }
-        Task { _ = await deleteRelayURLs(urls, using: dataSource) }
+        trackActionTask { [weak self] in
+            guard let self else { return }
+            _ = await self.deleteRelayURLs(urls, using: dataSource)
+        }
+    }
+
+    /// Fire-and-forget UI actions get tracked, weakly-capturing tasks so a
+    /// dismissed screen doesn't stay alive issuing relay-save FFI; `deinit`
+    /// cancels whatever is still in flight.
+    private func trackActionTask(_ operation: @escaping @MainActor () async -> Void) {
+        let id = UUID()
+        actionTasks[id] = Task { @MainActor [weak self] in
+            await operation()
+            self?.actionTasks[id] = nil
+        }
     }
 
     @discardableResult

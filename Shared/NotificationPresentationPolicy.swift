@@ -86,6 +86,11 @@ nonisolated enum NotificationPresentationPolicy {
             .sorted(by: orderedBefore)
     }
 
+    // Caps how many additional records the NSE adds individually and folds any
+    // overflow into per-route summary presentations. The overflow records have
+    // already been consumed from Marmot's background notification cursor, so
+    // they must stay represented rather than be silently abandoned; the summary
+    // keeps the consumed-cursor count visible without an unbounded `add` loop.
     static func boundedAdditionalPresentations(
         from additionalUpdates: [NotificationUpdateFfi],
         nickname: (String, String) -> String? = { _, _ in nil }
@@ -102,19 +107,6 @@ nonisolated enum NotificationPresentationPolicy {
             LocalNotificationProjection.makePresentation(for: $0, nickname: nickname)
         }
             + overflowSummaryPresentations(from: overflowUpdates, nickname: nickname)
-    }
-
-    static func boundedAdditionalPresentations(
-        after primary: LocalNotificationPresentation,
-        from additional: [LocalNotificationPresentation]
-    ) -> [LocalNotificationPresentation] {
-        guard additional.count > maxAdditionalPresentations + 1 else {
-            return additional
-        }
-
-        let shown = Array(additional.prefix(maxAdditionalPresentations))
-        let overflow = additional.dropFirst(maxAdditionalPresentations)
-        return shown + overflowSummaryPresentations(from: Array(overflow))
     }
 
     static func overflowSummaryPresentations(
@@ -138,27 +130,6 @@ nonisolated enum NotificationPresentationPolicy {
                   let base = LocalNotificationProjection.makePresentation(for: bucket.first, nickname: nickname)
             else { return nil }
             return summaryPresentation(after: base, overflowCount: bucket.count)
-        }
-    }
-
-    static func overflowSummaryPresentations(
-        from overflow: [LocalNotificationPresentation]
-    ) -> [LocalNotificationPresentation] {
-        var buckets: [OverflowRouteKey: (first: LocalNotificationPresentation, count: Int)] = [:]
-        var order: [OverflowRouteKey] = []
-        for presentation in overflow {
-            let key = OverflowRouteKey(presentation)
-            if let existing = buckets[key] {
-                buckets[key] = (existing.first, existing.count + 1)
-            } else {
-                buckets[key] = (presentation, 1)
-                order.append(key)
-            }
-        }
-
-        return order.compactMap { key in
-            guard let bucket = buckets[key] else { return nil }
-            return summaryPresentation(after: bucket.first, overflowCount: bucket.count)
         }
     }
 
@@ -216,12 +187,6 @@ nonisolated enum NotificationPresentationPolicy {
             threadIdentifier = update.conversationKey.isEmpty
                 ? "\(update.accountRef):\(update.groupIdHex)"
                 : update.conversationKey
-        }
-
-        init(_ presentation: LocalNotificationPresentation) {
-            accountRef = presentation.route.accountRef
-            groupIdHex = presentation.route.groupIdHex
-            threadIdentifier = presentation.threadIdentifier
         }
     }
 }
