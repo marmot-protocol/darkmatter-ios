@@ -1,12 +1,45 @@
+import LocalAuthentication
 import SwiftUI
 
 struct PrivacySecuritySettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var model = PrivacySecuritySettingsViewModel()
+    @State private var appLockCapability = AppLockCapability(available: false, biometryType: .none)
 
     var body: some View {
         @Bindable var model = model
         return Form {
+            Section {
+                Toggle(isOn: Binding(
+                    get: { appState.appLock.isEnabled },
+                    set: { enabled in Task { await appState.appLock.setEnabled(enabled) } }
+                )) {
+                    Label(appLockToggleTitle, systemImage: appLockToggleIcon)
+                }
+                .disabled(!appLockCapability.available)
+
+                if appState.appLock.isEnabled {
+                    Picker(selection: Binding(
+                        get: { appState.appLock.gracePeriod },
+                        set: { appState.appLock.gracePeriod = $0 }
+                    )) {
+                        ForEach(AppLockGracePeriod.allCases, id: \.self) { period in
+                            Text(period.displayName).tag(period)
+                        }
+                    } label: {
+                        Label("Auto-lock", systemImage: "clock")
+                    }
+                }
+            } header: {
+                Text("App Lock")
+            } footer: {
+                if appLockCapability.available {
+                    Text("Hides the app's content in the app switcher and requires unlocking when you return.")
+                } else {
+                    Text("To use App Lock, set a passcode on this device.")
+                }
+            }
+
             Section {
                 Toggle(isOn: Binding(
                     get: { model.telemetrySettings?.exportEnabled ?? false },
@@ -139,6 +172,7 @@ struct PrivacySecuritySettingsView: View {
         }
         .navigationTitle("Privacy & Security")
         .navigationBarTitleDisplayMode(.inline)
+        .task { appLockCapability = AppLockCapability.current() }
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
         .alert(
@@ -156,6 +190,24 @@ struct PrivacySecuritySettingsView: View {
 
     private var telemetryFooter: String {
         "Anonymous telemetry helps improve reliability and performance."
+    }
+
+    private var appLockToggleTitle: String {
+        switch appLockCapability.biometryType {
+        case .faceID: L10n.string("Require Face ID")
+        case .touchID: L10n.string("Require Touch ID")
+        case .opticID: L10n.string("Require Optic ID")
+        default: L10n.string("Require passcode")
+        }
+    }
+
+    private var appLockToggleIcon: String {
+        switch appLockCapability.biometryType {
+        case .faceID: "faceid"
+        case .touchID: "touchid"
+        case .opticID: "opticid"
+        default: "lock.fill"
+        }
     }
 
     @ViewBuilder

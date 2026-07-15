@@ -64,6 +64,7 @@ struct whitenoise_iosApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState = AppState()
+    @State private var appLockOverlay = AppLockOverlayPresenter()
 
     var body: some Scene {
         WindowGroup {
@@ -74,6 +75,11 @@ struct whitenoise_iosApp: App {
                 .appAppearance()
                 .task {
                     appState.setAppSceneActive(scenePhase == .active)
+                    appLockOverlay.update(for: appState.appLock.shield, controller: appState.appLock)
+                    if scenePhase == .active {
+                        appState.appLock.handleScenePhaseActive()
+                        Task { await appState.appLock.requestUnlock() }
+                    }
                     await appState.bootstrap()
                 }
                 .onOpenURL { url in
@@ -82,14 +88,22 @@ struct whitenoise_iosApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {
                     case .active:
+                        appState.appLock.handleScenePhaseActive()
+                        Task { await appState.appLock.requestUnlock() }
                         appState.startForegroundActivation()
                     case .inactive:
+                        appState.appLock.handleScenePhaseInactive()
                         appState.setAppSceneActive(false)
                     case .background:
+                        appState.appLock.handleScenePhaseBackground()
                         beginBackgroundRuntimeSuspension()
                     @unknown default:
+                        appState.appLock.handleScenePhaseInactive()
                         appState.setAppSceneActive(false)
                     }
+                }
+                .onChange(of: appState.appLock.shield) { _, shield in
+                    appLockOverlay.update(for: shield, controller: appState.appLock)
                 }
         }
     }
