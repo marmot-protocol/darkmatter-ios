@@ -9,26 +9,13 @@ import MarmotKit
 @MainActor
 @Observable
 final class NewChatFlowViewModel {
-    struct StartPrompt: Equatable {
-        enum Kind: Equatable {
-            case invite
-            case error(message: String)
-        }
-
-        let kind: Kind
-        let recipientName: String?
-        let accountIdHex: String
-        let memberRef: String
-        let existingGroupIdHex: String?
-    }
-
     let directory = RecipientDirectory()
     let starter = DirectChatStarter()
     let groupSelection = RecipientSelection()
     let messageQuery = RecipientQueryModel()
     let groupQuery = RecipientQueryModel()
 
-    var startPrompt: StartPrompt?
+    var startPrompt: StartChatPrompt?
     private(set) var isCreatingGroup = false
     var groupCreateError: String?
 
@@ -79,36 +66,19 @@ final class NewChatFlowViewModel {
         using appState: AppState,
         onOpen: (String) -> Void
     ) async {
-        let outcome = await starter.start(
+        let outcome = await starter.startMapped(
             accountIdHex: accountIdHex,
             memberRef: memberRef,
             existingGroupIdHex: existingGroupIdHex,
             using: appState
         )
         switch outcome {
-        case .opened(let groupIdHex), .created(let groupIdHex):
-            Haptics.success()
+        case .open(let groupIdHex):
             onOpen(groupIdHex)
-        case .failed(let failure):
-            Haptics.error()
-            startPrompt = StartPrompt(
-                kind: promptKind(for: failure),
-                recipientName: appState.knownDisplayName(forAccountIdHex: accountIdHex),
-                accountIdHex: accountIdHex,
-                memberRef: memberRef,
-                existingGroupIdHex: existingGroupIdHex
-            )
+        case .prompt(let prompt):
+            startPrompt = prompt
         case .ignored:
             break
-        }
-    }
-
-    private func promptKind(for failure: StartChatFailurePresentation.Failure) -> StartPrompt.Kind {
-        switch failure {
-        case .missingSetup:
-            return .invite
-        case .other(let message):
-            return .error(message: message)
         }
     }
 

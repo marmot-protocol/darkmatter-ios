@@ -10,10 +10,15 @@ struct NewChatFlowView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    /// Pre-seeds the group selection and opens directly on the picker step —
+    /// the profile surface's "Start a Group with this person" entry point.
+    var initialGroupMembers: [MemberRefFfi] = []
+
     @State private var model = NewChatFlowViewModel()
     @State private var path: [Route] = []
     @State private var scanTarget: ScanTarget?
     @State private var showMyCode = false
+    @State private var didSeedInitialMembers = false
 
     enum Route: Hashable {
         case groupPicker
@@ -55,6 +60,15 @@ struct NewChatFlowView: View {
             }
         }
         .interactiveDismissDisabled(model.isBusy)
+        .onAppear {
+            guard !didSeedInitialMembers, !initialGroupMembers.isEmpty else { return }
+            didSeedInitialMembers = true
+            let excluded = model.excludedAccountIds(using: appState)
+            for member in initialGroupMembers {
+                model.groupSelection.add(member, excludedAccountIds: excluded)
+            }
+            path = [.groupPicker]
+        }
         .fullScreenCover(item: $scanTarget) { target in
             ScannerSheet { raw in
                 scanTarget = nil
@@ -266,7 +280,7 @@ struct NewMessageScreen: View {
 /// Inline outcome card after a failed chat start: an invite prompt when the
 /// recipient has no usable messaging setup, an error with retry otherwise.
 struct StartChatPromptSection: View {
-    let prompt: NewChatFlowViewModel.StartPrompt
+    let prompt: StartChatPrompt
     let onRetry: () -> Void
     let onDismiss: () -> Void
 

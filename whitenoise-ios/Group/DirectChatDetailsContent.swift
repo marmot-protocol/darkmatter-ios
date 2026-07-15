@@ -17,6 +17,7 @@ struct DirectChatDetailsContent: View {
 
     @State private var editingNickname = false
     @State private var nicknameDraft = ""
+    @State private var showContactProfile = false
 
     var body: some View {
         identitySection
@@ -32,16 +33,26 @@ struct DirectChatDetailsContent: View {
     private var identitySection: some View {
         Section {
             VStack(spacing: 10) {
-                AvatarBubble(
-                    seed: contactAccountIdHex ?? viewModel.group.groupIdHex,
-                    title: contactTitle,
-                    pictureURL: contactAccountIdHex.flatMap { appState.avatarURL(forAccountIdHex: $0) }
-                )
-                .frame(width: 88, height: 88)
+                Button {
+                    showContactProfile = true
+                } label: {
+                    VStack(spacing: 10) {
+                        AvatarBubble(
+                            seed: contactAccountIdHex ?? viewModel.group.groupIdHex,
+                            title: contactTitle,
+                            pictureURL: contactAccountIdHex.flatMap { appState.avatarURL(forAccountIdHex: $0) }
+                        )
+                        .frame(width: 88, height: 88)
 
-                Text(contactTitle)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
+                        Text(contactTitle)
+                            .font(.title2.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(contactNpub == nil)
+                .accessibilityLabel(L10n.formatted("Show profile for %@", contactTitle))
 
                 // When a private nickname overrides the header, keep the real
                 // profile name visible so the override is never confused for
@@ -71,6 +82,12 @@ struct DirectChatDetailsContent: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .listRowBackground(Color.clear)
+            .sheet(isPresented: $showContactProfile) {
+                if let contactNpub {
+                    ProfileSheetView(npub: contactNpub)
+                        .appAppearance()
+                }
+            }
             // Attached inside the section: presentation modifiers on a Form's
             // Section itself can detach when the form re-renders.
             .alert(nicknameAlertTitle, isPresented: $editingNickname) {

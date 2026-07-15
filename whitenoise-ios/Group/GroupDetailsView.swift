@@ -37,8 +37,8 @@ struct GroupDetailsView: View {
 
     @State private var model = GroupDetailsViewModel()
     @State private var sharedMediaGallery: MessageMediaGallery?
-    /// Pushes the tapped member's profile within this details navigation stack.
-    @State private var memberProfileNpub: String?
+    /// Presents the tapped member contextually, with moderation scope.
+    @State private var selectedMemberProfile: MemberProfileTarget?
     @State private var memberSearchText = ""
     @State private var membersExpanded = false
     @State private var showTechnicalDetails = false
@@ -92,8 +92,12 @@ struct GroupDetailsView: View {
         }
         .navigationTitle(isDirectMessage ? "Contact Info" : "Group Info")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(item: $memberProfileNpub) { npub in
-            ProfileView(npub: npub)
+        .sheet(item: $selectedMemberProfile) { target in
+            ProfileSheetView(
+                npub: target.member.npub,
+                moderation: moderationContext(for: target.member)
+            )
+            .appAppearance()
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -536,16 +540,13 @@ struct GroupDetailsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(visible, id: \.memberIdHex) { member in
-                    HStack(spacing: 8) {
-                        Button {
-                            memberProfileNpub = member.npub
-                        } label: {
-                            GroupMemberDetailsRow(member: member)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        memberActionsMenu(for: member)
+                    Button {
+                        selectedMemberProfile = MemberProfileTarget(member: member)
+                    } label: {
+                        GroupMemberDetailsRow(member: member)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         swipeActions(for: member)
                     }
@@ -858,76 +859,25 @@ struct GroupDetailsView: View {
 
     // MARK: - Member actions
 
-    @ViewBuilder
-    private func memberActionsMenu(for member: GroupMemberDetailsFfi) -> some View {
-        // Copy npub is available to every member, so the menu always renders.
-        // Membership-management actions (admin/remove) stay gated on the
-        // caller's permissions and only appear when applicable.
-        Menu {
-            Button {
-                copyNpub(for: member)
-            } label: {
-                Label("Copy npub", systemImage: "doc.on.doc")
-            }
-
-            let actions = memberActions(for: member)
-            if !actions.isEmpty {
-                Divider()
-                memberActionButtons(for: member, actions: actions)
-            }
-        } label: {
-            Image(systemName: "ellipsis.circle")
-                .imageScale(.large)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Member actions")
+    private struct MemberProfileTarget: Identifiable {
+        let member: GroupMemberDetailsFfi
+        var id: String { member.memberIdHex }
     }
 
-    @ViewBuilder
-    private func memberActionButtons(
-        for member: GroupMemberDetailsFfi,
-        actions: [GroupMemberManagementAction]
-    ) -> some View {
-        if actions.contains(.promote) {
-            Button {
-                Task { await model.setAdmin(member: member, admin: true, using: appState) }
-            } label: {
-                Label("Make Admin", systemImage: "star")
-            }
-            .disabled(model.membershipActionInFlight)
-        }
-        if actions.contains(.demote) {
-            Button {
-                Task { await model.setAdmin(member: member, admin: false, using: appState) }
-            } label: {
-                Label("Remove Admin", systemImage: "star.slash")
-            }
-            .disabled(model.membershipActionInFlight)
-        }
-        if actions.contains(.selfDemote) {
-            Button(role: .destructive) {
-                model.pendingConfirmation = .selfDemote
-            } label: {
-                Label("Step Down as Admin", systemImage: "star.slash")
-            }
-            .disabled(model.membershipActionInFlight)
-        }
-        if actions.contains(.remove) {
-            Button(role: .destructive) {
-                model.pendingConfirmation = .remove(member)
-            } label: {
-                Label("Remove from Group", systemImage: "person.crop.circle.badge.minus")
-            }
-            .disabled(model.membershipActionInFlight)
-        }
-    }
-
-    private func copyNpub(for member: GroupMemberDetailsFfi) {
-        UIPasteboard.general.string = member.npub
-        Haptics.selection()
-        appState.present(.success(L10n.string("Copied to clipboard"), message: L10n.string("npub")))
+    /// Moderation scope for the contextual profile sheet, built from the
+    /// live management state each presentation. Self-demote stays in the
+    /// destructive section, not on another member's profile.
+    private func moderationContext(for member: GroupMemberDetailsFfi) -> ProfileModerationContext? {
+        let actions = memberActions(for: member).filter { $0 != .selfDemote }
+        guard !actions.isEmpty else { return nil }
+        return ProfileModerationContext(
+            actions: actions,
+            isAdmin: member.isAdmin,
+            isBusy: model.membershipActionInFlight,
+            onPromote: { Task { await model.setAdmin(member: member, admin: true, using: appState) } },
+            onDemote: { Task { await model.setAdmin(member: member, admin: false, using: appState) } },
+            onRemove: { Task { await model.remove(member: member, using: appState) } }
+        )
     }
 
     @ViewBuilder
