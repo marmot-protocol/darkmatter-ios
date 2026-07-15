@@ -193,6 +193,12 @@ final class AppState {
     /// back-reference from the scene-phase entry points so every gate computes
     /// the same boolean.
     var isAppSceneActive = true
+    /// False until any scene-phase entry point runs this launch. A UI-less
+    /// background launch (notification action on a terminated app) never
+    /// reports a phase while `isAppSceneActive` keeps its optimistic launch
+    /// default, so the pair distinguishes "scene is active" from "no scene
+    /// ever spoke". Written by `RuntimeLifecycle` alongside `isAppSceneActive`.
+    var sceneHasReportedPhase = false
     private(set) var profileRefreshGeneration = 0
 
     /// Foreground expiration-sweep loop for disappearing messages. Started
@@ -891,15 +897,30 @@ final class AppState {
     }
 
     @ObservationIgnored private var unreadSummaryRefreshGeneration = 0
+    /// Tracked so suspension can drain an in-flight badge refresh before the
+    /// runtime shuts down; an escaping task could otherwise hold the FFI
+    /// handle mid-`accountUnreadSummary()` while `shutdown()` runs.
+    @ObservationIgnored private var unreadSummaryRefreshTask: Task<Void, Never>?
 
     /// Fire-and-forget wrapper for foreground resume — background reads and
     /// notification actions can move the read cursor while the cached summary
     /// goes stale.
     @MainActor
     func scheduleAccountUnreadSummaryRefresh() {
-        Task { @MainActor [weak self] in
+        let previous = unreadSummaryRefreshTask
+        unreadSummaryRefreshTask = Task { @MainActor [weak self] in
+            await previous?.value
             await self?.refreshAccountUnreadSummaries()
         }
+    }
+
+    /// Awaited by `RuntimeLifecycle.cancelForegroundMaintenance` so no badge
+    /// refresh FFI read is in flight when suspension releases the runtime.
+    @MainActor
+    func drainUnreadSummaryRefresh() async {
+        let task = unreadSummaryRefreshTask
+        unreadSummaryRefreshTask = nil
+        await task?.value
     }
 
     /// Fetches the durable unread aggregate (client access is AppState's domain)
@@ -1076,6 +1097,8 @@ final class AppState {
     var isSigningOutForTesting: Bool { isSigningOut }
 
     var retentionSweeperIsActiveForTesting: Bool { retentionSweeper.isSweeping }
+
+    var hasPendingUnreadSummaryRefreshForTesting: Bool { unreadSummaryRefreshTask != nil }
     #endif
 }
 
