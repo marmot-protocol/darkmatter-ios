@@ -25,7 +25,6 @@ final class GroupDetailsViewModel {
     var pendingConfirmation: GroupDetailsConfirmation?
     var membershipActionInFlight = false
     var showRelays = false
-    var actionHelp: GroupActionHelp?
     var isExportingTranscript = false
     var transcriptExportURL: URL?
     var showTranscriptShareSheet = false
