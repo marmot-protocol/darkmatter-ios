@@ -315,26 +315,6 @@ struct MemberPickerTests {
         #expect(picker.error == "invalid member")
     }
 
-    @Test func createDoesNotReachClientWhenNoMembersStagedAfterFoldingEmptyPending() async throws {
-        // Empty pending makes addPending return true without staging anyone, so
-        // create must re-check members before touching the client — otherwise it
-        // reaches createGroup with an empty member list (and here, a client call
-        // that fails and surfaces an error). Mirrors AddMembersSheetViewModel.invite.
-        let appState = AppState(client: try MarmotClient.testClient())
-        appState.activeAccountRef = "account"
-        let viewModel = NewChatSheetViewModel()
-        var dismissed = false
-
-        await viewModel.create(using: appState, dismiss: { dismissed = true })
-
-        #expect(viewModel.memberPicker.members.isEmpty)
-        // Bailed before the client call, so no error was surfaced. Without the
-        // guard, create reaches currentMarmotClient()/createGroup and this fails.
-        #expect(viewModel.memberPicker.error == nil)
-        #expect(!viewModel.isCreating)
-        #expect(!dismissed)
-    }
-
     private enum TestError: Error {
         case unexpectedNormalize
     }

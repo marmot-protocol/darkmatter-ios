@@ -112,7 +112,7 @@ struct ChatsListView: View {
                 }
             }
             .sheet(isPresented: $showNewChat) {
-                NewChatSheet()
+                NewChatFlowView()
                     .appAppearance()
             }
             .sheet(isPresented: $showSettings) {
@@ -248,7 +248,7 @@ struct ChatsListView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel(searchCancellationActive ? "Clear search" : "New chat")
+        .accessibilityLabel(searchCancellationActive ? "Clear search" : "New message")
     }
 
     private var searchPlaceholderColor: Color {
@@ -676,13 +676,13 @@ private struct EmptyChatsState: View {
         ContentUnavailableView {
             Label("No chats yet", systemImage: "bubble.left.and.bubble.right")
         } description: {
-            Text("Start a conversation by inviting someone with their npub.")
+            Text("Search for someone you know, paste their npub, or scan their QR code.")
                 .multilineTextAlignment(.center)
         } actions: {
             Button {
                 action()
             } label: {
-                Label("New Chat", systemImage: "square.and.pencil")
+                Label("New Message", systemImage: "square.and.pencil")
                     .padding(.horizontal, 12)
             }
             .buttonStyle(.borderedProminent)
