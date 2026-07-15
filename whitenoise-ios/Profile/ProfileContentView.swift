@@ -24,9 +24,6 @@ struct ProfileContentView: View {
 
     let npub: String
     var moderation: ProfileModerationContext?
-    /// When set (sheet contexts), renders an Info row ahead of the
-    /// moderation actions that opens the full profile page.
-    var onShowInfo: (() -> Void)?
 
     @State private var model = ProfileViewModel()
     @State private var confirmingRemoval = false
@@ -47,8 +44,8 @@ struct ProfileContentView: View {
 
             primaryActionSection
             aboutSection
-            sharedGroupsSection
             moderationSection
+            sharedGroupsSection
         }
         .listStyle(.insetGrouped)
         .task(id: npub) { await model.resolve(npub: npub, using: appState) }
@@ -123,23 +120,26 @@ struct ProfileContentView: View {
                 Button {
                     Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
                 } label: {
-                    HStack {
+                    VStack(spacing: 4) {
                         if model.starter.isCreating {
                             ProgressView()
                                 .controlSize(.small)
+                                .frame(height: 20)
+                        } else {
+                            Image(systemName: "message")
+                                .font(.body.weight(.semibold))
+                                .frame(height: 20)
                         }
-                        Label("Message", systemImage: "bubble.left.and.bubble.right.fill")
-                            .font(.body.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
+                        Text("Message")
+                            .font(.caption2)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(.rect)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.accentColor)
-                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .disabled(model.starter.isCreating)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
-                .disabled(model.starter.isCreating)
             }
         }
     }
@@ -167,6 +167,7 @@ struct ProfileContentView: View {
                 contactName: title,
                 sharedGroups: model.sharedGroups,
                 addableGroups: model.addableGroups,
+                showsGroupActions: moderation == nil,
                 onOpenChat: openChat
             )
         }
@@ -176,11 +177,8 @@ struct ProfileContentView: View {
 
     @ViewBuilder
     private var moderationSection: some View {
-        if onShowInfo != nil || moderation?.actions.isEmpty == false {
+        if moderation?.actions.isEmpty == false {
             Section {
-                if let onShowInfo {
-                    Button("Info", action: onShowInfo)
-                }
                 moderationButtons
             } header: {
                 Text("Group Membership")

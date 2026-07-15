@@ -144,6 +144,8 @@ struct RecipientQuickActionRow: View {
 struct RecipientSearchField: View {
     @Binding var text: String
     var placeholder: LocalizedStringKey = "Search or paste npub"
+    /// Optional QR-scan affordance rendered beside the paste icon.
+    var onScan: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -169,6 +171,17 @@ struct RecipientSearchField: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Paste")
+                if let onScan {
+                    Button(action: onScan) {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.callout)
+                            .foregroundStyle(.tint)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scan QR Code")
+                }
             } else {
                 Button {
                     text = ""

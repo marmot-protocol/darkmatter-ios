@@ -38,11 +38,8 @@ struct GroupDetailsView: View {
     @State private var model = GroupDetailsViewModel()
     @State private var sharedMediaGallery: MessageMediaGallery?
     /// Presents the tapped member contextually, with moderation scope.
-    @State private var selectedMemberProfile: MemberProfileTarget?
-    /// Row tap opens the compact profile sheet; its Info row promotes the
-    /// pending target to a full-page push once the sheet has dismissed.
+    /// Row tap opens the compact profile sheet with moderation scope.
     @State private var memberSheetTarget: MemberProfileTarget?
-    @State private var pendingFullProfile: MemberProfileTarget?
     @State private var memberSearchText = ""
     @State private var membersExpanded = false
     @State private var showTechnicalDetails = false
@@ -99,26 +96,11 @@ struct GroupDetailsView: View {
         .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
-        .navigationDestination(item: $selectedMemberProfile) { target in
-            memberProfileDestination(for: target.member)
-        }
-        .sheet(
-            item: $memberSheetTarget,
-            onDismiss: {
-                if let pendingFullProfile {
-                    selectedMemberProfile = pendingFullProfile
-                    self.pendingFullProfile = nil
-                }
-            }
-        ) { target in
+        .sheet(item: $memberSheetTarget) { target in
             NavigationStack {
                 ProfileContentView(
                     npub: target.member.npub,
-                    moderation: moderationContext(for: target.member),
-                    onShowInfo: {
-                        pendingFullProfile = target
-                        memberSheetTarget = nil
-                    }
+                    moderation: moderationContext(for: target.member)
                 )
                 .navigationTitle("Profile")
                 .navigationBarTitleDisplayMode(.inline)
@@ -792,7 +774,7 @@ struct GroupDetailsView: View {
                         .textSelection(.enabled)
                 }
             } label: {
-                Text("Technical Details")
+                Text("Group Details")
             }
         }
     }
@@ -1007,10 +989,6 @@ struct GroupDetailsView: View {
     }
 
     // MARK: - Member actions
-
-    private func memberProfileDestination(for member: GroupMemberDetailsFfi) -> some View {
-        profileDestination(npub: member.npub, moderation: moderationContext(for: member))
-    }
 
     private func profileDestination(npub: String, moderation: ProfileModerationContext?) -> some View {
         ProfileContentView(npub: npub, moderation: moderation)

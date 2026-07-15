@@ -11,6 +11,9 @@ struct GroupsInCommonSection: View {
     let contactName: String
     let sharedGroups: [SharedGroupsProjection.SharedGroup]
     let addableGroups: [SharedGroupsProjection.SharedGroup]
+    /// The create/add rows belong to the standalone profile and contact
+    /// pages; moderation sheets show just the shared list.
+    var showsGroupActions = true
     let onOpenChat: (String) -> Void
 
     @State private var expanded = false
@@ -21,6 +24,7 @@ struct GroupsInCommonSection: View {
 
     var body: some View {
         Section {
+            if showsGroupActions {
             Button {
                 showStartGroup = true
             } label: {
@@ -43,6 +47,7 @@ struct GroupsInCommonSection: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+            }
             }
 
             ForEach(visibleShared) { group in

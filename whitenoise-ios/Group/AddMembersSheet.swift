@@ -21,7 +21,7 @@ struct AddMembersSheet: View {
         NavigationStack {
             List {
                 Section {
-                    RecipientSearchField(text: $query.text)
+                    RecipientSearchField(text: $query.text, onScan: { showScanner = true })
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
                         .listRowBackground(Color.clear)
                 }
@@ -33,17 +33,6 @@ struct AddMembersSheet: View {
                         }
                         .listRowInsets(EdgeInsets())
                     }
-                }
-
-                if query.isBlank {
-                    Section {
-                        RecipientQuickActionRow(
-                            title: "Scan QR Code",
-                            systemImage: "qrcode.viewfinder",
-                            action: { showScanner = true }
-                        )
-                    }
-                    .disabled(model.isInviting)
                 }
 
                 if query.isIdentifierQuery {

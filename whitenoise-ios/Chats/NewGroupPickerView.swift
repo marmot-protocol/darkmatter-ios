@@ -15,7 +15,7 @@ struct NewGroupPickerView: View {
         @Bindable var query = model.groupQuery
         List {
             Section {
-                RecipientSearchField(text: $query.text)
+                RecipientSearchField(text: $query.text, onScan: onScan)
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
                     .listRowBackground(Color.clear)
             }
@@ -26,16 +26,6 @@ struct NewGroupPickerView: View {
                         model.groupSelection.remove(accountIdHex: member.accountIdHex)
                     }
                     .listRowInsets(EdgeInsets())
-                }
-            }
-
-            if query.isBlank {
-                Section {
-                    RecipientQuickActionRow(
-                        title: "Scan QR Code",
-                        systemImage: "qrcode.viewfinder",
-                        action: onScan
-                    )
                 }
             }
 
