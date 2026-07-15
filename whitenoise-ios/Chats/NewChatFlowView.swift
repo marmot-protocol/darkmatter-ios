@@ -216,11 +216,13 @@ struct NewMessageScreen: View {
                 systemImage: "qrcode.viewfinder",
                 action: onScan
             )
-            RecipientQuickActionRow(
-                title: "Show My QR Code",
-                systemImage: "qrcode",
-                action: onShowMyCode
-            )
+            if appState.activeAccount != nil {
+                RecipientQuickActionRow(
+                    title: "Show My QR Code",
+                    systemImage: "qrcode",
+                    action: onShowMyCode
+                )
+            }
         }
         .disabled(model.isBusy)
     }

@@ -24,8 +24,6 @@ struct ProfileContentView: View {
 
     let npub: String
     var moderation: ProfileModerationContext?
-    /// False in sheet contexts: hides the create-group/add-to-group rows.
-    var showsGroupActions = true
 
     @State private var model = ProfileViewModel()
     @State private var confirmingRemoval = false
@@ -191,7 +189,6 @@ struct ProfileContentView: View {
                 contactName: title,
                 sharedGroups: model.sharedGroups,
                 addableGroups: model.addableGroups,
-                showsGroupActions: showsGroupActions,
                 onOpenChat: openChat,
                 onStartGroup: { showStartGroup = true },
                 onAddToGroup: { showAddToGroup = true }

@@ -24,7 +24,6 @@ final class GroupDetailsViewModel {
     var pushDebugError: String?
     var pendingConfirmation: GroupDetailsConfirmation?
     var membershipActionInFlight = false
-    var showRelays = false
     var isExportingTranscript = false
     var transcriptExportURL: URL?
     var showTranscriptShareSheet = false
@@ -61,7 +60,9 @@ final class GroupDetailsViewModel {
 
     func invite(refs: [String], using appState: AppState) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
-        guard !membershipActionInFlight else { return }
+        // Throwing keeps the caller from treating a skipped invite as success
+        // (the sheet would dismiss and drop the staged selection).
+        guard !membershipActionInFlight else { throw GroupDetailsActionError.operationInFlight }
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
         do {

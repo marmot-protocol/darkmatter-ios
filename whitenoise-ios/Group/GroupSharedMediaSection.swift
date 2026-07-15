@@ -41,10 +41,6 @@ nonisolated enum GroupSharedMediaPresentation {
         items.filter(\.isVisual)
     }
 
-    static func fileItems(from items: [GroupSharedMediaItem]) -> [GroupSharedMediaItem] {
-        items.filter { !$0.isVisual }
-    }
-
     @MainActor
     static func subtitle(for item: GroupSharedMediaItem) -> String {
         let mediaType = ContentSanitizer.singleLine(item.attachment.mediaType, maxLength: 100)

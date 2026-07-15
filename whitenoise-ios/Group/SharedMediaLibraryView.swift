@@ -338,6 +338,7 @@ struct SharedMediaLibraryView: View {
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+            .disabled(item.messageIdHex == nil)
 
             Button {
                 Task { await openFile(item) }
@@ -432,6 +433,7 @@ struct SharedMediaLibraryView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(L10n.formatted("Share %@", link.display))
                     }
                 }
             } footer: {

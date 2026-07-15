@@ -5,15 +5,11 @@ import MarmotKit
 /// with them, add them to a group you administer, then the groups you share,
 /// collapsed to a short preview with See all.
 struct GroupsInCommonSection: View {
-    @Environment(AppState.self) private var appState
     let contactAccountIdHex: String
     let contactNpub: String
     let contactName: String
     let sharedGroups: [SharedGroupsProjection.SharedGroup]
     let addableGroups: [SharedGroupsProjection.SharedGroup]
-    /// The create/add rows belong to the standalone profile and contact
-    /// pages; moderation sheets show just the shared list.
-    var showsGroupActions = true
     let onOpenChat: (String) -> Void
     /// Hoisted to the owning screen: sheets attached to a `Section` detach
     /// when the list re-renders (the same hazard as the picker scanner).
@@ -26,7 +22,6 @@ struct GroupsInCommonSection: View {
 
     var body: some View {
         Section {
-            if showsGroupActions {
             Button {
                 onStartGroup()
             } label: {
@@ -49,7 +44,6 @@ struct GroupsInCommonSection: View {
                         .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
-            }
             }
 
             ForEach(visibleShared) { group in

@@ -18,13 +18,6 @@ nonisolated enum AddMembersPresentation {
         case normalized(MemberRefFfi)
     }
 
-    /// True when `raw` already parses to a complete, valid profile reference
-    /// (npub/nprofile with a good checksum, or 64-char hex). Synchronous — no
-    /// Marmot hop.
-    static func isCompleteReference(_ raw: String) -> Bool {
-        memberRef(fromScannedPayload: raw) != nil
-    }
-
     static func memberRef(fromScannedPayload raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -74,8 +67,8 @@ nonisolated enum AddMembersPresentation {
         return .added(existingMembers + [normalized], normalized)
     }
 
-    static let selfRecipientMessage = "You can't add yourself to a chat."
-    static let existingMemberMessage = "That profile is already in this group."
+    static var selfRecipientMessage: String { L10n.string("You can't add yourself to a chat.") }
+    static var existingMemberMessage: String { L10n.string("That profile is already in this group.") }
 
     static func excludedNewChatAccountIds(activeAccountIdHex: String?) -> Set<String> {
         normalizedAccountSet([activeAccountIdHex])

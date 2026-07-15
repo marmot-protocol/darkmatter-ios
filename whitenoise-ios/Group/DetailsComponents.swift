@@ -34,7 +34,6 @@ struct CopyableIdentityChip: View {
     let copyValue: String
     let copiedToastTitle: String
 
-    @Environment(AppState.self) private var appState
     @State private var copied = false
 
     var body: some View {

@@ -37,6 +37,9 @@ final class NewChatFlowViewModel {
         onOpen: (String) -> Void
     ) async {
         startPrompt = nil
+        // Join any in-flight directory load so the reuse decision can't run
+        // against an empty candidate list and create a duplicate direct chat.
+        await directory.load(using: appState)
         let existing = existingDirectChatGroupIdHex(accountIdHex: accountIdHex)
         await runStart(
             accountIdHex: accountIdHex,
