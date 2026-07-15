@@ -64,7 +64,10 @@ nonisolated enum PinnedHTTPSFetcher {
         guard url.scheme?.lowercased() == "https",
               let host = url.host,
               !host.isEmpty,
-              let port = UInt16(exactly: url.port ?? 443)
+              let port = UInt16(exactly: url.port ?? 443),
+              // Mirror ContentSanitizer.imageURL: a peer-controlled URL must
+              // not steer the pinned connection off the standard HTTPS port.
+              port == 443
         else { throw FetchError.invalidRequest }
         return try HostResolutionGuard.resolvedPublicAddresses(host, resolver: resolver).map {
             Endpoint(address: $0, tlsServerName: host, port: port)

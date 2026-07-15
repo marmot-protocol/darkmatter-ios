@@ -30,6 +30,15 @@ struct ImportIdentityView: View {
         return trimmed
     }
 
+    /// Login/parse errors can echo the rejected input in their description;
+    /// redact anything secret-shaped (bech32 nsec runs, long hex runs) before
+    /// the message reaches a persistent label or toast.
+    static func redactedImportError(_ message: String) -> String {
+        message
+            .replacing(/nsec1[a-z0-9]+/.ignoresCase(), with: "nsec1…")
+            .replacing(/[0-9a-fA-F]{32,}/, with: "…")
+    }
+
     var body: some View {
         @Bindable var model = model
         return Form {
@@ -82,7 +91,7 @@ struct ImportIdentityView: View {
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(model.isImporting)
         .onDisappear {
-            model.identity = ""
+            model.scrubDismissedImportState()
         }
     }
 }
