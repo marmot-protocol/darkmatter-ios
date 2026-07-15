@@ -152,7 +152,11 @@ nonisolated enum ContentSanitizer {
               scheme == "https",
               let host = comps.host,
               !host.isEmpty,
-              !isPrivateOrLoopbackHost(host)
+              !isPrivateOrLoopbackHost(host),
+              // Standard HTTPS port only — an explicit port would let a peer
+              // steer TLS connections at arbitrary ports on public hosts, the
+              // one dimension the host checks don't constrain.
+              comps.port == nil || comps.port == 443
         else { return nil }
         return comps.url
     }
