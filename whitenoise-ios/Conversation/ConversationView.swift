@@ -1037,11 +1037,14 @@ struct ConversationView: View {
             }
             .lineLimit(1)
         case .subtitle(let value):
-            Text(value ?? " ")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .opacity(value == nil ? 0 : 1)
+            // No placeholder line when there is no subtitle (direct messages):
+            // reserving the space pushes the name off vertical center.
+            if let value {
+                Text(value)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 
