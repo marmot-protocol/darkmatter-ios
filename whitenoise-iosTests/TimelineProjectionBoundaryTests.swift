@@ -247,6 +247,21 @@ struct TimelineProjectionBoundaryTests {
         #expect(cached.storedPayloads.isEmpty)
     }
 
+    @Test func mediaUploadIntegrityDropsMismatchedReferences() async {
+        let acceptedData = Data([0x01, 0x02])
+        let rejectedData = Data([0x03, 0x04])
+        let acceptedReference = mediaReference(sourceEpoch: 7, plaintext: acceptedData)
+        let rejectedReference = mediaReference(sourceEpoch: 8, plaintext: Data([0xff]))
+
+        let verified = await MediaUploadIntegrity.verifiedAttachments(
+            plaintexts: [acceptedData, rejectedData],
+            references: [acceptedReference, rejectedReference]
+        )
+
+        #expect(verified.map(\.data) == [acceptedData])
+        #expect(verified.map(\.reference.plaintextSha256) == [acceptedReference.plaintextSha256])
+    }
+
     @Test func mediaDownloaderIgnoresHashMismatchedCacheHit() async throws {
         let downloadedData = Data([0x0c, 0x0d, 0x0e])
         let reference = mediaReference(sourceEpoch: 7, plaintext: downloadedData)
@@ -281,6 +296,42 @@ struct TimelineProjectionBoundaryTests {
         #expect(cached.cachedDataCalls == 1)
         #expect(cached.storedPayloads == [downloadedData])
         #expect(downloaded.referenceHashes == [reference.plaintextSha256])
+    }
+
+    @Test func mediaDownloaderCoalescesConcurrentCacheVerification() async throws {
+        let cachedData = Data(repeating: 0x5a, count: 512 * 1024)
+        let reference = mediaReference(sourceEpoch: 7, plaintext: cachedData)
+        let media = MessageMediaAttachment(
+            id: "message-a:\(reference.plaintextSha256):0:0",
+            reference: reference,
+            fileName: reference.fileName,
+            mediaType: reference.mediaType,
+            dim: nil,
+            localData: nil
+        )
+        let cached = CountingConversationMediaCache()
+        cached.cachedDataToReturn = cachedData
+        cached.blocksCachedDataRead = true
+        let downloader = ConversationMediaDownloader(cache: cached)
+
+        let first = Task {
+            try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
+        }
+        await cached.waitForCachedDataRead()
+        let secondRequestStarted = AsyncTestSignal()
+        let second = Task<Data, Error> {
+            secondRequestStarted.signal()
+            return try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
+        }
+        await secondRequestStarted.wait()
+        cached.releaseCachedDataRead()
+
+        let firstResult = try await first.value
+        let secondResult = try await second.value
+        #expect(firstResult == cachedData)
+        #expect(secondResult == cachedData)
+        #expect(cached.cachedDataCalls == 1)
+        #expect(cached.storedPayloads.isEmpty)
     }
 
     private func timelineRecord(
@@ -398,16 +449,52 @@ private final class CountingConversationMediaCache: ConversationMediaCacheAccess
     private(set) var storedReferenceHashes: [String] = []
     private(set) var storedSourceEpochs: [UInt64] = []
     var cachedDataToReturn: Data?
+    var blocksCachedDataRead = false
+    private let cachedDataReadStarted = AsyncTestSignal()
+    private let cachedDataReadReleased = AsyncTestSignal()
 
     func cachedData(for reference: MediaAttachmentReferenceFfi) async -> Data? {
         cachedDataCalls += 1
+        if blocksCachedDataRead {
+            cachedDataReadStarted.signal()
+            await cachedDataReadReleased.wait()
+        }
         return cachedDataToReturn
+    }
+
+    func waitForCachedDataRead() async {
+        await cachedDataReadStarted.wait()
+    }
+
+    func releaseCachedDataRead() {
+        cachedDataReadReleased.signal()
     }
 
     func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
         storedPayloads.append(data)
         storedReferenceHashes.append(reference.plaintextSha256)
         storedSourceEpochs.append(reference.sourceEpoch)
+    }
+}
+
+@MainActor
+private final class AsyncTestSignal {
+    private var isSignalled = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isSignalled else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func signal() {
+        guard !isSignalled else { return }
+        isSignalled = true
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        pendingWaiters.forEach { $0.resume() }
     }
 }
 

@@ -5,7 +5,7 @@ import UIKit
 // alongside encrypted-media uploads so recipients can show a preview before the
 // full image downloads. See https://evanw.github.io/thumbhash/ for the format.
 //
-// The encoder below is a faithful port of the reference Swift implementation
+// The codec below is a faithful port of the reference implementation
 // (github.com/evanw/thumbhash, MIT). The compound-expression decomposition and
 // while-loop style are deliberate workarounds for Swift compiler/debug-build
 // performance and are kept intact from the reference.
@@ -36,6 +36,15 @@ nonisolated enum ThumbHash {
     // ThumbHash encoding requires a tiny image; the reference caps usable input
     // at 100x100 and there is no quality benefit above that.
     static let maxEncodeEdge = 100
+    static let maxEncodedLength = 64
+    static let maxDecodedByteCount = 64
+    static let decodedEdge = 32
+
+    struct DecodedImage: Equatable, Sendable {
+        let width: Int
+        let height: Int
+        let rgba: Data
+    }
 
     /// Produces a base64-encoded ThumbHash string for `image`, or nil if the
     /// image cannot be rasterized. Suitable for the encrypted-media `thumbhash`
@@ -44,6 +53,163 @@ nonisolated enum ThumbHash {
         guard let rgba = rgbaBytes(from: image) else { return nil }
         let hash = rgbaToThumbHash(w: rgba.width, h: rgba.height, rgba: rgba.data)
         return hash.base64EncodedString()
+    }
+
+    /// Decodes an untrusted base64 ThumbHash into its naturally-sized RGBA8
+    /// placeholder. Input and output are deliberately bounded because the
+    /// value comes directly from an encrypted-media metadata tag.
+    static func decodedImage(from encoded: String) -> DecodedImage? {
+        guard !encoded.isEmpty, encoded.utf8.count <= maxEncodedLength else { return nil }
+        var normalized = encoded
+        switch normalized.utf8.count % 4 {
+        case 0:
+            break
+        case 2:
+            normalized += "=="
+        case 3:
+            normalized += "="
+        default:
+            return nil
+        }
+        guard let data = Data(base64Encoded: normalized),
+              data.count >= 5,
+              data.count <= maxDecodedByteCount
+        else {
+            return nil
+        }
+        return decodedImage(from: [UInt8](data))
+    }
+
+    private static func decodedImage(from hash: [UInt8]) -> DecodedImage? {
+        let header24 = Int(hash[0]) | (Int(hash[1]) << 8) | (Int(hash[2]) << 16)
+        let header16 = Int(hash[3]) | (Int(hash[4]) << 8)
+        let luminanceDC = Double(header24 & 63) / 63
+        let pDC = Double((header24 >> 6) & 63) / 31.5 - 1
+        let qDC = Double((header24 >> 12) & 63) / 31.5 - 1
+        let luminanceScale = Double((header24 >> 18) & 31) / 31
+        let hasAlpha = ((header24 >> 23) & 1) == 1
+        let pScale = Double((header16 >> 3) & 63) / 63
+        let qScale = Double((header16 >> 9) & 63) / 63
+        let isLandscape = ((header16 >> 15) & 1) == 1
+        let luminanceMaximum = header16 & 7
+        let luminanceX = max(3, isLandscape ? (hasAlpha ? 5 : 7) : luminanceMaximum)
+        let luminanceY = max(3, isLandscape ? luminanceMaximum : (hasAlpha ? 5 : 7))
+
+        let alphaDC: Double
+        let alphaScale: Double
+        let acStart: Int
+        if hasAlpha {
+            guard hash.count >= 6 else { return nil }
+            alphaDC = Double(hash[5] & 15) / 15
+            alphaScale = Double(hash[5] >> 4) / 15
+            acStart = 6
+        } else {
+            alphaDC = 1
+            alphaScale = 0
+            acStart = 5
+        }
+
+        var acIndex = 0
+        func decodeChannel(nx: Int, ny: Int, scale: Double) -> [Double] {
+            var coefficients: [Double] = []
+            coefficients.reserveCapacity(nx * ny)
+            for cy in 0..<ny {
+                var cx = cy == 0 ? 1 : 0
+                while cx * ny < nx * (ny - cy) {
+                    let slot = acStart + (acIndex >> 1)
+                    let nibble: Int
+                    if slot < hash.count {
+                        nibble = (Int(hash[slot]) >> ((acIndex & 1) << 2)) & 15
+                    } else {
+                        // Truncated hashes degrade to a neutral coefficient.
+                        nibble = 7
+                    }
+                    coefficients.append((Double(nibble) / 7.5 - 1) * scale)
+                    acIndex += 1
+                    cx += 1
+                }
+            }
+            return coefficients
+        }
+
+        let luminanceAC = decodeChannel(nx: luminanceX, ny: luminanceY, scale: luminanceScale)
+        let pAC = decodeChannel(nx: 3, ny: 3, scale: pScale * 1.25)
+        let qAC = decodeChannel(nx: 3, ny: 3, scale: qScale * 1.25)
+        let alphaAC = hasAlpha ? decodeChannel(nx: 5, ny: 5, scale: alphaScale) : []
+
+        let ratio = Double(luminanceX) / Double(luminanceY)
+        let width = ratio > 1 ? decodedEdge : max(1, Int((Double(decodedEdge) * ratio).rounded()))
+        let height = ratio > 1 ? max(1, Int((Double(decodedEdge) / ratio).rounded())) : decodedEdge
+        let xStop = max(luminanceX, hasAlpha ? 5 : 3)
+        let yStop = max(luminanceY, hasAlpha ? 5 : 3)
+        var rgba = Data(capacity: width * height * 4)
+        var xBasis = [Double](repeating: 0, count: xStop)
+        var yBasis = [Double](repeating: 0, count: yStop)
+
+        for y in 0..<height {
+            for x in 0..<width {
+                var luminance = luminanceDC
+                var p = pDC
+                var q = qDC
+                var alpha = alphaDC
+                for cx in 0..<xStop {
+                    xBasis[cx] = cos(.pi / Double(width) * (Double(x) + 0.5) * Double(cx))
+                }
+                for cy in 0..<yStop {
+                    yBasis[cy] = cos(.pi / Double(height) * (Double(y) + 0.5) * Double(cy))
+                }
+
+                var coefficientIndex = 0
+                for cy in 0..<luminanceY {
+                    var cx = cy == 0 ? 1 : 0
+                    let doubledYBasis = yBasis[cy] * 2
+                    while cx * luminanceY < luminanceX * (luminanceY - cy) {
+                        luminance += luminanceAC[coefficientIndex] * xBasis[cx] * doubledYBasis
+                        coefficientIndex += 1
+                        cx += 1
+                    }
+                }
+
+                coefficientIndex = 0
+                for cy in 0..<3 {
+                    var cx = cy == 0 ? 1 : 0
+                    let doubledYBasis = yBasis[cy] * 2
+                    while cx < 3 - cy {
+                        let basis = xBasis[cx] * doubledYBasis
+                        p += pAC[coefficientIndex] * basis
+                        q += qAC[coefficientIndex] * basis
+                        coefficientIndex += 1
+                        cx += 1
+                    }
+                }
+
+                if hasAlpha {
+                    coefficientIndex = 0
+                    for cy in 0..<5 {
+                        var cx = cy == 0 ? 1 : 0
+                        let doubledYBasis = yBasis[cy] * 2
+                        while cx < 5 - cy {
+                            alpha += alphaAC[coefficientIndex] * xBasis[cx] * doubledYBasis
+                            coefficientIndex += 1
+                            cx += 1
+                        }
+                    }
+                }
+
+                let blue = luminance - 2 / 3 * p
+                let red = (3 * luminance - blue + q) / 2
+                let green = red - q
+                rgba.append(byte(red))
+                rgba.append(byte(green))
+                rgba.append(byte(blue))
+                rgba.append(byte(alpha))
+            }
+        }
+        return DecodedImage(width: width, height: height, rgba: rgba)
+    }
+
+    private static func byte(_ value: Double) -> UInt8 {
+        UInt8(255 * min(1, max(0, value)))
     }
 
     /// Downsamples `image` to at most `maxEncodeEdge` on its long side and draws
@@ -291,5 +457,66 @@ nonisolated enum ThumbHash {
             }
         }
         return hash
+    }
+}
+
+@MainActor
+final class ThumbHashImageCache {
+    static let shared = ThumbHashImageCache()
+
+    private let images = NSCache<NSString, UIImage>()
+    private var inFlight: [String: Task<ThumbHash.DecodedImage?, Never>] = [:]
+
+    private init() {
+        images.countLimit = 128
+    }
+
+    func image(for encoded: String) async -> UIImage? {
+        if let image = images.object(forKey: encoded as NSString) {
+            return image
+        }
+
+        let task: Task<ThumbHash.DecodedImage?, Never>
+        if let existing = inFlight[encoded] {
+            task = existing
+        } else {
+            task = Task.detached(priority: .utility) {
+                ThumbHash.decodedImage(from: encoded)
+            }
+            inFlight[encoded] = task
+        }
+
+        let decoded = await task.value
+        inFlight[encoded] = nil
+        if let image = images.object(forKey: encoded as NSString) {
+            return image
+        }
+        guard let decoded, let image = makeImage(from: decoded) else { return nil }
+        images.setObject(image, forKey: encoded as NSString)
+        return image
+    }
+
+    private func makeImage(from decoded: ThumbHash.DecodedImage) -> UIImage? {
+        guard decoded.width > 0,
+              decoded.height > 0,
+              decoded.rgba.count == decoded.width * decoded.height * 4,
+              let provider = CGDataProvider(data: decoded.rgba as CFData),
+              let cgImage = CGImage(
+                  width: decoded.width,
+                  height: decoded.height,
+                  bitsPerComponent: 8,
+                  bitsPerPixel: 32,
+                  bytesPerRow: decoded.width * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                  provider: provider,
+                  decode: nil,
+                  shouldInterpolate: true,
+                  intent: .defaultIntent
+              )
+        else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }
