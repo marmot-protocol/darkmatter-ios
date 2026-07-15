@@ -139,6 +139,29 @@ before every release tag.
       Transcript opens the share sheet for a JSON file; dismissing the
       share sheet removes the temporary export file.
 
+## App lock
+
+Run on a device with a passcode set (and Face ID/Touch ID enrolled for the
+biometric paths); the simulator can fake enrollment via Features → Face ID.
+
+- [ ] Settings → Privacy & Security: enabling **Require Face ID** prompts
+      for authentication first; cancelling the prompt leaves the toggle off.
+- [ ] With the lock enabled, opening the app switcher covers the app's
+      card with the splash-style shield; no chat content is visible.
+- [ ] With Auto-lock **Immediately**, backgrounding and returning shows
+      the locked shield and auto-prompts Face ID; unlocking reveals the
+      app in its previous state.
+- [ ] With Auto-lock **After 1 minute**, backgrounding and returning
+      within a minute skips the prompt; returning after a minute locks.
+- [ ] Cancelling the unlock prompt keeps the shield up; **Unlock** retries
+      authentication. Content underneath (sheets included) stays hidden.
+- [ ] Force-quit + relaunch with the lock enabled starts locked regardless
+      of the Auto-lock setting.
+- [ ] While locked, a tapped notification still routes to the right chat
+      after unlocking.
+- [ ] On a device without a passcode, the toggle is greyed out with the
+      explanatory footer.
+
 ## Notifications
 
 - [ ] Settings → Notifications: enabling Local notifications prompts for
