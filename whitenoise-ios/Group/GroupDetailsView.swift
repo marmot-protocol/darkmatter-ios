@@ -39,6 +39,8 @@ struct GroupDetailsView: View {
     @State private var sharedMediaGallery: MessageMediaGallery?
     /// Presents the tapped member contextually, with moderation scope.
     @State private var selectedMemberProfile: MemberProfileTarget?
+    /// Row tap opens the member action dialog (Info, admin actions, remove).
+    @State private var memberActionTarget: MemberProfileTarget?
     @State private var memberSearchText = ""
     @State private var membersExpanded = false
     @State private var showTechnicalDetails = false
@@ -97,6 +99,17 @@ struct GroupDetailsView: View {
         .toolbarRole(.editor)
         .navigationDestination(item: $selectedMemberProfile) { target in
             memberProfileDestination(for: target.member)
+        }
+        .confirmationDialog(
+            memberActionTarget.map { GroupMemberDetailsPresentation.displayName(for: $0.member, appState: appState) } ?? "",
+            isPresented: Binding(
+                get: { memberActionTarget != nil },
+                set: { if !$0 { memberActionTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: memberActionTarget
+        ) { target in
+            memberActionDialogButtons(for: target.member)
         }
         .navigationDestination(isPresented: $showContactProfile) {
             if let contactNpub {
@@ -666,15 +679,21 @@ struct GroupDetailsView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(visible, id: \.memberIdHex) { member in
-                    Button {
-                        selectedMemberProfile = MemberProfileTarget(member: member)
-                    } label: {
+                    if member.isSelf {
+                        // Your own row is informational; your controls live in
+                        // the destructive section and Settings.
                         GroupMemberDetailsRow(member: member)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .swipeActions(edge: .trailing) {
-                        swipeActions(for: member)
+                    } else {
+                        Button {
+                            memberActionTarget = MemberProfileTarget(member: member)
+                        } label: {
+                            GroupMemberDetailsRow(member: member)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            swipeActions(for: member)
+                        }
                     }
                 }
                 if !isSearching, !membersExpanded, filtered.count > GroupMemberOrdering.previewCount {
@@ -964,6 +983,31 @@ struct GroupDetailsView: View {
     }
 
     // MARK: - Member actions
+
+    /// Reference-style member action list: Info first, then the moderation
+    /// actions the live management state allows.
+    @ViewBuilder
+    private func memberActionDialogButtons(for member: GroupMemberDetailsFfi) -> some View {
+        Button("Info") {
+            selectedMemberProfile = MemberProfileTarget(member: member)
+        }
+        let actions = memberActions(for: member).filter { $0 != .selfDemote }
+        if actions.contains(.promote) {
+            Button("Make Admin") {
+                Task { await model.setAdmin(member: member, admin: true, using: appState) }
+            }
+        }
+        if actions.contains(.demote) {
+            Button("Remove Admin") {
+                Task { await model.setAdmin(member: member, admin: false, using: appState) }
+            }
+        }
+        if actions.contains(.remove) {
+            Button("Remove from Group", role: .destructive) {
+                model.pendingConfirmation = .remove(member)
+            }
+        }
+    }
 
     private func memberProfileDestination(for member: GroupMemberDetailsFfi) -> some View {
         profileDestination(npub: member.npub, moderation: moderationContext(for: member))

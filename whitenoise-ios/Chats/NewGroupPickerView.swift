@@ -8,11 +8,18 @@ struct NewGroupPickerView: View {
     @Environment(AppState.self) private var appState
     @Bindable var model: NewChatFlowViewModel
     let onScan: () -> Void
+    let onCancel: () -> Void
     let onNext: () -> Void
 
     var body: some View {
         @Bindable var query = model.groupQuery
         List {
+            Section {
+                RecipientSearchField(text: $query.text)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+                    .listRowBackground(Color.clear)
+            }
+
             if !model.groupSelection.isEmpty {
                 Section {
                     SelectedRecipientRail(members: model.groupSelection.members) { member in
@@ -48,16 +55,23 @@ struct NewGroupPickerView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(title)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
-            text: $query.text,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: Text("Search people or paste a profile")
-        )
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: onCancel)
+                    .disabled(model.isBusy)
+            }
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 0) {
+                    Text("Add Members")
+                        .font(.headline)
+                    Text(L10n.plural("%lld selected", Int64(model.groupSelection.count)))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Next", action: onNext)
                     .disabled(model.groupSelection.isEmpty || model.isBusy)
@@ -67,13 +81,6 @@ struct NewGroupPickerView: View {
         .onChange(of: model.groupQuery.text) { _, _ in
             model.groupQuery.queryChanged(using: appState)
         }
-    }
-
-    private var title: Text {
-        if model.groupSelection.isEmpty {
-            return Text("New Group")
-        }
-        return Text(L10n.plural("%lld selected", Int64(model.groupSelection.count)))
     }
 
     private var selectedAccountIds: Set<String> {

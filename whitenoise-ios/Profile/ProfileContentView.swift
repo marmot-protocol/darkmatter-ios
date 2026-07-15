@@ -26,8 +26,6 @@ struct ProfileContentView: View {
     var moderation: ProfileModerationContext?
 
     @State private var model = ProfileViewModel()
-    @State private var editingNickname = false
-    @State private var nicknameDraft = ""
     @State private var confirmingRemoval = false
 
     var body: some View {
@@ -45,7 +43,6 @@ struct ProfileContentView: View {
             }
 
             primaryActionSection
-            nicknameSection
             aboutSection
             sharedGroupsSection
             moderationSection
@@ -111,15 +108,6 @@ struct ProfileContentView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .listRowBackground(Color.clear)
-            // Attached inside the section: presentation modifiers on a Form's
-            // Section itself can detach when the list re-renders.
-            .alert(nicknameAlertTitle, isPresented: $editingNickname) {
-                TextField(L10n.string("Nickname"), text: $nicknameDraft)
-                Button(L10n.string("Save"), action: saveNickname)
-                Button(L10n.string("Cancel"), role: .cancel) {}
-            } message: {
-                Text("Only you see this on this device. Clearing it restores their profile name.")
-            }
         }
     }
 
@@ -138,41 +126,17 @@ struct ProfileContentView: View {
                                 .controlSize(.small)
                         }
                         Label("Message", systemImage: "bubble.left.and.bubble.right.fill")
+                            .font(.body.weight(.semibold))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 6)
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
+                .controlSize(.large)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
                 .disabled(model.starter.isCreating)
-            }
-        }
-    }
-
-    // MARK: - Nickname
-
-    @ViewBuilder
-    private var nicknameSection: some View {
-        if canEditNickname {
-            Section {
-                Button(action: beginEditingNickname) {
-                    LabeledContent(nickname == nil ? "Set nickname" : "Edit nickname") {
-                        HStack(spacing: 6) {
-                            if let nickname {
-                                Text(nickname)
-                                    .lineLimit(1)
-                            }
-                            Image(systemName: "pencil")
-                                .font(.caption)
-                                .foregroundStyle(.tint)
-                        }
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-            } footer: {
-                Text("Only you see this on this device. Clearing it restores their profile name.")
             }
         }
     }
@@ -295,31 +259,8 @@ struct ProfileContentView: View {
         }
     }
 
-    /// Nicknames apply to other people, not this device's own accounts, and
-    /// only once the profile reference resolves to an account id. Requires an
-    /// active account too, since the nickname is scoped to (owner, contact).
-    private var canEditNickname: Bool {
-        model.hex != nil && !isSelf && appState.activeAccountRef != nil
-    }
-
     private var canMessage: Bool {
         model.hex != nil && !isSelf && appState.activeAccountRef != nil
-    }
-
-    private var nicknameAlertTitle: String {
-        nickname == nil ? L10n.string("Set nickname") : L10n.string("Edit nickname")
-    }
-
-    private func beginEditingNickname() {
-        nicknameDraft = nickname ?? ""
-        editingNickname = true
-    }
-
-    private func saveNickname() {
-        guard let hex = model.hex else { return }
-        // An empty/whitespace draft clears the nickname (store-side sanitize).
-        appState.setContactNickname(nicknameDraft, forAccountIdHex: hex)
-        Haptics.selection()
     }
 
     private var displayReference: String {

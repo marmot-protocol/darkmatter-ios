@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import MarmotKit
 
 /// One person in a recipient list: avatar, resolved name, and identity
@@ -17,7 +18,7 @@ struct RecipientRow<Trailing: View>: View {
                 title: displayName,
                 pictureURL: appState.avatarURL(forAccountIdHex: accountIdHex)
             )
-            .frame(width: 44, height: 44)
+            .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(displayName)
@@ -121,20 +122,69 @@ struct RecipientQuickActionRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
                 Image(systemName: systemImage)
-                    .font(.body.weight(.semibold))
+                    .font(.body)
                     .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-                    .background(.tint.opacity(0.12), in: Circle())
+                    .frame(width: 28)
                 Text(title)
                     .font(.body)
                 Spacer(minLength: 0)
             }
+            .frame(minHeight: 32)
             .contentShape(.rect)
-            .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Search field for recipient screens: magnifier, the query, and a paste
+/// affordance while empty (a clear button once text is present). Pasting
+/// feeds the same query pipeline as typing.
+struct RecipientSearchField: View {
+    @Binding var text: String
+    var placeholder: LocalizedStringKey = "Search or paste npub"
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(placeholder, text: $text)
+                .font(.body)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if text.isEmpty {
+                Button {
+                    if let pasted = UIPasteboard.general.string?
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                        !pasted.isEmpty {
+                        text = pasted
+                    }
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.callout)
+                        .foregroundStyle(.tint)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Paste")
+            } else {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))
     }
 }
 

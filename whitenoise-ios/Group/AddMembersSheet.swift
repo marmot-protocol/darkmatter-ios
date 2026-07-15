@@ -20,6 +20,12 @@ struct AddMembersSheet: View {
         @Bindable var query = model.query
         NavigationStack {
             List {
+                Section {
+                    RecipientSearchField(text: $query.text)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+                        .listRowBackground(Color.clear)
+                }
+
                 if !model.selection.isEmpty {
                     Section {
                         SelectedRecipientRail(members: model.selection.members) { member in
@@ -64,16 +70,18 @@ struct AddMembersSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(title)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(
-                text: $query.text,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: Text("Search people or paste a profile")
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 0) {
+                        Text("Add Members")
+                            .font(.headline)
+                        Text(L10n.plural("%lld selected", Int64(model.selection.count)))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                         .disabled(model.isInviting)
@@ -107,13 +115,6 @@ struct AddMembersSheet: View {
                 .appAppearance()
             }
         }
-    }
-
-    private var title: Text {
-        if model.selection.isEmpty {
-            return Text("Add Members")
-        }
-        return Text(L10n.plural("%lld selected", Int64(model.selection.count)))
     }
 
     private var selectedAccountIds: Set<String> {

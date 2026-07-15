@@ -52,6 +52,7 @@ struct NewChatFlowView: View {
                     NewGroupPickerView(
                         model: model,
                         onScan: { scanTarget = .groupPicker },
+                        onCancel: { dismiss() },
                         onNext: { path.append(.groupSetup) }
                     )
                 case .groupSetup:
@@ -116,6 +117,12 @@ struct NewMessageScreen: View {
     var body: some View {
         @Bindable var query = model.messageQuery
         List {
+            Section {
+                RecipientSearchField(text: $query.text)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+                    .listRowBackground(Color.clear)
+            }
+
             if let prompt = model.startPrompt {
                 StartChatPromptSection(
                     prompt: prompt,
@@ -154,13 +161,6 @@ struct NewMessageScreen: View {
         .listStyle(.insetGrouped)
         .navigationTitle("New Message")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
-            text: $query.text,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: Text("Search people or paste a profile")
-        )
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismissFlow() }
