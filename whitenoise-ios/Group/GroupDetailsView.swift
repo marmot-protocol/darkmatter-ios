@@ -90,7 +90,7 @@ struct GroupDetailsView: View {
                 }
             }
         }
-        .navigationTitle(isDirectMessage ? "Contact Info" : "Group Info")
+        .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $selectedMemberProfile) { target in
             ProfileSheetView(
@@ -321,7 +321,10 @@ struct GroupDetailsView: View {
                 model.renameDraft = ContentSanitizer.groupName(viewModel.group.name) ?? ""
                 model.showRename = true
             } label: {
-                Label(viewModel.group.name.isEmpty ? "Set Name" : "Edit Name", systemImage: "pencil")
+                Label(
+                    viewModel.group.name.isEmpty ? L10n.string("Set Name") : L10n.string("Edit Name"),
+                    systemImage: "pencil"
+                )
             }
             Button {
                 model.descriptionDraft = ContentSanitizer.multilineText(
@@ -332,8 +335,8 @@ struct GroupDetailsView: View {
             } label: {
                 Label(
                     Self.normalizedGroupDescriptionForUpdate(viewModel.group.description).isEmpty
-                        ? "Set Description"
-                        : "Edit Description",
+                        ? L10n.string("Set Description")
+                        : L10n.string("Edit Description"),
                     systemImage: "text.alignleft"
                 )
             }
@@ -341,7 +344,7 @@ struct GroupDetailsView: View {
                 model.showGroupImageEditor = true
             } label: {
                 Label(
-                    viewModel.group.avatarUrl == nil ? "Set Image" : "Edit Image",
+                    viewModel.group.avatarUrl == nil ? L10n.string("Set Image") : L10n.string("Edit Image"),
                     systemImage: "photo"
                 )
             }

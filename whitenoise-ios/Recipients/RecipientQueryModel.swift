@@ -127,6 +127,12 @@ final class RecipientQueryModel {
         resolution = state
     }
 
+#if DEBUG
+    func awaitResolutionForTesting() async {
+        await resolveTask?.value
+    }
+#endif
+
     private func warmProfile(_ accountIdHex: String, using appState: AppState) {
         _ = appState.profile(forAccountIdHex: accountIdHex)
     }

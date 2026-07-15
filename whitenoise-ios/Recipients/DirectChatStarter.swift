@@ -86,6 +86,10 @@ final class DirectChatStarter {
 
     var isCreating: Bool { creatingAccountIdHex != nil }
 
+#if DEBUG
+    @ObservationIgnored var createGroupForTesting: (@MainActor (String, String) async throws -> String)?
+#endif
+
     /// Opens `existingGroupIdHex` when the person already shares an open
     /// direct chat; otherwise creates an unnamed two-member group. The guard
     /// is taken synchronously before the first await.
@@ -105,13 +109,28 @@ final class DirectChatStarter {
         creatingAccountIdHex = accountIdHex
         defer { creatingAccountIdHex = nil }
         do {
+            let groupIdHex: String
+#if DEBUG
+            if let createGroupForTesting {
+                groupIdHex = try await createGroupForTesting(accountRef, memberRef)
+            } else {
+                let client = try appState.currentMarmotClient()
+                groupIdHex = try await client.createGroup(
+                    accountRef: accountRef,
+                    name: "",
+                    memberRefs: [memberRef],
+                    description: nil
+                )
+            }
+#else
             let client = try appState.currentMarmotClient()
-            let groupIdHex = try await client.createGroup(
+            groupIdHex = try await client.createGroup(
                 accountRef: accountRef,
                 name: "",
                 memberRefs: [memberRef],
                 description: nil
             )
+#endif
             return .created(groupIdHex: groupIdHex)
         } catch {
             return .failed(StartChatFailurePresentation.failure(for: error))

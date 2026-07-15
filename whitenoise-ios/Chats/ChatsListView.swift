@@ -248,7 +248,7 @@ struct ChatsListView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel(searchCancellationActive ? "Clear search" : "New message")
+        .accessibilityLabel(searchCancellationActive ? Text("Clear search") : Text("New message"))
     }
 
     private var searchPlaceholderColor: Color {

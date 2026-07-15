@@ -457,11 +457,10 @@ final class GroupDetailsViewModel {
         )
         isMuted = muted
         Haptics.success()
-        appState.present(
-            muted
-                ? .warning(L10n.string("Group muted"))
-                : .success(L10n.string("Group unmuted"))
-        )
+        let isDirectMessage = conversation.groupDisplay.isDirectMessage
+        let mutedTitle = isDirectMessage ? L10n.string("Chat muted") : L10n.string("Group muted")
+        let unmutedTitle = isDirectMessage ? L10n.string("Chat unmuted") : L10n.string("Group unmuted")
+        appState.present(muted ? .warning(mutedTitle) : .success(unmutedTitle))
     }
 
     func setArchived(_ archived: Bool, using appState: AppState) async {
