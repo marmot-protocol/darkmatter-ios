@@ -36937,6 +36937,48 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "解锁 White Noise" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "解鎖 White Noise" } }
       }
+    },
+    "Screen Capture" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bildschirmaufnahme" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Captura de pantalla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Capture d'écran" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Cattura schermo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Captura de tela" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Захват экрана" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Ekran yakalama" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "屏幕捕捉" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "螢幕擷取" } }
+      }
+    },
+    "Block screenshots" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Screenshots blockieren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Bloquear capturas de pantalla" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Bloquer les captures d'écran" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Blocca gli screenshot" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Bloquear capturas de tela" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Блокировать скриншоты" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Ekran görüntülerini engelle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阻止屏幕截图" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "封鎖螢幕截圖" } }
+      }
+    },
+    "Screenshots and screen recordings of the app show a blank screen. The app's preview in the app switcher is hidden too." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Screenshots und Bildschirmaufnahmen der App zeigen einen leeren Bildschirm. Auch die Vorschau der App im App-Umschalter wird ausgeblendet." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Las capturas y grabaciones de pantalla de la app muestran una pantalla en blanco. La vista previa de la app en el selector de apps también se oculta." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Les captures et enregistrements d'écran de l'app affichent un écran vide. L'aperçu de l'app dans le sélecteur d'apps est aussi masqué." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Gli screenshot e le registrazioni dello schermo dell'app mostrano una schermata vuota. Anche l'anteprima dell'app nel selettore delle app viene nascosta." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Capturas e gravações de tela do app mostram uma tela em branco. A prévia do app no seletor de apps também fica oculta." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скриншоты и записи экрана приложения показывают пустой экран. Предпросмотр приложения в переключателе приложений тоже скрыт." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Uygulamanın ekran görüntüleri ve ekran kayıtları boş bir ekran gösterir. Uygulamanın uygulama değiştiricideki önizlemesi de gizlenir." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用的屏幕截图和屏幕录制会显示空白屏幕。应用切换器中的应用预览也会被隐藏。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "應用程式的螢幕截圖和螢幕錄影會顯示空白畫面。應用程式切換器中的預覽也會被隱藏。" } }
+      }
     }
   },
   "version" : "1.1"

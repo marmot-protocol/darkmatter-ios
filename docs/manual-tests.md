@@ -162,6 +162,22 @@ biometric paths); the simulator can fake enrollment via Features → Face ID.
 - [ ] On a device without a passcode, the toggle is greyed out with the
       explanatory footer.
 
+## Screen capture
+
+- [ ] Settings → Privacy & Security: with **Block screenshots** on, a
+      screenshot captures a blank screen instead of conversation content.
+- [ ] With Block screenshots on, a screen recording (and QuickTime device
+      mirroring) shows blank app content; the app-switcher preview is blank
+      as well.
+- [ ] Content presented over the root view — the QR code sheet, full-screen
+      confirmation covers — is excluded from captures too.
+- [ ] Turning the toggle off immediately restores normal screenshots without
+      a relaunch, and the app keeps rendering and responding normally across
+      several on/off flips.
+- [ ] Sign-out of the last profile and reactivation from Settings → Profiles
+      restores live foreground notifications (send a message from another
+      device) and disappearing-message sweeps without relaunching.
+
 ## Notifications
 
 - [ ] Settings → Notifications: enabling Local notifications prompts for

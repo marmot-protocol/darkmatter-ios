@@ -42,6 +42,19 @@ struct PrivacySecuritySettingsView: View {
 
             Section {
                 Toggle(isOn: Binding(
+                    get: { appState.blockScreenshots },
+                    set: { appState.blockScreenshots = $0 }
+                )) {
+                    Label("Block screenshots", systemImage: "camera.viewfinder")
+                }
+            } header: {
+                Text("Screen Capture")
+            } footer: {
+                Text("Screenshots and screen recordings of the app show a blank screen. The app's preview in the app switcher is hidden too.")
+            }
+
+            Section {
+                Toggle(isOn: Binding(
                     get: { model.telemetrySettings?.exportEnabled ?? false },
                     set: { enabled in Task { await model.setTelemetryEnabled(enabled, using: appState) } }
                 )) {

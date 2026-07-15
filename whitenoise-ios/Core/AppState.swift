@@ -115,6 +115,15 @@ final class AppState {
         developerMode && streamingDebugMode
     }
 
+    /// Blocks screenshots and screen recordings of app content while on
+    /// (window-level capture exclusion, applied by `WindowCaptureProtection`).
+    /// Off by default; toggled in Settings → Privacy & Security.
+    var blockScreenshots: Bool {
+        didSet {
+            UserDefaults.standard.set(blockScreenshots, forKey: Self.blockScreenshotsKey)
+        }
+    }
+
     /// Recently-used reaction emojis, most-recent first. Drives the quick row
     /// in the message actions overlay.
     private(set) var recentReactions: [String]
@@ -233,6 +242,7 @@ final class AppState {
 
     private static let developerModeKey = "marmot.developerMode"
     private static let streamingDebugModeKey = "marmot.streamingDebugMode"
+    private static let blockScreenshotsKey = "marmot.blockScreenshots"
     private static let recentReactionsKey = "marmot.recentReactions"
     private static let defaultSuspendedRuntimeTelemetryBuildConfig = TelemetryBuildConfig.current()
     static let agentTextStreamQuicBrokerCandidate = "quic://quic-broker.ipf.dev:4450"
@@ -252,6 +262,7 @@ final class AppState {
         self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
         self.streamingDebugMode = UserDefaults.standard.bool(forKey: Self.streamingDebugModeKey)
+        self.blockScreenshots = UserDefaults.standard.bool(forKey: Self.blockScreenshotsKey)
         self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
             ?? Self.defaultReactions
         self.profileStore.appState = self
