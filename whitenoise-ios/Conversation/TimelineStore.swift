@@ -214,8 +214,6 @@ final class TimelineStore {
 
     // MARK: - Loaded-window queries
 
-    var loadedMessageIds: Set<String> { Set(messageById.keys) }
-
     /// Message ids in timeline order (oldest → newest). The read-marker's
     /// retention policy trims oldest-first so the ids most likely to still be
     /// on screen survive the cap.
