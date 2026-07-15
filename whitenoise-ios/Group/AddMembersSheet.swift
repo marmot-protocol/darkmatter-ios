@@ -1,6 +1,10 @@
 import SwiftUI
 import MarmotKit
 
+/// Membership extension for an existing group, built on the same searchable
+/// people picker as group creation so the two never drift. People already in
+/// the group are excluded; a pasted or scanned identifier auto-selects since
+/// it names an unambiguous target.
 struct AddMembersSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -10,210 +14,206 @@ struct AddMembersSheet: View {
     var excludedMemberMessage = AddMembersPresentation.existingMemberMessage
 
     @State private var model = AddMembersSheetViewModel()
+    @State private var showScanner = false
 
     var body: some View {
-        @Bindable var model = model
-        let memberPicker = model.memberPicker
-        return NavigationStack {
-            Form {
-                MemberPickerView(
-                    model: memberPicker,
-                    title: "Invite",
-                    normalize: normalize,
-                    excludedAccountIds: excludedAccountIds,
-                    excludedMemberMessage: excludedMemberMessage
-                )
+        @Bindable var query = model.query
+        NavigationStack {
+            List {
+                if !model.selection.isEmpty {
+                    Section {
+                        SelectedRecipientRail(members: model.selection.members) { member in
+                            model.selection.remove(accountIdHex: member.accountIdHex)
+                        }
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
+
+                if query.isBlank {
+                    Section {
+                        RecipientQuickActionRow(
+                            title: "Scan QR Code",
+                            systemImage: "qrcode.viewfinder",
+                            action: { showScanner = true }
+                        )
+                    }
+                    .disabled(model.isInviting)
+                }
+
+                if query.isIdentifierQuery {
+                    RecipientResolutionSection(
+                        query: model.query,
+                        excludedAccountIds: excludedAccountIds,
+                        isBusy: model.isInviting,
+                        selectedAccountIds: selectedAccountIds,
+                        excludedMessage: { excludedMessage(for: $0) },
+                        onRetry: { model.query.queryChanged(using: appState) },
+                        onSelect: { resolved in
+                            Task { await selectResolved(resolved) }
+                        }
+                    )
+                } else {
+                    peopleSection
+                }
+
+                if let error = model.error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
             }
-            .navigationTitle("Add Members")
+            .listStyle(.insetGrouped)
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $query.text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: Text("Search people or paste a profile")
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(model.isInviting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(model.isInviting ? L10n.string("Inviting…") : L10n.string("Invite")) {
                         Task {
-                            await model.invite(
-                                normalize: normalize,
-                                excludedAccountIds: excludedAccountIds,
-                                excludedMemberMessage: excludedMemberMessage,
-                                onSubmit: onSubmit,
-                                using: appState,
-                                dismiss: { dismiss() }
-                            )
+                            await model.invite(onSubmit: onSubmit, dismiss: { dismiss() })
                         }
                     }
                     .disabled(!AddMembersPresentation.canInvite(
-                        stagedCount: memberPicker.members.count,
-                        hasPendingText: !memberPicker.pending.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        stagedCount: model.selection.count,
                         isInviting: model.isInviting
                     ))
                 }
             }
             .interactiveDismissDisabled(model.isInviting)
-            .memberPickerScanner(
-                model: memberPicker,
-                normalize: normalize,
-                excludedAccountIds: excludedAccountIds,
-                excludedMemberMessage: excludedMemberMessage,
-                warmProfile: { _ = appState.profile(forAccountIdHex: $0) }
-            )
-        }
-    }
-}
-
-struct StagedGroupMemberRow: View {
-    @Environment(AppState.self) private var appState
-    let member: MemberRefFfi
-
-    var body: some View {
-        HStack(spacing: 12) {
-            AvatarBubble(
-                seed: member.accountIdHex,
-                title: displayName,
-                pictureURL: appState.avatarURL(forAccountIdHex: member.accountIdHex)
-            )
-            .frame(width: 36, height: 36)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(displayName)
-                    .font(.body)
-                Text(AddMembersPresentation.secondaryIdentity(for: member))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
+            .task { await model.directory.load(using: appState) }
+            .onChange(of: model.query.text) { _, _ in
+                model.query.queryChanged(using: appState)
             }
-            Spacer(minLength: 8)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private var displayName: String {
-        AddMembersPresentation.displayName(for: member, appState: appState)
-    }
-}
-
-nonisolated enum AddMembersPresentation {
-    enum PendingMemberAddResult: Equatable {
-        case empty
-        case invalid
-        case duplicate
-        case blocked
-        case added([MemberRefFfi], MemberRefFfi)
-    }
-
-    /// Outcome of normalizing a raw member reference off the main actor,
-    /// before it is staged against the live member list.
-    enum NormalizedMemberResult: Equatable {
-        case empty
-        case invalid
-        case normalized(MemberRefFfi)
-    }
-
-    /// True when `raw` already parses to a complete, valid profile reference
-    /// (npub/nprofile with a good checksum, or 64-char hex). Lets the input
-    /// field decide whether to auto-stage without flashing errors while a
-    /// partial reference is still being typed. Synchronous — no Marmot hop.
-    static func isCompleteReference(_ raw: String) -> Bool {
-        memberRef(fromScannedPayload: raw) != nil
-    }
-
-    static func memberRef(fromScannedPayload raw: String) -> String? {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        if case .profile(let memberRef) = DeepLink.parse(string: trimmed) {
-            return memberRef
-        }
-        return NostrProfileReference.referenceForResolution(fromReference: trimmed)
-    }
-
-    /// Parses and normalizes a raw member reference. The `normalize` closure
-    /// is expected to run the synchronous MarmotKit FFI off the main actor
-    /// (#260), so callers can `await` this and only hop back to the MainActor
-    /// to stage the result.
-    static func normalizedMember(
-        _ raw: String,
-        normalize: (String) async throws -> MemberRefFfi
-    ) async -> NormalizedMemberResult {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return .empty }
-        guard let memberRef = memberRef(fromScannedPayload: trimmed) else {
-            return .invalid
-        }
-        do {
-            return .normalized(try await normalize(memberRef))
-        } catch {
-            return .invalid
+            .onChange(of: model.query.resolution) { _, resolution in
+                guard case .resolved(let resolved) = resolution else { return }
+                Task { await autoSelect(resolved) }
+            }
+            .fullScreenCover(isPresented: $showScanner) {
+                ScannerSheet { raw in
+                    showScanner = false
+                    handleScan(raw)
+                }
+                .appAppearance()
+            }
         }
     }
 
-    /// Stages a normalized member against the current member list. Pure and
-    /// MainActor-cheap: callers run this after awaiting `normalizedMember` so
-    /// the dedup check sees the live `members` value rather than a snapshot
-    /// captured before the off-main hop.
-    static func stage(
-        _ normalized: MemberRefFfi,
-        existingMembers: [MemberRefFfi],
-        excludedAccountIds: Set<String> = []
-    ) -> PendingMemberAddResult {
-        let accountId = normalizedAccountId(normalized.accountIdHex)
-        let blockedAccountIds = Set(excludedAccountIds.map(normalizedAccountId))
-        guard !blockedAccountIds.contains(accountId) else {
-            return .blocked
+    private var title: Text {
+        if model.selection.isEmpty {
+            return Text("Add Members")
         }
-        guard !existingMembers.contains(where: { normalizedAccountId($0.accountIdHex) == accountId }) else {
-            return .duplicate
+        return Text(L10n.plural("%lld selected", Int64(model.selection.count)))
+    }
+
+    private var selectedAccountIds: Set<String> {
+        Set(model.selection.members.map { $0.accountIdHex.lowercased() })
+    }
+
+    private func excludedMessage(for accountIdHex: String) -> String {
+        let selfIds = AddMembersPresentation.excludedNewChatAccountIds(
+            activeAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+        return selfIds.contains(accountIdHex)
+            ? AddMembersPresentation.selfRecipientMessage
+            : excludedMemberMessage
+    }
+
+    @ViewBuilder
+    private var peopleSection: some View {
+        let candidates = RecipientSearch.browse(
+            model.directory.candidates,
+            query: model.query.text,
+            excludedAccountIds: excludedAccountIds,
+            fields: { RecipientDirectory.matchFields(for: $0, appState: appState) }
+        )
+        if model.directory.isLoading && model.directory.candidates.isEmpty {
+            Section {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+            }
+        } else if candidates.isEmpty {
+            Section {
+                if model.query.isBlank {
+                    Text("Paste an npub or scan a QR code to add someone you haven't chatted with yet.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ContentUnavailableView.search(text: model.query.trimmedText)
+                }
+            }
+        } else {
+            Section {
+                ForEach(candidates) { candidate in
+                    memberRow(candidate)
+                }
+            } header: {
+                if model.query.isBlank {
+                    Text("People")
+                }
+            }
         }
-        return .added(existingMembers + [normalized], normalized)
     }
 
-    static let selfRecipientMessage = "You can't add yourself to a chat."
-    static let existingMemberMessage = "That profile is already in this group."
-
-    static func excludedNewChatAccountIds(activeAccountIdHex: String?) -> Set<String> {
-        normalizedAccountSet([activeAccountIdHex])
+    private func memberRow(_ candidate: RecipientCandidate) -> some View {
+        let isSelected = model.selection.isSelected(accountIdHex: candidate.accountIdHex)
+        return Button {
+            model.toggle(candidate, excludedAccountIds: excludedAccountIds)
+        } label: {
+            RecipientRow(accountIdHex: candidate.accountIdHex, npub: candidate.npub) {
+                RecipientSelectionIndicator(isSelected: isSelected)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isInviting)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    static func excludedInviteAccountIds(
-        activeAccountIdHex: String?,
-        members: [AppGroupMemberRecordFfi],
-        groupMemberDetails: [GroupMemberDetailsFfi]
-    ) -> Set<String> {
-        var accountIds = normalizedAccountSet([activeAccountIdHex])
-        accountIds.formUnion(normalizedAccountSet(members.map(\.memberIdHex)))
-        accountIds.formUnion(normalizedAccountSet(groupMemberDetails.map(\.memberIdHex)))
-        return accountIds
+    /// Explicit tap on a resolved row; shares the normalize-then-stage path
+    /// with the automatic selection below.
+    private func selectResolved(_ resolved: ResolvedRecipient) async {
+        await model.selectResolved(
+            resolved,
+            excludedAccountIds: excludedAccountIds,
+            normalize: normalize
+        )
     }
 
-    /// "Create" is enabled once at least one member is staged, no create is
-    /// in flight, and there is an active account to create the group under.
-    static func canCreate(stagedCount: Int, isCreating: Bool, hasActiveAccount: Bool) -> Bool {
-        stagedCount > 0 && !isCreating && hasActiveAccount
+    /// A pasted/scanned identifier is an unambiguous target, so it selects
+    /// itself once resolved — unless it's excluded, already selected, or an
+    /// invite is in flight.
+    private func autoSelect(_ resolved: ResolvedRecipient) async {
+        let normalized = resolved.accountIdHex.lowercased()
+        guard !model.isInviting,
+              !excludedAccountIds.contains(normalized),
+              !model.selection.isSelected(accountIdHex: normalized)
+        else { return }
+        await selectResolved(resolved)
     }
 
-    /// "Invite" is enabled when no invite is in flight and there is something to
-    /// submit — a staged member, or still-unstaged text in the field that
-    /// invite folds in before submitting.
-    static func canInvite(stagedCount: Int, hasPendingText: Bool, isInviting: Bool) -> Bool {
-        !isInviting && (stagedCount > 0 || hasPendingText)
-    }
-
-    @MainActor
-    static func displayName(for member: MemberRefFfi, appState: AppState) -> String {
-        appState.knownDisplayName(forAccountIdHex: member.accountIdHex)
-            ?? IdentityFormatter.short(member.accountIdHex)
-    }
-
-    static func secondaryIdentity(for member: MemberRefFfi) -> String {
-        IdentityFormatter.short(member.npub)
-    }
-
-    private static func normalizedAccountSet(_ values: [String?]) -> Set<String> {
-        Set(values.compactMap { value in
-            value.map(normalizedAccountId).flatMap { $0.isEmpty ? nil : $0 }
-        })
-    }
-
-    private static func normalizedAccountId(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    private func handleScan(_ raw: String) {
+        guard AddMembersPresentation.memberRef(fromScannedPayload: raw) != nil else {
+            Haptics.error()
+            appState.present(.error(L10n.string("That QR code isn't a White Noise profile.")))
+            return
+        }
+        Haptics.success()
+        model.query.text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.query.queryChanged(using: appState)
     }
 }

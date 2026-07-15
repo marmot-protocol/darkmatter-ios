@@ -324,6 +324,7 @@ struct RecipientResolutionSection: View {
     let isBusy: Bool
     var creatingAccountIdHex: String?
     var selectedAccountIds: Set<String> = []
+    var excludedMessage: (String) -> String = { _ in AddMembersPresentation.selfRecipientMessage }
     let onRetry: () -> Void
     let onSelect: (ResolvedRecipient) -> Void
 
@@ -355,7 +356,7 @@ struct RecipientResolutionSection: View {
     private func resolvedRow(_ resolved: ResolvedRecipient) -> some View {
         let normalized = resolved.accountIdHex.lowercased()
         if excludedAccountIds.contains(normalized) {
-            Label(AddMembersPresentation.selfRecipientMessage, systemImage: "person.crop.circle.badge.exclamationmark")
+            Label(excludedMessage(normalized), systemImage: "person.crop.circle.badge.exclamationmark")
                 .foregroundStyle(.secondary)
         } else {
             Button {
