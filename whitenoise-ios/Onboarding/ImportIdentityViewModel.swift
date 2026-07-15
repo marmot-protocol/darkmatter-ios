@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Screen store for `ImportIdentityView`: owns the pasted-nsec field + in-flight
 /// state and the import action. The secret-handling order is preserved verbatim
@@ -93,5 +94,15 @@ final class ImportIdentityViewModel {
     func clearPastedClipboardToken() {
         pastedClipboardToken = nil
         pastedClipboardIdentity = nil
+    }
+
+    /// Dismiss-without-import teardown: scrub the visible field, wipe the
+    /// matching pasteboard generation (the same token gate `runImport`'s defer
+    /// uses, so unrelated clipboard content is never touched), and drop the
+    /// shadow copy — every exit from the sheet clears the secret.
+    func scrubDismissedImportState(pasteboard: UIPasteboard = .general) {
+        identity = ""
+        SensitiveClipboard.clear(matching: pastedClipboardToken, from: pasteboard)
+        clearPastedClipboardToken()
     }
 }

@@ -91,11 +91,7 @@ struct ImportIdentityView: View {
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(model.isImporting)
         .onDisappear {
-            model.identity = ""
-            // The paste interception keeps a shadow copy of a pasted nsec for
-            // the deferred clipboard clear; scrub it with the visible field
-            // when the sheet goes away without an import.
-            model.clearPastedClipboardToken()
+            model.scrubDismissedImportState()
         }
     }
 }

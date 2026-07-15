@@ -64,21 +64,43 @@ struct ImportIdentityValidationTests {
         #expect(ImportIdentityView.redactedImportError("Relay unreachable") == "Relay unreachable")
     }
 
-    @Test @MainActor func clearingPastedTokenScrubsShadowIdentityCopy() {
+    @Test @MainActor func dismissWithoutImportScrubsShadowCopyAndPasteboard() {
         let pasteboard = UIPasteboard.withUniqueName()
         defer { UIPasteboard.remove(withName: pasteboard.name) }
         let model = ImportIdentityViewModel()
         let nsec = "nsec1" + String(repeating: "q", count: 58)
+        pasteboard.string = nsec
         let token = SensitiveClipboard.capture(from: pasteboard)
+        model.identity = nsec
         model.recordPastedClipboardToken(token, resultingIdentity: nsec)
         #expect(model.pastedClipboardToken != nil)
         #expect(model.clipboardTokenForImportedIdentity(nsec) != nil)
 
-        // The sheet's onDisappear calls this so a dismissed-without-import
-        // paste doesn't leave a plaintext shadow copy in the model.
-        model.clearPastedClipboardToken()
+        // The sheet's onDisappear path: every exit clears the visible field,
+        // the matching pasteboard generation, and the in-memory shadow copy.
+        model.scrubDismissedImportState(pasteboard: pasteboard)
 
+        #expect(model.identity.isEmpty)
         #expect(model.pastedClipboardToken == nil)
         #expect(model.clipboardTokenForImportedIdentity(nsec) == nil)
+        #expect(!pasteboard.hasStrings)
+    }
+
+    @Test @MainActor func dismissScrubLeavesClipboardTheUserChangedAfterPasting() {
+        let pasteboard = UIPasteboard.withUniqueName()
+        defer { UIPasteboard.remove(withName: pasteboard.name) }
+        let model = ImportIdentityViewModel()
+        let nsec = "nsec1" + String(repeating: "q", count: 58)
+        pasteboard.string = nsec
+        let token = SensitiveClipboard.capture(from: pasteboard)
+        model.recordPastedClipboardToken(token, resultingIdentity: nsec)
+        // The user copied something else after pasting; the stale token must
+        // not clobber it.
+        pasteboard.string = "unrelated"
+
+        model.scrubDismissedImportState(pasteboard: pasteboard)
+
+        #expect(model.pastedClipboardToken == nil)
+        #expect(pasteboard.string == "unrelated")
     }
 }
