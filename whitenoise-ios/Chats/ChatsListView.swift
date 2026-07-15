@@ -161,6 +161,13 @@ struct ChatsListView: View {
     /// Navigate into a chat requested via `AppState.pendingChatId`, closing any
     /// presenting sheets (composer, account switcher and its nested QR/profile
     /// sheets) so the pushed conversation lands on top.
+    ///
+    /// Two-phase on purpose: replacing the path in one shot while a deep
+    /// stack (details → profile → flow sheet) is tearing down makes
+    /// NavigationStack silently restore the old path. Popping to root always
+    /// sticks; the clean push follows once the unwind has settled. The
+    /// pending id stays set until the final phase so deeper views' unwind
+    /// observers are guaranteed to see it.
     private func consumePendingChat() {
         guard let newId = appState.pendingChatId else { return }
         let target = ChatNavigationTarget(
@@ -171,8 +178,14 @@ struct ChatsListView: View {
         showSettings = false
         dismissSearchKeyboard()
         scope = .active
-        path = [target]
-        appState.clearPendingChat()
+        path = []
+        Task { @MainActor in
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard appState.pendingChatId == newId else { return }
+            path = [target]
+            appState.clearPendingChat()
+        }
     }
 
     // MARK: - Search
