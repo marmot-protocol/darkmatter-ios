@@ -657,6 +657,7 @@ struct ConversationView: View {
             // chevron; an inline system title would double it up.
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarRole(.editor)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     conversationTitle

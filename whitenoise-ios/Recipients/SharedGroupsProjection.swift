@@ -43,6 +43,38 @@ nonisolated enum SharedGroupsProjection {
             }
     }
 
+    /// Groups the viewer could add the subject to: named groups where the
+    /// viewer is an admin member and the subject isn't on the roster. The
+    /// engine still enforces admin rights on the invite itself.
+    static func addableGroups(
+        snapshots: [RecipientGroupSnapshot],
+        targetAccountIdHex: String?,
+        myAccountIdHex: String?
+    ) -> [SharedGroup] {
+        guard let target = normalized(targetAccountIdHex), let mine = normalized(myAccountIdHex),
+              target != mine
+        else { return [] }
+        return snapshots
+            .filter { snapshot in
+                guard snapshot.sanitizedName != nil,
+                      snapshot.isSelfMember,
+                      !snapshot.memberIdsHex.isEmpty
+                else { return false }
+                let roster = Set(snapshot.memberIdsHex.map { $0.lowercased() })
+                let admins = Set(snapshot.adminIdsHex.map { $0.lowercased() })
+                return admins.contains(mine) && roster.contains(mine) && !roster.contains(target)
+            }
+            .sorted { $0.lastActivityAt > $1.lastActivityAt }
+            .map { snapshot in
+                SharedGroup(
+                    groupIdHex: snapshot.groupIdHex,
+                    title: snapshot.title,
+                    avatarUrl: snapshot.avatarUrl,
+                    memberCount: snapshot.memberIdsHex.count
+                )
+            }
+    }
+
     private static func normalized(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
               !trimmed.isEmpty

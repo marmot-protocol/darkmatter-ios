@@ -151,6 +151,7 @@ struct SharedMediaLibraryView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Shared Media")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
         .task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState) }
         .task(id: category) {
             if category == .links {

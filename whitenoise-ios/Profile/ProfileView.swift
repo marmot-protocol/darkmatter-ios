@@ -8,8 +8,8 @@ nonisolated enum ProfileReferenceResolution {
 }
 
 /// Profile destination for QR scans and deep links: the reusable profile
-/// content inside its own navigation chrome. Conversational contexts present
-/// `ProfileSheetView` instead so they can attach moderation scope.
+/// content inside its own navigation chrome. Conversational contexts push
+/// `ProfileContentView` directly so they can attach moderation scope.
 struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
 

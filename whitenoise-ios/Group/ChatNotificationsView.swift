@@ -22,5 +22,6 @@ struct ChatNotificationsView: View {
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
     }
 }

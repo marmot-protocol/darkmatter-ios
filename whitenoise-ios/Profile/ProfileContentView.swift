@@ -28,13 +28,7 @@ struct ProfileContentView: View {
     @State private var model = ProfileViewModel()
     @State private var editingNickname = false
     @State private var nicknameDraft = ""
-    @State private var startGroupSeed: StartGroupSeed?
     @State private var confirmingRemoval = false
-
-    private struct StartGroupSeed: Identifiable {
-        let members: [MemberRefFfi]
-        let id = UUID()
-    }
 
     var body: some View {
         List {
@@ -54,16 +48,11 @@ struct ProfileContentView: View {
             nicknameSection
             aboutSection
             sharedGroupsSection
-            groupActionsSection
             moderationSection
         }
         .listStyle(.insetGrouped)
         .task(id: npub) { await model.resolve(npub: npub, using: appState) }
         .task(id: declaredNip05) { await model.verifyDeclaredNip05(declaredNip05) }
-        .sheet(item: $startGroupSeed) { seed in
-            NewChatFlowView(initialGroupMembers: seed.members)
-                .appAppearance()
-        }
     }
 
     // MARK: - Identity
@@ -200,64 +189,19 @@ struct ProfileContentView: View {
         }
     }
 
-    // MARK: - Shared groups
+    // MARK: - Groups in common
 
     @ViewBuilder
     private var sharedGroupsSection: some View {
-        if !model.sharedGroups.isEmpty {
-            Section("Shared Groups") {
-                ForEach(model.sharedGroups) { group in
-                    Button {
-                        openChat(group.groupIdHex)
-                    } label: {
-                        HStack(spacing: 12) {
-                            AvatarBubble(
-                                seed: group.groupIdHex,
-                                title: group.title,
-                                pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
-                            )
-                            .frame(width: 40, height: 40)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(group.title)
-                                    .lineLimit(1)
-                                Text(L10n.plural("%lld members", Int64(group.memberCount)))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 8)
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    // MARK: - Group actions
-
-    @ViewBuilder
-    private var groupActionsSection: some View {
-        if canMessage {
-            Section {
-                Button {
-                    guard let hex = model.hex else { return }
-                    startGroupSeed = StartGroupSeed(members: [
-                        MemberRefFfi(
-                            memberRef: appState.npub(forAccountIdHex: hex),
-                            accountIdHex: hex,
-                            npub: appState.npub(forAccountIdHex: hex)
-                        )
-                    ])
-                } label: {
-                    Label("Start a Group", systemImage: "person.2")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-            } footer: {
-                Text(L10n.formatted("Creates a new group that includes %@.", title))
-            }
+        if let hex = model.hex, !isSelf {
+            GroupsInCommonSection(
+                contactAccountIdHex: hex,
+                contactNpub: displayReference,
+                contactName: title,
+                sharedGroups: model.sharedGroups,
+                addableGroups: model.addableGroups,
+                onOpenChat: openChat
+            )
         }
     }
 
@@ -386,27 +330,5 @@ struct ProfileContentView: View {
     private var isSelf: Bool {
         guard let hex = model.hex else { return false }
         return appState.accounts.contains { $0.accountIdHex == hex }
-    }
-}
-
-/// Sheet wrapper for conversational contexts (member lists, headers).
-struct ProfileSheetView: View {
-    @Environment(\.dismiss) private var dismiss
-    let npub: String
-    var moderation: ProfileModerationContext?
-
-    var body: some View {
-        NavigationStack {
-            ProfileContentView(npub: npub, moderation: moderation)
-                .navigationTitle("Profile")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }

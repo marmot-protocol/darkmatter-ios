@@ -34,6 +34,8 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
     let memberIdsHex: [String]
     let lastSenderIdHex: String?
     let welcomerIdHex: String?
+    /// Group admins, for "can I add someone to this group" projections.
+    let adminIdsHex: [String]
 
     init(row: ChatListRowFfi, details: GroupDetailsFfi?) {
         self.init(
@@ -47,7 +49,8 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
             memberIdsHex: details?.members.map(\.memberIdHex) ?? [],
             lastSenderIdHex: row.lastMessage?.sender,
-            welcomerIdHex: details?.group.welcomerAccountIdHex
+            welcomerIdHex: details?.group.welcomerAccountIdHex,
+            adminIdsHex: details?.group.admins ?? []
         )
     }
 
@@ -60,7 +63,8 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         lastActivityAt: UInt64,
         memberIdsHex: [String],
         lastSenderIdHex: String?,
-        welcomerIdHex: String?
+        welcomerIdHex: String?,
+        adminIdsHex: [String] = []
     ) {
         self.groupIdHex = groupIdHex
         self.sanitizedName = sanitizedName
@@ -71,6 +75,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         self.memberIdsHex = memberIdsHex
         self.lastSenderIdHex = lastSenderIdHex
         self.welcomerIdHex = welcomerIdHex
+        self.adminIdsHex = adminIdsHex
     }
 
     /// An open, unnamed two-person chat — the only kind a person-tap may

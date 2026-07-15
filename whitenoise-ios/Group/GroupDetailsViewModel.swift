@@ -34,6 +34,7 @@ final class GroupDetailsViewModel {
     var sharedMediaError: String?
     var isMuted = false
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
+    private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private let recipientDirectory = RecipientDirectory()
     private var didLoadSharedMedia = false
 
@@ -422,11 +423,17 @@ final class GroupDetailsViewModel {
               let otherMember = conversation.otherMember
         else {
             sharedGroups = []
+            addableGroups = []
             return
         }
         await recipientDirectory.load(using: appState)
         guard !Task.isCancelled else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
+            snapshots: recipientDirectory.snapshots,
+            targetAccountIdHex: otherMember,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+        addableGroups = SharedGroupsProjection.addableGroups(
             snapshots: recipientDirectory.snapshots,
             targetAccountIdHex: otherMember,
             myAccountIdHex: appState.activeAccount?.accountIdHex

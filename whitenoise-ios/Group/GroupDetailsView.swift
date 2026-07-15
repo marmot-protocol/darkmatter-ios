@@ -94,17 +94,13 @@ struct GroupDetailsView: View {
         }
         .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(item: $selectedMemberProfile) { target in
-            ProfileSheetView(
-                npub: target.member.npub,
-                moderation: moderationContext(for: target.member)
-            )
-            .appAppearance()
+        .toolbarRole(.editor)
+        .navigationDestination(item: $selectedMemberProfile) { target in
+            memberProfileDestination(for: target.member)
         }
-        .sheet(isPresented: $showContactProfile) {
+        .navigationDestination(isPresented: $showContactProfile) {
             if let contactNpub {
-                ProfileSheetView(npub: contactNpub)
-                    .appAppearance()
+                profileDestination(npub: contactNpub, moderation: nil)
             }
         }
         .navigationDestination(isPresented: $showNotifications) {
@@ -629,35 +625,15 @@ struct GroupDetailsView: View {
 
     @ViewBuilder
     private var sharedGroupsSection: some View {
-        if !model.sharedGroups.isEmpty {
-            Section {
-                ForEach(model.sharedGroups) { group in
-                    Button {
-                        openChat(group.groupIdHex)
-                    } label: {
-                        HStack(spacing: 12) {
-                            AvatarBubble(
-                                seed: group.groupIdHex,
-                                title: group.title,
-                                pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
-                            )
-                            .frame(width: 40, height: 40)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(group.title)
-                                    .lineLimit(1)
-                                Text(L10n.plural("%lld members", Int64(group.memberCount)))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 8)
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("Shared Groups")
-            }
+        if let contactAccountIdHex, let contactNpub {
+            GroupsInCommonSection(
+                contactAccountIdHex: contactAccountIdHex,
+                contactNpub: contactNpub,
+                contactName: contactTitle,
+                sharedGroups: model.sharedGroups,
+                addableGroups: model.addableGroups,
+                onOpenChat: openChat
+            )
         }
     }
 
@@ -989,7 +965,18 @@ struct GroupDetailsView: View {
 
     // MARK: - Member actions
 
-    private struct MemberProfileTarget: Identifiable {
+    private func memberProfileDestination(for member: GroupMemberDetailsFfi) -> some View {
+        profileDestination(npub: member.npub, moderation: moderationContext(for: member))
+    }
+
+    private func profileDestination(npub: String, moderation: ProfileModerationContext?) -> some View {
+        ProfileContentView(npub: npub, moderation: moderation)
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarRole(.editor)
+    }
+
+    private struct MemberProfileTarget: Identifiable, Hashable {
         let member: GroupMemberDetailsFfi
         var id: String { member.memberIdHex }
     }

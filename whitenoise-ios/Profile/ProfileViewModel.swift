@@ -12,6 +12,7 @@ final class ProfileViewModel {
     var hex: String?
     var startPrompt: StartChatPrompt?
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
+    private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var verifiedNip05: String?
 
     let starter = DirectChatStarter()
@@ -33,6 +34,11 @@ final class ProfileViewModel {
         await directory.load(using: appState)
         guard !Task.isCancelled else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
+            snapshots: directory.snapshots,
+            targetAccountIdHex: resolvedHex,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+        addableGroups = SharedGroupsProjection.addableGroups(
             snapshots: directory.snapshots,
             targetAccountIdHex: resolvedHex,
             myAccountIdHex: appState.activeAccount?.accountIdHex

@@ -1,0 +1,214 @@
+import SwiftUI
+import MarmotKit
+
+/// The groups-in-common block shown on a contact's pages: create a group
+/// with them, add them to a group you administer, then the groups you share,
+/// collapsed to a short preview with See all.
+struct GroupsInCommonSection: View {
+    @Environment(AppState.self) private var appState
+    let contactAccountIdHex: String
+    let contactNpub: String
+    let contactName: String
+    let sharedGroups: [SharedGroupsProjection.SharedGroup]
+    let addableGroups: [SharedGroupsProjection.SharedGroup]
+    let onOpenChat: (String) -> Void
+
+    @State private var expanded = false
+    @State private var showStartGroup = false
+    @State private var showAddToGroup = false
+
+    private static let previewCount = 3
+
+    var body: some View {
+        Section {
+            Button {
+                showStartGroup = true
+            } label: {
+                Label(
+                    L10n.formatted("Create group with %@", contactName),
+                    systemImage: "plus"
+                )
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+
+            if !addableGroups.isEmpty {
+                Button {
+                    showAddToGroup = true
+                } label: {
+                    Label("Add to group", systemImage: "person.2.badge.plus")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+
+            ForEach(visibleShared) { group in
+                Button {
+                    onOpenChat(group.groupIdHex)
+                } label: {
+                    HStack(spacing: 12) {
+                        AvatarBubble(
+                            seed: group.groupIdHex,
+                            title: group.title,
+                            pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
+                        )
+                        .frame(width: 40, height: 40)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(group.title)
+                                .lineLimit(1)
+                            Text(L10n.plural("%lld members", Int64(group.memberCount)))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if !expanded, sharedGroups.count > Self.previewCount {
+                Button {
+                    expanded = true
+                } label: {
+                    HStack {
+                        Text("See all")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            }
+        } header: {
+            Text(L10n.plural("%lld groups in common", Int64(sharedGroups.count)))
+        }
+        .sheet(isPresented: $showStartGroup) {
+            NewChatFlowView(initialGroupMembers: [
+                MemberRefFfi(
+                    memberRef: contactNpub,
+                    accountIdHex: contactAccountIdHex,
+                    npub: contactNpub
+                )
+            ])
+            .appAppearance()
+        }
+        .sheet(isPresented: $showAddToGroup) {
+            AddToGroupSheet(
+                contactNpub: contactNpub,
+                contactName: contactName,
+                groups: addableGroups
+            )
+            .appAppearance()
+        }
+    }
+
+    private var visibleShared: [SharedGroupsProjection.SharedGroup] {
+        expanded ? sharedGroups : Array(sharedGroups.prefix(Self.previewCount))
+    }
+}
+
+/// Picker over the groups the viewer administers that don't yet include the
+/// contact. Selecting one publishes the invite; the engine enforces admin
+/// rights on the mutation path.
+struct AddToGroupSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    let contactNpub: String
+    let contactName: String
+    let groups: [SharedGroupsProjection.SharedGroup]
+
+    @State private var busyGroupIdHex: String?
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(groups) { group in
+                        Button {
+                            Task { await add(to: group) }
+                        } label: {
+                            HStack(spacing: 12) {
+                                AvatarBubble(
+                                    seed: group.groupIdHex,
+                                    title: group.title,
+                                    pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
+                                )
+                                .frame(width: 40, height: 40)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(group.title)
+                                        .lineLimit(1)
+                                    Text(L10n.plural("%lld members", Int64(group.memberCount)))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                if busyGroupIdHex == group.groupIdHex {
+                                    ProgressView()
+                                }
+                            }
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busyGroupIdHex != nil)
+                    }
+                } footer: {
+                    Text(L10n.formatted("Adds %@ to the group you pick.", contactName))
+                }
+
+                if let error {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Add to group")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(busyGroupIdHex != nil)
+                }
+            }
+            .interactiveDismissDisabled(busyGroupIdHex != nil)
+        }
+    }
+
+    private func add(to group: SharedGroupsProjection.SharedGroup) async {
+        guard busyGroupIdHex == nil, let accountRef = appState.activeAccountRef else { return }
+        busyGroupIdHex = group.groupIdHex
+        defer { busyGroupIdHex = nil }
+        error = nil
+        do {
+            let client = try appState.currentMarmotClient()
+            _ = try await client.inviteMembersDetailed(
+                accountRef: accountRef,
+                groupIdHex: group.groupIdHex,
+                memberRefs: [contactNpub]
+            )
+            Haptics.success()
+            appState.present(.success(L10n.string("Added to group"), message: group.title))
+            dismiss()
+        } catch let marmotError as MarmotKitError {
+            Haptics.error()
+            if case .MissingKeyPackage(let account) = marmotError {
+                error = L10n.formatted(
+                    "%@ hasn't published a compatible key package yet.",
+                    IdentityFormatter.short(account)
+                )
+            } else {
+                error = marmotError.localizedDescription
+            }
+        } catch {
+            Haptics.error()
+            self.error = error.localizedDescription
+        }
+    }
+}
