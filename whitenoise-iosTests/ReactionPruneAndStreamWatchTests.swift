@@ -495,6 +495,40 @@ struct StreamWatchRaceGuardTests {
         ))
     }
 
+    @Test func installRejectsWatchesFromACancelledSession() {
+        // cancelAll() bumped the epoch while the subscription open was
+        // awaited; the emptied dictionaries alone would wave the orphan
+        // through and lock out a legitimate re-watch of the same stream.
+        #expect(!AgentStreamWatchAdmission.shouldInstall(
+            sessionEpoch: 0,
+            currentSessionEpoch: 1,
+            streamId: "stream-a",
+            activeStreamIds: [],
+            finalizedStreamIds: []
+        ))
+        #expect(AgentStreamWatchAdmission.shouldInstall(
+            sessionEpoch: 1,
+            currentSessionEpoch: 1,
+            streamId: "stream-a",
+            activeStreamIds: [],
+            finalizedStreamIds: []
+        ))
+        #expect(!AgentStreamWatchAdmission.shouldInstall(
+            sessionEpoch: 1,
+            currentSessionEpoch: 1,
+            streamId: "stream-a",
+            activeStreamIds: ["stream-a"],
+            finalizedStreamIds: []
+        ))
+        #expect(!AgentStreamWatchAdmission.shouldInstall(
+            sessionEpoch: 1,
+            currentSessionEpoch: 1,
+            streamId: "stream-a",
+            activeStreamIds: [],
+            finalizedStreamIds: ["stream-a"]
+        ))
+    }
+
     @Test func fallbackStreamPreviewDropIsConservativeForConcurrentSenderStreams() {
         #expect(StreamWatcher.fallbackStreamPreviewToDrop(
             sender: "alice",

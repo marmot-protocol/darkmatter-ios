@@ -37,6 +37,11 @@ final class StreamWatcher {
     /// its own entry when the stored generation still matches (re-watch guard).
     private var streamWatchGenerations: [String: UUID] = [:]
     private var streamWatchInFlightIds: Set<String> = []
+    /// Bumped by `cancelAll()`. A `startWatching` suspended on the subscription
+    /// open when the session was cancelled re-checks this before touching any
+    /// session state, so it can't install an orphan watch into the restarted
+    /// session (the emptied dictionaries alone would wave it through).
+    private var watchSessionEpoch = 0
     private var latestStreamWatchInFlight = false
     private var streamText: [String: String] = [:]
     private var streamTextLengthById: [String: Int] = [:]
@@ -92,10 +97,12 @@ final class StreamWatcher {
     }
 
     func cancelAll() {
+        watchSessionEpoch += 1
         for task in streamWatchTasks.values { task.cancel() }
         streamWatchTasks.removeAll()
         streamWatchGenerations.removeAll()
         streamWatchInFlightIds.removeAll()
+        latestStreamWatchInFlight = false
     }
 
     func resetDebugSequence() {
@@ -228,16 +235,21 @@ final class StreamWatcher {
             inFlightStreamIds: streamWatchInFlightIds,
             latestStreamWatchInFlight: latestStreamWatchInFlight
         ) else { return }
+        let sessionEpoch = watchSessionEpoch
         if let streamIdHex {
             streamWatchInFlightIds.insert(streamIdHex)
         } else {
             latestStreamWatchInFlight = true
         }
         defer {
-            if let streamIdHex {
-                streamWatchInFlightIds.remove(streamIdHex)
-            } else {
-                latestStreamWatchInFlight = false
+            // After a cancelAll the in-flight markers belong to the restarted
+            // session; a stale watch must not clear a successor's entry.
+            if sessionEpoch == watchSessionEpoch {
+                if let streamIdHex {
+                    streamWatchInFlightIds.remove(streamIdHex)
+                } else {
+                    latestStreamWatchInFlight = false
+                }
             }
         }
         do {
@@ -256,8 +268,13 @@ final class StreamWatcher {
                 insecureLocal: insecureLocal
             )
             let streamId = subscription.streamIdHex()
-            if streamWatchTasks[streamId] != nil { return }
-            if finalizedStreamIds.contains(streamId) { return }
+            guard AgentStreamWatchAdmission.shouldInstall(
+                sessionEpoch: sessionEpoch,
+                currentSessionEpoch: watchSessionEpoch,
+                streamId: streamId,
+                activeStreamIds: Set(streamWatchTasks.keys),
+                finalizedStreamIds: finalizedStreamIds
+            ) else { return }
             if let startedAt, startedAt > 0 {
                 streamStartedAtById[streamId] = startedAt
             }
