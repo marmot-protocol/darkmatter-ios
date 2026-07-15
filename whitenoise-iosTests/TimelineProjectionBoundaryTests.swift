@@ -311,15 +311,20 @@ struct TimelineProjectionBoundaryTests {
         )
         let cached = CountingConversationMediaCache()
         cached.cachedDataToReturn = cachedData
-        cached.cachedDataDelayNanoseconds = 20_000_000
+        cached.blocksCachedDataRead = true
         let downloader = ConversationMediaDownloader(cache: cached)
 
         let first = Task {
             try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
         }
-        let second = Task {
-            try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
+        await cached.waitForCachedDataRead()
+        let secondRequestStarted = AsyncTestSignal()
+        let second = Task<Data, Error> {
+            secondRequestStarted.signal()
+            return try await downloader.data(for: media, groupIdHex: testGroupId, appState: nil)
         }
+        await secondRequestStarted.wait()
+        cached.releaseCachedDataRead()
 
         let firstResult = try await first.value
         let secondResult = try await second.value
@@ -444,20 +449,52 @@ private final class CountingConversationMediaCache: ConversationMediaCacheAccess
     private(set) var storedReferenceHashes: [String] = []
     private(set) var storedSourceEpochs: [UInt64] = []
     var cachedDataToReturn: Data?
-    var cachedDataDelayNanoseconds: UInt64 = 0
+    var blocksCachedDataRead = false
+    private let cachedDataReadStarted = AsyncTestSignal()
+    private let cachedDataReadReleased = AsyncTestSignal()
 
     func cachedData(for reference: MediaAttachmentReferenceFfi) async -> Data? {
         cachedDataCalls += 1
-        if cachedDataDelayNanoseconds > 0 {
-            try? await Task.sleep(nanoseconds: cachedDataDelayNanoseconds)
+        if blocksCachedDataRead {
+            cachedDataReadStarted.signal()
+            await cachedDataReadReleased.wait()
         }
         return cachedDataToReturn
+    }
+
+    func waitForCachedDataRead() async {
+        await cachedDataReadStarted.wait()
+    }
+
+    func releaseCachedDataRead() {
+        cachedDataReadReleased.signal()
     }
 
     func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
         storedPayloads.append(data)
         storedReferenceHashes.append(reference.plaintextSha256)
         storedSourceEpochs.append(reference.sourceEpoch)
+    }
+}
+
+@MainActor
+private final class AsyncTestSignal {
+    private var isSignalled = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isSignalled else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func signal() {
+        guard !isSignalled else { return }
+        isSignalled = true
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        pendingWaiters.forEach { $0.resume() }
     }
 }
 

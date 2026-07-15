@@ -28,8 +28,8 @@ struct TimelineTailRefreshTaskLifetimeTests {
         let probe = TailRefreshTaskProbe()
 
         viewModel.scheduleTimelineTailRefreshForTesting {
-            probe.markFirstStarted()
             await withTaskCancellationHandler {
+                probe.markFirstStarted()
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
             } onCancel: {
                 probe.markFirstCancelled()
@@ -62,7 +62,6 @@ struct TimelineTailRefreshTaskLifetimeTests {
         viewModel.scheduleTimelineTailRefreshForTesting {
             try? await Task.sleep(nanoseconds: 5_000_000_000)
         }
-        try await Task.sleep(nanoseconds: 20_000_000)
         #expect(viewModel.hasTimelineTailRefreshTaskForTesting)
 
         viewModel.cancelTimelineTailRefreshForTesting()
