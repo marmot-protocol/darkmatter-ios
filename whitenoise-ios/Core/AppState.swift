@@ -115,6 +115,15 @@ final class AppState {
         developerMode && streamingDebugMode
     }
 
+    /// Blocks screenshots and screen recordings of app content while on
+    /// (window-level capture exclusion, applied by `WindowCaptureProtection`).
+    /// Off by default; toggled in Settings → Privacy & Security.
+    var blockScreenshots: Bool {
+        didSet {
+            UserDefaults.standard.set(blockScreenshots, forKey: Self.blockScreenshotsKey)
+        }
+    }
+
     /// Recently-used reaction emojis, most-recent first. Drives the quick row
     /// in the message actions overlay.
     private(set) var recentReactions: [String]
@@ -233,6 +242,7 @@ final class AppState {
 
     private static let developerModeKey = "marmot.developerMode"
     private static let streamingDebugModeKey = "marmot.streamingDebugMode"
+    private static let blockScreenshotsKey = "marmot.blockScreenshots"
     private static let recentReactionsKey = "marmot.recentReactions"
     private static let defaultSuspendedRuntimeTelemetryBuildConfig = TelemetryBuildConfig.current()
     static let agentTextStreamQuicBrokerCandidate = "quic://quic-broker.ipf.dev:4450"
@@ -252,6 +262,7 @@ final class AppState {
         self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)
         self.streamingDebugMode = UserDefaults.standard.bool(forKey: Self.streamingDebugModeKey)
+        self.blockScreenshots = UserDefaults.standard.bool(forKey: Self.blockScreenshotsKey)
         self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
             ?? Self.defaultReactions
         self.profileStore.appState = self
@@ -346,6 +357,17 @@ final class AppState {
         guard phase == .onboarding else { return }
         phase = .ready
         startReadyForegroundMaintenance(scheduleNativePushRegistration: scheduleNativePushRegistration)
+    }
+
+    /// Signing out of the last signed-in account stops the notification
+    /// subscription and retention sweeper but keeps the `.ready` shell alive
+    /// for reactivation. Activating an account from that shell must restart
+    /// both loops; ordinary account switches never stopped the subscription,
+    /// so the liveness guard keeps this a no-op there.
+    @MainActor
+    private func restartReadyForegroundMaintenanceIfStopped() {
+        guard phase == .ready, !notificationCoordinator.notificationSubscriptionActive else { return }
+        startReadyForegroundMaintenance(scheduleNativePushRegistration: false)
     }
 
     /// Internal (not `private`) so `RuntimeLifecycle.performBootstrap` can hand
@@ -463,6 +485,7 @@ final class AppState {
         }
 
         activeAccountRef = accountRef
+        restartReadyForegroundMaintenanceIfStopped()
         scheduleNativePushRegistrationIfEnabled()
     }
 
@@ -964,6 +987,11 @@ final class AppState {
 
         activeAccountRef = summary.label
         completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
+        // A new identity can also be created from the `.ready` shell left by a
+        // sign-out of every account; the onboarding completion above is a no-op
+        // there, so the stopped maintenance loops need the same restart as
+        // `activateAccount`.
+        restartReadyForegroundMaintenanceIfStopped()
         await enableNotificationsByDefault(for: summary.label)
         scheduleNativePushRegistrationIfEnabled()
     }
@@ -1046,6 +1074,8 @@ final class AppState {
     /// (so a legitimate post-sign-out reschedule is not suppressed).
     @MainActor
     var isSigningOutForTesting: Bool { isSigningOut }
+
+    var retentionSweeperIsActiveForTesting: Bool { retentionSweeper.isSweeping }
     #endif
 }
 
