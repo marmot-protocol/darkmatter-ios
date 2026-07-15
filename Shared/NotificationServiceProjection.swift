@@ -81,28 +81,4 @@ nonisolated enum NotificationServiceProjection {
         )
     }
 
-    // Caps how many additional records the NSE adds individually and folds any
-    // overflow into a single summary presentation. The overflow records have
-    // already been consumed from Marmot's background notification cursor, so they
-    // must stay represented rather than be silently abandoned; the summary keeps
-    // the consumed-cursor count visible without an unbounded `add` loop.
-    static func boundedAdditionalPresentations(
-        after primary: LocalNotificationPresentation,
-        from additional: [LocalNotificationPresentation]
-    ) -> [LocalNotificationPresentation] {
-        NotificationPresentationPolicy.boundedAdditionalPresentations(
-            after: primary,
-            from: additional
-        )
-    }
-
-    static func summaryPresentation(
-        after primary: LocalNotificationPresentation,
-        overflowCount: Int
-    ) -> LocalNotificationPresentation {
-        NotificationPresentationPolicy.summaryPresentation(
-            after: primary,
-            overflowCount: overflowCount
-        )
-    }
 }
