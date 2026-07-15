@@ -44,8 +44,19 @@ nonisolated enum AppLanguage: String, CaseIterable, Identifiable {
     }
 
     static var current: AppLanguage {
-        resolved(rawValue: currentRawValue)
+        #if DEBUG
+        if let testCurrentOverride { return testCurrentOverride }
+        #endif
+        return resolved(rawValue: currentRawValue)
     }
+
+    #if DEBUG
+    /// Task-scoped language override for tests. Parallel suites share the
+    /// process-scoped `testDefaults`, so a test that wrote the preference
+    /// there would leak its language into concurrently-running assertions on
+    /// other suites; a task-local is visible only inside the test that set it.
+    @TaskLocal static var testCurrentOverride: AppLanguage?
+    #endif
 
     static var currentRawValue: String {
         defaults.string(forKey: storageKey) ?? AppLanguage.system.rawValue
