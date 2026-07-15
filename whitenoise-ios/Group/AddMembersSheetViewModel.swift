@@ -29,10 +29,14 @@ final class AddMembersSheetViewModel {
         excludedAccountIds: Set<String>,
         normalize: (String) async throws -> MemberRefFfi
     ) async {
+        guard !isInviting else { return }
         let result = await AddMembersPresentation.normalizedMember(
             resolved.memberRef,
             normalize: normalize
         )
+        // Re-check after the await: a selection resumed mid-submit would
+        // stage a recipient the in-flight invite never sends.
+        guard !isInviting else { return }
         guard case .normalized(let member) = result else { return }
         if selection.add(member, excludedAccountIds: excludedAccountIds) {
             Haptics.selection()

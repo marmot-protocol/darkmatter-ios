@@ -170,10 +170,6 @@ struct ChatsListView: View {
     /// observers are guaranteed to see it.
     private func consumePendingChat() {
         guard let newId = appState.pendingChatId else { return }
-        let target = ChatNavigationTarget(
-            groupIdHex: newId,
-            messageIdHex: appState.pendingChatMessageIdHex
-        )
         showNewChat = false
         showSettings = false
         dismissSearchKeyboard()
@@ -187,6 +183,11 @@ struct ChatsListView: View {
             for attempt in 0..<8 {
                 try? await Task.sleep(nanoseconds: attempt == 0 ? 350_000_000 : 450_000_000)
                 guard appState.pendingChatId == newId else { return }
+                // Re-read the anchor so a newer jump for the same chat wins.
+                let target = ChatNavigationTarget(
+                    groupIdHex: newId,
+                    messageIdHex: appState.pendingChatMessageIdHex
+                )
                 path = [target]
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 guard appState.pendingChatId == newId else { return }

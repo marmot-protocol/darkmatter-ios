@@ -99,10 +99,15 @@ struct GroupDetailsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .sheet(item: $memberSheetTarget) { target in
+            // Resolve the live roster entry so promote/demote done from the
+            // sheet is reflected without reopening it.
+            let member = viewModel.groupMemberDetails.first {
+                $0.memberIdHex == target.member.memberIdHex
+            } ?? target.member
             NavigationStack {
                 ProfileContentView(
-                    npub: target.member.npub,
-                    moderation: moderationContext(for: target.member)
+                    npub: member.npub,
+                    moderation: moderationContext(for: member)
                 )
                 .navigationTitle("Profile")
                 .navigationBarTitleDisplayMode(.inline)

@@ -94,6 +94,14 @@ struct NewGroupPickerView: View {
                 }
                 .padding(.vertical, 16)
             }
+        } else if let loadError = model.directory.loadError, model.directory.candidates.isEmpty {
+            Section {
+                Label(loadError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.secondary)
+                Button("Retry") {
+                    Task { await model.directory.load(using: appState, force: true) }
+                }
+            }
         } else if candidates.isEmpty {
             Section {
                 if model.groupQuery.isBlank {

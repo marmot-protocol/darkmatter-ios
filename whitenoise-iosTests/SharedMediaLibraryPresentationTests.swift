@@ -18,6 +18,17 @@ struct SharedMediaLibraryPresentationTests {
         #expect(links.first?.timelineAt == 20)
     }
 
+    @Test func extractsMarkdownDestinationsAndFlagsInternationalizedHosts() {
+        let records = [
+            record("m1", kind: 9, content: "see [docs](https://example.com/docs) and https://xn--e1awd7f.example/x", at: 4)
+        ]
+
+        let links = SharedMediaLibraryPresentation.linkItems(from: records)
+
+        #expect(links.map(\.urlString) == ["https://example.com/docs", "https://xn--e1awd7f.example/x"])
+        #expect(links.map(\.hasInternationalizedHost) == [false, true])
+    }
+
     @Test func trimsWrappingPunctuationAndValidatesShape() {
         #expect(SharedMediaLibraryPresentation.normalizedLink("(https://example.com/a).") == "https://example.com/a")
         #expect(SharedMediaLibraryPresentation.normalizedLink("\"https://example.com\"") == "https://example.com")

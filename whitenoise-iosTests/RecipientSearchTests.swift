@@ -20,8 +20,13 @@ struct RecipientSearchTests {
         let result = RecipientSearch.browse(candidates, query: "  JOSÉ ") { candidate in
             candidate.accountIdHex == self.alice ? .init(displayName: "jose garcía") : .init()
         }
+        // The stored field's diacritics must fold too, not just the query's.
+        let foldedField = RecipientSearch.browse(candidates, query: "garcia") { candidate in
+            candidate.accountIdHex == self.alice ? .init(displayName: "José García") : .init()
+        }
 
         #expect(result.map(\.accountIdHex) == [alice])
+        #expect(foldedField.map(\.accountIdHex) == [alice])
     }
 
     @Test func ranksNamePrefixMatchesBeforeContainedMatches() {

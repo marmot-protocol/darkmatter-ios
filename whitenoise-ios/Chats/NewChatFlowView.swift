@@ -64,11 +64,23 @@ struct NewChatFlowView: View {
         .onAppear {
             guard !didSeedInitialMembers, !initialGroupMembers.isEmpty else { return }
             didSeedInitialMembers = true
-            let excluded = model.excludedAccountIds(using: appState)
-            for member in initialGroupMembers {
-                model.groupSelection.add(member, excludedAccountIds: excluded)
-            }
             path = [.groupPicker]
+            // Seeds ride the shared staging pipeline (Marmot normalization +
+            // accountIdHex dedup) rather than raw construction.
+            Task {
+                let excluded = model.excludedAccountIds(using: appState)
+                for member in initialGroupMembers {
+                    let result = await AddMembersPresentation.normalizedMember(
+                        member.memberRef,
+                        normalize: { try await appState.currentMarmotClient().normalizeMemberRef(memberRef: $0) }
+                    )
+                    if case .normalized(let normalized) = result {
+                        model.groupSelection.add(normalized, excludedAccountIds: excluded)
+                    } else {
+                        model.groupSelection.add(member, excludedAccountIds: excluded)
+                    }
+                }
+            }
         }
         .fullScreenCover(item: $scanTarget) { target in
             ScannerSheet { raw in
@@ -103,8 +115,8 @@ struct NewChatFlowView: View {
         }
         Haptics.success()
         let query = target == .message ? model.messageQuery : model.groupQuery
+        // The screens observe the text and run the resolution themselves.
         query.text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        query.queryChanged(using: appState)
     }
 }
 

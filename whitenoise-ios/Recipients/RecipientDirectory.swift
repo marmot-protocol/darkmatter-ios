@@ -78,24 +78,43 @@ final class RecipientDirectory {
         )
     }
 
-    /// Rosters load per row; a row whose details read fails still contributes
-    /// its last-message sender, so one bad group can't blank the directory.
+    /// Rosters load per row with bounded concurrency; a row whose details
+    /// read fails still contributes its last-message sender, so one bad group
+    /// can't blank the directory.
     private nonisolated static func loadSnapshots(
         client: MarmotClient,
         accountRef: String
     ) async throws -> [RecipientGroupSnapshot] {
         let rows = try await client.chatList(accountRef: accountRef, includeArchived: true)
-        var snapshots: [RecipientGroupSnapshot] = []
-        snapshots.reserveCapacity(rows.count)
-        for row in rows {
-            try Task.checkCancellation()
-            let details = try? await client.groupDetails(
-                accountRef: accountRef,
-                groupIdHex: row.groupIdHex
-            )
-            snapshots.append(RecipientGroupSnapshot(row: row, details: details))
+        var detailsByGroupId: [String: GroupDetailsFfi] = [:]
+        try await withThrowingTaskGroup(of: (String, GroupDetailsFfi?).self) { group in
+            var iterator = rows.makeIterator()
+            var inFlight = 0
+            func addNext() {
+                guard let row = iterator.next() else { return }
+                inFlight += 1
+                group.addTask {
+                    let details = try? await client.groupDetails(
+                        accountRef: accountRef,
+                        groupIdHex: row.groupIdHex
+                    )
+                    return (row.groupIdHex, details)
+                }
+            }
+            for _ in 0..<4 { addNext() }
+            while inFlight > 0 {
+                try Task.checkCancellation()
+                guard let (groupIdHex, details) = try await group.next() else { break }
+                inFlight -= 1
+                if let details {
+                    detailsByGroupId[groupIdHex] = details
+                }
+                addNext()
+            }
         }
-        return snapshots
+        return rows.map { row in
+            RecipientGroupSnapshot(row: row, details: detailsByGroupId[row.groupIdHex])
+        }
     }
 
     private nonisolated static func deriveCandidates(

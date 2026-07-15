@@ -997,6 +997,9 @@ struct ConversationView: View {
     private var conversationTitle: some View {
         let chrome = conversationChrome
         Button {
+            // The destination renders only once the model exists; a tap in
+            // the load window would push an empty page.
+            guard viewModel != nil else { return }
             showDetails = true
         } label: {
             HStack(spacing: 10) {

@@ -37,6 +37,8 @@ nonisolated enum SharedMediaLibraryPresentation {
         locale: Locale = AppLanguage.currentLocale
     ) -> [MonthSection] {
         let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
         formatter.locale = locale
         formatter.setLocalizedDateFormatFromTemplate("MMMM y")
 
@@ -83,6 +85,8 @@ nonisolated enum SharedMediaLibraryPresentation {
         let urlString: String
         let display: String
         let timelineAt: UInt64
+        /// True for `xn--` (IDN) hosts so the view can flag lookalike domains.
+        let hasInternationalizedHost: Bool
     }
 
     static let chatMessageKind: UInt64 = 9
@@ -103,12 +107,14 @@ nonisolated enum SharedMediaLibraryPresentation {
                 let dedupeKey = "\(record.messageIdHex)#\(urlString.lowercased())"
                 guard seen.insert(dedupeKey).inserted else { continue }
                 let display = ContentSanitizer.singleLine(urlString, maxLength: 120) ?? urlString
+                let host = URL(string: urlString)?.host?.lowercased() ?? ""
                 results.append(LinkItem(
                     id: "\(record.messageIdHex)#\(indexInMessage)",
                     messageIdHex: record.messageIdHex,
                     urlString: urlString,
                     display: display,
-                    timelineAt: record.timelineAt
+                    timelineAt: record.timelineAt,
+                    hasInternationalizedHost: host.contains("xn--")
                 ))
                 indexInMessage += 1
             }
@@ -117,9 +123,18 @@ nonisolated enum SharedMediaLibraryPresentation {
     }
 
     /// Trims wrapping punctuation and validates shape: http(s), a host, and a
-    /// bounded length. Returns the cleaned URL string or nil.
+    /// bounded length. A scheme embedded mid-token (markdown destinations
+    /// like `[x](https://…)`) is sliced out rather than rejected. Returns the
+    /// cleaned URL string or nil.
     static func normalizedLink(_ raw: String) -> String? {
+        guard raw.count <= maxLinkLength else { return nil }
         var value = raw.trimmingCharacters(in: leadingTrim)
+        if let schemeRange = value.range(
+            of: "https?://",
+            options: [.regularExpression, .caseInsensitive]
+        ), schemeRange.lowerBound != value.startIndex {
+            value = String(value[schemeRange.lowerBound...])
+        }
         while let last = value.unicodeScalars.last, trailingTrim.contains(last) {
             value.removeLast()
         }

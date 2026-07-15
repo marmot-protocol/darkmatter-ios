@@ -104,12 +104,19 @@ final class NewChatFlowViewModel {
     /// Normalizes a resolved identifier through Marmot before selecting it so
     /// the staged member carries the validated reference form.
     func selectResolved(_ resolved: ResolvedRecipient, using appState: AppState) async {
-        guard let client = try? appState.currentMarmotClient(),
-              let member = try? await client.normalizeMemberRef(memberRef: resolved.memberRef)
-        else { return }
-        if groupSelection.add(member, excludedAccountIds: excludedAccountIds(using: appState)) {
-            Haptics.selection()
-            groupQuery.clear()
+        do {
+            let client = try appState.currentMarmotClient()
+            let member = try await client.normalizeMemberRef(memberRef: resolved.memberRef)
+            if groupSelection.add(member, excludedAccountIds: excludedAccountIds(using: appState)) {
+                Haptics.selection()
+                groupQuery.clear()
+            }
+        } catch {
+            Haptics.error()
+            appState.present(.error(
+                L10n.string("Couldn't add this person"),
+                message: error.localizedDescription
+            ))
         }
     }
 

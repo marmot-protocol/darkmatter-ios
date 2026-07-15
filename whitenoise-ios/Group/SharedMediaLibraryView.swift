@@ -112,6 +112,8 @@ struct SharedMediaLibraryView: View {
     @State private var loadingFileID: String?
     @State private var fileShare: SharedMediaFileShare?
     @State private var fileOpenError: String?
+    @State private var linkToOpen: SharedMediaLibraryPresentation.LinkItem?
+    @Environment(\.openURL) private var openURL
 
     private struct SharedMediaFileShare: Identifiable {
         let id = UUID()
@@ -173,6 +175,29 @@ struct SharedMediaLibraryView: View {
         }
         .sheet(item: $fileShare) { share in
             ActivityShareSheet(items: [share.url])
+        }
+        .confirmationDialog(
+            "Open this link?",
+            isPresented: Binding(
+                get: { linkToOpen != nil },
+                set: { if !$0 { linkToOpen = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: linkToOpen
+        ) { link in
+            Button("Open Link") {
+                if let url = URL(string: link.urlString) {
+                    openURL(url)
+                }
+                linkToOpen = nil
+            }
+            Button("Cancel", role: .cancel) { linkToOpen = nil }
+        } message: { link in
+            if link.hasInternationalizedHost {
+                Text("\(link.display)\n\(L10n.string("This address uses international characters and may be misleading."))")
+            } else {
+                Text(link.display)
+            }
         }
         .alert(
             "Couldn't open file",
@@ -240,7 +265,13 @@ struct SharedMediaLibraryView: View {
     @ViewBuilder
     private var voiceSection: some View {
         let voice = SharedMediaLibraryPresentation.voiceItems(from: model.items)
-        if voice.isEmpty {
+        if model.isLoading && model.items.isEmpty {
+            loadingRow
+        } else if let error = model.loadError, model.items.isEmpty {
+            errorRow(error) {
+                Task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState, force: true) }
+            }
+        } else if voice.isEmpty {
             emptyRow(title: "No voice messages", systemImage: "waveform")
         } else {
             Section {
@@ -260,7 +291,13 @@ struct SharedMediaLibraryView: View {
     @ViewBuilder
     private var filesSection: some View {
         let files = SharedMediaLibraryPresentation.fileItems(from: model.items)
-        if files.isEmpty {
+        if model.isLoading && model.items.isEmpty {
+            loadingRow
+        } else if let error = model.loadError, model.items.isEmpty {
+            errorRow(error) {
+                Task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState, force: true) }
+            }
+        } else if files.isEmpty {
             emptyRow(title: "No files", systemImage: "doc")
         } else {
             Section {
@@ -352,9 +389,17 @@ struct SharedMediaLibraryView: View {
                                     .foregroundStyle(.tint)
                                     .frame(width: 30, height: 30)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(link.display)
-                                        .font(.callout)
-                                        .lineLimit(2)
+                                    HStack(spacing: 4) {
+                                        Text(link.display)
+                                            .font(.callout)
+                                            .lineLimit(2)
+                                        if link.hasInternationalizedHost {
+                                            Image(systemName: "exclamationmark.triangle")
+                                                .font(.caption2)
+                                                .foregroundStyle(.orange)
+                                                .accessibilityLabel(L10n.string("This address uses international characters and may be misleading."))
+                                        }
+                                    }
                                     if link.timelineAt > 0 {
                                         Text(RelativeTime.short(
                                             Date(timeIntervalSince1970: TimeInterval(link.timelineAt))
@@ -368,6 +413,17 @@ struct SharedMediaLibraryView: View {
                             .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
+
+                        Button {
+                            linkToOpen = link
+                        } label: {
+                            Image(systemName: "safari")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Open Link")
 
                         ShareLink(item: link.urlString) {
                             Image(systemName: "square.and.arrow.up")

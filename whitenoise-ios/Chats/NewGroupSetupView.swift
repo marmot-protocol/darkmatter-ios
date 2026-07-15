@@ -55,6 +55,7 @@ struct NewGroupSetupView: View {
                 SelectedRecipientRail(members: model.groupSelection.members) { member in
                     model.groupSelection.remove(accountIdHex: member.accountIdHex)
                 }
+                .disabled(model.isCreatingGroup)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
             } header: {
