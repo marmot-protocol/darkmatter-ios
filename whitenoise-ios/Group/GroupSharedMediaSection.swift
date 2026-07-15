@@ -1,17 +1,12 @@
 import SwiftUI
 import MarmotKit
 
-enum GroupSharedMediaCategory: String, CaseIterable, Identifiable {
-    case media = "Media"
-    case files = "Files"
-
-    var id: String { rawValue }
-}
-
 nonisolated struct GroupSharedMediaItem: Identifiable, Equatable {
     let id: String
     let attachment: MessageMediaAttachment
     let timestamp: UInt64
+    /// Owning message, when the record carries one — powers jump-to-message.
+    let messageIdHex: String?
 
     var isVisual: Bool {
         attachment.isImage || attachment.isVideo
@@ -32,7 +27,8 @@ nonisolated enum GroupSharedMediaPresentation {
             return GroupSharedMediaItem(
                 id: ownerID,
                 attachment: attachment,
-                timestamp: max(record.recordedAt, record.receivedAt)
+                timestamp: max(record.recordedAt, record.receivedAt),
+                messageIdHex: record.messageIdHex.isEmpty ? nil : record.messageIdHex
             )
         }
         .sorted { lhs, rhs in
@@ -45,11 +41,22 @@ nonisolated enum GroupSharedMediaPresentation {
         items.filter(\.isVisual)
     }
 
-    static func fileItems(from items: [GroupSharedMediaItem]) -> [GroupSharedMediaItem] {
-        items.filter { !$0.isVisual }
+    @MainActor
+    static func subtitle(for item: GroupSharedMediaItem) -> String {
+        let mediaType = ContentSanitizer.singleLine(item.attachment.mediaType, maxLength: 100)
+            ?? L10n.string("Attachment")
+        guard item.timestamp > 0 else { return mediaType }
+        let date = Date(timeIntervalSince1970: TimeInterval(item.timestamp))
+        return L10n.formatted(
+            "%@ · %@",
+            arguments: [mediaType, RelativeTime.short(date)],
+            locale: AppLanguage.currentLocale
+        )
     }
 }
 
+/// Details-page preview: a horizontal strip of the most recent photos and
+/// videos plus the entry point into the full library (voice, files, links).
 struct GroupSharedMediaSection: View {
     let records: [MediaRecordFfi]
     let isLoading: Bool
@@ -57,28 +64,13 @@ struct GroupSharedMediaSection: View {
     let onRetry: () -> Void
     let onLoadMedia: ConversationMediaLoader
     let onOpenGallery: (MessageMediaGallery) -> Void
+    let onSeeAll: () -> Void
 
-    @State private var selectedCategory = GroupSharedMediaCategory.media
-    @State private var loadingFileID: String?
-    @State private var fileShare: GroupSharedMediaFileShare?
-    @State private var fileOpenError: String?
-
-    private let columns = Array(
-        repeating: GridItem(.flexible(minimum: 64), spacing: 3),
-        count: 3
-    )
+    static let previewCount = 12
+    private static let thumbnailSize: CGFloat = 92
 
     var body: some View {
-        let items = GroupSharedMediaPresentation.items(from: records)
-
         Section {
-            Picker("Shared media type", selection: $selectedCategory) {
-                ForEach(GroupSharedMediaCategory.allCases) { category in
-                    Text(category.rawValue).tag(category)
-                }
-            }
-            .pickerStyle(.segmented)
-
             if isLoading && records.isEmpty {
                 HStack {
                     Spacer()
@@ -95,44 +87,36 @@ struct GroupSharedMediaSection: View {
                     Button("Retry", action: onRetry)
                 }
             } else {
-                switch selectedCategory {
-                case .media:
-                    mediaGrid(items: items)
-                case .files:
-                    filesList(items: items)
+                let items = GroupSharedMediaPresentation.items(from: records)
+                let visualItems = GroupSharedMediaPresentation.visualItems(from: items)
+
+                if !visualItems.isEmpty {
+                    previewStrip(visualItems: visualItems)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8))
+                        .listRowBackground(Color.clear)
                 }
+
+                Button(action: onSeeAll) {
+                    HStack {
+                        Label("View Shared Media", systemImage: "photo.on.rectangle.angled")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
             }
         } header: {
             Text("Shared Media")
         }
-        .sheet(item: $fileShare) { share in
-            ActivityShareSheet(items: [share.url])
-        }
-        .alert(
-            "Couldn't open file",
-            isPresented: Binding(
-                get: { fileOpenError != nil },
-                set: { if !$0 { fileOpenError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) { fileOpenError = nil }
-        } message: {
-            Text(fileOpenError ?? "")
-        }
     }
 
-    @ViewBuilder
-    private func mediaGrid(items: [GroupSharedMediaItem]) -> some View {
-        let visualItems = GroupSharedMediaPresentation.visualItems(from: items)
-
-        if visualItems.isEmpty {
-            sharedMediaEmptyState(
-                title: "No photos or videos",
-                systemImage: "photo.on.rectangle.angled"
-            )
-        } else {
-            LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(visualItems) { item in
+    private func previewStrip(visualItems: [GroupSharedMediaItem]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(visualItems.prefix(Self.previewCount)) { item in
                     GroupSharedMediaThumbnail(
                         item: item.attachment,
                         onLoadMedia: onLoadMedia
@@ -145,105 +129,15 @@ struct GroupSharedMediaSection: View {
                         ) else { return }
                         onOpenGallery(gallery)
                     }
+                    .frame(width: Self.thumbnailSize, height: Self.thumbnailSize)
+                    .clipShape(.rect(cornerRadius: 10))
                 }
             }
-            .padding(.vertical, 2)
-        }
-    }
-
-    @ViewBuilder
-    private func filesList(items: [GroupSharedMediaItem]) -> some View {
-        let fileItems = GroupSharedMediaPresentation.fileItems(from: items)
-
-        if fileItems.isEmpty {
-            sharedMediaEmptyState(title: "No files", systemImage: "doc")
-        } else {
-            ForEach(fileItems) { item in
-                Button {
-                    Task { await openFile(item) }
-                } label: {
-                    HStack(spacing: 12) {
-                        if loadingFileID == item.id {
-                            ProgressView()
-                                .frame(width: 30, height: 30)
-                        } else {
-                            Image(systemName: item.attachment.kind.systemImageName)
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-                                .frame(width: 30, height: 30)
-                        }
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.attachment.fileName)
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Text(fileSubtitle(for: item))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
-                        Image(systemName: "square.and.arrow.up")
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(loadingFileID != nil)
-            }
-        }
-    }
-
-    private func sharedMediaEmptyState(title: LocalizedStringKey, systemImage: String) -> some View {
-        HStack(spacing: 8) {
-            Spacer()
-            Label(title, systemImage: systemImage)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 18)
-            Spacer()
-        }
-    }
-
-    private func fileSubtitle(for item: GroupSharedMediaItem) -> String {
-        let mediaType = ContentSanitizer.singleLine(item.attachment.mediaType, maxLength: 100)
-            ?? L10n.string("Attachment")
-        guard item.timestamp > 0 else { return mediaType }
-        let date = Date(timeIntervalSince1970: TimeInterval(item.timestamp))
-        return L10n.formatted(
-            "%@ · %@",
-            arguments: [mediaType, RelativeTime.short(date)],
-            locale: AppLanguage.currentLocale
-        )
-    }
-
-    @MainActor
-    private func openFile(_ item: GroupSharedMediaItem) async {
-        guard loadingFileID == nil else { return }
-        loadingFileID = item.id
-        defer { loadingFileID = nil }
-        do {
-            let data = try await onLoadMedia.data(for: item.attachment)
-            guard !Task.isCancelled,
-                  let url = await MediaPlaybackFileStore.fileURL(
-                    for: item.attachment,
-                    data: data
-                  )
-            else { return }
-            fileShare = GroupSharedMediaFileShare(url: url)
-        } catch is CancellationError {
-            return
-        } catch {
-            fileOpenError = error.localizedDescription
         }
     }
 }
 
-private struct GroupSharedMediaFileShare: Identifiable {
-    let id = UUID()
-    let url: URL
-}
-
-private struct GroupSharedMediaThumbnail: View {
+struct GroupSharedMediaThumbnail: View {
     let item: MessageMediaAttachment
     let onLoadMedia: ConversationMediaLoader
     let onOpen: (Data?) -> Void

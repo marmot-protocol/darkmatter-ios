@@ -1,18 +1,23 @@
 import Foundation
 import MarmotKit
 
-/// Screen store for `ProfileView`: resolves the scanned/deep-linked profile
-/// reference to an account id and runs the "Message" action (start a 2-member
-/// group), holding the resolved id + in-flight/error state. The view keeps the
-/// pure display helpers (title / reference / isSelf) and the pasteboard copy.
-/// `npub` and the view's `dismiss` are passed in rather than retained.
+/// Screen store for the profile surface: resolves the profile reference to
+/// an account id, derives shared groups from chat state, runs the Message
+/// action through the shared direct-chat starter (so the invite/retry path
+/// matches New Message), and independently verifies a declared NIP-05
+/// address before any verified state is shown.
 @MainActor
 @Observable
 final class ProfileViewModel {
     var hex: String?
-    var creating = false
-    var error: String?
-    var copied = false
+    var startPrompt: StartChatPrompt?
+    private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
+    private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
+    private(set) var verifiedNip05: String?
+
+    let starter = DirectChatStarter()
+    let directory = RecipientDirectory()
+    private var attemptedNip05Verification: String?
 
     func resolve(npub: String, using appState: AppState) async {
         guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
@@ -23,45 +28,98 @@ final class ProfileViewModel {
         let resolvedHex = await client.accountIdHex(reference: reference)
         guard !Task.isCancelled else { return }
         hex = resolvedHex
-        if let hex {
-            // Trigger enrichment (cached read + background relay fetch).
-            _ = appState.profile(forAccountIdHex: hex)
+        guard let resolvedHex else { return }
+        // Trigger enrichment (cached read + background relay fetch).
+        _ = appState.profile(forAccountIdHex: resolvedHex)
+        await directory.load(using: appState)
+        guard !Task.isCancelled else { return }
+        sharedGroups = SharedGroupsProjection.sharedGroups(
+            snapshots: directory.snapshots,
+            targetAccountIdHex: resolvedHex,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+        addableGroups = SharedGroupsProjection.addableGroups(
+            snapshots: directory.snapshots,
+            targetAccountIdHex: resolvedHex,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+    }
+
+    /// One bounded lookup per declared address; the verified state appears
+    /// only when the declaration independently resolves back to this pubkey.
+    func verifyDeclaredNip05(
+        _ declared: String?,
+        transport: Nip05Resolver.Transport = Nip05Resolver.pinnedTransport
+    ) async {
+        guard let hex,
+              let declared = ContentSanitizer.profileAddress(declared),
+              attemptedNip05Verification != declared
+        else { return }
+        attemptedNip05Verification = declared
+        if await Nip05Resolver.verifies(
+            declaredAddress: declared,
+            accountIdHex: hex,
+            transport: transport
+        ) {
+            verifiedNip05 = declared
         }
     }
 
-    func message(npub: String, title: String, using appState: AppState, dismiss: () -> Void) async {
-        // Take the in-flight guard synchronously before the first await so a
-        // fast double-tap can't start two concurrent createGroup calls (which
-        // would create two duplicate 2-member groups with the same peer),
-        // mirroring NewChatSheetViewModel.create (#403).
-        guard !creating, let accountRef = appState.activeAccountRef else { return }
-        creating = true
-        defer { creating = false }
-        error = nil
-        do {
-            let client = try appState.currentMarmotClient()
-            let groupIdHex = try await client.createGroup(
-                accountRef: accountRef,
-                name: "",
-                memberRefs: [hex ?? npub],
-                description: nil
-            )
-            Haptics.success()
-            dismiss()
-            appState.presentChat(groupIdHex: groupIdHex)
-        } catch let marmotError as MarmotKitError {
-            Haptics.error()
-            if case .MissingKeyPackage = marmotError {
-                error = L10n.formatted(
-                    "%@ hasn't published a compatible key package, so they can't be messaged yet.",
-                    title
-                )
-            } else {
-                error = marmotError.localizedDescription
-            }
-        } catch {
-            Haptics.error()
-            self.error = error.localizedDescription
+    func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {
+        guard let hex else { return }
+        startPrompt = nil
+        // The reuse decision needs the directory; join any in-flight load so
+        // a fast tap can't create a duplicate direct chat.
+        await directory.load(using: appState)
+        let memberRef = ProfileReferenceResolution.referenceForResolution(npub) ?? hex
+        await runStart(
+            accountIdHex: hex,
+            memberRef: memberRef,
+            existingGroupIdHex: existingDirectChatGroupIdHex(accountIdHex: hex),
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    func retryStart(using appState: AppState, onOpen: (String) -> Void) async {
+        guard let prompt = startPrompt else { return }
+        startPrompt = nil
+        await runStart(
+            accountIdHex: prompt.accountIdHex,
+            memberRef: prompt.memberRef,
+            existingGroupIdHex: prompt.existingGroupIdHex,
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    private func runStart(
+        accountIdHex: String,
+        memberRef: String,
+        existingGroupIdHex: String?,
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        let outcome = await starter.startMapped(
+            accountIdHex: accountIdHex,
+            memberRef: memberRef,
+            existingGroupIdHex: existingGroupIdHex,
+            using: appState
+        )
+        switch outcome {
+        case .open(let groupIdHex):
+            onOpen(groupIdHex)
+        case .prompt(let prompt):
+            startPrompt = prompt
+        case .ignored:
+            break
         }
+    }
+
+    private func existingDirectChatGroupIdHex(accountIdHex: String) -> String? {
+        let normalized = accountIdHex.lowercased()
+        return directory.candidates
+            .first { $0.accountIdHex == normalized }?
+            .directChatGroupIdHex
     }
 }

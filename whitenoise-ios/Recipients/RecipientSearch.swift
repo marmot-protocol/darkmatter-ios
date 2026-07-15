@@ -1,0 +1,80 @@
+import Foundation
+
+/// Pure matching rules for the people list in New Message, New Group, and Add
+/// Members. Matches resolved display names (private nicknames fold in through
+/// the resolved name), NIP-05 addresses, and npub/hex prefixes; name-prefix
+/// matches rank before contained matches, identity matches last.
+nonisolated enum RecipientSearch {
+    struct MatchFields: Equatable {
+        let displayName: String?
+        let nickname: String?
+        let nip05: String?
+
+        init(displayName: String? = nil, nickname: String? = nil, nip05: String? = nil) {
+            self.displayName = displayName
+            self.nickname = nickname
+            self.nip05 = nip05
+        }
+    }
+
+    static func browse(
+        _ candidates: [RecipientCandidate],
+        query: String,
+        excludedAccountIds: Set<String> = [],
+        fields: (RecipientCandidate) -> MatchFields
+    ) -> [RecipientCandidate] {
+        let excluded = Set(excludedAccountIds.map { normalized($0) })
+        var seen: Set<String> = []
+        var eligible: [RecipientCandidate] = []
+        for candidate in candidates {
+            let hex = normalized(candidate.accountIdHex)
+            guard !excluded.contains(hex), seen.insert(hex).inserted else { continue }
+            eligible.append(candidate)
+        }
+
+        let needle = folded(query)
+        guard !needle.isEmpty else { return eligible }
+
+        var namePrefix: [RecipientCandidate] = []
+        var nameContained: [RecipientCandidate] = []
+        var identity: [RecipientCandidate] = []
+        for candidate in eligible {
+            let matchFields = fields(candidate)
+            let names = [matchFields.displayName, matchFields.nickname]
+                .compactMap { $0 }
+                .map { folded($0) }
+            if names.contains(where: { $0.hasPrefix(needle) }) {
+                namePrefix.append(candidate)
+            } else if names.contains(where: { $0.contains(needle) }) {
+                nameContained.append(candidate)
+            } else if matchesIdentity(candidate, fields: matchFields, needle: needle) {
+                identity.append(candidate)
+            }
+        }
+        return namePrefix + nameContained + identity
+    }
+
+    private static func matchesIdentity(
+        _ candidate: RecipientCandidate,
+        fields: MatchFields,
+        needle: String
+    ) -> Bool {
+        if let nip05 = fields.nip05, folded(nip05).contains(needle) {
+            return true
+        }
+        let bare = needle.trimmingCharacters(in: .whitespaces)
+        guard bare.count >= 4 else { return false }
+        return candidate.npub.lowercased().hasPrefix(bare)
+            || candidate.accountIdHex.lowercased().hasPrefix(bare)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private static func folded(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+    }
+}

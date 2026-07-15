@@ -24,8 +24,6 @@ final class GroupDetailsViewModel {
     var pushDebugError: String?
     var pendingConfirmation: GroupDetailsConfirmation?
     var membershipActionInFlight = false
-    var showRelays = false
-    var actionHelp: GroupActionHelp?
     var isExportingTranscript = false
     var transcriptExportURL: URL?
     var showTranscriptShareSheet = false
@@ -34,6 +32,9 @@ final class GroupDetailsViewModel {
     var isLoadingSharedMedia = false
     var sharedMediaError: String?
     var isMuted = false
+    private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
+    private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
+    private let recipientDirectory = RecipientDirectory()
     private var didLoadSharedMedia = false
 
     // Bound by the view at the top of `body` (both @ObservationIgnored, so the
@@ -59,7 +60,9 @@ final class GroupDetailsViewModel {
 
     func invite(refs: [String], using appState: AppState) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
-        guard !membershipActionInFlight else { return }
+        // Throwing keeps the caller from treating a skipped invite as success
+        // (the sheet would dismiss and drop the staged selection).
+        guard !membershipActionInFlight else { throw GroupDetailsActionError.operationInFlight }
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
         do {
@@ -414,6 +417,30 @@ final class GroupDetailsViewModel {
         }
     }
 
+    /// Direct-chat details show the named groups both people share, derived
+    /// from the same on-demand snapshots the recipient directory loads.
+    func loadSharedGroups(using appState: AppState) async {
+        guard let conversation, conversation.groupDisplay.isDirectMessage,
+              let otherMember = conversation.otherMember
+        else {
+            sharedGroups = []
+            addableGroups = []
+            return
+        }
+        await recipientDirectory.load(using: appState)
+        guard !Task.isCancelled else { return }
+        sharedGroups = SharedGroupsProjection.sharedGroups(
+            snapshots: recipientDirectory.snapshots,
+            targetAccountIdHex: otherMember,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+        addableGroups = SharedGroupsProjection.addableGroups(
+            snapshots: recipientDirectory.snapshots,
+            targetAccountIdHex: otherMember,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
+    }
+
     func loadMuteState(using appState: AppState) {
         guard let conversation,
               let accountIdHex = appState.activeAccount?.accountIdHex
@@ -437,11 +464,10 @@ final class GroupDetailsViewModel {
         )
         isMuted = muted
         Haptics.success()
-        appState.present(
-            muted
-                ? .warning(L10n.string("Group muted"))
-                : .success(L10n.string("Group unmuted"))
-        )
+        let isDirectMessage = conversation.groupDisplay.isDirectMessage
+        let mutedTitle = isDirectMessage ? L10n.string("Chat muted") : L10n.string("Group muted")
+        let unmutedTitle = isDirectMessage ? L10n.string("Chat unmuted") : L10n.string("Group unmuted")
+        appState.present(muted ? .warning(mutedTitle) : .success(unmutedTitle))
     }
 
     func setArchived(_ archived: Bool, using appState: AppState) async {

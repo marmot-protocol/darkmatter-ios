@@ -112,7 +112,7 @@ struct ChatsListView: View {
                 }
             }
             .sheet(isPresented: $showNewChat) {
-                NewChatSheet()
+                NewChatFlowView()
                     .appAppearance()
             }
             .sheet(isPresented: $showSettings) {
@@ -161,18 +161,44 @@ struct ChatsListView: View {
     /// Navigate into a chat requested via `AppState.pendingChatId`, closing any
     /// presenting sheets (composer, account switcher and its nested QR/profile
     /// sheets) so the pushed conversation lands on top.
+    ///
+    /// Two-phase on purpose: replacing the path in one shot while a deep
+    /// stack (details → profile → flow sheet) is tearing down makes
+    /// NavigationStack silently restore the old path. Popping to root always
+    /// sticks; the clean push follows once the unwind has settled. The
+    /// pending id stays set until the final phase so deeper views' unwind
+    /// observers are guaranteed to see it.
     private func consumePendingChat() {
         guard let newId = appState.pendingChatId else { return }
-        let target = ChatNavigationTarget(
-            groupIdHex: newId,
-            messageIdHex: appState.pendingChatMessageIdHex
-        )
         showNewChat = false
         showSettings = false
         dismissSearchKeyboard()
         scope = .active
-        path = [target]
-        appState.clearPendingChat()
+        path = []
+        Task { @MainActor in
+            // Cascaded dismissals (flow sheet → profile → details) each take
+            // an animation beat, and a push landing mid-cascade gets
+            // reverted. No fixed delay wins that race, so push, observe
+            // whether the stack kept it, and retry until it sticks.
+            for attempt in 0..<8 {
+                try? await Task.sleep(nanoseconds: attempt == 0 ? 350_000_000 : 450_000_000)
+                guard appState.pendingChatId == newId else { return }
+                // Re-read the anchor so a newer jump for the same chat wins.
+                let target = ChatNavigationTarget(
+                    groupIdHex: newId,
+                    messageIdHex: appState.pendingChatMessageIdHex
+                )
+                path = [target]
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard appState.pendingChatId == newId else { return }
+                if path == [target] {
+                    appState.clearPendingChat()
+                    return
+                }
+                path = []
+            }
+            appState.clearPendingChat()
+        }
     }
 
     // MARK: - Search
@@ -248,7 +274,7 @@ struct ChatsListView: View {
         }
         .buttonStyle(.plain)
         .contentShape(Circle())
-        .accessibilityLabel(searchCancellationActive ? "Clear search" : "New chat")
+        .accessibilityLabel(searchCancellationActive ? Text("Clear search") : Text("New message"))
     }
 
     private var searchPlaceholderColor: Color {
@@ -676,13 +702,13 @@ private struct EmptyChatsState: View {
         ContentUnavailableView {
             Label("No chats yet", systemImage: "bubble.left.and.bubble.right")
         } description: {
-            Text("Start a conversation by inviting someone with their npub.")
+            Text("Search for someone you know, paste their npub, or scan their QR code.")
                 .multilineTextAlignment(.center)
         } actions: {
             Button {
                 action()
             } label: {
-                Label("New Chat", systemImage: "square.and.pencil")
+                Label("New Message", systemImage: "square.and.pencil")
                     .padding(.horizontal, 12)
             }
             .buttonStyle(.borderedProminent)
