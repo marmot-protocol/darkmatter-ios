@@ -43,6 +43,7 @@ struct GroupDetailsView: View {
     @State private var membersExpanded = false
     @State private var showTechnicalDetails = false
     @State private var showNotifications = false
+    @State private var showMediaLibrary = false
     @State private var showContactProfile = false
     @State private var editingNickname = false
     @State private var nicknameDraft = ""
@@ -108,6 +109,9 @@ struct GroupDetailsView: View {
         }
         .navigationDestination(isPresented: $showNotifications) {
             ChatNotificationsView(model: model)
+        }
+        .navigationDestination(isPresented: $showMediaLibrary) {
+            SharedMediaLibraryView(conversation: viewModel)
         }
         .toolbar {
             if !isDirectMessage && isAdmin {
@@ -534,7 +538,8 @@ struct GroupDetailsView: View {
             onLoadMedia: mediaLoader,
             onOpenGallery: { gallery in
                 sharedMediaGallery = gallery
-            }
+            },
+            onSeeAll: { showMediaLibrary = true }
         )
     }
 
