@@ -36727,6 +36727,216 @@
           }
         }
       }
+    },
+    "App Lock" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App-Sperre" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Bloqueo de la app" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Verrouillage de l'app" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Blocco app" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Bloqueio do app" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Блокировка приложения" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Uygulama kilidi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用锁定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "應用程式鎖定" } }
+      }
+    },
+    "Require Face ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Face ID erforderlich" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Requerir Face ID" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exiger Face ID" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Richiedi Face ID" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Exigir Face ID" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Требовать Face ID" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Face ID iste" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要 Face ID" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要 Face ID" } }
+      }
+    },
+    "Require Touch ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Touch ID erforderlich" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Requerir Touch ID" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exiger Touch ID" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Richiedi Touch ID" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Exigir Touch ID" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Требовать Touch ID" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Touch ID iste" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要 Touch ID" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要 Touch ID" } }
+      }
+    },
+    "Require Optic ID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Optic ID erforderlich" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Requerir Optic ID" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exiger Optic ID" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Richiedi Optic ID" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Exigir Optic ID" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Требовать Optic ID" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Optic ID iste" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要 Optic ID" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要 Optic ID" } }
+      }
+    },
+    "Require passcode" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Code erforderlich" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Requerir código" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Exiger le code" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Richiedi codice" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Exigir código" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Требовать код-пароль" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şifre iste" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "需要密码" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "需要密碼" } }
+      }
+    },
+    "Auto-lock" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Automatisch sperren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Bloqueo automático" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Verrouillage auto" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Blocco automatico" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Bloqueio automático" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Автоблокировка" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Otomatik kilit" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动锁定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "自動鎖定" } }
+      }
+    },
+    "Immediately" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sofort" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Inmediatamente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Immédiatement" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Immediatamente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Imediatamente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сразу" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Hemen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "立即" } }
+      }
+    },
+    "After 1 minute" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nach 1 Minute" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Después de 1 minuto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Après 1 minute" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Dopo 1 minuto" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Após 1 minuto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Через 1 минуту" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "1 dakika sonra" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "1 分钟后" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "1 分鐘後" } }
+      }
+    },
+    "After 5 minutes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nach 5 Minuten" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Después de 5 minutos" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Après 5 minutes" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Dopo 5 minuti" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Após 5 minutos" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Через 5 минут" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "5 dakika sonra" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "5 分钟后" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "5 分鐘後" } }
+      }
+    },
+    "After 15 minutes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nach 15 Minuten" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Después de 15 minutos" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Après 15 minutes" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Dopo 15 minuti" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Após 15 minutos" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Через 15 минут" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "15 dakika sonra" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "15 分钟后" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "15 分鐘後" } }
+      }
+    },
+    "Hides the app's content in the app switcher and requires unlocking when you return." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Blendet den Inhalt der App im App-Umschalter aus und verlangt beim Zurückkehren eine Entsperrung." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Oculta el contenido de la app en el selector de apps y requiere desbloquear al volver." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Masque le contenu de l'app dans le sélecteur d'apps et demande un déverrouillage au retour." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Nasconde il contenuto dell'app nel selettore delle app e richiede lo sblocco al ritorno." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Oculta o conteúdo do app no seletor de apps e exige desbloqueio ao voltar." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Скрывает содержимое приложения в переключателе приложений и требует разблокировки при возвращении." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Uygulama içeriğini uygulama değiştiricide gizler ve geri döndüğünüzde kilidin açılmasını ister." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在应用切换器中隐藏应用内容，返回时需要解锁。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "在應用程式切換器中隱藏應用程式內容，返回時需要解鎖。" } }
+      }
+    },
+    "To use App Lock, set a passcode on this device." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lege einen Gerätecode fest, um die App-Sperre zu nutzen." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Para usar el bloqueo de la app, configura un código en este dispositivo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pour utiliser le verrouillage de l'app, définissez un code sur cet appareil." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Per usare il blocco app, imposta un codice su questo dispositivo." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Para usar o bloqueio do app, defina um código neste dispositivo." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтобы использовать блокировку приложения, установите код-пароль на этом устройстве." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Uygulama kilidini kullanmak için bu cihazda bir şifre belirleyin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "要使用应用锁定，请先在此设备上设置密码。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要使用應用程式鎖定，請先在此裝置上設定密碼。" } }
+      }
+    },
+    "White Noise is locked" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "White Noise ist gesperrt" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "White Noise está bloqueado" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "White Noise est verrouillé" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "White Noise è bloccato" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "White Noise está bloqueado" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "White Noise заблокирован" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "White Noise kilitli" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "White Noise 已锁定" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "White Noise 已鎖定" } }
+      }
+    },
+    "Unlock" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Entsperren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Desbloquear" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déverrouiller" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Sblocca" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Desbloquear" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разблокировать" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kilidi aç" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "解锁" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "解鎖" } }
+      }
+    },
+    "Unlock White Noise" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "White Noise entsperren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Desbloquear White Noise" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Déverrouiller White Noise" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Sblocca White Noise" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Desbloquear White Noise" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разблокировать White Noise" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "White Noise kilidini aç" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "解锁 White Noise" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "解鎖 White Noise" } }
+      }
     }
   },
   "version" : "1.1"

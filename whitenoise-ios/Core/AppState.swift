@@ -159,6 +159,9 @@ final class AppState {
     @ObservationIgnored let notificationCoordinator = NotificationCoordinator()
     let toastState = ToastState()
     let navigation = NavigationState()
+    /// Optional local-auth gate and app-switcher privacy shield. UI-only:
+    /// runtime suspend/resume stays independent of the lock state.
+    let appLock = AppLockController()
     /// Profile projection cache + hydration/refresh queues. `profileRefreshGeneration`
     /// stays on AppState (below) as the observed token; the store reads/bumps it
     /// through its back-reference so SwiftUI observation is unchanged.
