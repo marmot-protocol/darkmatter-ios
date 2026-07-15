@@ -14,10 +14,16 @@ final class RecipientDirectory {
     private(set) var isLoading = false
     private(set) var loadError: String?
     private var loadedAccountRef: String?
+    private var loadTask: Task<Void, Never>?
 
     private static let profileWarmupLimit = 24
 
+    /// Callers that need the directory before deciding (e.g. DM reuse) can
+    /// await this mid-flight: a concurrent load is joined, not skipped.
     func load(using appState: AppState, force: Bool = false) async {
+        if let loadTask {
+            await loadTask.value
+        }
         guard let accountRef = appState.activeAccountRef else {
             snapshots = []
             candidates = []
@@ -26,6 +32,13 @@ final class RecipientDirectory {
         }
         if loadedAccountRef == accountRef, !force, !snapshots.isEmpty { return }
         guard !isLoading else { return }
+        let task = Task { await performLoad(accountRef: accountRef, using: appState) }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func performLoad(accountRef: String, using appState: AppState) async {
         isLoading = true
         loadError = nil
         defer { isLoading = false }

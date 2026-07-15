@@ -102,8 +102,7 @@ struct GroupDetailsView: View {
             NavigationStack {
                 ProfileContentView(
                     npub: target.member.npub,
-                    moderation: moderationContext(for: target.member),
-                    showsGroupActions: false
+                    moderation: moderationContext(for: target.member)
                 )
                 .navigationTitle("Profile")
                 .navigationBarTitleDisplayMode(.inline)
@@ -140,6 +139,18 @@ struct GroupDetailsView: View {
                     groups: model.addableGroups
                 )
                 .appAppearance()
+            }
+        }
+        // Unwind every details-owned presentation when a chat navigation
+        // posts; isPresented pushes otherwise re-assert over the new stack.
+        .onChange(of: appState.pendingChatId) { _, pending in
+            if pending != nil {
+                showContactProfile = false
+                showNotifications = false
+                showMediaLibrary = false
+                memberSheetTarget = nil
+                showStartGroupWithContact = false
+                showAddContactToGroup = false
             }
         }
         .navigationDestination(isPresented: $showNotifications) {

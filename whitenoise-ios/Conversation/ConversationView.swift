@@ -663,6 +663,14 @@ struct ConversationView: View {
                     conversationTitle
                 }
             }
+            // An isPresented push fights navigation-path swaps: unwind it
+            // before the pending chat replaces the stack, or the details page
+            // re-asserts itself over the new conversation.
+            .onChange(of: appState.pendingChatId) { _, pending in
+                if pending != nil {
+                    showDetails = false
+                }
+            }
             .navigationDestination(isPresented: $showDetails) {
                 if let viewModel {
                     GroupDetailsView(

@@ -68,6 +68,9 @@ final class ProfileViewModel {
     func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {
         guard let hex else { return }
         startPrompt = nil
+        // The reuse decision needs the directory; join any in-flight load so
+        // a fast tap can't create a duplicate direct chat.
+        await directory.load(using: appState)
         let memberRef = ProfileReferenceResolution.referenceForResolution(npub) ?? hex
         await runStart(
             accountIdHex: hex,
