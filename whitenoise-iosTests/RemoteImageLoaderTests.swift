@@ -8,6 +8,23 @@ import UniformTypeIdentifiers
 @MainActor
 @Suite(.serialized)
 struct RemoteImageLoaderTests {
+    @Test func imageDataRejectsUnsanitizedURLsAtTheEgress() async throws {
+        // Self-enforcing chokepoint: a caller that skips ContentSanitizer must
+        // not reach the network on the first hop.
+        let privateHost = try #require(URL(string: "https://127.0.0.1/a.png"))
+        await #expect(throws: PinnedHTTPSFetcher.FetchError.invalidRequest) {
+            try await RemoteImageFetch.imageData(for: privateHost)
+        }
+        let plainHTTP = try #require(URL(string: "http://example.com/a.png"))
+        await #expect(throws: PinnedHTTPSFetcher.FetchError.invalidRequest) {
+            try await RemoteImageFetch.imageData(for: plainHTTP)
+        }
+        let oddPort = try #require(URL(string: "https://example.com:8443/a.png"))
+        await #expect(throws: PinnedHTTPSFetcher.FetchError.invalidRequest) {
+            try await RemoteImageFetch.imageData(for: oddPort)
+        }
+    }
+
     @Test func remoteImageFetchDoesNotAdvertiseSVGContent() throws {
         let request = RemoteImageFetch.request(
             for: try #require(URL(string: "https://example.com/avatar.png")),

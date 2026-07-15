@@ -30,8 +30,15 @@ nonisolated enum RemoteImageFetch {
     }
 
     static func imageData(for url: URL) async throws -> Data {
+        // Self-enforcing chokepoint: re-validate at the egress instead of
+        // trusting every caller to have pre-sanitized. The redirect guard only
+        // re-checks hops after the first; the first hop must pass the same
+        // allowlist.
+        guard let validated = ContentSanitizer.imageURL(url.absoluteString) else {
+            throw PinnedHTTPSFetcher.FetchError.invalidRequest
+        }
         let request = request(
-            for: url,
+            for: validated,
             accept: remoteImageAcceptHeader
         )
         let (data, _) = try await download(request, maximumResponseBytes: maximumImageBytes)

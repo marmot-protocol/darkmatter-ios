@@ -49,8 +49,9 @@ final class ImportIdentityViewModel {
             dismiss()
         } catch {
             Haptics.error()
-            self.error = error.localizedDescription
-            appState.present(.error(L10n.string("Import failed"), message: error.localizedDescription))
+            let message = ImportIdentityView.redactedImportError(error.localizedDescription)
+            self.error = message
+            appState.present(.error(L10n.string("Import failed"), message: message))
         }
     }
 

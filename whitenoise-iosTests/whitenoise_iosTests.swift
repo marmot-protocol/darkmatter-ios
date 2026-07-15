@@ -4077,6 +4077,15 @@ struct ContentSanitizerTests {
         #expect(ContentSanitizer.imageURL("http://example.com/a.png") == nil)
     }
 
+    @Test func imageURLRejectsNonStandardPorts() {
+        // A peer URL with an explicit port would drive TLS connections at
+        // arbitrary ports on public hosts — a connect/timing oracle.
+        #expect(ContentSanitizer.imageURL("https://example.com:443/a.png") != nil)
+        #expect(ContentSanitizer.imageURL("https://example.com:1234/a.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://example.com:8443/a.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://example.com:80/a.png") == nil)
+    }
+
     @Test func imageURLRejectsOverLengthStrings() {
         // Peer-controlled fields (kind:0 `picture`, group `avatarUrl`, DuckDuckGo
         // results) are unbounded; reject before parsing past the length cap (#381).

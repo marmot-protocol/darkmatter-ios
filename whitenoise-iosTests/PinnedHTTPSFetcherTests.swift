@@ -6,7 +6,7 @@ import Testing
 
 struct PinnedHTTPSFetcherTests {
     @Test func endpointsResolveOnceAndPreserveTLSHostname() throws {
-        let url = try #require(URL(string: "https://cdn.example:8443/avatar.png"))
+        let url = try #require(URL(string: "https://cdn.example:443/avatar.png"))
         let calls = Mutex(0)
         let resolver: HostResolutionGuard.Resolver = { host in
             #expect(host == "cdn.example")
@@ -18,9 +18,20 @@ struct PinnedHTTPSFetcherTests {
 
         #expect(calls.withLock { $0 } == 1)
         #expect(endpoints == [
-            .init(address: "93.184.216.34", tlsServerName: "cdn.example", port: 8443),
-            .init(address: "2001:4860:4860::8888", tlsServerName: "cdn.example", port: 8443),
+            .init(address: "93.184.216.34", tlsServerName: "cdn.example", port: 443),
+            .init(address: "2001:4860:4860::8888", tlsServerName: "cdn.example", port: 443),
         ])
+    }
+
+    @Test func endpointsRejectNonStandardPorts() throws {
+        // A peer URL must not steer the pinned TLS connection off port 443 —
+        // the one dimension the host/address checks don't constrain.
+        let url = try #require(URL(string: "https://cdn.example:8443/avatar.png"))
+        let resolver: HostResolutionGuard.Resolver = { _ in ["93.184.216.34"] }
+
+        #expect(throws: PinnedHTTPSFetcher.FetchError.invalidRequest) {
+            try PinnedHTTPSFetcher.endpoints(for: url, resolver: resolver)
+        }
     }
 
     @Test func endpointsRejectMixedPublicAndPrivateDNSAnswers() throws {
