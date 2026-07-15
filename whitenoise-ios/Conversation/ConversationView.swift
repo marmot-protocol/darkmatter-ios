@@ -653,10 +653,12 @@ struct ConversationView: View {
             .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
             .bottomInputChromeAccessory { composerArea }
             .overlay { centeredActionsOverlay }
-            .navigationTitle(conversationChrome.title)
+            // The identity cluster lives leading-aligned next to the back
+            // chevron; an inline system title would double it up.
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
+                ToolbarItem(placement: .topBarLeading) {
                     conversationTitle
                 }
             }
@@ -978,16 +980,17 @@ struct ConversationView: View {
         .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
     }
 
-    /// Header: avatar, name (with a timer glyph while disappearing messages
-    /// are on), and the member count. Tapping it is the single way into the
-    /// details page for both direct messages and groups.
+    /// Leading identity cluster: avatar beside the back chevron, then the
+    /// name (with a timer glyph while disappearing messages are on) over the
+    /// member count. Tapping it is the single way into the details page for
+    /// both direct messages and groups.
     @ViewBuilder
     private var conversationTitle: some View {
         let chrome = conversationChrome
         Button {
             showDetails = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 if let viewModel {
                     let groupDisplay = viewModel.groupDisplay
                     AvatarBubble(
@@ -995,9 +998,9 @@ struct ConversationView: View {
                         title: chrome.title,
                         pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
                     )
-                    .frame(width: 30, height: 30)
+                    .frame(width: 34, height: 34)
                 }
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 4) {
                         Text(chrome.title)
                             .font(.headline)
