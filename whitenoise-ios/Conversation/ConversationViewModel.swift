@@ -185,7 +185,7 @@ final class ConversationViewModel {
         maxMarkedReadMessageIds: Int(Self.timelinePageLimit) * 4,
         appState: appState,
         loadedMessageIds: { [weak timelineStore] in
-            timelineStore?.loadedMessageIds ?? []
+            timelineStore?.loadedMessageIdsInTimelineOrder ?? []
         },
         onChatListRowUpdated: onChatListRowUpdated
     )

@@ -127,7 +127,14 @@ struct ConversationTranscriptExportTests {
             groupIdHex: groupId
         )
 
-        #expect(messages.map(\.messageIdHex) == [oldestId, middleId, newestId])
+        // Pagination collects every record; makeDocument owns the
+        // chronological sort.
+        #expect(Set(messages.map(\.messageIdHex)) == [oldestId, middleId, newestId])
+        let document = ConversationTranscriptExport.makeDocument(
+            group: testExportGroup(name: "Sorted", groupIdHex: groupId),
+            messages: messages
+        )
+        #expect(document.events.map(\.messageIdHex) == [oldestId, middleId, newestId])
         #expect(reader.accountRefs == ["account-1", "account-1"])
         #expect(reader.queries.count == 2)
         let firstQuery = try #require(reader.queries.first)
@@ -161,7 +168,9 @@ struct ConversationTranscriptExportTests {
             groupIdHex: groupId
         )
 
-        #expect(messages.map(\.messageIdHex) == [oldestId, newestId])
+        // The stalled second page is dropped, not appended twice; page order
+        // is preserved (makeDocument owns the chronological sort).
+        #expect(messages.map(\.messageIdHex) == [newestId, oldestId])
         #expect(reader.queries.count == 2)
         #expect(reader.queries[0].before == nil)
         #expect(reader.queries[0].beforeMessageId == nil)

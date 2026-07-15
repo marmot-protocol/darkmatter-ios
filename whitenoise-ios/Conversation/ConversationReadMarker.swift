@@ -27,10 +27,11 @@ final class ConversationReadMarker {
     private let groupIdHex: String
     private let maxMarkedReadMessageIds: Int
     private weak var appState: AppState?
-    /// The message ids currently in the loaded timeline window — used to bound
-    /// the marked set to what can still be re-displayed. Evaluated lazily so the
-    /// async flush prunes against the live window.
-    private let loadedMessageIds: () -> Set<String>
+    /// The message ids currently in the loaded timeline window, oldest →
+    /// newest — used to bound the marked set to what can still be
+    /// re-displayed, preferring the newest. Evaluated lazily so the async
+    /// flush prunes against the live window.
+    private let loadedMessageIds: () -> [String]
     private let onChatListRowUpdated: ((ChatListRowFfi) -> Void)?
 
     private var markedReadMessageIds: Set<String> = []
@@ -43,7 +44,7 @@ final class ConversationReadMarker {
         groupIdHex: String,
         maxMarkedReadMessageIds: Int,
         appState: AppState?,
-        loadedMessageIds: @escaping () -> Set<String>,
+        loadedMessageIds: @escaping () -> [String],
         onChatListRowUpdated: ((ChatListRowFfi) -> Void)?
     ) {
         self.groupIdHex = groupIdHex
@@ -77,7 +78,7 @@ final class ConversationReadMarker {
 
     nonisolated static func retainedMarkedReadMessageIds(
         _ current: Set<String>,
-        loadedMessageIds: Set<String>,
+        loadedMessageIdsInTimelineOrder: [String],
         pendingMessageIds: Set<String>,
         limit: Int
     ) -> Set<String> {
@@ -85,16 +86,12 @@ final class ConversationReadMarker {
         let boundedLimit = max(0, limit)
         guard boundedLimit > 0 else { return pending }
 
-        let loaded = current.intersection(loadedMessageIds)
-        let retainedCandidates = loaded.union(pending)
-        guard retainedCandidates.count > boundedLimit else {
-            return retainedCandidates
-        }
-
         var retained = pending
-        let remainingCapacity = max(0, boundedLimit - retained.count)
-        if remainingCapacity > 0 {
-            for messageId in loaded.subtracting(retained).sorted().prefix(remainingCapacity) {
+        // Newest first, so the trimmed ids are the ones least likely to still
+        // be on screen — a hash-ordered subset would re-mark visible rows.
+        for messageId in loadedMessageIdsInTimelineOrder.reversed() {
+            guard retained.count < boundedLimit else { break }
+            if current.contains(messageId) {
                 retained.insert(messageId)
             }
         }
@@ -105,7 +102,7 @@ final class ConversationReadMarker {
         guard force || markedReadMessageIds.count > maxMarkedReadMessageIds else { return }
         markedReadMessageIds = Self.retainedMarkedReadMessageIds(
             markedReadMessageIds,
-            loadedMessageIds: loadedMessageIds(),
+            loadedMessageIdsInTimelineOrder: loadedMessageIds(),
             pendingMessageIds: pendingReadMessageIdSet,
             limit: maxMarkedReadMessageIds
         )
@@ -152,6 +149,10 @@ final class ConversationReadMarker {
             activeAccountMatches: appState?.activeAccountRef == accountRef
         ) {
         case .stop:
+            // Keep the array and set in lockstep like every other drain path,
+            // or the emptied set lets the same ids be re-appended and a later
+            // flush re-marks the orphaned copies.
+            pendingReadMessageIds = []
             pendingReadMessageIdSet = []
             pruneMarkedReadMessageIds(force: true)
             return false

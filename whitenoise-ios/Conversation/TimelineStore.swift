@@ -216,6 +216,18 @@ final class TimelineStore {
 
     var loadedMessageIds: Set<String> { Set(messageById.keys) }
 
+    /// Message ids in timeline order (oldest → newest). The read-marker's
+    /// retention policy trims oldest-first so the ids most likely to still be
+    /// on screen survive the cap.
+    var loadedMessageIdsInTimelineOrder: [String] {
+        timeline.compactMap { item in
+            guard case .message(let record, _) = item.kind, !record.messageIdHex.isEmpty else {
+                return nil
+            }
+            return record.messageIdHex
+        }
+    }
+
     // MARK: - Projection accessors
 
     /// Reaction tallies for a target message (empty when none).

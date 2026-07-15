@@ -3675,44 +3675,38 @@ struct NotificationServiceProjectionTests {
     }
 
     @Test func boundedAdditionalPresentationsCoalescesOverflowWithoutDroppingRecords() {
-        // Unit-level coverage of the bounding helper independent of FFI plumbing.
-        let primary = LocalNotificationProjection.makePresentation(
-            for: notificationUpdate(notificationKey: "primary", timestampMs: 1_000)
-        )!
+        // Unit-level coverage of the live NSE bounding path (the one
+        // `decision(...)` uses).
         let cap = NotificationServiceProjection.maxAdditionalPresentations
-        let additional = (0..<(cap + 3)).map { index in
-            LocalNotificationProjection.makePresentation(
-                for: notificationUpdate(notificationKey: "add-\(index)", timestampMs: Int64(900 - index))
-            )!
+        let additionalUpdates = (0..<(cap + 3)).map { index in
+            notificationUpdate(notificationKey: "add-\(index)", timestampMs: Int64(900 - index))
         }
 
-        let bounded = NotificationServiceProjection.boundedAdditionalPresentations(
-            after: primary,
-            from: additional
+        let bounded = NotificationPresentationPolicy.boundedAdditionalPresentations(
+            from: additionalUpdates
         )
 
         // cap shown + a single summary; the 3 overflow records are represented, not lost.
+        let shown = additionalUpdates.prefix(cap).compactMap {
+            LocalNotificationProjection.makePresentation(for: $0)
+        }
         #expect(bounded.count == cap + 1)
-        #expect(Array(bounded.prefix(cap)) == Array(additional.prefix(cap)))
+        #expect(Array(bounded.prefix(cap)) == shown)
         #expect(bounded.last!.body == L10n.plural("%lld more messages", Int64(3)))
     }
 
     @Test func boundedAdditionalPresentationsLeavesSmallListUntouched() {
-        let primary = LocalNotificationProjection.makePresentation(
-            for: notificationUpdate(notificationKey: "primary", timestampMs: 1_000)
-        )!
-        let additional = (0..<3).map { index in
-            LocalNotificationProjection.makePresentation(
-                for: notificationUpdate(notificationKey: "add-\(index)", timestampMs: Int64(900 - index))
-            )!
+        let additionalUpdates = (0..<3).map { index in
+            notificationUpdate(notificationKey: "add-\(index)", timestampMs: Int64(900 - index))
         }
 
-        let bounded = NotificationServiceProjection.boundedAdditionalPresentations(
-            after: primary,
-            from: additional
+        let bounded = NotificationPresentationPolicy.boundedAdditionalPresentations(
+            from: additionalUpdates
         )
 
-        #expect(bounded == additional)
+        #expect(bounded == additionalUpdates.compactMap {
+            LocalNotificationProjection.makePresentation(for: $0)
+        })
     }
 
     @Test func equalTimestampsUseStableOrdering() {
@@ -5253,34 +5247,36 @@ struct ConversationTimelineProjectionTests {
     }
 
     @Test func markedReadDedupKeepsPendingFlushIdsWhenApplyingLimit() {
-        let loaded = Set([hex("11"), hex("22"), hex("33")])
+        let loaded = [hex("11"), hex("22"), hex("33")]
         let pending = Set([hex("aa")])
         let stale = hex("ff")
 
         let retained = ConversationReadMarker.retainedMarkedReadMessageIds(
-            loaded.union(pending).union([stale]),
-            loadedMessageIds: loaded,
+            Set(loaded).union(pending).union([stale]),
+            loadedMessageIdsInTimelineOrder: loaded,
             pendingMessageIds: pending,
             limit: 2
         )
 
         #expect(retained.count == 2)
-        #expect(retained.isSubset(of: loaded.union(pending)))
+        #expect(retained.isSubset(of: Set(loaded).union(pending)))
         #expect(retained.isSuperset(of: pending))
         #expect(!retained.contains(stale))
     }
 
-    @Test func markedReadDedupRetainsLoadedIdsDeterministically() {
-        let loaded = Set([hex("44"), hex("11"), hex("33"), hex("22")])
+    @Test func markedReadDedupRetainsNewestLoadedIds() {
+        // Timeline order is oldest → newest; trimming keeps the newest ids so
+        // rows still on screen aren't re-marked after the cap is applied.
+        let loaded = [hex("44"), hex("11"), hex("33"), hex("22")]
 
         let retained = ConversationReadMarker.retainedMarkedReadMessageIds(
-            loaded,
-            loadedMessageIds: loaded,
+            Set(loaded),
+            loadedMessageIdsInTimelineOrder: loaded,
             pendingMessageIds: [],
             limit: 2
         )
 
-        #expect(retained == Set([hex("11"), hex("22")]))
+        #expect(retained == Set([hex("33"), hex("22")]))
     }
 
     @Test func canDeleteMessageRequiresSenderOrAdminPermission() {

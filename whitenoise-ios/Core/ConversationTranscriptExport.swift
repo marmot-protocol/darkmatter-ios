@@ -122,7 +122,10 @@ nonisolated enum ConversationTranscriptExport {
             beforeMessageId = nextBeforeMessageId
         }
 
-        return sortChronologically(collected)
+        // Page order, newest page first. `makeDocument` owns the chronological
+        // sort; sorting here too would be a redundant O(n log n) pass over
+        // every record's full payload.
+        return collected
     }
 
     static func makeDocument(
