@@ -5264,6 +5264,30 @@ struct ConversationTimelineProjectionTests {
         #expect(!retained.contains(stale))
     }
 
+    @Test @MainActor func stopDrainKeepsPendingArrayAndSetInLockstep() async {
+        let marker = ConversationReadMarker(
+            groupIdHex: hex("aa"),
+            maxMarkedReadMessageIds: 10,
+            appState: nil,
+            loadedMessageIds: { [] },
+            onChatListRowUpdated: nil
+        )
+        marker.insertPendingReadMessageIdsForTesting([hex("11")])
+
+        // A nil app state never matches the captured account, so the flush
+        // takes the .stop drain — which must empty the array with the set, or
+        // the emptied set lets the same id re-append and re-mark later.
+        let keepAlive = await marker.flushPendingReadMarksForTesting(accountRef: "acct")
+
+        #expect(!keepAlive)
+        #expect(marker.pendingReadMessageIdsForTesting.isEmpty)
+        #expect(marker.pendingReadMessageIdSetForTesting.isEmpty)
+
+        // Re-enqueueing after the drain yields exactly one queued copy.
+        marker.insertPendingReadMessageIdsForTesting([hex("11"), hex("11")])
+        #expect(marker.pendingReadMessageIdsForTesting == [hex("11")])
+    }
+
     @Test func markedReadDedupRetainsNewestLoadedIds() {
         // Timeline order is oldest → newest; trimming keeps the newest ids so
         // rows still on screen aren't re-marked after the cap is applied.

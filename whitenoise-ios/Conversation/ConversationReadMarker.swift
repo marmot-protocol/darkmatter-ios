@@ -240,5 +240,13 @@ final class ConversationReadMarker {
             pendingReadMessageIds.append(messageId)
         }
     }
+
+    var pendingReadMessageIdsForTesting: [String] { pendingReadMessageIds }
+
+    var pendingReadMessageIdSetForTesting: Set<String> { pendingReadMessageIdSet }
+
+    func flushPendingReadMarksForTesting(accountRef: String) async -> Bool {
+        await flushPendingReadMarks(accountRef: accountRef)
+    }
 #endif
 }
