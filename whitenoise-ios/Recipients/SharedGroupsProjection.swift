@@ -1,10 +1,10 @@
 import Foundation
 
-/// Groups a profile subject shares with the active account: named groups with
-/// more than two members where both are on the roster and the viewer is still
-/// a member. Direct chats are reached through the Message action instead, and
-/// unnamed groups have no stable identity to show. Derived from the same
-/// screen-lifetime snapshots the recipient directory loads.
+/// Groups a profile subject shares with the active account: named groups
+/// where both are on the roster and the viewer is still a member. The
+/// unnamed two-person chat is the DM itself and stays excluded; a *named*
+/// pair group counts. Derived from the same screen-lifetime snapshots the
+/// recipient directory loads.
 nonisolated enum SharedGroupsProjection {
     struct SharedGroup: Equatable, Identifiable {
         let groupIdHex: String
@@ -27,7 +27,7 @@ nonisolated enum SharedGroupsProjection {
             .filter { snapshot in
                 guard snapshot.sanitizedName != nil,
                       snapshot.isSelfMember,
-                      snapshot.memberIdsHex.count > 2
+                      snapshot.memberIdsHex.count >= 2
                 else { return false }
                 let roster = Set(snapshot.memberIdsHex.map { $0.lowercased() })
                 return roster.contains(target) && roster.contains(mine)

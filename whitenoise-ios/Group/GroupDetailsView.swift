@@ -171,9 +171,12 @@ struct GroupDetailsView: View {
             .appAppearance()
         }
         .sheet(isPresented: $model.showGroupImageEditor) {
-            GroupImageURLSheet(initialURL: viewModel.group.avatarUrl) { url in
-                try await model.updateGroupImage(url: url, using: appState)
-            }
+            GroupImageURLSheet(
+                initialURL: viewModel.group.avatarUrl,
+                onSave: GroupImageSaveSubmitter { url in
+                    try await model.updateGroupImage(url: url, using: appState)
+                }
+            )
             .appAppearance()
         }
         .sheet(isPresented: $model.showRetentionEditor) {

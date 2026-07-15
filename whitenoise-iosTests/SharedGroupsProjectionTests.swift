@@ -6,22 +6,24 @@ struct SharedGroupsProjectionTests {
     private let alice = String(repeating: "bb", count: 32)
     private let bob = String(repeating: "cc", count: 32)
 
-    @Test func includesOnlyNamedMultiMemberGroupsContainingBothParties() {
+    @Test func includesOnlyNamedGroupsContainingBothParties() {
         let shared = snapshot("g1", name: "Team", members: [me, alice, bob], activity: 5)
+        let namedPair = snapshot("g6", name: "Us two", members: [me, alice], activity: 7)
         let directChat = snapshot("g2", name: nil, members: [me, alice], activity: 9)
         let unnamed = snapshot("g3", name: nil, members: [me, alice, bob], activity: 9)
         let withoutTarget = snapshot("g4", name: "Others", members: [me, bob, String(repeating: "dd", count: 32)], activity: 9)
         let withoutMe = snapshot("g5", name: "Their group", members: [alice, bob, String(repeating: "ee", count: 32)], activity: 9)
 
         let result = SharedGroupsProjection.sharedGroups(
-            snapshots: [shared, directChat, unnamed, withoutTarget, withoutMe],
+            snapshots: [shared, namedPair, directChat, unnamed, withoutTarget, withoutMe],
             targetAccountIdHex: alice,
             myAccountIdHex: me
         )
 
-        #expect(result.map(\.groupIdHex) == ["g1"])
-        #expect(result.first?.title == "Team")
-        #expect(result.first?.memberCount == 3)
+        #expect(result.map(\.groupIdHex) == ["g6", "g1"])
+        #expect(result.first?.title == "Us two")
+        #expect(result.first?.memberCount == 2)
+        #expect(result.last?.title == "Team")
     }
 
     @Test func ordersByMostRecentActivity() {
