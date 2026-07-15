@@ -34,6 +34,8 @@ final class GroupDetailsViewModel {
     var isLoadingSharedMedia = false
     var sharedMediaError: String?
     var isMuted = false
+    private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
+    private let recipientDirectory = RecipientDirectory()
     private var didLoadSharedMedia = false
 
     // Bound by the view at the top of `body` (both @ObservationIgnored, so the
@@ -412,6 +414,24 @@ final class GroupDetailsViewModel {
             handleActionError(error, title: L10n.string("Couldn't update disappearing messages"), using: appState)
             return false
         }
+    }
+
+    /// Direct-chat details show the named groups both people share, derived
+    /// from the same on-demand snapshots the recipient directory loads.
+    func loadSharedGroups(using appState: AppState) async {
+        guard let conversation, conversation.groupDisplay.isDirectMessage,
+              let otherMember = conversation.otherMember
+        else {
+            sharedGroups = []
+            return
+        }
+        await recipientDirectory.load(using: appState)
+        guard !Task.isCancelled else { return }
+        sharedGroups = SharedGroupsProjection.sharedGroups(
+            snapshots: recipientDirectory.snapshots,
+            targetAccountIdHex: otherMember,
+            myAccountIdHex: appState.activeAccount?.accountIdHex
+        )
     }
 
     func loadMuteState(using appState: AppState) {

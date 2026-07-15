@@ -22,8 +22,11 @@ enum GroupDetailsConfirmation: Identifiable {
     }
 }
 
-/// Inspector for a single group. Name, members + admin management,
-/// invite/remove, mute, archive, leave, and (in developer mode) MLS internals.
+/// Conversation inspector. Direct messages get contact-centric sections
+/// (identity, shared media, privacy, shared groups); groups get the full
+/// membership surface (identity, actions, media, settings, members,
+/// technical details, destructive actions). Mutations, confirmations, and
+/// developer diagnostics are shared between the two.
 struct GroupDetailsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
@@ -36,8 +39,12 @@ struct GroupDetailsView: View {
     @State private var sharedMediaGallery: MessageMediaGallery?
     /// Pushes the tapped member's profile within this details navigation stack.
     @State private var memberProfileNpub: String?
+    @State private var memberSearchText = ""
+    @State private var membersExpanded = false
+    @State private var showTechnicalDetails = false
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
+    private var isDirectMessage: Bool { viewModel.groupDisplay.isDirectMessage }
     private var memberCount: Int {
         viewModel.groupMemberDetails.isEmpty ? viewModel.members.count : viewModel.groupMemberDetails.count
     }
@@ -51,11 +58,24 @@ struct GroupDetailsView: View {
         model.onGroupLeft = onGroupLeft
         model.onGroupDeleted = onGroupDeleted
         return Form {
-            headerSection
-            sharedMediaSection
-            membersSection
-            infoSection
-            groupActionsSection
+            if isDirectMessage {
+                DirectChatDetailsContent(
+                    viewModel: viewModel,
+                    model: model,
+                    onSearch: openConversationSearch,
+                    onOpenChat: openChat,
+                    onLoadMedia: mediaLoader,
+                    onOpenGallery: { sharedMediaGallery = $0 }
+                )
+            } else {
+                identityHeaderSection
+                groupActionsRowSection
+                sharedMediaSection
+                groupSettingsSection
+                membersSection
+                technicalDetailsSection
+                destructiveActionsSection
+            }
 
             if appState.developerMode {
                 transcriptExportSection
@@ -70,7 +90,7 @@ struct GroupDetailsView: View {
                 }
             }
         }
-        .navigationTitle("Details")
+        .navigationTitle(isDirectMessage ? "Contact Info" : "Group Info")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $memberProfileNpub) { npub in
             ProfileView(npub: npub)
@@ -78,6 +98,11 @@ struct GroupDetailsView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
+            }
+            if !isDirectMessage && isAdmin {
+                ToolbarItem(placement: .topBarTrailing) {
+                    editMenu
+                }
             }
         }
         .sheet(isPresented: $model.showAddMembers) {
@@ -159,9 +184,7 @@ struct GroupDetailsView: View {
         .fullScreenCover(item: $sharedMediaGallery) { gallery in
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
-                onLoadMedia: ConversationMediaLoader { media in
-                    try await viewModel.data(for: media)
-                },
+                onLoadMedia: mediaLoader,
                 onDismiss: { sharedMediaGallery = nil }
             )
         }
@@ -196,13 +219,32 @@ struct GroupDetailsView: View {
         .task(id: viewModel.group.groupIdHex) {
             model.loadMuteState(using: appState)
             await model.loadSharedMedia(using: appState)
+            await model.loadSharedGroups(using: appState)
         }
         .refreshable {
             await model.loadSharedMedia(using: appState, force: true)
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Navigation hooks
+
+    /// Details is a sheet over the conversation; search lives in the
+    /// conversation chrome, so close the sheet and activate it there.
+    private func openConversationSearch() {
+        dismiss()
+        viewModel.search.activate()
+    }
+
+    private func openChat(_ groupIdHex: String) {
+        dismiss()
+        appState.presentChat(groupIdHex: groupIdHex)
+    }
+
+    private var mediaLoader: ConversationMediaLoader {
+        ConversationMediaLoader { media in
+            try await viewModel.data(for: media)
+        }
+    }
 
     private var actionHelpBinding: Binding<Bool> {
         Binding(
@@ -211,12 +253,14 @@ struct GroupDetailsView: View {
         )
     }
 
+    // MARK: - Confirmations
+
     @ViewBuilder
     private func fullScreenConfirmation(for confirmation: GroupDetailsConfirmation) -> some View {
         switch confirmation {
         case .leave:
             FullScreenConfirmationDialog(
-                title: "Leave this group?",
+                title: isDirectMessage ? L10n.string("Leave this chat?") : L10n.string("Leave this group?"),
                 message: GroupManagementPresentation.leaveConfirmationMessage(state: viewModel.managementState),
                 systemImage: "rectangle.portrait.and.arrow.right",
                 destructiveTitle: "Leave",
@@ -229,7 +273,7 @@ struct GroupDetailsView: View {
         case .deleteLocal:
             FullScreenConfirmationDialog(
                 title: "Delete local copy?",
-                message: "This removes the group's local history from this device. It won't send a leave proposal.",
+                message: "This removes the local history from this device. It won't send a leave proposal.",
                 systemImage: "trash",
                 destructiveTitle: "Delete Local Copy",
                 onConfirm: {
@@ -265,64 +309,138 @@ struct GroupDetailsView: View {
         }
     }
 
-    private var headerSection: some View {
+    // MARK: - Group sections
+
+    private var editMenu: some View {
+        Menu {
+            Button {
+                model.renameDraft = ContentSanitizer.groupName(viewModel.group.name) ?? ""
+                model.showRename = true
+            } label: {
+                Label(viewModel.group.name.isEmpty ? "Set Name" : "Edit Name", systemImage: "pencil")
+            }
+            Button {
+                model.descriptionDraft = ContentSanitizer.multilineText(
+                    viewModel.group.description,
+                    maxLength: ContentSanitizer.maxGroupDescriptionLength
+                ) ?? ""
+                model.showDescriptionEditor = true
+            } label: {
+                Label(
+                    Self.normalizedGroupDescriptionForUpdate(viewModel.group.description).isEmpty
+                        ? "Set Description"
+                        : "Edit Description",
+                    systemImage: "text.alignleft"
+                )
+            }
+            Button {
+                model.showGroupImageEditor = true
+            } label: {
+                Label(
+                    viewModel.group.avatarUrl == nil ? "Set Image" : "Edit Image",
+                    systemImage: "photo"
+                )
+            }
+        } label: {
+            Text("Edit")
+        }
+        .disabled(model.membershipActionInFlight)
+        .accessibilityLabel("Edit group")
+    }
+
+    private var identityHeaderSection: some View {
         let groupDisplay = viewModel.groupDisplay
         let displayTitle = viewModel.displayTitle(for: groupDisplay)
         return Section {
-            HStack(spacing: 14) {
-                AvatarBubble(
-                    seed: GroupDisplay.avatarSeed(for: groupDisplay),
-                    title: displayTitle,
-                    pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
-                )
-                .frame(width: 56, height: 56)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(displayTitle)
-                        .font(.title3.weight(.semibold))
-                    if let description = ContentSanitizer.multilineText(
-                        viewModel.group.description,
-                        maxLength: ContentSanitizer.maxGroupDescriptionLength
-                    ) {
-                        Text(description)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                Group {
+                    if isAdmin {
+                        Button {
+                            model.showGroupImageEditor = true
+                        } label: {
+                            groupAvatar(groupDisplay: groupDisplay, displayTitle: displayTitle)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(
+                            viewModel.group.avatarUrl == nil
+                                ? L10n.string("Set group image")
+                                : L10n.string("Edit group image")
+                        )
+                    } else {
+                        groupAvatar(groupDisplay: groupDisplay, displayTitle: displayTitle)
                     }
                 }
-                Spacer()
+
+                Text(displayTitle)
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text(L10n.plural("Group · %lld members", Int64(memberCount)))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                if let description = ContentSanitizer.multilineText(
+                    viewModel.group.description,
+                    maxLength: ContentSanitizer.maxGroupDescriptionLength
+                ) {
+                    Text(description)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                } else if isAdmin {
+                    Button {
+                        model.descriptionDraft = ""
+                        model.showDescriptionEditor = true
+                    } label: {
+                        Text("Add Description")
+                            .font(.callout)
+                    }
+                    .disabled(model.membershipActionInFlight)
+                }
             }
-            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .listRowBackground(Color.clear)
+        }
+    }
 
-            if isAdmin {
-                Button {
-                    model.renameDraft = ContentSanitizer.groupName(viewModel.group.name) ?? ""
-                    model.showRename = true
-                } label: {
-                    Label(viewModel.group.name.isEmpty ? "Set group name" : "Edit group name",
-                          systemImage: "pencil")
-                }
+    private func groupAvatar(groupDisplay: GroupDisplay.Resolved, displayTitle: String) -> some View {
+        AvatarBubble(
+            seed: GroupDisplay.avatarSeed(for: groupDisplay),
+            title: displayTitle,
+            pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+        )
+        .frame(width: 88, height: 88)
+    }
 
-                Button {
-                    model.showGroupImageEditor = true
-                } label: {
-                    Label(viewModel.group.avatarUrl == nil ? "Set group image" : "Edit group image",
-                          systemImage: "photo")
-                }
-
-                Button {
-                    model.descriptionDraft = ContentSanitizer.multilineText(
-                        viewModel.group.description,
-                        maxLength: ContentSanitizer.maxGroupDescriptionLength
-                    ) ?? ""
-                    model.showDescriptionEditor = true
-                } label: {
-                    Label(
-                        Self.normalizedGroupDescriptionForUpdate(viewModel.group.description).isEmpty
-                            ? "Set group description"
-                            : "Edit group description",
-                        systemImage: "text.alignleft"
+    private var groupActionsRowSection: some View {
+        Section {
+            HStack(spacing: 10) {
+                if GroupManagementPresentation.canInvite(
+                    state: viewModel.managementState,
+                    fallbackIsAdmin: isAdmin
+                ) {
+                    DetailsActionButton(
+                        title: "Add",
+                        systemImage: "person.crop.circle.badge.plus",
+                        isDisabled: model.membershipActionInFlight,
+                        action: { model.showAddMembers = true }
                     )
                 }
+                DetailsActionButton(
+                    title: model.isMuted ? "Unmute" : "Mute",
+                    systemImage: model.isMuted ? "bell.fill" : "bell.slash",
+                    action: { model.setMuted(!model.isMuted, using: appState) }
+                )
+                DetailsActionButton(
+                    title: "Search",
+                    systemImage: "magnifyingglass",
+                    action: openConversationSearch
+                )
             }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
         }
     }
 
@@ -334,22 +452,15 @@ struct GroupDetailsView: View {
             onRetry: {
                 Task { await model.loadSharedMedia(using: appState, force: true) }
             },
-            onLoadMedia: ConversationMediaLoader { media in
-                try await viewModel.data(for: media)
-            },
+            onLoadMedia: mediaLoader,
             onOpenGallery: { gallery in
                 sharedMediaGallery = gallery
             }
         )
     }
 
-    private var infoSection: some View {
+    private var groupSettingsSection: some View {
         Section {
-            LabeledContent("Group ID") {
-                Text(IdentityFormatter.short(viewModel.group.groupIdHex))
-                    .font(.system(.caption, design: .monospaced))
-            }
-            LabeledContent("Members", value: "\(memberCount)")
             if isAdmin {
                 Button {
                     model.showRetentionEditor = true
@@ -376,35 +487,55 @@ struct GroupDetailsView: View {
                     )
                 )
             }
-            DisclosureGroup(isExpanded: $model.showRelays) {
-                // Stable per-row identity by position. Sanitized display strings can
-                // collide (distinct raw relays sanitize to the same line), so id: \.self
-                // would produce duplicate SwiftUI identities on hostile relay input.
-                ForEach(Array(GroupRelaysPresentation.rows(for: viewModel.group.relays).enumerated()), id: \.offset) { _, relay in
-                    Text(relay)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(relay == GroupRelaysPresentation.emptyMessage ? .secondary : .primary)
-                        .textSelection(.enabled)
-                }
+
+            Button {
+                Task { await model.setArchived(!viewModel.group.archived, using: appState) }
             } label: {
-                HStack {
-                    Text("Relays")
-                    Spacer()
-                    Text(GroupRelaysPresentation.countLabel(for: viewModel.group.relays))
-                        .foregroundStyle(.secondary)
-                }
+                Label(
+                    viewModel.group.archived ? L10n.string("Unarchive Group") : L10n.string("Archive Group"),
+                    systemImage: viewModel.group.archived ? "tray.and.arrow.up" : "archivebox"
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
+            .disabled(model.membershipActionInFlight)
+        } header: {
+            Text("Settings")
+        } footer: {
+            Text("Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone.")
         }
     }
 
     private var membersSection: some View {
-        Section {
-            if viewModel.groupMemberDetails.isEmpty {
+        let details = viewModel.groupMemberDetails
+        let namesByMemberId = memberNamesById(details)
+        let ordered = GroupMemberOrdering.ordered(details, namesByMemberId: namesByMemberId)
+        let filtered = GroupMemberOrdering.filtered(
+            ordered,
+            query: memberSearchText,
+            namesByMemberId: namesByMemberId
+        )
+        let isSearching = !memberSearchText.trimmingCharacters(in: .whitespaces).isEmpty
+        let visible = GroupMemberOrdering.visible(
+            filtered,
+            isSearching: isSearching,
+            isExpanded: membersExpanded
+        )
+        return Section {
+            if details.count > GroupMemberOrdering.previewCount {
+                memberSearchField
+            }
+
+            if details.isEmpty {
                 ForEach(viewModel.members, id: \.memberIdHex) { member in
                     GroupMemberRow(member: member, isAdmin: viewModel.isAdmin(member))
                 }
+            } else if filtered.isEmpty {
+                Text("No members match your search.")
+                    .foregroundStyle(.secondary)
             } else {
-                ForEach(viewModel.groupMemberDetails, id: \.memberIdHex) { member in
+                ForEach(visible, id: \.memberIdHex) { member in
                     HStack(spacing: 8) {
                         Button {
                             memberProfileNpub = member.npub
@@ -419,19 +550,16 @@ struct GroupDetailsView: View {
                         swipeActions(for: member)
                     }
                 }
-            }
-
-            if GroupManagementPresentation.canInvite(
-                state: viewModel.managementState,
-                fallbackIsAdmin: isAdmin
-            ) {
-                Button {
-                    model.showAddMembers = true
-                } label: {
-                    Label("Add Members", systemImage: "person.crop.circle.badge.plus")
+                if !isSearching, !membersExpanded, filtered.count > GroupMemberOrdering.previewCount {
+                    Button {
+                        membersExpanded = true
+                    } label: {
+                        Text(L10n.plural("See all %lld members", Int64(filtered.count)))
+                    }
                 }
-                .disabled(model.membershipActionInFlight)
             }
+        } header: {
+            Text(L10n.plural("%lld members", Int64(memberCount)))
         } footer: {
             if !GroupManagementPresentation.canInvite(
                 state: viewModel.managementState,
@@ -442,26 +570,63 @@ struct GroupDetailsView: View {
         }
     }
 
-    private var groupActionsSection: some View {
+    private var memberSearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search members", text: $memberSearchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !memberSearchText.isEmpty {
+                Button {
+                    memberSearchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear member search")
+            }
+        }
+    }
+
+    private func memberNamesById(_ details: [GroupMemberDetailsFfi]) -> [String: String] {
+        var names: [String: String] = [:]
+        names.reserveCapacity(details.count)
+        for member in details {
+            names[member.memberIdHex] = GroupMemberDetailsPresentation.displayName(
+                for: member,
+                appState: appState
+            )
+        }
+        return names
+    }
+
+    private var technicalDetailsSection: some View {
         Section {
-            groupActionRow(
-                title: model.isMuted ? L10n.string("Unmute Group") : L10n.string("Mute Group"),
-                systemImage: model.isMuted ? "bell.fill" : "bell.slash",
-                isDisabled: false,
-                help: .mute
-            ) {
-                model.setMuted(!model.isMuted, using: appState)
+            DisclosureGroup(isExpanded: $showTechnicalDetails) {
+                copyableDeveloperValueRow(title: "Group ID", value: viewModel.group.groupIdHex)
+                LabeledContent("Relays") {
+                    Text(GroupRelaysPresentation.countLabel(for: viewModel.group.relays))
+                        .foregroundStyle(.secondary)
+                }
+                // Stable per-row identity by position. Sanitized display strings can
+                // collide (distinct raw relays sanitize to the same line), so id: \.self
+                // would produce duplicate SwiftUI identities on hostile relay input.
+                ForEach(Array(GroupRelaysPresentation.rows(for: viewModel.group.relays).enumerated()), id: \.offset) { _, relay in
+                    Text(relay)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(relay == GroupRelaysPresentation.emptyMessage ? .secondary : .primary)
+                        .textSelection(.enabled)
+                }
+            } label: {
+                Text("Technical Details")
             }
+        }
+    }
 
-            groupActionRow(
-                title: viewModel.group.archived ? L10n.string("Unarchive Group") : L10n.string("Archive Group"),
-                systemImage: viewModel.group.archived ? "tray.and.arrow.up" : "archivebox",
-                isDisabled: model.membershipActionInFlight,
-                help: .archive
-            ) {
-                Task { await model.setArchived(!viewModel.group.archived, using: appState) }
-            }
-
+    private var destructiveActionsSection: some View {
+        Section {
             if shouldShowSelfDemoteAction {
                 groupActionRow(
                     title: L10n.string("Step Down as Admin"),
@@ -691,7 +856,7 @@ struct GroupDetailsView: View {
         .padding(.vertical, 4)
     }
 
-    // MARK: - Actions
+    // MARK: - Member actions
 
     @ViewBuilder
     private func memberActionsMenu(for member: GroupMemberDetailsFfi) -> some View {
@@ -836,8 +1001,6 @@ enum GroupDetailsActionError: Equatable, LocalizedError {
 
 enum GroupActionHelp {
     case stepDown
-    case mute
-    case archive
     case leave(message: String)
     case deleteLocal
 
@@ -845,10 +1008,6 @@ enum GroupActionHelp {
         switch self {
         case .stepDown:
             return L10n.string("Step Down as Admin")
-        case .mute:
-            return L10n.string("Mute Group")
-        case .archive:
-            return L10n.string("Archive Group")
         case .leave:
             return L10n.string("Leave Group")
         case .deleteLocal:
@@ -860,10 +1019,6 @@ enum GroupActionHelp {
         switch self {
         case .stepDown:
             return L10n.string("You'll stay in the group, but another admin will need to restore your admin status.")
-        case .mute:
-            return L10n.string("Muting silences this group's notification banners and sounds on this device. Messages still arrive and count as unread.")
-        case .archive:
-            return L10n.string("Archiving hides the group from your main chats list. It doesn't change your membership or notify anyone.")
         case .leave(let message):
             return message
         case .deleteLocal:
