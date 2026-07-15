@@ -929,10 +929,13 @@ struct AppStateBootstrapTests {
     }
 
     /// With a live foreground runtime, a notification action leases the
-    /// durable client directly and builds nothing ephemeral.
+    /// durable client directly and builds nothing ephemeral. The scene must
+    /// have reported a phase for the lease end to leave the runtime alone —
+    /// otherwise this launch is indistinguishable from a cold UI-less one.
     @Test func notificationActionWithLiveRuntimeReusesDurableClient() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
+        appState.setAppSceneActive(true)
 
         let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
 
@@ -944,6 +947,46 @@ struct AppStateBootstrapTests {
 
         #expect(appState.client === lease.client)
         #expect(appState.phase == .ready)
+
+        await stopReadyRuntime(appState)
+    }
+
+    /// A notification action on a cold UI-less launch (terminated app)
+    /// bootstraps the durable runtime itself and no scene ever reports a
+    /// phase, so nothing else suspends that runtime before iOS freezes the
+    /// process with the App Group SQLite lock held (0xdead10cc). Ending the
+    /// lease must suspend the runtime the action started.
+    @Test func coldLaunchNotificationActionSuspendsBootstrappedRuntime() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        #expect(!appState.sceneHasReportedPhase)
+        #expect(appState.client != nil)
+
+        let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
+        #expect(!lease.ownsEphemeralRuntime)
+
+        await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+
+        await stopReadyRuntime(appState)
+    }
+
+    /// The resume-tail badge refresh runs in its own task; suspension must
+    /// drain it so no unread-summary FFI read is in flight when the runtime
+    /// shuts down.
+    @Test func suspensionDrainsScheduledUnreadSummaryRefresh() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        appState.scheduleAccountUnreadSummaryRefresh()
+        #expect(appState.hasPendingUnreadSummaryRefreshForTesting)
+
+        await appState.startRuntimeSuspension().value
+
+        #expect(!appState.hasPendingUnreadSummaryRefreshForTesting)
+        #expect(appState.client == nil)
 
         await stopReadyRuntime(appState)
     }

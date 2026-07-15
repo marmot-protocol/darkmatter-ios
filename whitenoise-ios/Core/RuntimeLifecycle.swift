@@ -107,6 +107,7 @@ final class RuntimeLifecycle {
     }
 
     private var isAppSceneActive: Bool { appState?.isAppSceneActive ?? false }
+    private var sceneHasReportedPhase: Bool { appState?.sceneHasReportedPhase ?? false }
 
     var canRefreshProfiles: Bool {
         isAppSceneActive && !runtimeSuspendedForBackground && !isRuntimeSuspending
@@ -282,6 +283,7 @@ final class RuntimeLifecycle {
 
     func setAppSceneActive(_ active: Bool) {
         appState?.isAppSceneActive = active
+        appState?.sceneHasReportedPhase = true
         if !active {
             appState?.cancelNativePushRegistrationTaskSync()
         }
@@ -290,6 +292,7 @@ final class RuntimeLifecycle {
     @discardableResult
     func startForegroundActivation() -> Task<Void, Never> {
         appState?.isAppSceneActive = true
+        appState?.sceneHasReportedPhase = true
         if let foregroundActivationTask {
             return foregroundActivationTask
         }
@@ -307,6 +310,7 @@ final class RuntimeLifecycle {
     @discardableResult
     func startRuntimeSuspension() -> Task<Void, Never> {
         appState?.isAppSceneActive = false
+        appState?.sceneHasReportedPhase = true
         if appState?.phase == .bootstrapping {
             bootstrapNeedsBackgroundSuspensionRecheck = true
         }
@@ -524,7 +528,19 @@ final class RuntimeLifecycle {
     /// normal resume path. Both race directions are safe because the standard
     /// entry points re-check the authoritative scene flag.
     func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
-        guard lease.ownsEphemeralRuntime else { return }
+        guard lease.ownsEphemeralRuntime else {
+            // A live-client lease on a cold UI-less launch rides the runtime
+            // that the action's own bootstrap just started. No scene ever
+            // reports a phase on that launch (`isAppSceneActive` keeps its
+            // optimistic default), so nothing else suspends the runtime before
+            // iOS freezes the process with the App Group SQLite lock held
+            // (0xdead10cc). Any launch where a scene did report keeps today's
+            // behavior: the scene machinery owns suspension.
+            if !sceneHasReportedPhase {
+                await startRuntimeSuspension().value
+            }
+            return
+        }
         await lease.client.marmot.shutdown()
         finishRuntimeSuspensionWait()
         if isAppSceneActive {
@@ -586,6 +602,7 @@ final class RuntimeLifecycle {
         await foregroundTask?.value
         await appState?.cancelNativePushRegistrationTask()
         await appState?.cancelRetentionSweeps()
+        await appState?.drainUnreadSummaryRefresh()
         await profileTask?.value
     }
 

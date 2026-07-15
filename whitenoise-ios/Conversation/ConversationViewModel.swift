@@ -20,6 +20,22 @@ enum AgentStreamWatchAdmission {
         }
         return !latestStreamWatchInFlight
     }
+
+    /// Post-await install decision. The epoch check is what makes `cancelAll()`
+    /// stick: a watch suspended on the subscription open when the session was
+    /// cancelled must not install into the restarted session's dictionaries —
+    /// the emptied dictionaries alone would wave it through.
+    static func shouldInstall(
+        sessionEpoch: Int,
+        currentSessionEpoch: Int,
+        streamId: String,
+        activeStreamIds: Set<String>,
+        finalizedStreamIds: Set<String>
+    ) -> Bool {
+        sessionEpoch == currentSessionEpoch
+            && !activeStreamIds.contains(streamId)
+            && !finalizedStreamIds.contains(streamId)
+    }
 }
 
 enum TimelineTailRefreshTaskLifetime {
