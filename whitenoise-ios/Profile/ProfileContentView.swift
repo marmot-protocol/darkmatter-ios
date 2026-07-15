@@ -24,6 +24,9 @@ struct ProfileContentView: View {
 
     let npub: String
     var moderation: ProfileModerationContext?
+    /// When set (sheet contexts), renders an Info row ahead of the
+    /// moderation actions that opens the full profile page.
+    var onShowInfo: (() -> Void)?
 
     @State private var model = ProfileViewModel()
     @State private var confirmingRemoval = false
@@ -173,8 +176,25 @@ struct ProfileContentView: View {
 
     @ViewBuilder
     private var moderationSection: some View {
-        if let moderation, !moderation.actions.isEmpty {
+        if onShowInfo != nil || moderation?.actions.isEmpty == false {
             Section {
+                if let onShowInfo {
+                    Button("Info", action: onShowInfo)
+                }
+                moderationButtons
+            } header: {
+                Text("Group Membership")
+            } footer: {
+                if moderation?.isAdmin == true {
+                    Text("This person is a group admin.")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var moderationButtons: some View {
+        if let moderation, !moderation.actions.isEmpty {
                 if moderation.actions.contains(.promote) {
                     Button {
                         moderation.onPromote()
@@ -214,13 +234,6 @@ struct ProfileContentView: View {
                         Text("They'll stop receiving new messages in this group.")
                     }
                 }
-            } header: {
-                Text("Group Membership")
-            } footer: {
-                if moderation.isAdmin {
-                    Text("This person is a group admin.")
-                }
-            }
         }
     }
 
