@@ -54,8 +54,10 @@ final class MediaDownloadInFlightStore {
 }
 
 nonisolated enum MediaPlaintextHash {
-    static func matches(_ data: Data, reference: MediaAttachmentReferenceFfi) -> Bool {
-        sha256Hex(of: data) == reference.plaintextSha256.lowercased()
+    static func matches(_ data: Data, expectedSha256: String) async -> Bool {
+        await Task.detached(priority: .utility) {
+            sha256Hex(of: data) == expectedSha256.lowercased()
+        }.value
     }
 
     private static func sha256Hex(of data: Data) -> String {
@@ -119,22 +121,25 @@ final class ConversationMediaDownloader {
         guard let reference = media.reference else {
             throw MediaDataError.missingReference
         }
-        if let cached = await cache.cachedData(for: reference),
-           MediaPlaintextHash.matches(cached, reference: reference)
-        {
-            return cached
-        }
-        guard let appState, let accountRef = appState.activeAccountRef else {
-            throw MediaDataError.missingAccount
-        }
-        let client = try appState.currentMarmotClient()
         return try await inFlight.data(
             for: MediaDownloadInFlightKey(reference: reference)
         ) {
+            if let cached = await self.cache.cachedData(for: reference),
+               await MediaPlaintextHash.matches(cached, expectedSha256: reference.plaintextSha256)
+            {
+                return cached
+            }
+            guard let appState, let accountRef = appState.activeAccountRef else {
+                throw MediaDataError.missingAccount
+            }
+            let client = try appState.currentMarmotClient()
             // Row references already carry the real source_epoch, so the reference
             // is directly downloadable — no listMedia round-trip to recover it.
             let result = try await self.downloadMedia(client, accountRef, groupIdHex, reference)
-            guard MediaPlaintextHash.matches(result.plaintext, reference: reference) else {
+            guard await MediaPlaintextHash.matches(
+                result.plaintext,
+                expectedSha256: reference.plaintextSha256
+            ) else {
                 throw MediaDataError.plaintextHashMismatch
             }
             await self.cache.store(result.plaintext, for: reference)
