@@ -348,6 +348,17 @@ final class AppState {
         startReadyForegroundMaintenance(scheduleNativePushRegistration: scheduleNativePushRegistration)
     }
 
+    /// Signing out of the last signed-in account stops the notification
+    /// subscription and retention sweeper but keeps the `.ready` shell alive
+    /// for reactivation. Activating an account from that shell must restart
+    /// both loops; ordinary account switches never stopped the subscription,
+    /// so the liveness guard keeps this a no-op there.
+    @MainActor
+    private func restartReadyForegroundMaintenanceIfStopped() {
+        guard phase == .ready, !notificationCoordinator.notificationSubscriptionActive else { return }
+        startReadyForegroundMaintenance(scheduleNativePushRegistration: false)
+    }
+
     /// Internal (not `private`) so `RuntimeLifecycle.performBootstrap` can hand
     /// back the account-scoped maintenance once the runtime is ready.
     @MainActor
@@ -463,6 +474,7 @@ final class AppState {
         }
 
         activeAccountRef = accountRef
+        restartReadyForegroundMaintenanceIfStopped()
         scheduleNativePushRegistrationIfEnabled()
     }
 
@@ -964,6 +976,11 @@ final class AppState {
 
         activeAccountRef = summary.label
         completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
+        // A new identity can also be created from the `.ready` shell left by a
+        // sign-out of every account; the onboarding completion above is a no-op
+        // there, so the stopped maintenance loops need the same restart as
+        // `activateAccount`.
+        restartReadyForegroundMaintenanceIfStopped()
         await enableNotificationsByDefault(for: summary.label)
         scheduleNativePushRegistrationIfEnabled()
     }
@@ -1046,6 +1063,8 @@ final class AppState {
     /// (so a legitimate post-sign-out reschedule is not suppressed).
     @MainActor
     var isSigningOutForTesting: Bool { isSigningOut }
+
+    var retentionSweeperIsActiveForTesting: Bool { retentionSweeper.isSweeping }
     #endif
 }
 

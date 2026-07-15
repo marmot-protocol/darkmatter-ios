@@ -1362,11 +1362,54 @@ struct AppStateBootstrapTests {
         // Keep the main shell available so Settings → Profiles can sign the
         // retained local account back in without importing its keys again.
         #expect(appState.phase == .ready)
+        // Account-bound maintenance is stopped while every account is signed out.
+        #expect(!appState.notificationSubscriptionActive)
+        #expect(!appState.retentionSweeperIsActiveForTesting)
 
         await appState.activateAccount(only.label)
 
         #expect(appState.activeAccountRef == only.label)
         #expect(appState.accounts.first?.signedOut == false)
+        // Reactivation must restart the maintenance the sign-out stopped;
+        // nothing else (foreground resume, relaunch) heals it this session.
+        #expect(appState.notificationSubscriptionActive)
+        #expect(appState.retentionSweeperIsActiveForTesting)
+        await stopReadyRuntime(appState)
+    }
+
+    @Test func newIdentityFromFullySignedOutShellRestartsForegroundMaintenance() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        appState.activeAccountRef = seeded.accounts[0].label
+
+        await appState.signOut()
+
+        #expect(appState.phase == .ready)
+        #expect(!appState.notificationSubscriptionActive)
+        #expect(!appState.retentionSweeperIsActiveForTesting)
+
+        // Creating a fresh identity from the fully-signed-out shell skips the
+        // onboarding completion (phase is already .ready), so it must restart
+        // the stopped maintenance loops itself.
+        let fresh = try await appState.createIdentity()
+
+        #expect(appState.activeAccountRef == fresh.label)
+        #expect(appState.notificationSubscriptionActive)
+        #expect(appState.retentionSweeperIsActiveForTesting)
+        await stopReadyRuntime(appState)
+    }
+
+    @Test func accountSwitchBetweenSignedInAccountsKeepsSubscriptionRunning() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities(accountCount: 2)
+        let appState = seeded.appState
+        appState.activeAccountRef = seeded.accounts[0].label
+        #expect(appState.notificationSubscriptionActive)
+
+        await appState.activateAccount(seeded.accounts[1].label)
+
+        #expect(appState.activeAccountRef == seeded.accounts[1].label)
+        #expect(appState.notificationSubscriptionActive)
+        #expect(appState.retentionSweeperIsActiveForTesting)
         await stopReadyRuntime(appState)
     }
 

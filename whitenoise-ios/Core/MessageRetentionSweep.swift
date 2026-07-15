@@ -92,6 +92,10 @@ final class MessageRetentionSweeper {
         sweepTask?.cancel()
     }
 
+    /// Live only while an uncancelled sweep loop exists; `cancelWithoutAwaiting`
+    /// leaves the task reference behind, so a bare nil-check would lie.
+    var isSweeping: Bool { !(sweepTask?.isCancelled ?? true) }
+
     func start(appState: AppState) {
         self.appState = appState
         guard appState.phase == .ready else { return }
