@@ -15,10 +15,12 @@ struct GroupsInCommonSection: View {
     /// pages; moderation sheets show just the shared list.
     var showsGroupActions = true
     let onOpenChat: (String) -> Void
+    /// Hoisted to the owning screen: sheets attached to a `Section` detach
+    /// when the list re-renders (the same hazard as the picker scanner).
+    var onStartGroup: () -> Void = {}
+    var onAddToGroup: () -> Void = {}
 
     @State private var expanded = false
-    @State private var showStartGroup = false
-    @State private var showAddToGroup = false
 
     private static let previewCount = 3
 
@@ -26,7 +28,7 @@ struct GroupsInCommonSection: View {
         Section {
             if showsGroupActions {
             Button {
-                showStartGroup = true
+                onStartGroup()
             } label: {
                 Label(
                     L10n.formatted("Create group with %@", contactName),
@@ -40,7 +42,7 @@ struct GroupsInCommonSection: View {
 
             if !addableGroups.isEmpty {
                 Button {
-                    showAddToGroup = true
+                    onAddToGroup()
                 } label: {
                     Label("Add to group", systemImage: "person.2.badge.plus")
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,24 +94,6 @@ struct GroupsInCommonSection: View {
             }
         } header: {
             Text(L10n.plural("%lld groups in common", Int64(sharedGroups.count)))
-        }
-        .sheet(isPresented: $showStartGroup) {
-            NewChatFlowView(initialGroupMembers: [
-                MemberRefFfi(
-                    memberRef: contactNpub,
-                    accountIdHex: contactAccountIdHex,
-                    npub: contactNpub
-                )
-            ])
-            .appAppearance()
-        }
-        .sheet(isPresented: $showAddToGroup) {
-            AddToGroupSheet(
-                contactNpub: contactNpub,
-                contactName: contactName,
-                groups: addableGroups
-            )
-            .appAppearance()
         }
     }
 

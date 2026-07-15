@@ -86,8 +86,11 @@ struct NewChatFlowView: View {
     }
 
     private func open(_ groupIdHex: String) {
-        dismiss()
-        appState.presentChat(groupIdHex: groupIdHex)
+        DeferredChatPresentation.present(
+            groupIdHex: groupIdHex,
+            using: appState,
+            dismissFirst: dismiss
+        )
     }
 
     /// A scanned code feeds the target screen's search field so the shared

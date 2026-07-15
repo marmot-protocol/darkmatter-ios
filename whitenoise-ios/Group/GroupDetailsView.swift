@@ -48,6 +48,8 @@ struct GroupDetailsView: View {
     @State private var showContactProfile = false
     @State private var editingNickname = false
     @State private var nicknameDraft = ""
+    @State private var showStartGroupWithContact = false
+    @State private var showAddContactToGroup = false
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var isDirectMessage: Bool { viewModel.groupDisplay.isDirectMessage }
@@ -100,7 +102,8 @@ struct GroupDetailsView: View {
             NavigationStack {
                 ProfileContentView(
                     npub: target.member.npub,
-                    moderation: moderationContext(for: target.member)
+                    moderation: moderationContext(for: target.member),
+                    showsGroupActions: false
                 )
                 .navigationTitle("Profile")
                 .navigationBarTitleDisplayMode(.inline)
@@ -110,13 +113,33 @@ struct GroupDetailsView: View {
                     }
                 }
             }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
             .appAppearance()
         }
         .navigationDestination(isPresented: $showContactProfile) {
             if let contactNpub {
                 profileDestination(npub: contactNpub, moderation: nil)
+            }
+        }
+        .sheet(isPresented: $showStartGroupWithContact) {
+            if let contactAccountIdHex, let contactNpub {
+                NewChatFlowView(initialGroupMembers: [
+                    MemberRefFfi(
+                        memberRef: contactNpub,
+                        accountIdHex: contactAccountIdHex,
+                        npub: contactNpub
+                    )
+                ])
+                .appAppearance()
+            }
+        }
+        .sheet(isPresented: $showAddContactToGroup) {
+            if let contactNpub {
+                AddToGroupSheet(
+                    contactNpub: contactNpub,
+                    contactName: contactTitle,
+                    groups: model.addableGroups
+                )
+                .appAppearance()
             }
         }
         .navigationDestination(isPresented: $showNotifications) {
@@ -268,8 +291,11 @@ struct GroupDetailsView: View {
     }
 
     private func openChat(_ groupIdHex: String) {
-        dismiss()
-        appState.presentChat(groupIdHex: groupIdHex)
+        DeferredChatPresentation.present(
+            groupIdHex: groupIdHex,
+            using: appState,
+            dismissFirst: dismiss
+        )
     }
 
     private var mediaLoader: ConversationMediaLoader {
@@ -651,7 +677,9 @@ struct GroupDetailsView: View {
                 contactName: contactTitle,
                 sharedGroups: model.sharedGroups,
                 addableGroups: model.addableGroups,
-                onOpenChat: openChat
+                onOpenChat: openChat,
+                onStartGroup: { showStartGroupWithContact = true },
+                onAddToGroup: { showAddContactToGroup = true }
             )
         }
     }

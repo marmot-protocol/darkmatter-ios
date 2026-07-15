@@ -24,9 +24,13 @@ struct ProfileContentView: View {
 
     let npub: String
     var moderation: ProfileModerationContext?
+    /// False in sheet contexts: hides the create-group/add-to-group rows.
+    var showsGroupActions = true
 
     @State private var model = ProfileViewModel()
     @State private var confirmingRemoval = false
+    @State private var showStartGroup = false
+    @State private var showAddToGroup = false
 
     var body: some View {
         List {
@@ -50,6 +54,26 @@ struct ProfileContentView: View {
         .listStyle(.insetGrouped)
         .task(id: npub) { await model.resolve(npub: npub, using: appState) }
         .task(id: declaredNip05) { await model.verifyDeclaredNip05(declaredNip05) }
+        .sheet(isPresented: $showStartGroup) {
+            if let hex = model.hex {
+                NewChatFlowView(initialGroupMembers: [
+                    MemberRefFfi(
+                        memberRef: displayReference,
+                        accountIdHex: hex,
+                        npub: displayReference
+                    )
+                ])
+                .appAppearance()
+            }
+        }
+        .sheet(isPresented: $showAddToGroup) {
+            AddToGroupSheet(
+                contactNpub: displayReference,
+                contactName: title,
+                groups: model.addableGroups
+            )
+            .appAppearance()
+        }
     }
 
     // MARK: - Identity
@@ -167,8 +191,10 @@ struct ProfileContentView: View {
                 contactName: title,
                 sharedGroups: model.sharedGroups,
                 addableGroups: model.addableGroups,
-                showsGroupActions: moderation == nil,
-                onOpenChat: openChat
+                showsGroupActions: showsGroupActions,
+                onOpenChat: openChat,
+                onStartGroup: { showStartGroup = true },
+                onAddToGroup: { showAddToGroup = true }
             )
         }
     }
@@ -238,8 +264,11 @@ struct ProfileContentView: View {
     // MARK: - Helpers
 
     private func openChat(_ groupIdHex: String) {
-        dismiss()
-        appState.presentChat(groupIdHex: groupIdHex)
+        DeferredChatPresentation.present(
+            groupIdHex: groupIdHex,
+            using: appState,
+            dismissFirst: dismiss
+        )
     }
 
     private var title: String {
