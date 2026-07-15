@@ -180,10 +180,22 @@ struct ChatsListView: View {
         scope = .active
         path = []
         Task { @MainActor in
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard appState.pendingChatId == newId else { return }
-            path = [target]
+            // Cascaded dismissals (flow sheet → profile → details) each take
+            // an animation beat, and a push landing mid-cascade gets
+            // reverted. No fixed delay wins that race, so push, observe
+            // whether the stack kept it, and retry until it sticks.
+            for attempt in 0..<8 {
+                try? await Task.sleep(nanoseconds: attempt == 0 ? 350_000_000 : 450_000_000)
+                guard appState.pendingChatId == newId else { return }
+                path = [target]
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard appState.pendingChatId == newId else { return }
+                if path == [target] {
+                    appState.clearPendingChat()
+                    return
+                }
+                path = []
+            }
             appState.clearPendingChat()
         }
     }
