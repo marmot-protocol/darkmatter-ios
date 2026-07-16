@@ -1,0 +1,321 @@
+import Combine
+import SwiftUI
+
+nonisolated struct EmojiCatalogEntry: Codable, Identifiable, Hashable {
+    let emoji: String
+    let name: String
+    let group: Int
+    let keywords: [String]
+
+    var id: String { emoji }
+
+    enum CodingKeys: String, CodingKey {
+        case emoji = "e"
+        case name = "n"
+        case group = "g"
+        case keywords = "k"
+    }
+}
+
+nonisolated enum EmojiCatalogSearch {
+    static func results(in entries: [EmojiCatalogEntry], query: String, limit: Int = 120) -> [EmojiCatalogEntry] {
+        let terms = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !terms.isEmpty else { return entries }
+
+        return entries.compactMap { entry -> (EmojiCatalogEntry, Int)? in
+            let name = entry.name.lowercased()
+            let keywords = entry.keywords.map { $0.lowercased() }
+            var score = 0
+            for term in terms {
+                if name == term {
+                    score += 100
+                } else if name.hasPrefix(term) {
+                    score += 60
+                } else if name.contains(term) {
+                    score += 35
+                } else if keywords.contains(term) {
+                    score += 25
+                } else if keywords.contains(where: { $0.hasPrefix(term) }) {
+                    score += 12
+                } else {
+                    return nil
+                }
+            }
+            return (entry, score)
+        }
+        .sorted {
+            if $0.1 != $1.1 { return $0.1 > $1.1 }
+            return $0.0.name < $1.0.name
+        }
+        .prefix(limit)
+        .map(\.0)
+    }
+}
+
+private struct EmojiCategory: Identifiable {
+    let id: Int
+    let title: LocalizedStringKey
+    let systemImage: String
+
+    static let all = [
+        Self(id: 0, title: "Smileys & People", systemImage: "face.smiling"),
+        Self(id: 1, title: "People & Body", systemImage: "person.fill"),
+        Self(id: 2, title: "Animals & Nature", systemImage: "pawprint.fill"),
+        Self(id: 3, title: "Food & Drink", systemImage: "fork.knife"),
+        Self(id: 4, title: "Travel & Places", systemImage: "car.fill"),
+        Self(id: 5, title: "Activities", systemImage: "soccerball"),
+        Self(id: 6, title: "Objects", systemImage: "lightbulb.fill"),
+        Self(id: 7, title: "Symbols", systemImage: "heart.fill"),
+        Self(id: 8, title: "Flags", systemImage: "flag.fill")
+    ]
+}
+
+@MainActor
+private final class EmojiPickerModel: ObservableObject {
+    @Published private(set) var entries: [EmojiCatalogEntry] = []
+    @Published private(set) var didFail = false
+
+    func load() async {
+        guard entries.isEmpty else { return }
+        guard let url = Bundle.main.url(forResource: "emoji", withExtension: "json") else {
+            didFail = true
+            return
+        }
+        do {
+            entries = try await Task.detached(priority: .userInitiated) {
+                let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+                return try JSONDecoder().decode([EmojiCatalogEntry].self, from: data)
+            }.value
+        } catch {
+            didFail = true
+        }
+    }
+}
+
+private enum EmojiRecents {
+    static let key = "chat.emoji-picker.recents"
+    static let maximumCount = 40
+
+    static var values: [String] {
+        UserDefaults.standard.stringArray(forKey: key) ?? AppState.defaultReactions
+    }
+
+    static func record(_ emoji: String) {
+        var result = values.filter { $0 != emoji }
+        result.insert(emoji, at: 0)
+        UserDefaults.standard.set(Array(result.prefix(maximumCount)), forKey: key)
+    }
+}
+
+struct EmojiPickerSheet: View {
+    var title: LocalizedStringKey? = "React"
+    let onPick: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            EmojiPickerContent(showsSearchField: true) { emoji in
+                onPick(emoji)
+                dismiss()
+            }
+            .navigationTitle(title ?? "")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L10n.string("Done")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+struct ComposerEmojiPanel: View {
+    let onPick: (String) -> Void
+    let onDeleteBackward: () -> Void
+
+    var body: some View {
+        EmojiPickerContent(
+            showsSearchField: false,
+            onDeleteBackward: onDeleteBackward,
+            onPick: onPick
+        )
+        .background(Color(.systemBackground))
+    }
+}
+
+private struct EmojiPickerContent: View {
+    let showsSearchField: Bool
+    var onDeleteBackward: (() -> Void)?
+    let onPick: (String) -> Void
+
+    @StateObject private var model = EmojiPickerModel()
+    @State private var query = ""
+    @State private var selectedCategory = 0
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 8)
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                if showsSearchField {
+                    searchField
+                    Divider()
+                }
+                emojiGrid
+                Divider()
+                categoryRail(proxy: proxy)
+            }
+        }
+        .task { await model.load() }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(L10n.string("Search emoji"), text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.string("Clear search"))
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .background(Color(.secondarySystemBackground), in: Capsule())
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var emojiGrid: some View {
+        if model.entries.isEmpty, !model.didFail {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if model.didFail {
+            ContentUnavailableView(
+                L10n.string("Emoji unavailable"),
+                systemImage: "face.dashed",
+                description: Text(L10n.string("The emoji catalog could not be loaded."))
+            )
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
+                    if !query.isEmpty {
+                        emojiSection(title: "Search results", entries: searchResults)
+                    } else {
+                        let recentEntries = EmojiRecents.values.compactMap { emoji in
+                            model.entries.first { $0.emoji == emoji }
+                        }
+                        if !recentEntries.isEmpty {
+                            emojiSection(title: "Recently used", entries: recentEntries)
+                                .id("recent")
+                        }
+                        ForEach(EmojiCategory.all) { category in
+                            emojiSection(
+                                title: category.title,
+                                entries: model.entries.filter { $0.group == category.id }
+                            )
+                            .id("category-\(category.id)")
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
+        }
+    }
+
+    private var searchResults: [EmojiCatalogEntry] {
+        EmojiCatalogSearch.results(in: model.entries, query: query)
+    }
+
+    private func emojiSection(
+        title: LocalizedStringKey,
+        entries: [EmojiCatalogEntry]
+    ) -> some View {
+        Section {
+            LazyVGrid(columns: columns, spacing: 5) {
+                ForEach(entries) { entry in
+                    Button {
+                        EmojiRecents.record(entry.emoji)
+                        onPick(entry.emoji)
+                    } label: {
+                        Text(entry.emoji)
+                            .font(.system(size: 29))
+                            .frame(maxWidth: .infinity, minHeight: 42)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(entry.name)
+                }
+            }
+        } header: {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 7)
+                .background(.bar)
+        }
+    }
+
+    private func categoryRail(proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    railButton(systemImage: "clock.fill", selected: false) {
+                        withAnimation(.smooth) { proxy.scrollTo("recent", anchor: .top) }
+                    }
+                    ForEach(EmojiCategory.all) { category in
+                        railButton(systemImage: category.systemImage, selected: selectedCategory == category.id) {
+                            selectedCategory = category.id
+                            withAnimation(.smooth) { proxy.scrollTo("category-\(category.id)", anchor: .top) }
+                        }
+                        .accessibilityLabel(Text(category.title))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            if let onDeleteBackward {
+                Divider()
+                    .frame(height: 30)
+                Button(action: onDeleteBackward) {
+                    Image(systemName: "delete.left.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 46, height: 46)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.string("Delete"))
+            }
+        }
+        .background(Color(.secondarySystemBackground))
+    }
+
+    private func railButton(
+        systemImage: String,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(selected ? Color.primary : Color.secondary)
+                .frame(width: 38, height: 34)
+                .background(selected ? Color(.tertiarySystemFill) : .clear, in: .rect(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+}

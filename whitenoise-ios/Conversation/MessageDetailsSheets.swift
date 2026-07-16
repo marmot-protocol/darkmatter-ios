@@ -167,10 +167,16 @@ struct ReactionDetailsSheet: View {
     @Environment(AppState.self) private var appState
 
     let details: ConversationViewModel.ReactionDetails
+    let onRemoveOwnReaction: ((String) -> Void)?
     @State private var selectedEmoji: String?
 
-    init(details: ConversationViewModel.ReactionDetails, initialEmoji: String?) {
+    init(
+        details: ConversationViewModel.ReactionDetails,
+        initialEmoji: String?,
+        onRemoveOwnReaction: ((String) -> Void)? = nil
+    ) {
         self.details = details
+        self.onRemoveOwnReaction = onRemoveOwnReaction
         _selectedEmoji = State(initialValue: initialEmoji)
     }
 
@@ -307,8 +313,29 @@ struct ReactionDetailsSheet: View {
 
             HStack(spacing: 5) {
                 ForEach(user.emojis, id: \.self) { emoji in
-                    Text(ContentSanitizer.reactionEmoji(emoji))
-                        .font(.title3)
+                    if isMe, let onRemoveOwnReaction {
+                        Button {
+                            onRemoveOwnReaction(emoji)
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(ContentSanitizer.reactionEmoji(emoji))
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.title3)
+                            .padding(.leading, 7)
+                            .padding(.trailing, 5)
+                            .padding(.vertical, 4)
+                            .background(Color(.tertiarySystemFill), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L10n.string("Remove"))
+                        .accessibilityValue(ContentSanitizer.reactionEmoji(emoji))
+                    } else {
+                        Text(ContentSanitizer.reactionEmoji(emoji))
+                            .font(.title3)
+                    }
                 }
             }
         }

@@ -128,16 +128,16 @@ final class AppState {
     /// in the message actions overlay.
     private(set) var recentReactions: [String]
 
-    static let defaultReactions = ["👍", "❤️", "😂", "🎉", "😮"]
+    static let defaultReactions = ["❤️", "👍", "👎", "😂", "😮", "😢"]
 
-    /// The five emojis to show in the quick-reaction row: recents first,
+    /// The six emojis to show in the quick-reaction row: recents first,
     /// topped up with defaults.
     var quickReactions: [String] {
         var result = recentReactions
-        for emoji in Self.defaultReactions where result.count < 5 {
+        for emoji in Self.defaultReactions where result.count < 6 {
             if !result.contains(emoji) { result.append(emoji) }
         }
-        return Array(result.prefix(5))
+        return Array(result.prefix(6))
     }
 
     func addRecentReaction(_ emoji: String) {

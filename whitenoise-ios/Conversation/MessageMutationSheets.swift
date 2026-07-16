@@ -4,7 +4,7 @@ import MarmotKit
 struct ForwardMessageSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let message: AppMessageRecordFfi
+    let messages: [AppMessageRecordFfi]
     let viewModel: ConversationViewModel
     let destinationProvider: () async throws -> [MessageForwardDestination]
 
@@ -14,6 +14,26 @@ struct ForwardMessageSheet: View {
     @State private var isSending = false
     @State private var loadFailed = false
     @State private var sendFailed = false
+
+    init(
+        message: AppMessageRecordFfi,
+        viewModel: ConversationViewModel,
+        destinationProvider: @escaping () async throws -> [MessageForwardDestination]
+    ) {
+        self.messages = [message]
+        self.viewModel = viewModel
+        self.destinationProvider = destinationProvider
+    }
+
+    init(
+        messages: [AppMessageRecordFfi],
+        viewModel: ConversationViewModel,
+        destinationProvider: @escaping () async throws -> [MessageForwardDestination]
+    ) {
+        self.messages = Array(messages.prefix(MessageSelectionPolicy.maximumForwardCount))
+        self.viewModel = viewModel
+        self.destinationProvider = destinationProvider
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +51,7 @@ struct ForwardMessageSheet: View {
 
     private var header: some View {
         ZStack {
-            Text("Forward")
+            Text(L10n.plural("Forward %lld messages", Int64(messages.count)))
                 .font(.headline)
 
             HStack {
@@ -145,7 +165,7 @@ struct ForwardMessageSheet: View {
         guard !selectedGroupIds.isEmpty else { return }
         isSending = true
         sendFailed = false
-        let result = await viewModel.forwardMessage(message, to: selectedGroupIds)
+        let result = await viewModel.forwardMessages(messages, to: selectedGroupIds)
         isSending = false
         if result.succeededCompletely {
             dismiss()

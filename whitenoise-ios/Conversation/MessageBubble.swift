@@ -32,6 +32,30 @@ enum MessageBubbleReplyLayout {
     static let sentHeaderOverlayOpacity = 0.16
 }
 
+private struct ReplyHeaderHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct ReplyHeaderWidthPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct MessageBodyContentWidthPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 nonisolated enum MessageBodyCollapsePresentation {
     static let maxCollapsedCharacters = 900
     static let maxCollapsedLines = 12
@@ -63,7 +87,8 @@ struct MessageBubble: View {
     var mediaItems: [MessageMediaAttachment] = []
     var markdownBlocks: [MarkdownDisplayBlock]? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
-    var onShowReactionDetails: (String) -> Void = { _ in }
+    var onShowReactionDetails: (String?) -> Void = { _ in }
+    var onReplyPreviewTap: () -> Void = {}
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
     /// Set when the message has viewable edit history; makes the inline "Edited"
     /// label tap to open the history sheet, the same sheet the actions menu opens.
@@ -72,17 +97,20 @@ struct MessageBubble: View {
     @State private var mediaGallery: MessageMediaGallery?
     @State private var fullBodyPresentation: MessageFullBodyPresentation?
     @State private var pendingExternalLink: PendingMessageExternalLink?
+    @State private var replyHeaderHeight: CGFloat = 0
+    @State private var replyHeaderWidth: CGFloat = 0
+    @State private var measuredBodyContentWidth: CGFloat = 0
 
     private var isFromMe: Bool { record.direction == "sent" }
 
     private var bubbleMaxWidth: CGFloat? {
-        sizeClass == .regular ? 560 : nil
+        sizeClass == .regular ? ChatBubbleMetrics.regularMaximumWidth : nil
     }
 
     /// Minimum gap on the opposite side. Tiny on iPhone so long bubbles run
     /// (near) full width; larger on iPad where width is also capped above.
     private var oppositeInset: CGFloat {
-        sizeClass == .regular ? 64 : 0
+        sizeClass == .regular ? ChatBubbleMetrics.regularOppositeInset : ChatBubbleMetrics.compactOppositeInset
     }
 
     /// Body text projected from the decoded unsigned Nostr app event's kind,
@@ -151,8 +179,6 @@ struct MessageBubble: View {
                     }
                 }
 
-                metaLine
-                    .padding(isFromMe ? .trailing : .leading, 12)
             }
             .frame(maxWidth: bubbleMaxWidth, alignment: isFromMe ? .trailing : .leading)
 
@@ -189,9 +215,12 @@ struct MessageBubble: View {
     }
 
     private var deletedBubble: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "trash")
-            Text("This message was deleted")
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: "trash")
+                Text("This message was deleted")
+            }
+            messageMetadataFooter
         }
         .font(.callout)
         .italic()
@@ -205,11 +234,27 @@ struct MessageBubble: View {
     }
 
     private func replyHeader(_ preview: (name: String, text: String)) -> some View {
-        quoted(preview)
-            .padding(.horizontal, MessageBubbleReplyLayout.headerHorizontalInset)
-            .padding(.vertical, MessageBubbleReplyLayout.headerVerticalInset)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(replyHeaderBackground)
+        Button(action: onReplyPreviewTap) {
+            quoted(preview)
+                .padding(.horizontal, MessageBubbleReplyLayout.headerHorizontalInset)
+                .padding(.vertical, MessageBubbleReplyLayout.headerVerticalInset)
+                .background {
+                    GeometryReader { geometry in
+                        Color.clear.preference(
+                            key: ReplyHeaderHeightPreferenceKey.self,
+                            value: geometry.size.height
+                        )
+                        .preference(
+                            key: ReplyHeaderWidthPreferenceKey.self,
+                            value: geometry.size.width
+                        )
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.formatted("Reply to %@", preview.name))
+        .onPreferenceChange(ReplyHeaderHeightPreferenceKey.self) { replyHeaderHeight = $0 }
+        .onPreferenceChange(ReplyHeaderWidthPreferenceKey.self) { replyHeaderWidth = $0 }
     }
 
     private var textBubble: some View {
@@ -227,10 +272,14 @@ struct MessageBubble: View {
                 }
             } else if let debugStyle {
                 debugPayload(debugStyle)
+                messageMetadataFooter
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
+                    .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
             }
         }
         .font(.body)
-        .background(bubbleBackground)
+        .background { bubbleLayerBackground(hasReply: replyPreview != nil) }
         .clipShape(.rect(cornerRadius: 18))
         .overlay {
             if let debugStyle {
@@ -313,16 +362,29 @@ struct MessageBubble: View {
                     )
                 }
             )
+            .overlay(alignment: .bottomTrailing) {
+                if !hasVisibleBodyText && replyPreview == nil {
+                    mediaOverlayMetadataFooter
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.42), in: Capsule())
+                        .padding(6)
+                }
+            }
 
             if let replyPreview {
                 VStack(alignment: .leading, spacing: 0) {
                     replyHeader(replyPreview)
                     if hasVisibleBodyText {
                         messageBodyText(hasReply: true)
+                    } else {
+                        messageMetadataFooter
+                            .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
+                            .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
                     }
                 }
                 .font(.body)
-                .background(bubbleBackground)
+                .background { bubbleLayerBackground(hasReply: true) }
                 .clipShape(.rect(cornerRadius: 18))
             } else if hasVisibleBodyText {
                 textBubble
@@ -353,7 +415,6 @@ struct MessageBubble: View {
                     .foregroundStyle(isFromMe ? Color.white.opacity(0.82) : Color.secondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
         }
         // Without this the width-only Capsule is greedy vertically and stretches
         // the whole bubble; fixedSize pins the quote to its content height.
@@ -362,33 +423,100 @@ struct MessageBubble: View {
 
     private func messageBodyText(hasReply: Bool) -> some View {
         let shouldCollapse = MessageBodyCollapsePresentation.shouldCollapse(sanitizedBodyText)
-        return VStack(alignment: .leading, spacing: 7) {
-            messageBodyContent
-                .frame(
-                    maxHeight: shouldCollapse ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
-                    alignment: .top
-                )
-                .clipped()
-
-            if shouldCollapse {
-                Button {
-                    fullBodyPresentation = MessageFullBodyPresentation(
-                        id: record.messageIdHex.isEmpty ? "pending-\(record.recordedAt)" : record.messageIdHex,
-                        text: sanitizedBodyText,
-                        blocks: markdownBlocks
+        let usesInlineFooter = MessageBubbleTextLayout.usesInlineFooter(
+            text: sanitizedBodyText,
+            isCollapsed: shouldCollapse
+        )
+        let replyContentWidth = hasReply && replyHeaderWidth > 0
+            ? max(0, replyHeaderWidth - (MessageBubbleReplyLayout.bodyHorizontalInset * 2))
+            : 0
+        let bodyLayoutWidth: CGFloat? = max(replyContentWidth, measuredBodyContentWidth) > 0
+            ? max(replyContentWidth, measuredBodyContentWidth)
+            : nil
+        return Group {
+            if usesInlineFooter {
+                if hasReply {
+                    HStack(alignment: .lastTextBaseline, spacing: 0) {
+                        messageBodyContent
+                            .layoutPriority(1)
+                        Spacer(minLength: 7)
+                        messageMetadataFooter
+                            .fixedSize()
+                    }
+                    .frame(
+                        minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
+                        alignment: .leading
                     )
-                } label: {
-                    Text(L10n.string("Read more"))
-                        .font(.footnote.weight(.semibold))
+                } else {
+                    HStack(alignment: .lastTextBaseline, spacing: 7) {
+                        messageBodyContent
+                            .layoutPriority(1)
+                        messageMetadataFooter
+                            .fixedSize()
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    messageBodyContent
+                        .background {
+                            GeometryReader { geometry in
+                                Color.clear.preference(
+                                    key: MessageBodyContentWidthPreferenceKey.self,
+                                    value: geometry.size.width
+                                )
+                            }
+                        }
+                        .frame(width: bodyLayoutWidth, alignment: .leading)
+                        .frame(
+                            maxHeight: shouldCollapse ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
+                            alignment: .topLeading
+                        )
+                        .clipped()
+
+                    if shouldCollapse {
+                        HStack(alignment: .lastTextBaseline, spacing: 8) {
+                            Button {
+                                fullBodyPresentation = MessageFullBodyPresentation(
+                                    id: record.messageIdHex.isEmpty
+                                        ? "pending-\(record.recordedAt)"
+                                        : record.messageIdHex,
+                                    text: sanitizedBodyText,
+                                    blocks: markdownBlocks
+                                )
+                            } label: {
+                                Text(L10n.string("Read more"))
+                                    .font(.footnote.weight(.semibold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
+
+                            Spacer(minLength: 8)
+                            messageMetadataFooter
+                                .fixedSize()
+                        }
+                        .frame(width: bodyLayoutWidth, alignment: .leading)
+                    } else {
+                        messageMetadataFooter
+                            .background {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(
+                                        key: MessageBodyContentWidthPreferenceKey.self,
+                                        value: geometry.size.width
+                                    )
+                                }
+                            }
+                            .frame(width: bodyLayoutWidth, alignment: .trailing)
+                    }
+                }
             }
         }
         .foregroundStyle(isFromMe ? Color.white : Color.primary)
         .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
         .padding(.top, hasReply ? MessageBubbleReplyLayout.bodyTopInsetAfterReply : MessageBubbleReplyLayout.bodyTopInset)
         .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
+        .onPreferenceChange(MessageBodyContentWidthPreferenceKey.self) {
+            measuredBodyContentWidth = $0
+        }
     }
 
     @ViewBuilder
@@ -445,73 +573,76 @@ struct MessageBubble: View {
         }
     }
 
-    private var reactionChips: some View {
-        HStack(spacing: 4) {
-            ForEach(reactions) { tally in
-                Button {
-                    onShowReactionDetails(tally.emoji)
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(ContentSanitizer.reactionEmoji(tally.emoji))
-                        if tally.count > 1 {
-                            Text(L10n.formatted("%lld", Int64(tally.count)))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(tally.mine ? Color.accentColor.opacity(0.22) : Color(.tertiarySystemFill))
-                    )
-                    .overlay(
-                        Capsule().stroke(tally.mine ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
+    private func bubbleLayerBackground(hasReply: Bool) -> some View {
+        ZStack(alignment: .top) {
+            bubbleBackground
+            if hasReply, replyHeaderHeight > 0 {
+                replyHeaderBackground
+                    .frame(height: replyHeaderHeight)
             }
         }
-        .font(.footnote)
-        .padding(isFromMe ? .trailing : .leading, 8)
     }
 
-    private var metaLine: some View {
-        HStack(spacing: 4) {
-            Text(timeLabel)
-            if isEdited, !isDeleted {
-                Text("·")
-                if let onViewEditHistory {
-                    Button(action: onViewEditHistory) {
-                        Text("Edited")
+    @ViewBuilder
+    private var reactionChips: some View {
+        if let summary = ReactionSummaryPresentation.value(from: reactions) {
+            Button {
+                onShowReactionDetails(nil)
+            } label: {
+                HStack(spacing: 3) {
+                    Text(summary.emojis.map(ContentSanitizer.reactionEmoji).joined())
+                        .font(.footnote)
+                    if summary.totalCount > 1 {
+                        Text(L10n.formatted("%lld", Int64(summary.totalCount)))
+                            .font(.caption.weight(.semibold))
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    Text("Edited")
+                }
+                .foregroundStyle(summary.mine ? Color.accentColor : Color.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    summary.mine ? Color.accentColor.opacity(0.16) : Color(.secondarySystemBackground),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color(.systemBackground), lineWidth: 1.5)
                 }
             }
-            // Show the status caption for our own messages, and the live
-            // "streaming" indicator regardless of side.
-            if let statusLabel, isFromMe || status == .streaming {
-                Text("·")
-                Text(statusLabel)
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.string("Reactions"))
+            .accessibilityValue(L10n.formatted("%lld", Int64(summary.totalCount)))
+            .accessibilityAddTraits(summary.mine ? .isSelected : [])
+            .padding(isFromMe ? .trailing : .leading, 10)
+            .offset(y: -6)
+            .padding(.bottom, -6)
         }
-        .font(.caption2)
-        .foregroundStyle(status == .failed ? Color.red : Color.secondary)
+    }
+
+    private var messageMetadataFooter: some View {
+        MessageMetadataFooter(
+            time: timeLabel,
+            isEdited: isEdited && !isDeleted,
+            status: status,
+            isFromMe: isFromMe,
+            usesLightForeground: usesSentBubbleForeground,
+            onViewEditHistory: onViewEditHistory
+        )
+    }
+
+    private var mediaOverlayMetadataFooter: some View {
+        MessageMetadataFooter(
+            time: timeLabel,
+            isEdited: isEdited && !isDeleted,
+            status: status,
+            isFromMe: isFromMe,
+            usesLightForeground: true,
+            onViewEditHistory: onViewEditHistory
+        )
     }
 
     private var timeLabel: String {
         Self.timeLabel(recordedAt: record.recordedAt)
-    }
-
-    private var statusLabel: String? {
-        switch status {
-        case .sending: return L10n.string("Sending…")
-        case .sent: return L10n.string("Sent")
-        case .failed: return L10n.string("Not delivered")
-        case .streaming: return L10n.string("Streaming…")
-        case .received: return nil
-        }
     }
 
     @ViewBuilder
@@ -773,7 +904,7 @@ private struct MessageMediaGrid: View {
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
-    private let spacing: CGFloat = 3
+    private let spacing: CGFloat = 2
     private let cornerRadius: CGFloat = 14
 
     private var visibleItems: [MessageMediaAttachment] {
@@ -802,7 +933,7 @@ private struct MessageMediaGrid: View {
     }
 
     private var rowStarts: [Int] {
-        rowCount == 1 ? [0] : [0, columnCount]
+        Array(stride(from: 0, to: visibleItems.count, by: columnCount))
     }
 
     var body: some View {
@@ -834,7 +965,7 @@ private struct MessageMediaGrid: View {
                 item: visibleItems[index],
                 isFromMe: isFromMe,
                 size: CGSize(width: tileSize, height: tileSize),
-                hiddenCount: index == MessageMediaGridPresentation.maxVisibleItems - 1 ? hiddenCount : 0,
+                hiddenCount: index == visibleItems.count - 1 ? hiddenCount : 0,
                 onLoadMedia: onLoadMedia,
                 onOpenImage: onOpenImage,
                 onOpenVideo: onOpenVideo
@@ -1073,7 +1204,7 @@ nonisolated struct MessageMediaTileCornerRadii: Equatable, Sendable {
 }
 
 enum MessageMediaGridPresentation {
-    static let maxVisibleItems = 4
+    static let maxVisibleItems = 5
 
     static func visibleCount(totalCount: Int) -> Int {
         min(max(totalCount, 0), maxVisibleItems)
@@ -1088,8 +1219,10 @@ enum MessageMediaGridPresentation {
     }
 
     static func rowCount(totalCount: Int) -> Int {
-        if totalCount <= 2 { return 1 }
-        return 2
+        let visible = visibleCount(totalCount: totalCount)
+        let columns = columnCount(totalCount: totalCount)
+        guard visible > 0 else { return 0 }
+        return Int(ceil(Double(visible) / Double(columns)))
     }
 
     static func roundedCorners(totalCount: Int, tileIndex: Int) -> MessageMediaTileCornerRadii {
@@ -1101,11 +1234,13 @@ enum MessageMediaGridPresentation {
         let row = tileIndex / columns
         let column = tileIndex % columns
 
+        let lastRowItemCount = visibleCount - ((rows - 1) * columns)
+        let isOnlyItemInLastRow = row == rows - 1 && lastRowItemCount == 1
         return MessageMediaTileCornerRadii(
             topLeading: row == 0 && column == 0,
             topTrailing: row == 0 && column == columns - 1,
             bottomLeading: row == rows - 1 && column == 0,
-            bottomTrailing: row == rows - 1 && column == columns - 1
+            bottomTrailing: row == rows - 1 && (column == columns - 1 || isOnlyItemInLastRow)
         )
     }
 }
