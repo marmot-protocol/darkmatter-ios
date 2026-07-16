@@ -51,11 +51,29 @@ final class ProfileEditViewModel {
     func loadExisting(using appState: AppState) async {
         guard let id = appState.activeAccount?.accountIdHex else { return }
         let cachedProfile = appState.profile(forAccountIdHex: id)
-        let loadedProfile = await appState.reloadProfileProjection(forAccountIdHex: id)?.profile
+        let projection = await appState.reloadProfileProjection(forAccountIdHex: id)
         // The reload is async; if the active account changed under us, drop the
         // result rather than seed this editor with another account's metadata.
         guard appState.activeAccount?.accountIdHex == id else { return }
-        guard let profile = loadedProfile ?? cachedProfile else { return }
+        let resolution = ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: projection?.profile != nil,
+            hasCachedProfile: cachedProfile != nil,
+            projectionExists: projection != nil
+        )
+        guard let profile = projection?.profile ?? cachedProfile else {
+            switch resolution {
+            case .enableFirstPublish:
+                existingName = nil
+                existingLud16 = nil
+                loadedAccountIdHex = id
+            case .loadFailed:
+                error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
+            case .seedExisting:
+                break
+            }
+            return
+        }
+        error = nil
         let isDifferentAccount = ProfileEditLoadSeeding.isDifferentLoadedAccount(
             previousAccountId: loadedAccountIdHex,
             loading: id

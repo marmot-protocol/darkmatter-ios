@@ -99,6 +99,21 @@ struct ProfileEditMetadataDraftTests {
 
     @Test func firstLoadDoesNotCountAsDifferentLoadedAccount() {
         #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: nil, loading: "account-a"))
+        // A fresh identity (projection exists, no kind:0 anywhere) unlocks a
+        // first publish; a failed load stays gated — publishing then could
+        // replace existing metadata with blanks.
+        #expect(ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: false, hasCachedProfile: false, projectionExists: true
+        ) == .enableFirstPublish)
+        #expect(ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: false, hasCachedProfile: false, projectionExists: false
+        ) == .loadFailed)
+        #expect(ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: true, hasCachedProfile: false, projectionExists: true
+        ) == .seedExisting)
+        #expect(ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: false, hasCachedProfile: true, projectionExists: false
+        ) == .seedExisting)
         #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-a"))
         #expect(ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-b"))
     }

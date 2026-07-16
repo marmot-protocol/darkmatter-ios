@@ -87,7 +87,27 @@ struct ProfileEditView: View {
     private var saveDisabled: Bool {
         model.isPublishing
             || appState.activeAccountRef == nil
+            || model.loadedAccountIdHex != appState.activeAccount?.accountIdHex
             || model.currentDraft.validationError != nil
+    }
+}
+
+/// What `loadExisting` should do when the profile lookup settles: seed the
+/// form, unlock a first publish (fresh identity, definitively no kind:0), or
+/// stay gated because the load itself failed and publishing could replace
+/// existing metadata with blanks.
+nonisolated enum ProfileEditLoadResolution: Equatable {
+    case seedExisting
+    case enableFirstPublish
+    case loadFailed
+
+    static func resolve(
+        hasLoadedProfile: Bool,
+        hasCachedProfile: Bool,
+        projectionExists: Bool
+    ) -> ProfileEditLoadResolution {
+        if hasLoadedProfile || hasCachedProfile { return .seedExisting }
+        return projectionExists ? .enableFirstPublish : .loadFailed
     }
 }
 
