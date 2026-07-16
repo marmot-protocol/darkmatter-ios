@@ -51,49 +51,80 @@ final class ProfileEditViewModel {
     func loadExisting(using appState: AppState) async {
         guard let id = appState.activeAccount?.accountIdHex else { return }
         let cachedProfile = appState.profile(forAccountIdHex: id)
-        let projection = await appState.reloadProfileProjection(forAccountIdHex: id)
-        // The reload is async; if the active account changed under us, drop the
+        // The projection batch erases read errors (`try?`), so the editor
+        // takes its authority from the throwing read: nil is definitive
+        // absence, a throw is unknown state that must gate publishing.
+        var loadedProfile: UserProfileMetadataFfi?
+        var readFailed = false
+        do {
+            loadedProfile = try await appState.currentMarmotClient()
+                .userProfileForEditing(accountIdHex: id)
+        } catch {
+            readFailed = true
+        }
+        // The read is async; if the active account changed under us, drop the
         // result rather than seed this editor with another account's metadata.
         guard appState.activeAccount?.accountIdHex == id else { return }
-        let resolution = ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: projection?.profile != nil,
-            hasCachedProfile: cachedProfile != nil,
-            projectionExists: projection != nil
+        applyLoadOutcome(
+            ProfileEditLoadResolution.resolve(
+                hasLoadedProfile: loadedProfile != nil,
+                hasCachedProfile: cachedProfile != nil,
+                readFailed: readFailed
+            ),
+            accountIdHex: id,
+            profile: loadedProfile ?? cachedProfile
         )
-        guard let profile = projection?.profile ?? cachedProfile else {
-            switch resolution {
-            case .enableFirstPublish:
-                existingName = nil
-                existingLud16 = nil
-                loadedAccountIdHex = id
-            case .loadFailed:
-                error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
-            case .seedExisting:
-                break
-            }
-            return
-        }
-        error = nil
+    }
+
+    /// Split from `loadExisting` so the field state machine is testable
+    /// without an `AppState`. A change of loaded account resets every
+    /// editable field first — stale text typed for one account must never
+    /// become publishable under another.
+    func applyLoadOutcome(
+        _ resolution: ProfileEditLoadResolution,
+        accountIdHex id: String,
+        profile: UserProfileMetadataFfi?
+    ) {
         let isDifferentAccount = ProfileEditLoadSeeding.isDifferentLoadedAccount(
             previousAccountId: loadedAccountIdHex,
             loading: id
         )
-        let formFields = ProfileEditFormFields(profile: profile)
-        existingName = formFields.name
-        existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
-        displayName = ProfileEditFieldSeeding.seeded(
-            current: displayName, loaded: formFields.displayName, isNewAccount: isDifferentAccount
-        )
-        about = ProfileEditFieldSeeding.seeded(
-            current: about, loaded: formFields.about, isNewAccount: isDifferentAccount
-        )
-        picture = ProfileEditFieldSeeding.seeded(
-            current: picture, loaded: formFields.picture, isNewAccount: isDifferentAccount
-        )
-        nip05 = ProfileEditFieldSeeding.seeded(
-            current: nip05, loaded: formFields.nip05, isNewAccount: isDifferentAccount
-        )
-        loadedAccountIdHex = id
+        if isDifferentAccount {
+            existingName = nil
+            existingLud16 = nil
+            displayName = ""
+            about = ""
+            picture = ""
+            nip05 = ""
+            error = nil
+        }
+        switch resolution {
+        case .loadFailed:
+            error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
+        case .enableFirstPublish:
+            existingName = nil
+            existingLud16 = nil
+            loadedAccountIdHex = id
+        case .seedExisting:
+            guard let profile else { return }
+            error = nil
+            let formFields = ProfileEditFormFields(profile: profile)
+            existingName = formFields.name
+            existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
+            displayName = ProfileEditFieldSeeding.seeded(
+                current: displayName, loaded: formFields.displayName, isNewAccount: isDifferentAccount
+            )
+            about = ProfileEditFieldSeeding.seeded(
+                current: about, loaded: formFields.about, isNewAccount: isDifferentAccount
+            )
+            picture = ProfileEditFieldSeeding.seeded(
+                current: picture, loaded: formFields.picture, isNewAccount: isDifferentAccount
+            )
+            nip05 = ProfileEditFieldSeeding.seeded(
+                current: nip05, loaded: formFields.nip05, isNewAccount: isDifferentAccount
+            )
+            loadedAccountIdHex = id
+        }
     }
 
     func publish(using appState: AppState) async {

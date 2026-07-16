@@ -94,8 +94,10 @@ struct ProfileEditView: View {
 
 /// What `loadExisting` should do when the profile lookup settles: seed the
 /// form, unlock a first publish (fresh identity, definitively no kind:0), or
-/// stay gated because the load itself failed and publishing could replace
-/// existing metadata with blanks.
+/// stay gated because the read itself threw and publishing could replace
+/// existing metadata with blanks. The distinction rides on the throwing
+/// `userProfile` read — a nil return is authoritative absence, a throw is
+/// unknown state.
 nonisolated enum ProfileEditLoadResolution: Equatable {
     case seedExisting
     case enableFirstPublish
@@ -104,10 +106,10 @@ nonisolated enum ProfileEditLoadResolution: Equatable {
     static func resolve(
         hasLoadedProfile: Bool,
         hasCachedProfile: Bool,
-        projectionExists: Bool
+        readFailed: Bool
     ) -> ProfileEditLoadResolution {
         if hasLoadedProfile || hasCachedProfile { return .seedExisting }
-        return projectionExists ? .enableFirstPublish : .loadFailed
+        return readFailed ? .loadFailed : .enableFirstPublish
     }
 }
 

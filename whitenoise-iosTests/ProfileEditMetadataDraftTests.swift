@@ -4,6 +4,38 @@ import Testing
 @testable import MarmotKit
 
 struct ProfileEditMetadataDraftTests {
+    @MainActor
+    @Test func accountTransitionResetsEditableFieldsBeforeFirstPublish() {
+        let model = ProfileEditViewModel()
+        // Account A: fresh identity, user typed a draft; load settles.
+        model.displayName = "Alice draft"
+        model.about = "About A"
+        model.applyLoadOutcome(.enableFirstPublish, accountIdHex: "account-a", profile: nil)
+        #expect(model.displayName == "Alice draft")
+        #expect(model.loadedAccountIdHex == "account-a")
+
+        // Switch to fresh account B: A's typed fields must not survive to
+        // become publishable under B.
+        model.applyLoadOutcome(.enableFirstPublish, accountIdHex: "account-b", profile: nil)
+        #expect(model.displayName.isEmpty)
+        #expect(model.about.isEmpty)
+        #expect(model.loadedAccountIdHex == "account-b")
+    }
+
+    @MainActor
+    @Test func failedReadAfterAccountTransitionClearsFieldsAndKeepsSaveGated() {
+        let model = ProfileEditViewModel()
+        model.displayName = "Alice draft"
+        model.applyLoadOutcome(.enableFirstPublish, accountIdHex: "account-a", profile: nil)
+
+        model.applyLoadOutcome(.loadFailed, accountIdHex: "account-b", profile: nil)
+        #expect(model.displayName.isEmpty)
+        #expect(model.error != nil)
+        // The gate stays on A: saveDisabled compares against the active
+        // account, so B cannot publish until a load succeeds for B.
+        #expect(model.loadedAccountIdHex == "account-a")
+    }
+
     @Test func formFieldsPreserveNameWithoutSeedingDisplayNameFromIt() {
         let profile = UserProfileMetadataFfi(
             name: "alice",
@@ -103,16 +135,18 @@ struct ProfileEditMetadataDraftTests {
         // first publish; a failed load stays gated — publishing then could
         // replace existing metadata with blanks.
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: false, projectionExists: true
+            hasLoadedProfile: false, hasCachedProfile: false, readFailed: false
         ) == .enableFirstPublish)
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: false, projectionExists: false
+            hasLoadedProfile: false, hasCachedProfile: false, readFailed: true
         ) == .loadFailed)
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: true, hasCachedProfile: false, projectionExists: true
+            hasLoadedProfile: true, hasCachedProfile: false, readFailed: false
         ) == .seedExisting)
+        // A failed read still seeds from cache — matching the pre-existing
+        // cache-fallback behavior.
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: true, projectionExists: false
+            hasLoadedProfile: false, hasCachedProfile: true, readFailed: true
         ) == .seedExisting)
         #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-a"))
         #expect(ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-b"))
