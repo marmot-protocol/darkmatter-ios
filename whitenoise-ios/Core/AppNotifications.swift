@@ -217,8 +217,10 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         ) {
             let localNotificationsEnabled = await appState?.client?
                 .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
+            let isArchived = await routeIsArchived(route)
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
+                isArchived: isArchived,
                 notifyMode: routeNotifyMode(route),
                 isMention: LocalNotificationProjection.isMention(
                     from: notification.request.content.userInfo
@@ -233,6 +235,18 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             }
         }
         return [.banner, .list, .sound]
+    }
+
+    /// Archived chats shed notification attention; a missing client or
+    /// failed read fails open (presents).
+    private func routeIsArchived(_ route: LocalNotificationRoute) async -> Bool {
+        guard let client = appState?.client,
+              let rows = try? await client.chatList(
+                  accountRef: route.accountRef,
+                  includeArchived: true
+              )
+        else { return false }
+        return rows.contains { $0.groupIdHex == route.groupIdHex && $0.archived }
     }
 
     /// Notification routes carry the account label, while the mode store keys

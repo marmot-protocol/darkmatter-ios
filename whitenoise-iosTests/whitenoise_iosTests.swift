@@ -4023,6 +4023,23 @@ struct NotificationServiceProjectionTests {
         #expect(LocalNotificationProjection.isMention(from: [:]))
     }
 
+    @Test func archivedChatKeysFoldOnlyArchivedRowsPerAccount() {
+        let rowA = chatListRow(groupIdHex: "group-a", archived: true, title: "A")
+        let rowB = chatListRow(groupIdHex: "group-b", archived: false, title: "B")
+        let rowC = chatListRow(groupIdHex: "group-c", archived: true, title: "C")
+
+        let keys = NotificationServiceProjection.archivedChatKeys(rowsByAccountRef: [
+            "account-1": [rowA, rowB],
+            "account-2": [rowC],
+        ])
+
+        #expect(keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-a")))
+        #expect(keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-2", groupIdHex: "group-c")))
+        #expect(!keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-b")))
+        // Keys are account-scoped: another account's archive doesn't leak.
+        #expect(!keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-c")))
+    }
+
     @Test func failedCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .failed,

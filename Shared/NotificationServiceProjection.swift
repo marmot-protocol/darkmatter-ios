@@ -84,6 +84,24 @@ nonisolated enum NotificationServiceProjection {
             && accountRefs.allSatisfy { !localNotificationsEnabled($0) }
     }
 
+    /// Archived state is read once per wake as full chat lists (one sync
+    /// storage read per account) and folded into a key set the decision's
+    /// resolver checks; a throwing read contributes nothing (fail open —
+    /// archived suppression is attention hygiene, not privacy).
+    static func archivedChatKeys(rowsByAccountRef: [String: [ChatListRowFfi]]) -> Set<String> {
+        var keys: Set<String> = []
+        for (accountRef, rows) in rowsByAccountRef {
+            for row in rows where row.archived {
+                keys.insert(archivedChatKey(accountRef: accountRef, groupIdHex: row.groupIdHex))
+            }
+        }
+        return keys
+    }
+
+    static func archivedChatKey(accountRef: String, groupIdHex: String) -> String {
+        "\(accountRef)\u{0}\(groupIdHex)"
+    }
+
     static func decision(
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },

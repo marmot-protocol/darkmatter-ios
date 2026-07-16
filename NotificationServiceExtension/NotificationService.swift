@@ -96,9 +96,25 @@ final class NotificationService: UNNotificationServiceExtension {
                             ).localNotificationsEnabled
                         }
                     }
+                var rowsByAccountRef: [String: [ChatListRowFfi]] = [:]
+                for accountRef in Set(result.notifications.map(\.accountRef)) {
+                    rowsByAccountRef[accountRef] =
+                        (try? marmot.chatList(accountRef: accountRef, includeArchived: true)) ?? []
+                }
+                let archivedChatKeys = NotificationServiceProjection.archivedChatKeys(
+                    rowsByAccountRef: rowsByAccountRef
+                )
                 var decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: localNotificationsEnabled,
+                    isArchived: { accountRef, groupIdHex in
+                        archivedChatKeys.contains(
+                            NotificationServiceProjection.archivedChatKey(
+                                accountRef: accountRef,
+                                groupIdHex: groupIdHex
+                            )
+                        )
+                    },
                     notifyMode: { accountIdHex, groupIdHex in
                         ChatMuteStore.notifyMode(
                             accountIdHex: accountIdHex,
