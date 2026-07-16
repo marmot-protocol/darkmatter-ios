@@ -100,15 +100,31 @@ nonisolated enum NotificationCommunicationDecorator {
 
     private static let warmsInFlight = Mutex<Set<String>>([])
 
+    /// Application-level bound on concurrent warm fetches. Per-URL dedup alone
+    /// lets many distinct slow hosts each hold a detached task (DNS is not
+    /// interruptible), so the set itself is capped; warms beyond it are
+    /// dropped — the cache is opportunistic.
+    static let maxConcurrentWarms = 4
+
+    static func claimWarmSlot(
+        _ key: String,
+        in inFlight: inout Set<String>,
+        limit: Int = maxConcurrentWarms
+    ) -> Bool {
+        guard inFlight.count < limit, !inFlight.contains(key) else { return false }
+        inFlight.insert(key)
+        return true
+    }
+
     /// Fills the avatar cache off the delivery path so the next presentation
     /// of this sender carries an image. Deduplicates concurrent warms per URL
-    /// so a burst of messages from one sender spawns a single fetch.
+    /// and caps how many may run at once.
     static func warmAvatarCache(for pictureUrl: String?) {
         guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return }
         guard cachedAvatarData(for: url) == nil else { return }
         let key = url.absoluteString
         let claimed = warmsInFlight.withLock { inFlight in
-            inFlight.insert(key).inserted
+            claimWarmSlot(key, in: &inFlight)
         }
         guard claimed else { return }
         Task.detached(priority: .utility) {
@@ -118,44 +134,72 @@ nonisolated enum NotificationCommunicationDecorator {
         }
     }
 
-    /// Resumes with the work's value or `nil` at the deadline, whichever comes
-    /// first. A task group can't provide this bound: it awaits every child at
-    /// scope exit, so a fetch stalled in non-cancellable DNS would hold the
-    /// caller past `cancelAll()`. The losing side is cancelled — a deadline
-    /// win cancels the fetch so peer-controlled work can't accumulate, and a
-    /// work win cancels the sleeping timer.
+    private struct DeadlineRace {
+        var resumed = false
+        var cancelled = false
+        var continuation: CheckedContinuation<Data?, Never>?
+        var work: Task<Void, Never>?
+        var timer: Task<Void, Never>?
+    }
+
+    /// Resumes with the work's value, `nil` at the deadline, or `nil` when the
+    /// caller is cancelled — whichever comes first. A task group can't provide
+    /// this bound: it awaits every child at scope exit, so a fetch stalled in
+    /// non-cancellable DNS would hold the caller past `cancelAll()`. Every
+    /// losing side is cancelled — deadline and caller-cancellation wins cancel
+    /// the fetch so peer-controlled work can't accumulate, and a work win
+    /// cancels the sleeping timer.
     static func withDeadline(
         _ deadline: Duration,
         work: @escaping @Sendable () async -> Data?
     ) async -> Data? {
-        let resumed = Mutex(false)
-        let timerHolder = Mutex<Task<Void, Never>?>(nil)
-        return await withCheckedContinuation { continuation in
-            let workTask = Task.detached {
-                let value = await work()
-                let shouldResume = resumed.withLock { flag in
-                    if flag { return false }
-                    flag = true
-                    return true
+        let race = Mutex(DeadlineRace())
+
+        @Sendable func finish(_ value: Data?, cancellingWork: Bool) {
+            let resolved: (CheckedContinuation<Data?, Never>, Task<Void, Never>?, Task<Void, Never>?)? =
+                race.withLock { state in
+                    guard !state.resumed, let continuation = state.continuation else { return nil }
+                    state.resumed = true
+                    state.continuation = nil
+                    return (continuation, cancellingWork ? state.work : nil, state.timer)
                 }
-                if shouldResume {
-                    timerHolder.withLock { $0?.cancel() }
-                    continuation.resume(returning: value)
+            guard let (continuation, workTask, timerTask) = resolved else { return }
+            workTask?.cancel()
+            timerTask?.cancel()
+            continuation.resume(returning: value)
+        }
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                race.withLock { state in
+                    state.continuation = continuation
+                }
+                // The caller may have been cancelled before the continuation
+                // existed; the flag records it so the resume isn't lost.
+                if race.withLock({ $0.cancelled }) {
+                    finish(nil, cancellingWork: false)
+                    return
+                }
+                let workTask = Task.detached {
+                    let value = await work()
+                    finish(value, cancellingWork: false)
+                }
+                let timerTask = Task.detached {
+                    try? await Task.sleep(for: deadline)
+                    finish(nil, cancellingWork: true)
+                }
+                let alreadyResumed = race.withLock { state in
+                    state.work = workTask
+                    state.timer = timerTask
+                    return state.resumed
+                }
+                if alreadyResumed {
+                    timerTask.cancel()
                 }
             }
-            let timerTask = Task.detached {
-                try? await Task.sleep(for: deadline)
-                let shouldResume = resumed.withLock { flag in
-                    if flag { return false }
-                    flag = true
-                    return true
-                }
-                if shouldResume {
-                    workTask.cancel()
-                    continuation.resume(returning: nil)
-                }
-            }
-            timerHolder.withLock { $0 = timerTask }
+        } onCancel: {
+            race.withLock { $0.cancelled = true }
+            finish(nil, cancellingWork: true)
         }
     }
 

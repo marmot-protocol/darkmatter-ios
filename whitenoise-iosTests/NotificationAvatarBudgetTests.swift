@@ -48,6 +48,44 @@ struct NotificationAvatarBudgetTests {
         #expect(observedCancellation.withLock { $0 })
     }
 
+    @Test func callerCancellationResumesTheDeadlineWaitAndCancelsWork() async {
+        let observedCancellation = Mutex(false)
+        let clock = ContinuousClock()
+        let start = clock.now
+        let waiter = Task {
+            await NotificationCommunicationDecorator.withDeadline(.seconds(30)) {
+                await withTaskCancellationHandler {
+                    try? await Task.sleep(for: .seconds(30))
+                    return nil
+                } onCancel: {
+                    observedCancellation.withLock { $0 = true }
+                }
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+        waiter.cancel()
+        let result = await waiter.value
+        #expect(result == nil)
+        // Well under the 30s deadline: cancellation resumed the wait.
+        #expect(clock.now - start < .seconds(10))
+        for _ in 0..<100 where !observedCancellation.withLock({ $0 }) {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(observedCancellation.withLock { $0 })
+    }
+
+    @Test func warmSlotsDeduplicatePerUrlAndCapConcurrency() {
+        var inFlight: Set<String> = []
+        #expect(NotificationCommunicationDecorator.claimWarmSlot("a", in: &inFlight, limit: 2))
+        // Same URL never claims a second slot.
+        #expect(!NotificationCommunicationDecorator.claimWarmSlot("a", in: &inFlight, limit: 2))
+        #expect(NotificationCommunicationDecorator.claimWarmSlot("b", in: &inFlight, limit: 2))
+        // The cap bounds distinct peer-controlled hosts, not just duplicates.
+        #expect(!NotificationCommunicationDecorator.claimWarmSlot("c", in: &inFlight, limit: 2))
+        inFlight.remove("a")
+        #expect(NotificationCommunicationDecorator.claimWarmSlot("c", in: &inFlight, limit: 2))
+    }
+
     @Test func workWinReturnsItsValueBeforeTheDeadline() async {
         let result = await NotificationCommunicationDecorator.withDeadline(.seconds(30)) {
             Data([0x1])

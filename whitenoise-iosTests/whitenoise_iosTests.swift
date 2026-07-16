@@ -3791,8 +3791,11 @@ struct NotificationServiceProjectionTests {
 
     @Test func disabledLocalNotificationsDeliverQuietlyFromTheNSE() {
         // Disabling local notifications must not produce an audible generic
-        // banner per message (#675); the wake sheds its alert and lands
-        // quietly, matching the all-muted wake.
+        // banner per message; the wake sheds its alert and lands quietly,
+        // matching the all-muted wake. Forward-looking: the pinned engine
+        // currently discards disabled-account records at ingest (the wake
+        // arrives as an empty `.noData` collection instead), so this state
+        // only occurs once the engine surfaces suppressed records.
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [

@@ -13,6 +13,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var collectionTask: Task<Void, Never>?
     private var expirationTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
+    private var avatarFetchTask: Task<[String: Data], Never>?
     private var activeMarmot: Marmot?
     private var activeMarmotNeedsShutdown = false
     private var didApplyRenderDecision = false
@@ -27,6 +28,7 @@ final class NotificationService: UNNotificationServiceExtension {
         activeMarmot = nil
         activeMarmotNeedsShutdown = false
         additionalPresentationTask = nil
+        avatarFetchTask = nil
         didApplyRenderDecision = false
         decoratedContent = nil
 
@@ -37,6 +39,10 @@ final class NotificationService: UNNotificationServiceExtension {
 
     override func serviceExtensionTimeWillExpire() {
         collectionTask?.cancel()
+        // Unblocks the additional-presentation task: it enqueues immediately
+        // with whatever avatars have resolved instead of waiting out the
+        // remaining fetch deadlines.
+        avatarFetchTask?.cancel()
         let additionalPresentationTask = additionalPresentationTask
         guard let marmot = takeActiveMarmotForShutdown() else {
             if let additionalPresentationTask {
@@ -172,11 +178,17 @@ final class NotificationService: UNNotificationServiceExtension {
             // expiration that lands mid-fetch must deliver the decorated
             // title/body, just without the intent image.
             decorate(content, with: presentation)
-            let avatarsByUrl = await Self.fetchAvatars(for: [presentation] + additionalPresentations)
-            let additionalPresentationTask = startAdditionalPresentations(
-                additionalPresentations,
-                avatarsByUrl: avatarsByUrl
-            )
+            // The additional-presentation task must exist before any avatar
+            // await — expiration finishes without one, and these records are
+            // already consumed from the background cursor. It awaits the
+            // shared fetch internally; cancelling that fetch releases it to
+            // enqueue with whatever resolved.
+            let avatarFetch = Task { await Self.fetchAvatars(for: [presentation] + additionalPresentations) }
+            avatarFetchTask = avatarFetch
+            let additionalPresentationTask = startAdditionalPresentations(additionalPresentations) {
+                await avatarFetch.value
+            }
+            let avatarsByUrl = await avatarFetch.value
             decoratedContent = NotificationCommunicationDecorator.decorated(
                 content,
                 presentation: presentation,
@@ -184,6 +196,7 @@ final class NotificationService: UNNotificationServiceExtension {
             )
             await additionalPresentationTask?.value
             self.additionalPresentationTask = nil
+            avatarFetchTask = nil
         case .deliverQuietly:
             applyQuietDelivery(to: content)
         case .fallback:
@@ -200,15 +213,16 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func startAdditionalPresentations(
         _ additionalPresentations: [LocalNotificationPresentation],
-        avatarsByUrl: [String: Data]
+        avatarsByUrl: @escaping @Sendable () async -> [String: Data]
     ) -> Task<Void, Never>? {
         guard !additionalPresentations.isEmpty else { return nil }
         let task = Task { [additionalPresentations] in
+            let avatars = await avatarsByUrl()
             for presentation in additionalPresentations {
                 let content = NotificationCommunicationDecorator.decorated(
                     NotificationContentDecorator.makeContent(for: presentation),
                     presentation: presentation,
-                    avatarData: presentation.senderPictureUrl.flatMap { avatarsByUrl[$0] }
+                    avatarData: presentation.senderPictureUrl.flatMap { avatars[$0] }
                 )
                 let request = UNNotificationRequest(
                     identifier: presentation.identifier,
@@ -239,9 +253,11 @@ final class NotificationService: UNNotificationServiceExtension {
         let clock = ContinuousClock()
         let start = clock.now
         for url in distinct.prefix(3) {
-            guard let deadline = NotificationCommunicationDecorator.avatarFetchDeadline(
-                elapsed: clock.now - start
-            ) else { break }
+            guard !Task.isCancelled,
+                  let deadline = NotificationCommunicationDecorator.avatarFetchDeadline(
+                      elapsed: clock.now - start
+                  )
+            else { break }
             if let data = await NotificationCommunicationDecorator.avatarData(
                 for: url,
                 deadline: deadline
