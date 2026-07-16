@@ -55,10 +55,14 @@ final class ProfileEditViewModel {
 
     func loadExisting(using appState: AppState) async {
         guard let id = appState.activeAccount?.accountIdHex else { return }
-        let cachedProfile = appState.profile(forAccountIdHex: id)
+        // Publishing authorization is revoked for the whole load window and
+        // re-granted only by a successful outcome — a failed or in-flight
+        // load must never leave Save armed with a previous account's grant.
+        loadedAccountIdHex = nil
         // The projection batch erases read errors (`try?`), so the editor
         // takes its authority from the throwing read: nil is definitive
-        // absence, a throw is unknown state that must gate publishing.
+        // absence, a throw is unknown state that must gate publishing. The
+        // display cache gets no vote — it can trail the relays.
         var loadedProfile: UserProfileMetadataFfi?
         var readFailed = false
         do {
@@ -73,11 +77,10 @@ final class ProfileEditViewModel {
         applyLoadOutcome(
             ProfileEditLoadResolution.resolve(
                 hasLoadedProfile: loadedProfile != nil,
-                hasCachedProfile: cachedProfile != nil,
                 readFailed: readFailed
             ),
             accountIdHex: id,
-            profile: loadedProfile ?? cachedProfile
+            profile: loadedProfile
         )
     }
 
@@ -106,6 +109,7 @@ final class ProfileEditViewModel {
         }
         switch resolution {
         case .loadFailed:
+            loadedAccountIdHex = nil
             error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
         case .enableFirstPublish:
             existingName = nil

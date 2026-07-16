@@ -105,15 +105,14 @@ nonisolated enum ProfileEditLoadResolution: Equatable {
 
     static func resolve(
         hasLoadedProfile: Bool,
-        hasCachedProfile: Bool,
         readFailed: Bool
     ) -> ProfileEditLoadResolution {
-        // A failed read gates publishing even when a cached projection
-        // exists: the cache may trail the relays, and republishing stale
-        // kind:0 fields over newer metadata is exactly what the gate is for.
+        // The throwing read is the only authority. A failure gates
+        // publishing outright, and a successful nil is definitive absence —
+        // the display cache gets no vote in either direction, because a
+        // stale projection could otherwise unlock a republish of old fields.
         if readFailed { return .loadFailed }
-        if hasLoadedProfile || hasCachedProfile { return .seedExisting }
-        return .enableFirstPublish
+        return hasLoadedProfile ? .seedExisting : .enableFirstPublish
     }
 }
 

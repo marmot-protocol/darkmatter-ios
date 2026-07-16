@@ -31,9 +31,10 @@ struct ProfileEditMetadataDraftTests {
         model.applyLoadOutcome(.loadFailed, accountIdHex: "account-b", profile: nil)
         #expect(model.displayName.isEmpty)
         #expect(model.error != nil)
-        // The gate stays on A: saveDisabled compares against the active
-        // account, so B cannot publish until a load succeeds for B.
-        #expect(model.loadedAccountIdHex == "account-a")
+        // A failed load revokes authorization entirely — a stale grant from
+        // the previously loaded account would re-arm Save the moment the
+        // active account switches back, with whatever the form then holds.
+        #expect(model.loadedAccountIdHex == nil)
 
         // Text typed for B (while B's load had failed) must not survive a
         // switch back to A — the reset detector tracks attempts, not just
@@ -142,22 +143,17 @@ struct ProfileEditMetadataDraftTests {
         // A fresh identity (projection exists, no kind:0 anywhere) unlocks a
         // first publish; a failed load stays gated — publishing then could
         // replace existing metadata with blanks.
+        // The throwing read is the only authority: failure gates outright,
+        // a successful nil is definitive absence, and the display cache has
+        // no vote (a stale projection must neither seed nor unlock Save).
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: false, readFailed: false
+            hasLoadedProfile: false, readFailed: false
         ) == .enableFirstPublish)
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: false, readFailed: true
+            hasLoadedProfile: false, readFailed: true
         ) == .loadFailed)
         #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: true, hasCachedProfile: false, readFailed: false
-        ) == .seedExisting)
-        // A failed read gates publishing even with a warm cache — the cache
-        // may trail the relays, and Save must not republish stale fields.
-        #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: true, readFailed: true
-        ) == .loadFailed)
-        #expect(ProfileEditLoadResolution.resolve(
-            hasLoadedProfile: false, hasCachedProfile: true, readFailed: false
+            hasLoadedProfile: true, readFailed: false
         ) == .seedExisting)
         #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-a"))
         #expect(ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-b"))
