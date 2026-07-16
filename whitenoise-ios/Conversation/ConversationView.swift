@@ -552,7 +552,7 @@ struct ConversationView: View {
     @State private var isSelectingMessages = false
     @State private var selectedMessageIds = Set<String>()
     @State private var showBatchDeleteConfirmation = false
-    @State private var batchDeleteInFlight = false
+    @State private var batchDeleteOperationID: UUID?
     @State private var editSession: ComposerEditSession?
     @State private var editSaveInFlight = false
     @State private var editHistoryTarget: ActionsTarget?
@@ -622,6 +622,7 @@ struct ConversationView: View {
     }
 
     private struct ComposerEditSession {
+        let id = UUID()
         let message: AppMessageRecordFfi
         let preservedDraft: String
         let preservedMediaDrafts: [MediaDraftAttachment]
@@ -2139,6 +2140,10 @@ struct ConversationView: View {
         return normalized != editSession.message.plaintext
     }
 
+    private var batchDeleteInFlight: Bool {
+        batchDeleteOperationID != nil
+    }
+
     private func cancelEdit() {
         guard let editSession else { return }
         self.editSession = nil
@@ -2169,6 +2174,7 @@ struct ConversationView: View {
             Task {
                 defer { editSaveInFlight = false }
                 guard await viewModel.editMessage(editSession.message, content: editedContent) else { return }
+                guard self.editSession?.id == editSession.id else { return }
                 self.editSession = nil
                 draft = editSession.preservedDraft
                 mediaDrafts = editSession.preservedMediaDrafts
@@ -2700,6 +2706,7 @@ struct ConversationView: View {
     }
 
     private func exitMessageSelection() {
+        batchDeleteOperationID = nil
         isSelectingMessages = false
         selectedMessageIds.removeAll()
         showBatchDeleteConfirmation = false
@@ -2726,13 +2733,15 @@ struct ConversationView: View {
             }
         ) else { return }
 
-        batchDeleteInFlight = true
+        let operationID = UUID()
+        batchDeleteOperationID = operationID
         Task { @MainActor in
             for record in records {
                 guard !Task.isCancelled else { break }
                 await viewModel.deleteMessage(record)
             }
-            batchDeleteInFlight = false
+            guard batchDeleteOperationID == operationID else { return }
+            batchDeleteOperationID = nil
             exitMessageSelection()
         }
     }
