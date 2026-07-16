@@ -94,36 +94,27 @@ struct MessageFooterPresentation: Equatable {
     }
 }
 
-nonisolated struct ReactionPillPresentation: Identifiable, Equatable {
-    let id: String
-    let emoji: String
-    let count: Int
+nonisolated struct ReactionSummaryPresentation: Equatable {
+    let emojis: [String]
+    let totalCount: Int
     let mine: Bool
-    let isOverflow: Bool
 
-    static func values(
+    static func value(
         from reactions: [ConversationViewModel.ReactionTally],
-        maximumVisible: Int = 3
-    ) -> [Self] {
-        guard maximumVisible > 0 else { return [] }
+        maximumVisibleEmojis: Int = 3
+    ) -> Self? {
+        guard maximumVisibleEmojis > 0, !reactions.isEmpty else { return nil }
 
         let sorted = reactions.sorted {
             if $0.mine != $1.mine { return $0.mine && !$1.mine }
             if $0.count != $1.count { return $0.count > $1.count }
             return $0.emoji < $1.emoji
         }
-        guard sorted.count > maximumVisible else {
-            return sorted.map {
-                Self(id: $0.emoji, emoji: $0.emoji, count: $0.count, mine: $0.mine, isOverflow: false)
-            }
-        }
-
-        let visibleCount = max(0, maximumVisible - 1)
-        let visible = sorted.prefix(visibleCount).map {
-            Self(id: $0.emoji, emoji: $0.emoji, count: $0.count, mine: $0.mine, isOverflow: false)
-        }
-        let hiddenCount = sorted.dropFirst(visibleCount).reduce(0) { $0 + $1.count }
-        return visible + [Self(id: "overflow", emoji: "+", count: hiddenCount, mine: false, isOverflow: true)]
+        return Self(
+            emojis: sorted.prefix(maximumVisibleEmojis).map(\.emoji),
+            totalCount: sorted.reduce(0) { $0 + $1.count },
+            mine: reactions.contains(where: \.mine)
+        )
     }
 }
 

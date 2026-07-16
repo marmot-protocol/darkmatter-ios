@@ -12,18 +12,18 @@ struct ChatSurfacePresentationTests {
         #expect(MessageFooterPresentation.value(for: .received, isFromMe: false).systemImage == nil)
     }
 
-    @Test func reactionPillsCapAndAggregateOverflow() {
-        let values = ReactionPillPresentation.values(from: [
+    @Test func reactionSummaryCombinesEmojisAndTotalCount() throws {
+        let summary = try #require(ReactionSummaryPresentation.value(from: [
             .init(emoji: "👍", count: 4, mine: false),
             .init(emoji: "❤️", count: 3, mine: true),
             .init(emoji: "😂", count: 2, mine: false),
             .init(emoji: "😮", count: 1, mine: false),
-        ])
+        ]))
 
-        #expect(values.count == 3)
-        #expect(values.first?.emoji == "❤️")
-        #expect(values.last?.isOverflow == true)
-        #expect(values.last?.count == 3)
+        #expect(summary.emojis == ["❤️", "👍", "😂"])
+        #expect(summary.totalCount == 10)
+        #expect(summary.mine)
+        #expect(ReactionSummaryPresentation.value(from: []) == nil)
     }
 
     @Test func emojiSearchPrefersExactAndPrefixNames() {

@@ -610,8 +610,9 @@ struct ConversationView: View {
     }
 
     private struct ReactionDetailsTarget: Identifiable {
-        let messageIdHex: String
-        let initialEmoji: String
+        let record: AppMessageRecordFfi
+        let initialEmoji: String?
+        var messageIdHex: String { record.messageIdHex }
         let id = UUID()
     }
 
@@ -756,7 +757,15 @@ struct ConversationView: View {
                 if let viewModel {
                     ReactionDetailsSheet(
                         details: viewModel.reactionDetails(for: target.messageIdHex),
-                        initialEmoji: target.initialEmoji
+                        initialEmoji: target.initialEmoji,
+                        onRemoveOwnReaction: { emoji in
+                            Task {
+                                await viewModel.toggleReaction(emoji, on: target.record)
+                                if viewModel.reactions(for: target.messageIdHex).isEmpty {
+                                    reactionDetailsTarget = nil
+                                }
+                            }
+                        }
                     )
                     .appAppearance()
                 }
@@ -1626,7 +1635,7 @@ struct ConversationView: View {
             reactions: viewModel.reactions(for: record.messageIdHex),
             onShowReactionDetails: { emoji in
                 reactionDetailsTarget = ReactionDetailsTarget(
-                    messageIdHex: record.messageIdHex,
+                    record: record,
                     initialEmoji: emoji
                 )
             },

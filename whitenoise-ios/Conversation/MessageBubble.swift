@@ -87,7 +87,7 @@ struct MessageBubble: View {
     var mediaItems: [MessageMediaAttachment] = []
     var markdownBlocks: [MarkdownDisplayBlock]? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
-    var onShowReactionDetails: (String) -> Void = { _ in }
+    var onShowReactionDetails: (String?) -> Void = { _ in }
     var onReplyPreviewTap: () -> Void = {}
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
     /// Set when the message has viewable edit history; makes the inline "Edited"
@@ -583,39 +583,40 @@ struct MessageBubble: View {
         }
     }
 
+    @ViewBuilder
     private var reactionChips: some View {
-        HStack(spacing: 4) {
-            ForEach(ReactionPillPresentation.values(from: reactions)) { tally in
-                Button {
-                    if !tally.isOverflow {
-                        onShowReactionDetails(tally.emoji)
+        if let summary = ReactionSummaryPresentation.value(from: reactions) {
+            Button {
+                onShowReactionDetails(nil)
+            } label: {
+                HStack(spacing: 3) {
+                    Text(summary.emojis.map(ContentSanitizer.reactionEmoji).joined())
+                        .font(.footnote)
+                    if summary.totalCount > 1 {
+                        Text(L10n.formatted("%lld", Int64(summary.totalCount)))
+                            .font(.caption.weight(.semibold))
                     }
-                } label: {
-                    HStack(spacing: 2) {
-                        Text(tally.isOverflow ? "+" : ContentSanitizer.reactionEmoji(tally.emoji))
-                        if tally.count > 1 || tally.isOverflow {
-                            Text(L10n.formatted("%lld", Int64(tally.count)))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(tally.mine ? Color.accentColor.opacity(0.22) : Color(.tertiarySystemFill))
-                    )
-                    .overlay(
-                        Capsule().stroke(tally.mine ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.plain)
-                .disabled(tally.isOverflow)
+                .foregroundStyle(summary.mine ? Color.accentColor : Color.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    summary.mine ? Color.accentColor.opacity(0.16) : Color(.secondarySystemBackground),
+                    in: Capsule()
+                )
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color(.systemBackground), lineWidth: 1.5)
+                }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.string("Reactions"))
+            .accessibilityValue(L10n.formatted("%lld", Int64(summary.totalCount)))
+            .accessibilityAddTraits(summary.mine ? .isSelected : [])
+            .padding(isFromMe ? .trailing : .leading, 10)
+            .offset(y: -6)
+            .padding(.bottom, -6)
         }
-        .font(.footnote)
-        .padding(isFromMe ? .trailing : .leading, 8)
-        .offset(y: -5)
-        .padding(.bottom, -5)
     }
 
     private var messageMetadataFooter: some View {
