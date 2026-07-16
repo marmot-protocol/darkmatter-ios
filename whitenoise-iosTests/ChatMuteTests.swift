@@ -385,10 +385,36 @@ struct ChatNotifyModeStoreTests {
         // Write-through keeps the legacy set consistent: mentions-only is not muted.
         #expect(!ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
 
+        // A conflicting legacy entry (as an older build would write it) must
+        // not outrank the explicit mode.
+        let key = try #require(ChatMuteStore.key(accountIdHex: account, groupIdHex: "group-a"))
+        defaults.set([key], forKey: ChatMuteStore.storageKey)
+        snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .mentionsOnly)
+
         ChatMuteStore.setNotifyMode(.nothing, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
         snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
         #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .nothing)
         #expect(ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
+    }
+
+    @Test func setMutedRoutesThroughTheModeWriter() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = String(repeating: "11", count: 32)
+
+        // Mute after mentions-only must flip the mode too, not just the
+        // legacy set — the two stores can never disagree.
+        ChatMuteStore.setNotifyMode(.mentionsOnly, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        ChatMuteStore.setMuted(true, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        var snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .nothing)
+        #expect(ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
+
+        ChatMuteStore.setMuted(false, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .all)
+        #expect(!ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
     }
 
     @Test func nilSnapshotFailsSafeAsNothing() {

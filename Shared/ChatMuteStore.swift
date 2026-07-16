@@ -102,13 +102,28 @@ nonisolated enum ChatMuteStore {
         )
     }
 
+    /// Mute writes route through the tri-state writer so the two stores can
+    /// never disagree: muting is `.nothing`, unmuting is `.all`.
     static func setMuted(
         _ muted: Bool,
         accountIdHex: String,
         groupIdHex: String,
         defaults: UserDefaults
     ) {
-        guard let key = key(accountIdHex: accountIdHex, groupIdHex: groupIdHex) else { return }
+        setNotifyMode(muted ? .nothing : .all, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
+    }
+
+    /// Resolving write. No-op when the shared suite can't be resolved.
+    static func setMuted(_ muted: Bool, accountIdHex: String, groupIdHex: String) {
+        guard let defaults else { return }
+        setMuted(muted, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
+    }
+
+    private static func writeLegacyMuted(
+        _ muted: Bool,
+        key: String,
+        defaults: UserDefaults
+    ) {
         var keys = mutedChatKeys(defaults: defaults)
         if muted {
             keys.insert(key)
@@ -116,12 +131,6 @@ nonisolated enum ChatMuteStore {
             keys.remove(key)
         }
         defaults.set(keys.sorted(), forKey: storageKey)
-    }
-
-    /// Resolving write. No-op when the shared suite can't be resolved.
-    static func setMuted(_ muted: Bool, accountIdHex: String, groupIdHex: String) {
-        guard let defaults else { return }
-        setMuted(muted, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
     }
 
     // MARK: - Tri-state notify mode
@@ -191,7 +200,7 @@ nonisolated enum ChatMuteStore {
         var modes = (defaults.dictionary(forKey: notifyModeStorageKey) as? [String: String]) ?? [:]
         modes[key] = mode.rawValue
         defaults.set(modes, forKey: notifyModeStorageKey)
-        setMuted(mode == .nothing, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
+        writeLegacyMuted(mode == .nothing, key: key, defaults: defaults)
     }
 
     /// Resolving write. No-op when the shared suite can't be resolved.

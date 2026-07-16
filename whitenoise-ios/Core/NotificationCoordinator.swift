@@ -189,13 +189,15 @@ final class NotificationCoordinator {
                     accountRef: update.accountRef,
                     host: host
                 )
-                let notifyMode = ChatMuteStore.notifyMode(
-                    accountIdHex: update.accountIdHex,
-                    groupIdHex: update.groupIdHex
-                )
                 guard self.canPresentRuntimeNotificationUpdate(host: host) else { return }
                 let shouldPresent = await MainActor.run {
                     guard self.canPresentRuntimeNotificationUpdate(host: host) else { return false }
+                    // Read at the decision point so a mode change during the
+                    // off-main settings read can't present against a stale value.
+                    let notifyMode = ChatMuteStore.notifyMode(
+                        accountIdHex: update.accountIdHex,
+                        groupIdHex: update.groupIdHex
+                    )
                     self.noteNotificationSubscriptionDelivery()
                     return self.shouldPresentLocalNotification(
                         update,

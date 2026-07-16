@@ -22,6 +22,7 @@ struct LocalNotificationPresentation: Equatable {
     // Communication-notification decoration inputs; defaulted so summaries and
     // fallbacks stay undecorated. The picture URL is pre-sanitized.
     var senderName: String? = nil
+    var senderAccountIdHex: String? = nil
     var senderPictureUrl: String? = nil
     var isGroupConversation: Bool = false
 }
@@ -78,6 +79,7 @@ nonisolated enum LocalNotificationProjection {
                 messageIdHex: update.messageIdHex
             ),
             senderName: senderName,
+            senderAccountIdHex: update.sender.accountIdHex,
             senderPictureUrl: ContentSanitizer.imageURL(update.sender.pictureUrl)?.absoluteString,
             isGroupConversation: !update.isDm
         )

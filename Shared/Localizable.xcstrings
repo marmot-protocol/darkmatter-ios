@@ -44192,7 +44192,7 @@
         "it" : { "stringUnit" : { "state" : "translated", "value" : "Notificami per" } },
         "pt" : { "stringUnit" : { "state" : "translated", "value" : "Notificar sobre" } },
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уведомлять о" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şunlar için bildir" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Beni şu durumlarda bilgilendir" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知我" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "通知我" } }
       }
