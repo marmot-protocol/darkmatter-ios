@@ -15,7 +15,24 @@ nonisolated enum NotificationCommunicationDecorator {
     /// restarts across redirects and resolved endpoints, so delivery races
     /// this deadline instead and abandons the fetch when it loses.
     static let avatarDeadline: Duration = .seconds(3)
+    /// Aggregate wall-clock the NSE may spend across all avatar fetches in
+    /// one wake; each fetch's deadline is clamped to what remains.
+    static let avatarAggregateBudget: Duration = .seconds(6)
     static let maxCachedAvatars = 32
+
+    /// Per-fetch deadline under an aggregate budget, `nil` once the budget is
+    /// exhausted. Clamping to the remainder is what makes the budget a hard
+    /// bound — a loop that only checks elapsed time before each fetch can
+    /// overshoot by a full per-fetch deadline.
+    static func avatarFetchDeadline(
+        elapsed: Duration,
+        budget: Duration = avatarAggregateBudget,
+        perFetch: Duration = avatarDeadline
+    ) -> Duration? {
+        let remaining = budget - elapsed
+        guard remaining > .zero else { return nil }
+        return min(perFetch, remaining)
+    }
 
     static func decorated(
         _ content: UNNotificationContent,
@@ -64,45 +81,81 @@ nonisolated enum NotificationCommunicationDecorator {
 
     /// `pictureUrl` is re-validated even though presentations carry it
     /// pre-sanitized — the decorator is its own egress chokepoint.
-    static func avatarData(for pictureUrl: String?) async -> Data? {
+    static func avatarData(for pictureUrl: String?, deadline: Duration = avatarDeadline) async -> Data? {
         guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return nil }
         if let cached = cachedAvatarData(for: url) { return cached }
-        return await withDeadline(avatarDeadline) {
+        return await withDeadline(deadline) {
             guard let fetched = await boundedFetch(url) else { return nil }
             storeCachedAvatar(fetched, for: url)
             return fetched
         }
     }
 
+    /// Cache-only read for paths that must never wait on the network — the
+    /// foreground presenter enqueues immediately and warms the cache instead.
+    static func cachedAvatarData(forPictureUrl pictureUrl: String?) -> Data? {
+        guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return nil }
+        return cachedAvatarData(for: url)
+    }
+
+    private static let warmsInFlight = Mutex<Set<String>>([])
+
+    /// Fills the avatar cache off the delivery path so the next presentation
+    /// of this sender carries an image. Deduplicates concurrent warms per URL
+    /// so a burst of messages from one sender spawns a single fetch.
+    static func warmAvatarCache(for pictureUrl: String?) {
+        guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return }
+        guard cachedAvatarData(for: url) == nil else { return }
+        let key = url.absoluteString
+        let claimed = warmsInFlight.withLock { inFlight in
+            inFlight.insert(key).inserted
+        }
+        guard claimed else { return }
+        Task.detached(priority: .utility) {
+            defer { _ = warmsInFlight.withLock { $0.remove(key) } }
+            guard let fetched = await boundedFetch(url) else { return }
+            storeCachedAvatar(fetched, for: url)
+        }
+    }
+
     /// Resumes with the work's value or `nil` at the deadline, whichever comes
     /// first. A task group can't provide this bound: it awaits every child at
     /// scope exit, so a fetch stalled in non-cancellable DNS would hold the
-    /// caller past `cancelAll()`. Here the loser is abandoned — a late fetch
-    /// still finishes into the cache for the next wake.
+    /// caller past `cancelAll()`. The losing side is cancelled — a deadline
+    /// win cancels the fetch so peer-controlled work can't accumulate, and a
+    /// work win cancels the sleeping timer.
     static func withDeadline(
         _ deadline: Duration,
         work: @escaping @Sendable () async -> Data?
     ) async -> Data? {
         let resumed = Mutex(false)
+        let timerHolder = Mutex<Task<Void, Never>?>(nil)
         return await withCheckedContinuation { continuation in
-            Task.detached {
+            let workTask = Task.detached {
                 let value = await work()
                 let shouldResume = resumed.withLock { flag in
                     if flag { return false }
                     flag = true
                     return true
                 }
-                if shouldResume { continuation.resume(returning: value) }
+                if shouldResume {
+                    timerHolder.withLock { $0?.cancel() }
+                    continuation.resume(returning: value)
+                }
             }
-            Task.detached {
+            let timerTask = Task.detached {
                 try? await Task.sleep(for: deadline)
                 let shouldResume = resumed.withLock { flag in
                     if flag { return false }
                     flag = true
                     return true
                 }
-                if shouldResume { continuation.resume(returning: nil) }
+                if shouldResume {
+                    workTask.cancel()
+                    continuation.resume(returning: nil)
+                }
             }
+            timerHolder.withLock { $0 = timerTask }
         }
     }
 

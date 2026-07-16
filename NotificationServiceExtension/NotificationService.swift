@@ -104,7 +104,7 @@ final class NotificationService: UNNotificationServiceExtension {
                 let archivedChatKeys = NotificationServiceProjection.archivedChatKeys(
                     rowsByAccountRef: rowsByAccountRef
                 )
-                var decision = NotificationServiceProjection.decision(
+                let decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: localNotificationsEnabled,
                     isArchived: { accountRef, groupIdHex in
@@ -130,19 +130,12 @@ final class NotificationService: UNNotificationServiceExtension {
                         )
                     }
                 )
-                // The engine rejects records for notification-disabled
-                // accounts at ingest, so a disabled account's wake arrives as
-                // an EMPTY (but successful) collection and would fall back
-                // audibly; shed the sound when no account wants audible
-                // alerts. Failed collections stay audible.
-                if case .fallback = decision,
-                   NotificationServiceProjection.shouldQuietFallback(
-                       status: result.status,
-                       accountRefs: (try? marmot.listAccounts().map(\.label)) ?? [],
-                       localNotificationsEnabled: localNotificationsEnabled
-                   ) {
-                    decision = .deliverQuietly
-                }
+                // An empty wake can't be attributed: the engine drops
+                // disabled accounts' records at ingest, so `.noData` is
+                // ambiguous between "nothing existed" and "records were
+                // suppressed". Account-wide inference gets both directions
+                // wrong, so the fallback stays audible until the engine
+                // reports suppressed records explicitly.
                 await apply(decision, to: content)
             } catch {
                 applyFallback(to: content)
@@ -229,10 +222,10 @@ final class NotificationService: UNNotificationServiceExtension {
         return task
     }
 
-    /// Resolves each distinct sender avatar once per wake. Every fetch races a
-    /// hard per-call deadline and the loop stops at an aggregate budget, so
-    /// slow avatar hosts (or redirect chains) can never spend the extension's
-    /// delivery window; cache hits are instant and unbudgeted.
+    /// Resolves each distinct sender avatar once per wake. Each fetch's
+    /// deadline is clamped to what remains of the aggregate budget, so the
+    /// total avatar wait is a hard bound rather than a loop-entry check that
+    /// a late fetch could overshoot; cache hits are instant and unbudgeted.
     private static func fetchAvatars(
         for presentations: [LocalNotificationPresentation]
     ) async -> [String: Data] {
@@ -246,8 +239,13 @@ final class NotificationService: UNNotificationServiceExtension {
         let clock = ContinuousClock()
         let start = clock.now
         for url in distinct.prefix(3) {
-            guard clock.now - start < .seconds(6) else { break }
-            if let data = await NotificationCommunicationDecorator.avatarData(for: url) {
+            guard let deadline = NotificationCommunicationDecorator.avatarFetchDeadline(
+                elapsed: clock.now - start
+            ) else { break }
+            if let data = await NotificationCommunicationDecorator.avatarData(
+                for: url,
+                deadline: deadline
+            ) {
                 avatars[url] = data
             }
         }

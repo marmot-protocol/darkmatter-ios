@@ -98,9 +98,18 @@ nonisolated enum PinnedHTTPSFetcher {
               request.httpMethod == nil || request.httpMethod == "GET"
         else { throw FetchError.invalidRequest }
 
-        let resolvedEndpoints = try await Task.detached(priority: .utility) {
+        // The resolver blocks a thread in getaddrinfo, which cancellation
+        // cannot interrupt — but propagating it stops the connection and body
+        // stages from ever starting for an abandoned fetch.
+        let dnsTask = Task.detached(priority: .utility) {
             try endpoints(for: url, resolver: resolver)
-        }.value
+        }
+        let resolvedEndpoints = try await withTaskCancellationHandler {
+            try await dnsTask.value
+        } onCancel: {
+            dnsTask.cancel()
+        }
+        try Task.checkCancellation()
         let requestData = try requestBytes(for: request)
         var lastError: Error = URLError(.cannotConnectToHost)
         for endpoint in resolvedEndpoints {

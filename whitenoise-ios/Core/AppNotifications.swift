@@ -183,9 +183,14 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        let avatarData = await NotificationCommunicationDecorator.avatarData(
-            for: presentation.senderPictureUrl
+        // The banner is enqueued immediately; a cold avatar warms the cache
+        // for the sender's next message instead of delaying this one.
+        let avatarData = NotificationCommunicationDecorator.cachedAvatarData(
+            forPictureUrl: presentation.senderPictureUrl
         )
+        if avatarData == nil {
+            NotificationCommunicationDecorator.warmAvatarCache(for: presentation.senderPictureUrl)
+        }
         let content = NotificationCommunicationDecorator.decorated(
             NotificationContentDecorator.makeContent(for: presentation),
             presentation: presentation,
