@@ -135,9 +135,7 @@ struct RecipientCandidateDerivationTests {
         #expect(snapshot.isSelfMember)
     }
 
-    @Test func snapshotRosterUsesNostrAccountsInsteadOfMlsMemberIds() {
-        let mlsMe = String(repeating: "11", count: 32)
-        let mlsAlice = String(repeating: "22", count: 32)
+    @Test func snapshotRosterUsesMemberIdsInsteadOfLocalAccountLabels() {
         let row = ChatListRowFfi(
             groupIdHex: "dm-1",
             archived: false,
@@ -184,8 +182,8 @@ struct RecipientCandidateDerivationTests {
                 viaWelcomeMessageIdHex: nil
             ),
             members: [
-                member(memberIdHex: mlsMe, accountIdHex: me, isSelf: true),
-                member(memberIdHex: mlsAlice, accountIdHex: alice),
+                member(memberIdHex: me, accountLabel: "primary", isSelf: true),
+                member(memberIdHex: alice, accountLabel: nil),
             ]
         )
 
@@ -224,12 +222,12 @@ struct RecipientCandidateDerivationTests {
 
     private func member(
         memberIdHex: String,
-        accountIdHex: String,
+        accountLabel: String?,
         isSelf: Bool = false
     ) -> GroupMemberDetailsFfi {
         GroupMemberDetailsFfi(
             memberIdHex: memberIdHex,
-            account: accountIdHex,
+            account: accountLabel,
             local: isSelf,
             isAdmin: false,
             isSelf: isSelf,
