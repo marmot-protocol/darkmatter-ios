@@ -75,7 +75,7 @@ nonisolated enum NotificationServiceProjection {
     /// account, so a disabled account's wake alongside an enabled one still
     /// alerts generically until the engine reports suppressed records.
     static func shouldQuietFallback(
-        status: BackgroundNotificationStatusFfi,
+        status: NotificationCollectionStatusFfi,
         accountRefs: [String],
         localNotificationsEnabled: (String) -> Bool
     ) -> Bool {
