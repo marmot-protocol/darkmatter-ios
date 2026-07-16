@@ -23,6 +23,11 @@ final class ProfileEditViewModel {
     var error: String?
 
     private(set) var loadedAccountIdHex: String?
+    // The reset detector must see every attempt: a failed load never moves
+    // the Save gate above, so gating alone would treat a return to the
+    // previously loaded account as "same account" and let another account's
+    // typed draft survive into a publishable state.
+    private var lastAttemptedAccountIdHex: String?
 
     var currentDraft: ProfileEditMetadataDraft {
         ProfileEditMetadataDraft(
@@ -86,9 +91,10 @@ final class ProfileEditViewModel {
         profile: UserProfileMetadataFfi?
     ) {
         let isDifferentAccount = ProfileEditLoadSeeding.isDifferentLoadedAccount(
-            previousAccountId: loadedAccountIdHex,
+            previousAccountId: lastAttemptedAccountIdHex,
             loading: id
         )
+        lastAttemptedAccountIdHex = id
         if isDifferentAccount {
             existingName = nil
             existingLud16 = nil

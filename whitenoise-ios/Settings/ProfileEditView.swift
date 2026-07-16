@@ -108,8 +108,12 @@ nonisolated enum ProfileEditLoadResolution: Equatable {
         hasCachedProfile: Bool,
         readFailed: Bool
     ) -> ProfileEditLoadResolution {
+        // A failed read gates publishing even when a cached projection
+        // exists: the cache may trail the relays, and republishing stale
+        // kind:0 fields over newer metadata is exactly what the gate is for.
+        if readFailed { return .loadFailed }
         if hasLoadedProfile || hasCachedProfile { return .seedExisting }
-        return readFailed ? .loadFailed : .enableFirstPublish
+        return .enableFirstPublish
     }
 }
 

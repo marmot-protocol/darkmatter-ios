@@ -34,6 +34,14 @@ struct ProfileEditMetadataDraftTests {
         // The gate stays on A: saveDisabled compares against the active
         // account, so B cannot publish until a load succeeds for B.
         #expect(model.loadedAccountIdHex == "account-a")
+
+        // Text typed for B (while B's load had failed) must not survive a
+        // switch back to A — the reset detector tracks attempts, not just
+        // successful loads, or B's draft becomes publishable under A.
+        model.displayName = "Bob draft"
+        model.applyLoadOutcome(.enableFirstPublish, accountIdHex: "account-a", profile: nil)
+        #expect(model.displayName.isEmpty)
+        #expect(model.loadedAccountIdHex == "account-a")
     }
 
     @Test func formFieldsPreserveNameWithoutSeedingDisplayNameFromIt() {
@@ -143,10 +151,13 @@ struct ProfileEditMetadataDraftTests {
         #expect(ProfileEditLoadResolution.resolve(
             hasLoadedProfile: true, hasCachedProfile: false, readFailed: false
         ) == .seedExisting)
-        // A failed read still seeds from cache — matching the pre-existing
-        // cache-fallback behavior.
+        // A failed read gates publishing even with a warm cache — the cache
+        // may trail the relays, and Save must not republish stale fields.
         #expect(ProfileEditLoadResolution.resolve(
             hasLoadedProfile: false, hasCachedProfile: true, readFailed: true
+        ) == .loadFailed)
+        #expect(ProfileEditLoadResolution.resolve(
+            hasLoadedProfile: false, hasCachedProfile: true, readFailed: false
         ) == .seedExisting)
         #expect(!ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-a"))
         #expect(ProfileEditLoadSeeding.isDifferentLoadedAccount(previousAccountId: "account-a", loading: "account-b"))
