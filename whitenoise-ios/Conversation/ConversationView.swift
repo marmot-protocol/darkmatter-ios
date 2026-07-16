@@ -583,6 +583,7 @@ struct ConversationView: View {
     @State private var pendingSearchMatchScrollTask: Task<Void, Never>?
     @State private var replyNavigationTargetItemId: String?
     @State private var replyNavigationTask: Task<Void, Never>?
+    @State private var replyNavigationGeneration = 0
     @State private var visibleChatRoute: VisibleChatRoute?
     /// Global Y bounds of the visible timeline (between nav bar and composer).
     /// The bottom shrinks when the keyboard rises, so placement accounts for it.
@@ -622,6 +623,7 @@ struct ConversationView: View {
     private struct ComposerEditSession {
         let message: AppMessageRecordFfi
         let preservedDraft: String
+        let preservedMediaDrafts: [MediaDraftAttachment]
     }
 
     init(
@@ -790,7 +792,7 @@ struct ConversationView: View {
                 }
             }
             .confirmationDialog(
-                L10n.formatted("Delete %lld selected messages?", Int64(selectedMessageIds.count)),
+                L10n.plural("Delete %lld selected messages?", Int64(selectedMessageIds.count)),
                 isPresented: $showBatchDeleteConfirmation,
                 titleVisibility: .visible
             ) {
@@ -972,7 +974,7 @@ struct ConversationView: View {
                     isSending: (viewModel?.sendInFlight ?? false) || editSaveInFlight,
                     hasAttachments: !mediaDrafts.isEmpty,
                     audioDraft: inlineAudioDraft,
-                    mediaEnabled: viewModel?.canSendMediaAttachments ?? false,
+                    mediaEnabled: editSession == nil && (viewModel?.canSendMediaAttachments ?? false),
                     disabledMessage: viewModel?.inactiveGroupMessage,
                     voiceRecordingActive: voiceRecorder.isActive,
                     focusRequest: composerFocusRequest,
@@ -1017,7 +1019,7 @@ struct ConversationView: View {
         )
 
         return HStack(spacing: 18) {
-            Text(L10n.formatted("%lld selected", Int64(records.count)))
+            Text(L10n.plural("%lld selected", Int64(records.count)))
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -1204,7 +1206,7 @@ struct ConversationView: View {
     @ViewBuilder
     private var conversationTitle: some View {
         if isSelectingMessages {
-            Text(L10n.formatted("%lld selected", Int64(selectedMessageIds.count)))
+            Text(L10n.plural("%lld selected", Int64(selectedMessageIds.count)))
                 .font(.headline)
         } else {
             let chrome = conversationChrome
@@ -1508,6 +1510,8 @@ struct ConversationView: View {
                         }
                         .onChange(of: replyNavigationTargetItemId) { _, itemId in
                             guard let itemId else { return }
+                            isAtTimelineBottom = false
+                            userMovedAwayFromTimelineBottom = true
                             scheduleSearchMatchScroll(to: itemId, proxy: proxy)
                             replyNavigationTargetItemId = nil
                         }
@@ -2106,10 +2110,15 @@ struct ConversationView: View {
             canSendMessages: viewModel.canSendMessages
         ) else { return }
         let preservedDraft = editSession?.preservedDraft ?? draft
+        let preservedMediaDrafts = editSession?.preservedMediaDrafts ?? mediaDrafts
         viewModel.replyingTo = nil
         mediaDrafts.removeAll()
         cancelVoiceRecording()
-        editSession = ComposerEditSession(message: message, preservedDraft: preservedDraft)
+        editSession = ComposerEditSession(
+            message: message,
+            preservedDraft: preservedDraft,
+            preservedMediaDrafts: preservedMediaDrafts
+        )
         draft = message.plaintext
         composerFocusRequest += 1
     }
@@ -2125,6 +2134,7 @@ struct ConversationView: View {
         guard let editSession else { return }
         self.editSession = nil
         draft = editSession.preservedDraft
+        mediaDrafts = editSession.preservedMediaDrafts
     }
 
     private func acceptInvite(viewModel: ConversationViewModel) {
@@ -2152,6 +2162,7 @@ struct ConversationView: View {
                 guard await viewModel.editMessage(editSession.message, content: editedContent) else { return }
                 self.editSession = nil
                 draft = editSession.preservedDraft
+                mediaDrafts = editSession.preservedMediaDrafts
             }
             return
         }
@@ -2207,6 +2218,7 @@ struct ConversationView: View {
     }
 
     private func takePhoto() {
+        guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
             appState.present(.warning(L10n.string("Camera is not available on this device")))
@@ -2216,26 +2228,31 @@ struct ConversationView: View {
     }
 
     private func openPhotoLibrary() {
+        guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         showPhotoLibraryPicker = true
     }
 
     private func openFileImporter() {
+        guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         showFileImporter = true
     }
 
     private func openLocationPicker() {
+        guard editSession == nil else { return }
         guard viewModel?.canSendMessages == true else { return }
         showLocationPicker = true
     }
 
     private func openContactPicker() {
+        guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         showContactPicker = true
     }
 
     private func pasteImage(_ image: UIImage) {
+        guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         addCameraImage(image)
     }
@@ -2553,6 +2570,7 @@ struct ConversationView: View {
     private func cancelPendingTimelineFollowUpWork() {
         initialScrollFollowUpTask?.cancel()
         initialScrollFollowUpTask = nil
+        replyNavigationGeneration &+= 1
         replyNavigationTask?.cancel()
         replyNavigationTask = nil
         cancelPendingBottomScroll()
@@ -2563,8 +2581,14 @@ struct ConversationView: View {
 
     private func navigateToReplyTarget(_ messageIdHex: String, viewModel: ConversationViewModel) {
         replyNavigationTask?.cancel()
+        replyNavigationGeneration &+= 1
+        let generation = replyNavigationGeneration
         replyNavigationTask = Task { @MainActor in
-            defer { replyNavigationTask = nil }
+            defer {
+                if replyNavigationGeneration == generation {
+                    replyNavigationTask = nil
+                }
+            }
 
             if viewModel.record(for: messageIdHex) != nil {
                 replyNavigationTargetItemId = "msg:\(messageIdHex)"

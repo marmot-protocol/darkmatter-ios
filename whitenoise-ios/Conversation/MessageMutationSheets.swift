@@ -51,7 +51,7 @@ struct ForwardMessageSheet: View {
 
     private var header: some View {
         ZStack {
-            Text(messages.count == 1 ? L10n.string("Forward") : L10n.formatted("Forward %lld messages", Int64(messages.count)))
+            Text(L10n.plural("Forward %lld messages", Int64(messages.count)))
                 .font(.headline)
 
             HStack {
