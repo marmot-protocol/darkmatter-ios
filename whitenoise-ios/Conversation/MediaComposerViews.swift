@@ -580,6 +580,12 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
 
                 let selections = PhotoLibrarySelection.compactPreservingPickerOrder(selectionsByPickerIndex)
                 await MainActor.run {
+                    // A failure among successes (an oversized video next to a
+                    // valid photo) surfaces alongside the delivered selections
+                    // instead of silently dropping the item.
+                    if let firstError, !selections.isEmpty {
+                        self.onError(firstError)
+                    }
                     if selections.isEmpty {
                         self.onError(firstError ?? PhotoLibraryPickerError.noReadableMedia)
                     } else {
@@ -609,7 +615,7 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
                         )
                         return
                     }
-                    guard size > 0, let data = try? Data(contentsOf: url), !data.isEmpty else {
+                    guard let data = try? Data(contentsOf: url), !data.isEmpty else {
                         continuation.resume(throwing: PhotoLibraryPickerError.noReadableMedia)
                         return
                     }
