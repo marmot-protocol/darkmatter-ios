@@ -8,6 +8,12 @@ import Foundation
 /// that decides whether the teardown may begin.
 struct SignOutAndWipeTests {
 
+    @Test func readyRootRoutesToProfileSelectionWithoutAnActiveAccount() {
+        #expect(RootPresentation.resolve(phase: .ready, activeAccountRef: nil) == .profileSelection)
+        #expect(RootPresentation.resolve(phase: .ready, activeAccountRef: "profile-a") == .main)
+        #expect(RootPresentation.resolve(phase: .onboarding, activeAccountRef: nil) == .onboarding)
+    }
+
     // MARK: - Confirm gate
 
     @Test func confirmGateAcceptsExactKeyword() {
@@ -123,6 +129,23 @@ struct SignOutAndWipeTests {
         #expect(DestructiveWipeGate.canBegin(
             isReady: true,
             isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false,
+            hasRuntimeClient: true
+        ))
+    }
+
+    @Test func normalSignOutUsesTheSameForegroundRuntimeGateAsWipe() {
+        #expect(AccountExitGate.canBegin(
+            isReady: true,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false,
+            hasRuntimeClient: true
+        ))
+        #expect(!AccountExitGate.canBegin(
+            isReady: true,
+            isAppSceneActive: false,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: false,
             hasRuntimeClient: true

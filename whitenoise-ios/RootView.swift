@@ -1,5 +1,26 @@
 import SwiftUI
 
+enum RootPresentation: Equatable {
+    case bootstrap
+    case onboarding
+    case profileSelection
+    case main
+    case failed(String)
+
+    static func resolve(phase: AppState.Phase, activeAccountRef: String?) -> RootPresentation {
+        switch phase {
+        case .bootstrapping:
+            .bootstrap
+        case .onboarding:
+            .onboarding
+        case .ready:
+            activeAccountRef == nil ? .profileSelection : .main
+        case .failed(let message):
+            .failed(message)
+        }
+    }
+}
+
 /// Top-level router. Routes between the bootstrap splash, the onboarding
 /// flow (when no accounts exist), and the main app once at least one
 /// identity is set up.
@@ -7,19 +28,25 @@ struct RootView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
+        let presentation = RootPresentation.resolve(
+            phase: appState.phase,
+            activeAccountRef: appState.activeAccountRef
+        )
         Group {
-            switch appState.phase {
-            case .bootstrapping:
+            switch presentation {
+            case .bootstrap:
                 BootstrapSplash()
             case .onboarding:
                 WelcomeView()
-            case .ready:
+            case .profileSelection:
+                SignedOutProfilesView()
+            case .main:
                 MainView()
             case .failed(let message):
                 BootstrapFailureView(message: message)
             }
         }
-        .animation(.smooth(duration: 0.25), value: appState.phase)
+        .animation(.smooth(duration: 0.25), value: presentation)
         .toastHost()
         // Hosted at the root so a partial-failure wipe report survives the
         // account teardown (routing to onboarding / switching accounts pops the

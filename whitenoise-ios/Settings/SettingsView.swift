@@ -3,10 +3,12 @@ import MarmotKit
 
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var showQR = false
     @State private var showProfileEdit = false
     @State private var showAccounts = false
-    @State private var showSignOutConfirm = false
+    @State private var showAccountActions = false
+    @State private var presentWipeAfterActionsDismiss = false
     @State private var wipeModel = SignOutAndWipeModel()
 
     var body: some View {
@@ -133,38 +135,20 @@ struct SettingsView: View {
             }
 
             Section {
-                Button(role: .destructive) {
-                    showSignOutConfirm = true
+                Button {
+                    showAccountActions = true
                 } label: {
-                    Label {
-                        Text("Sign out of this profile")
-                    } icon: {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .foregroundStyle(.red)
+                    HStack {
+                        Label("Profile Actions", systemImage: "person.crop.circle.badge.minus")
+                        Spacer()
+                        Image(systemName: "chevron.up")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
                     }
                 }
-                .tint(.red)
                 .disabled(appState.activeAccount == nil)
             } footer: {
-                Text("Signing out removes this profile and its local key material from this device.")
-                    .font(.footnote)
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    wipeModel.present()
-                } label: {
-                    Label {
-                        Text("Sign Out & Wipe")
-                    } icon: {
-                        Image(systemName: "trash.fill")
-                            .foregroundStyle(.red)
-                    }
-                }
-                .tint(.red)
-                .disabled(appState.activeAccount == nil)
-            } footer: {
-                Text("Permanently removes this profile, its local data, keys, and relay key packages from this device. This can't be undone.")
+                Text("Sign out while keeping this profile on the device, or permanently remove its local data.")
                     .font(.footnote)
             }
         }
@@ -184,17 +168,25 @@ struct SettingsView: View {
                 ProfileQRView(accountIdHex: hex)
             }
         }
-        .fullScreenCover(isPresented: $showSignOutConfirm) {
-            FullScreenConfirmationDialog(
-                title: L10n.string("Sign out?"),
-                message: L10n.string("Signing out removes this profile and its local key material from this device."),
-                systemImage: "rectangle.portrait.and.arrow.right",
-                destructiveTitle: L10n.string("Sign out"),
-                onConfirm: {
-                    showSignOutConfirm = false
-                    Task { await appState.signOut() }
+        .sheet(isPresented: $showAccountActions, onDismiss: {
+            guard presentWipeAfterActionsDismiss else { return }
+            presentWipeAfterActionsDismiss = false
+            wipeModel.present()
+        }) {
+            AccountActionsSheet(
+                isBusy: appState.isAccountExitInProgress,
+                onSignOut: {
+                    Task { @MainActor in
+                        if await appState.signOut() {
+                            showAccountActions = false
+                            dismiss()
+                        }
+                    }
                 },
-                onCancel: { showSignOutConfirm = false }
+                onWipe: {
+                    presentWipeAfterActionsDismiss = true
+                    showAccountActions = false
+                }
             )
             .appAppearance()
         }
@@ -205,6 +197,11 @@ struct SettingsView: View {
                 onCancel: { wipeModel.cancel() }
             )
             .appAppearance()
+        }
+        .onChange(of: appState.activeAccountRef) { oldValue, newValue in
+            if oldValue != nil, oldValue != newValue {
+                dismiss()
+            }
         }
     }
 
@@ -223,5 +220,89 @@ struct SettingsView: View {
             return MarmotKitVersion.mdkSHA
         }
         return "\(tag) (\(MarmotKitVersion.mdkSHA))"
+    }
+}
+
+private struct AccountActionsSheet: View {
+    let isBusy: Bool
+    let onSignOut: () -> Void
+    let onWipe: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSignOutConfirmation = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    actionButton(
+                        title: "Sign Out",
+                        description: "Keep this profile's keys, messages, media, and settings on this device.",
+                        systemImage: "rectangle.portrait.and.arrow.right",
+                        role: nil
+                    ) {
+                        showSignOutConfirmation = true
+                    }
+
+                    actionButton(
+                        title: "Sign Out & Wipe",
+                        description: "Permanently remove this profile and its local data from this device.",
+                        systemImage: "trash.fill",
+                        role: .destructive,
+                        action: onWipe
+                    )
+                }
+            }
+            .navigationTitle("Profile Actions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isBusy)
+                }
+            }
+            .confirmationDialog(
+                "Sign out of this profile?",
+                isPresented: $showSignOutConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Sign Out", role: .destructive, action: onSignOut)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You can sign back in without importing your keys again.")
+            }
+        }
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+        .interactiveDismissDisabled(isBusy)
+    }
+
+    private func actionButton(
+        title: LocalizedStringKey,
+        description: LocalizedStringKey,
+        systemImage: String,
+        role: ButtonRole?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: systemImage)
+                    .font(.title3)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                if isBusy {
+                    ProgressView()
+                }
+            }
+            .padding(.vertical, 6)
+        }
+        .disabled(isBusy)
     }
 }

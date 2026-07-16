@@ -20,7 +20,7 @@ struct AccountsView: View {
                     Button {
                         Task { await appState.activateAccount(account.label) }
                     } label: {
-                        accountRow(account)
+                        AccountSummaryRow(account: account)
                     }
                     .buttonStyle(.plain)
                 }
@@ -43,7 +43,19 @@ struct AccountsView: View {
         }
     }
 
-    private func accountRow(_ account: AccountSummaryFfi) -> some View {
+    /// The unread count a Profiles row shows for an account, or `nil` when the
+    /// badge should be hidden — no summary yet, or nothing unread.
+    static func unreadBadgeCount(for summary: AccountUnreadFfi?) -> UInt64? {
+        guard let summary, summary.hasUnread else { return nil }
+        return summary.unreadCount
+    }
+}
+
+struct AccountSummaryRow: View {
+    @Environment(AppState.self) private var appState
+    let account: AccountSummaryFfi
+
+    var body: some View {
         HStack(spacing: 12) {
             AvatarBubble(
                 seed: account.accountIdHex,
@@ -89,10 +101,71 @@ struct AccountsView: View {
         .padding(.vertical, 4)
     }
 
-    /// The unread count a Profiles row shows for an account, or `nil` when the
-    /// badge should be hidden — no summary yet, or nothing unread.
     static func unreadBadgeCount(for summary: AccountUnreadFfi?) -> UInt64? {
-        guard let summary, summary.hasUnread else { return nil }
-        return summary.unreadCount
+        AccountsView.unreadBadgeCount(for: summary)
+    }
+}
+
+struct SignedOutProfilesView: View {
+    @Environment(AppState.self) private var appState
+    @State private var showAdd = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle.badge.checkmark")
+                            .font(.system(size: 42, weight: .medium))
+                            .foregroundStyle(.tint)
+                            .accessibilityHidden(true)
+                        Text("Choose a profile")
+                            .font(.title2.weight(.bold))
+                        Text("Sign in to a profile stored on this device, or add a new one.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .listRowBackground(Color.clear)
+                }
+
+                Section("Profiles") {
+                    ForEach(appState.accounts, id: \.label) { account in
+                        Button {
+                            Task { await appState.activateAccount(account.label) }
+                        } label: {
+                            AccountSummaryRow(account: account)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appState.isAccountExitInProgress)
+                    }
+                }
+
+                Section {
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Label("Add Profile", systemImage: "plus.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle("White Noise")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .task { await appState.refreshAccountUnreadSummaries() }
+        .sheet(isPresented: $showAdd) {
+            NavigationStack {
+                WelcomeView()
+            }
+            .appAppearance()
+        }
+        .onChange(of: appState.accounts.count) { _, _ in
+            if showAdd { showAdd = false }
+        }
     }
 }

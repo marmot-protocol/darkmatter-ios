@@ -183,6 +183,7 @@ final class AppState {
     /// account whose registration sign-out just cleared (#320, residual of
     /// #7/#111). MainActor-owned; mutated only on the MainActor.
     private var isSigningOut = false
+    @ObservationIgnored private var accountExitWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// Account refs with an activation already running. Set before signed-out
     /// reactivation awaits so rapid repeated taps cannot start duplicate sign-ins.
     /// MainActor-owned; mutated only by `activateAccount`.
@@ -475,6 +476,7 @@ final class AppState {
     /// locally signed out without wiping.
     @MainActor
     func activateAccount(_ accountRef: String) async {
+        guard !isSigningOut else { return }
         guard accountRef != activeAccountRef else { return }
         guard let account = accounts.first(where: { $0.label == accountRef }) else { return }
         guard activatingAccountRefs.insert(accountRef).inserted else { return }
@@ -509,8 +511,19 @@ final class AppState {
     /// Push cleanup is best-effort — a transient marmot error here must not
     /// block the user from signing out.
     @MainActor
-    func signOut() async {
-        guard let signingOut = activeAccountRef else { return }
+    @discardableResult
+    func signOut() async -> Bool {
+        guard let signingOut = activeAccountRef else { return false }
+        guard AccountExitGate.canBegin(
+            isReady: phase == .ready,
+            isAppSceneActive: isAppSceneActive,
+            runtimeSuspendedForBackground: runtimeSuspendedForBackground,
+            isRuntimeSuspending: isRuntimeSuspending,
+            hasRuntimeClient: client != nil
+        ), !isSigningOut else {
+            present(.error(L10n.string("Couldn't sign out")))
+            return false
+        }
         let signingOutAccountIdHex = accounts
             .first(where: { $0.label == signingOut })?
             .accountIdHex
@@ -526,7 +539,7 @@ final class AppState {
         // the flag on every exit path, including the early wipe failure return
         // below.
         isSigningOut = true
-        defer { isSigningOut = false }
+        defer { finishAccountExit() }
         let nativePushWasEnabled = (
             try? await runtimeClient()
                 .notificationSettings(accountRef: signingOut)
@@ -546,7 +559,7 @@ final class AppState {
                     wasEnabled: nativePushWasEnabled
                 )
                 present(.error(L10n.string("Couldn't sign out"), message: message))
-                return
+                return false
             }
         } catch {
             await restoreNativePushAfterFailedSignOut(
@@ -554,7 +567,7 @@ final class AppState {
                 wasEnabled: nativePushWasEnabled
             )
             present(.error(L10n.string("Couldn't sign out"), message: error.localizedDescription))
-            return
+            return false
         }
 
         await completeSignOut(
@@ -562,6 +575,7 @@ final class AppState {
             removedAccountIdHex: signingOutAccountIdHex,
             destructive: false
         )
+        return true
     }
 
     /// App-state cleanup shared by normal sign-out and destructive wipe. A
@@ -607,12 +621,6 @@ final class AppState {
             present(.error(L10n.string("Couldn't refresh accounts"), message: error.localizedDescription))
         }
 
-        // The departing account is now removed from disk and excluded from the
-        // in-memory `accounts` list, so it can no longer be re-registered. Clear
-        // the guard before routing so a legitimate reschedule for the *new*
-        // active account below is not suppressed (the trailing `defer` then
-        // becomes a no-op redo).
-        isSigningOut = false
         activeAccountRef = accounts.first { account in
             account.label != removedRef && !account.signedOut
         }?.label
@@ -636,7 +644,6 @@ final class AppState {
             if destructive, let removedAccountIdHex {
                 profileStore.clearForAccountRemoval(accountIdHex: removedAccountIdHex)
             }
-            scheduleNativePushRegistrationIfEnabled()
         } else {
             // Every retained account is signed out. Keep the main shell alive
             // so Settings → Profiles can reactivate one; stop account-bound
@@ -644,6 +651,15 @@ final class AppState {
             stopNotificationSubscription()
             retentionSweeper.cancelWithoutAwaiting()
             phase = .ready
+        }
+
+        // The account mutation is now complete. Release a pending background
+        // suspension before scheduling work for the surviving active profile;
+        // the scheduling gate will correctly skip it if the scene already left
+        // the foreground.
+        finishAccountExit()
+        if activeAccountRef != nil {
+            scheduleNativePushRegistrationIfEnabled()
         }
     }
 
@@ -662,17 +678,18 @@ final class AppState {
     /// suspension released it (`0xdead10cc`). This is the union of the guarded
     /// settings-read gate and the `.ready` gate the audit-log delete uses.
     @MainActor
-    func signOutAndWipeActiveAccount() async {
-        guard let wipingRef = activeAccountRef else { return }
+    @discardableResult
+    func signOutAndWipeActiveAccount() async -> Bool {
+        guard let wipingRef = activeAccountRef else { return false }
         guard DestructiveWipeGate.canBegin(
             isReady: phase == .ready,
             isAppSceneActive: isAppSceneActive,
             runtimeSuspendedForBackground: runtimeSuspendedForBackground,
             isRuntimeSuspending: isRuntimeSuspending,
             hasRuntimeClient: client != nil
-        ) else {
+        ), !isSigningOut else {
             present(.error(L10n.string("Couldn't wipe profile")))
-            return
+            return false
         }
         let wipingAccountIdHex = accounts
             .first(where: { $0.label == wipingRef })?
@@ -682,7 +699,7 @@ final class AppState {
         // push reschedule for the whole teardown; cleared before routing so a
         // reschedule for the *new* active account is not suppressed.
         isSigningOut = true
-        defer { isSigningOut = false }
+        defer { finishAccountExit() }
         let nativePushWasEnabled = (
             try? await runtimeClient()
                 .notificationSettings(accountRef: wipingRef)
@@ -704,7 +721,7 @@ final class AppState {
                 wasEnabled: nativePushWasEnabled
             )
             present(.error(L10n.string("Couldn't wipe profile"), message: error.localizedDescription))
-            return
+            return false
         }
 
         // The wipe returned: the account ref is invalid now. Do the same local
@@ -722,6 +739,7 @@ final class AppState {
         } else {
             pendingWipeReport = report
         }
+        return true
     }
 
     @MainActor
@@ -731,8 +749,32 @@ final class AppState {
     ) async {
         guard wasEnabled else { return }
         _ = try? await marmot.setNativePushEnabled(accountRef: accountRef, enabled: true)
-        isSigningOut = false
+        finishAccountExit()
         scheduleNativePushRegistrationIfEnabled()
+    }
+
+    var isAccountExitInProgress: Bool { isSigningOut }
+
+    /// Background suspension waits here instead of releasing the shared
+    /// runtime while sign-out is still mutating account state.
+    @MainActor
+    func waitForAccountExitToFinish() async {
+        guard isSigningOut else { return }
+        let id = UUID()
+        await withCheckedContinuation { continuation in
+            accountExitWaiters[id] = continuation
+        }
+    }
+
+    @MainActor
+    private func finishAccountExit() {
+        guard isSigningOut else { return }
+        isSigningOut = false
+        let waiters = Array(accountExitWaiters.values)
+        accountExitWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     @discardableResult
@@ -881,7 +923,7 @@ final class AppState {
     func beginForegroundMaintenanceCancellation() -> Task<Void, Never>? {
         notificationCoordinator.cancelNativePushRegistrationTaskWithoutAwaiting()
         retentionSweeper.cancelWithoutAwaiting()
-        return cancelProfileFetchQueue()
+        return pauseProfileFetchQueue()
     }
 
     static func nativePushEnabledAccountRefs(

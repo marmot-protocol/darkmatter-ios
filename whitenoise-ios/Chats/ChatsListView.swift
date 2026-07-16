@@ -331,13 +331,15 @@ struct ChatsListView: View {
     private var subscriptionScope: SubscriptionScope {
         SubscriptionScope(
             accountRef: appState.activeAccountRef,
-            runtimeGeneration: appState.runtimeGeneration
+            runtimeGeneration: appState.runtimeGeneration,
+            isAppSceneActive: appState.isAppSceneActive
         )
     }
 
-    private struct SubscriptionScope: Hashable {
+    struct SubscriptionScope: Hashable {
         let accountRef: String?
         let runtimeGeneration: Int
+        let isAppSceneActive: Bool
     }
 
     // MARK: - Filter

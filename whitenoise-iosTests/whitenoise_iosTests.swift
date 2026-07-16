@@ -1089,6 +1089,21 @@ struct AppStateBootstrapTests {
         ))
     }
 
+    @Test func chatListSubscriptionScopeChangesWhenSceneBecomesActive() {
+        let inactive = ChatsListView.SubscriptionScope(
+            accountRef: "account-a",
+            runtimeGeneration: 4,
+            isAppSceneActive: false
+        )
+        let active = ChatsListView.SubscriptionScope(
+            accountRef: "account-a",
+            runtimeGeneration: 4,
+            isAppSceneActive: true
+        )
+
+        #expect(inactive != active)
+    }
+
     @Test func profileFetchQueueLeavesQueuedIDsWhenRefreshBecomesUnavailable() async throws {
         let appState = try testAppState()
         let queued = [hex("11"), hex("22")]
@@ -1114,6 +1129,58 @@ struct AppStateBootstrapTests {
         let task = appState.cancelProfileFetchQueue()
 
         #expect(task != nil)
+    }
+
+    @Test func inactiveProfileMissQueuesHydrationUntilForegroundActivation() async throws {
+        let appState = try testAppState()
+        let accountIdHex = hex("34")
+        appState.setAppSceneActive(false)
+
+        #expect(appState.knownDisplayName(forAccountIdHex: accountIdHex) == nil)
+        #expect(appState.profileStore.queuedProfileProjectionLoadIDs == [accountIdHex])
+        #expect(appState.profileStore.scheduledProfileProjectionLoadIDs == [accountIdHex])
+        #expect(appState.profileStore.profileProjectionRefreshAfterLoadIDs == [accountIdHex])
+        #expect(appState.profileStore.profileProjectionLoadTask == nil)
+
+        appState.setAppSceneActive(true)
+        appState.resumeProfileFetchQueueIfNeeded()
+        #expect(appState.cancelProfileFetchQueue() != nil)
+    }
+
+    @Test func cachedProjectionWithoutIdentityRequeuesRefreshWhileInactive() async throws {
+        let appState = try testAppState()
+        let accountIdHex = hex("35")
+        appState.profileStore.profileProjectionCache[accountIdHex] = ProfileDisplayProjection(
+            profile: nil,
+            projectedName: nil,
+            localAccountLabel: nil
+        )
+        appState.setAppSceneActive(false)
+
+        #expect(appState.knownDisplayName(forAccountIdHex: accountIdHex) == nil)
+        #expect(appState.profileStore.queuedProfileFetchIDs == [accountIdHex])
+        #expect(appState.profileStore.scheduledProfileFetchIDs == [accountIdHex])
+        #expect(appState.profileStore.profileFetchQueueTask == nil)
+    }
+
+    @Test func foregroundMaintenancePausePreservesPendingProfileWork() async throws {
+        let appState = try testAppState()
+        let loading = hex("36")
+        let refreshing = hex("37")
+        appState.profileStore.queuedProfileProjectionLoadIDs = [loading]
+        appState.profileStore.scheduledProfileProjectionLoadIDs = [loading]
+        appState.profileStore.profileProjectionRefreshAfterLoadIDs = [loading]
+        appState.profileStore.queuedProfileFetchIDs = [refreshing]
+        appState.profileStore.scheduledProfileFetchIDs = [refreshing]
+
+        _ = appState.pauseProfileFetchQueue()
+
+        #expect(appState.profileStore.queuedProfileProjectionLoadIDs == [loading])
+        #expect(appState.profileStore.scheduledProfileProjectionLoadIDs == [loading])
+        #expect(appState.profileStore.profileProjectionRefreshAfterLoadIDs == [loading])
+        #expect(appState.profileStore.queuedProfileFetchIDs == [refreshing])
+        #expect(appState.profileStore.scheduledProfileFetchIDs == [refreshing])
+        #expect(appState.profileStore.profileProjectionCacheNeedsReloadOnResume)
     }
 
     @Test func staleProfileFetchQueueCompletionDoesNotClearNewerRunner() async throws {
