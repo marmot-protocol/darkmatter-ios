@@ -183,7 +183,19 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        let content = NotificationContentDecorator.makeContent(for: presentation)
+        // The banner is enqueued immediately; a cold avatar warms the cache
+        // for the sender's next message instead of delaying this one.
+        let avatarData = NotificationCommunicationDecorator.cachedAvatarData(
+            forPictureUrl: presentation.senderPictureUrl
+        )
+        if avatarData == nil {
+            NotificationCommunicationDecorator.warmAvatarCache(for: presentation.senderPictureUrl)
+        }
+        let content = NotificationCommunicationDecorator.decorated(
+            NotificationContentDecorator.makeContent(for: presentation),
+            presentation: presentation,
+            avatarData: avatarData
+        )
 
         let request = UNNotificationRequest(
             identifier: presentation.identifier,
@@ -210,9 +222,14 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         ) {
             let localNotificationsEnabled = await appState?.client?
                 .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
+            let isArchived = await routeIsArchived(route)
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
-                isMuted: isRouteMuted(route),
+                isArchived: isArchived,
+                notifyMode: routeNotifyMode(route),
+                isMention: LocalNotificationProjection.isMention(
+                    from: notification.request.content.userInfo
+                ),
                 appSceneActive: appState?.isAppSceneActive ?? true,
                 updateAccountRef: route.accountRef,
                 updateGroupIdHex: route.groupIdHex,
@@ -225,14 +242,26 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         return [.banner, .list, .sound]
     }
 
-    /// Notification routes carry the account label, while the mute store keys
+    /// Archived chats shed notification attention; a missing client or
+    /// failed read fails open (presents).
+    private func routeIsArchived(_ route: LocalNotificationRoute) async -> Bool {
+        guard let client = appState?.client,
+              let rows = try? await client.chatList(
+                  accountRef: route.accountRef,
+                  includeArchived: true
+              )
+        else { return false }
+        return rows.contains { $0.groupIdHex == route.groupIdHex && $0.archived }
+    }
+
+    /// Notification routes carry the account label, while the mode store keys
     /// by account id; an unresolvable account fails open (presents).
-    private func isRouteMuted(_ route: LocalNotificationRoute) -> Bool {
+    private func routeNotifyMode(_ route: LocalNotificationRoute) -> ChatNotifyMode {
         guard let accountIdHex = appState?.accounts
             .first(where: { $0.label == route.accountRef })?
             .accountIdHex
-        else { return false }
-        return ChatMuteStore.isMuted(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
+        else { return .all }
+        return ChatMuteStore.notifyMode(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
     }
 
     func userNotificationCenter(

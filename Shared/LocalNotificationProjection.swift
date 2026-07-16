@@ -19,6 +19,12 @@ struct LocalNotificationPresentation: Equatable {
     // Defaulted so display-only presentations (summaries, failure fallbacks)
     // stay action-free without touching every construction site.
     var categoryIdentifier: String? = nil
+    // Communication-notification decoration inputs; defaulted so summaries and
+    // fallbacks stay undecorated. The picture URL is pre-sanitized.
+    var senderName: String? = nil
+    var senderAccountIdHex: String? = nil
+    var senderPictureUrl: String? = nil
+    var isGroupConversation: Bool = false
 }
 
 nonisolated enum LocalNotificationProjection {
@@ -26,6 +32,7 @@ nonisolated enum LocalNotificationProjection {
     static let groupIdHexKey = "dm_group_id_hex"
     static let notificationKeyKey = "dm_notification_key"
     static let messageIdHexKey = "dm_message_id_hex"
+    static let isMentionKey = "dm_is_mention"
 
     private static let maxPreviewLength = 240
 
@@ -67,12 +74,28 @@ nonisolated enum LocalNotificationProjection {
             body: content.body,
             route: route,
             timestamp: Date(timeIntervalSince1970: TimeInterval(update.timestampMs) / 1000),
-            userInfo: userInfo(for: route),
+            userInfo: userInfo(for: route).merging(
+                [isMentionKey: update.isMention ? "1" : "0"],
+                uniquingKeysWith: { _, new in new }
+            ),
             categoryIdentifier: NotificationActionCategory.identifier(
                 trigger: update.trigger,
                 messageIdHex: update.messageIdHex
-            )
+            ),
+            senderName: senderName,
+            senderAccountIdHex: update.sender.accountIdHex,
+            senderPictureUrl: ContentSanitizer.imageURL(update.sender.pictureUrl)?.absoluteString,
+            isGroupConversation: !update.isDm
         )
+    }
+
+    /// Mention bit persisted alongside the route so `willPresent` can
+    /// re-evaluate a mode change against the original message, not a guess.
+    /// Absent (pre-upgrade notifications) reads as a mention so only an
+    /// explicit non-mention is suppressible by a later mentions-only switch.
+    static func isMention(from userInfo: [AnyHashable: Any]) -> Bool {
+        guard let raw = stringValue(userInfo[isMentionKey]) else { return true }
+        return raw != "0"
     }
 
     static func route(from userInfo: [AnyHashable: Any]) -> LocalNotificationRoute? {

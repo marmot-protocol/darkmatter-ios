@@ -100,6 +100,7 @@ Rules for notification work:
 - `NotificationDriver` task state is MainActor-owned; runner completion must hop back to MainActor before clearing task storage.
 - Notification subscription retry failures should show at most one generic user-facing banner per outage; do not surface raw backend error descriptions in that toast.
 - The main app should not keep the Marmot runtime alive indefinitely in the background. It suspends the runtime on background and restarts it on foreground.
+- The chat-scoped notify-mode/mute store fails safe (suppressed) when the shared App Group suite cannot be resolved — the fail-open rule above governs Marmot settings reads, not this store; falling open here would audibly un-mute every muted chat.
 
 If notifications are flaky, check token registration, group push-token gossip, relay hints, transponder visibility on the relay, and NSE timeout behavior before changing UI code.
 

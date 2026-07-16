@@ -9,6 +9,30 @@ import Synchronization
 /// original hostname through SNI, so DNS cannot rebind between validation and
 /// the socket connection.
 nonisolated enum PinnedHTTPSFetcher {
+    /// Upper bound on concurrent host resolutions across the process. Each
+    /// resolution can pin a thread in uninterruptible getaddrinfo for the
+    /// system resolver timeout, so exhausted slots fail fast rather than
+    /// queueing more stuck work.
+    static let maxConcurrentDnsResolutions = 6
+
+    private static let dnsResolutionsInFlight = Mutex(0)
+
+    /// Claim logic is pure for testability; the process-wide counter is
+    /// touched only through the argumentless wrappers.
+    static func claimDnsSlot(_ inFlight: inout Int, limit: Int = maxConcurrentDnsResolutions) -> Bool {
+        guard inFlight < limit else { return false }
+        inFlight += 1
+        return true
+    }
+
+    static func claimDnsSlot() -> Bool {
+        dnsResolutionsInFlight.withLock { claimDnsSlot(&$0) }
+    }
+
+    static func releaseDnsSlot() {
+        dnsResolutionsInFlight.withLock { $0 = max(0, $0 - 1) }
+    }
+
     struct Endpoint: Equatable {
         let address: String
         let tlsServerName: String
@@ -98,9 +122,23 @@ nonisolated enum PinnedHTTPSFetcher {
               request.httpMethod == nil || request.httpMethod == "GET"
         else { throw FetchError.invalidRequest }
 
-        let resolvedEndpoints = try await Task.detached(priority: .utility) {
-            try endpoints(for: url, resolver: resolver)
-        }.value
+        // The resolver blocks a thread in getaddrinfo, which cancellation
+        // cannot interrupt — but propagating it stops the connection and body
+        // stages from ever starting for an abandoned fetch. A process-wide
+        // slot cap bounds how many of those stuck threads can exist at once:
+        // repeated wakes naming distinct slow hosts fail fast instead of
+        // stacking resolutions behind abandoned deadlines.
+        guard claimDnsSlot() else { throw URLError(.cannotConnectToHost) }
+        let dnsTask = Task.detached(priority: .utility) {
+            defer { releaseDnsSlot() }
+            return try endpoints(for: url, resolver: resolver)
+        }
+        let resolvedEndpoints = try await withTaskCancellationHandler {
+            try await dnsTask.value
+        } onCancel: {
+            dnsTask.cancel()
+        }
+        try Task.checkCancellation()
         let requestData = try requestBytes(for: request)
         var lastError: Error = URLError(.cannotConnectToHost)
         for endpoint in resolvedEndpoints {

@@ -31,7 +31,8 @@ final class GroupDetailsViewModel {
     var sharedMediaRecords: [MediaRecordFfi] = []
     var isLoadingSharedMedia = false
     var sharedMediaError: String?
-    var isMuted = false
+    var notifyMode: ChatNotifyMode = .all
+    var isMuted: Bool { notifyMode == .nothing }
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private let recipientDirectory = RecipientDirectory()
@@ -445,25 +446,32 @@ final class GroupDetailsViewModel {
         guard let conversation,
               let accountIdHex = appState.activeAccount?.accountIdHex
         else { return }
-        isMuted = ChatMuteStore.isMuted(
+        notifyMode = ChatMuteStore.notifyMode(
             accountIdHex: accountIdHex,
             groupIdHex: conversation.group.groupIdHex
         )
     }
 
-    /// Mute is a local, per-device preference; unlike archive it publishes
-    /// nothing and doesn't touch the group record.
-    func setMuted(_ muted: Bool, using appState: AppState) {
+    /// The notify mode is a local, per-device preference; unlike archive it
+    /// publishes nothing and doesn't touch the group record.
+    func setNotifyMode(_ mode: ChatNotifyMode, using appState: AppState) {
         guard let conversation,
               let accountIdHex = appState.activeAccount?.accountIdHex
         else { return }
-        ChatMuteStore.setMuted(
-            muted,
+        ChatMuteStore.setNotifyMode(
+            mode,
             accountIdHex: accountIdHex,
             groupIdHex: conversation.group.groupIdHex
         )
-        isMuted = muted
+        notifyMode = mode
         Haptics.success()
+    }
+
+    /// The quick-action Mute button toggles between the tri-state's ends; a
+    /// mentions-only chat mutes from here and unmutes back to all messages.
+    func setMuted(_ muted: Bool, using appState: AppState) {
+        setNotifyMode(muted ? .nothing : .all, using: appState)
+        guard let conversation else { return }
         let isDirectMessage = conversation.groupDisplay.isDirectMessage
         let mutedTitle = isDirectMessage ? L10n.string("Chat muted") : L10n.string("Group muted")
         let unmutedTitle = isDirectMessage ? L10n.string("Chat unmuted") : L10n.string("Group unmuted")

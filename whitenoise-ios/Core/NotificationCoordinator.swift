@@ -189,18 +189,22 @@ final class NotificationCoordinator {
                     accountRef: update.accountRef,
                     host: host
                 )
-                let isMuted = ChatMuteStore.isMuted(
-                    accountIdHex: update.accountIdHex,
-                    groupIdHex: update.groupIdHex
-                )
+                let isArchived = await self.chatIsArchivedForPresentation(update: update, host: host)
                 guard self.canPresentRuntimeNotificationUpdate(host: host) else { return }
                 let shouldPresent = await MainActor.run {
                     guard self.canPresentRuntimeNotificationUpdate(host: host) else { return false }
+                    // Read at the decision point so a mode change during the
+                    // off-main settings read can't present against a stale value.
+                    let notifyMode = ChatMuteStore.notifyMode(
+                        accountIdHex: update.accountIdHex,
+                        groupIdHex: update.groupIdHex
+                    )
                     self.noteNotificationSubscriptionDelivery()
                     return self.shouldPresentLocalNotification(
                         update,
                         localNotificationsEnabled: localNotificationsEnabled,
-                        isMuted: isMuted,
+                        isArchived: isArchived,
+                        notifyMode: notifyMode,
                         host: host
                     )
                 }
@@ -240,12 +244,15 @@ final class NotificationCoordinator {
     private func shouldPresentLocalNotification(
         _ update: NotificationUpdateFfi,
         localNotificationsEnabled: Bool,
-        isMuted: Bool,
+        isArchived: Bool,
+        notifyMode: ChatNotifyMode,
         host: NotificationCoordinatorHost
     ) -> Bool {
         LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: localNotificationsEnabled,
-            isMuted: isMuted,
+            isArchived: isArchived,
+            notifyMode: notifyMode,
+            isMention: update.isMention,
             appSceneActive: host.isAppSceneActive,
             updateAccountRef: update.accountRef,
             updateGroupIdHex: update.groupIdHex,
@@ -261,6 +268,25 @@ final class NotificationCoordinator {
             isRuntimeSuspending: host.isRuntimeSuspendingForNotificationCoordinator,
             hasRuntimeClient: host.client != nil
         )
+    }
+
+    /// Archived chats keep their history but shed notification attention;
+    /// a failed read fails open (presents).
+    private func chatIsArchivedForPresentation(
+        update: NotificationUpdateFfi,
+        host: NotificationCoordinatorHost
+    ) async -> Bool {
+        guard !Task.isCancelled,
+              host.isAppSceneActive,
+              !host.runtimeSuspendedForBackground,
+              !host.isRuntimeSuspendingForNotificationCoordinator,
+              let client = host.client
+        else { return false }
+        guard let rows = try? await client.chatList(
+            accountRef: update.accountRef,
+            includeArchived: true
+        ) else { return false }
+        return rows.contains { $0.groupIdHex == update.groupIdHex && $0.archived }
     }
 
     private func localNotificationsEnabledForPresentation(
