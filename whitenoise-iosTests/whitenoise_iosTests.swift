@@ -4614,6 +4614,33 @@ struct GroupImageSearchTests {
         // Saving a typed draft that does not resolve to a valid HTTPS URL is
         // rejected (the user intends to save an invalid URL).
         #expect(GroupImageURLSheet.shouldRejectSave(hasDraft: true, resolvedURL: nil, isRemoval: false))
+        // Clearing is judged on raw stored presence: a peer-set URL this
+        // client's sanitizer rejects must still be clearable.
+        #expect(!GroupImageURLSheet.saveDisabled(
+            isSaving: false, trimmedDraft: "", normalizedDraft: nil,
+            hasStoredURL: true, normalizedStored: nil
+        ))
+        // Nothing stored + empty draft = nothing to save.
+        #expect(GroupImageURLSheet.saveDisabled(
+            isSaving: false, trimmedDraft: "", normalizedDraft: nil,
+            hasStoredURL: false, normalizedStored: nil
+        ))
+        // Unchanged valid draft stays disabled; a new valid draft enables.
+        #expect(GroupImageURLSheet.saveDisabled(
+            isSaving: false, trimmedDraft: "https://a.example/x.png",
+            normalizedDraft: "https://a.example/x.png",
+            hasStoredURL: true, normalizedStored: "https://a.example/x.png"
+        ))
+        #expect(!GroupImageURLSheet.saveDisabled(
+            isSaving: false, trimmedDraft: "https://a.example/y.png",
+            normalizedDraft: "https://a.example/y.png",
+            hasStoredURL: true, normalizedStored: "https://a.example/x.png"
+        ))
+        // A non-empty draft that fails validation never saves.
+        #expect(GroupImageURLSheet.saveDisabled(
+            isSaving: false, trimmedDraft: "http://a.example/x.png", normalizedDraft: nil,
+            hasStoredURL: true, normalizedStored: nil
+        ))
 
         // Saving a draft that resolves to a valid URL is allowed.
         #expect(!GroupImageURLSheet.shouldRejectSave(hasDraft: true, resolvedURL: "https://example.com/a.png", isRemoval: false))
