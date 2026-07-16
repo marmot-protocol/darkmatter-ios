@@ -53,8 +53,37 @@ struct MessageMutationPolicyTests {
             from: rows,
             excludingGroupIdHex: current
         )
-        #expect(destinations.map(\.id) == [alpha, hex("04"), beta, hex("06"), hex("07")])
-        #expect(destinations.map(\.title) == ["Alpha", "Archived", "beta", "Left", "Removed"])
+        // Archived chats remain valid destinations (still a member); left and
+        // removed chats are excluded — a forward to one fails at send.
+        #expect(destinations.map(\.id) == [alpha, hex("04"), beta])
+        #expect(destinations.map(\.title) == ["Alpha", "Archived", "beta"])
+    }
+
+    @MainActor
+    @Test func forwardingDestinationsExcludeLeftAndRemovedChats() {
+        // Left/removed rows persist in the chat-list model but a forward to
+        // one fails at send; they must never be offered.
+        let items = [
+            chatItem(id: hex("01"), rowTitle: "Member", displayTitle: "Member"),
+            chatItem(id: hex("02"), rowTitle: "Left", displayTitle: "Left", membership: .left),
+            chatItem(id: hex("03"), rowTitle: "Removed", displayTitle: "Removed", membership: .removed),
+        ]
+        let fromItems = MessageForwardDestinationPresentation.destinations(
+            from: items,
+            excludingGroupIdHex: "other"
+        )
+        #expect(fromItems.map(\.id) == [hex("01")])
+
+        let rows = [
+            chatRow(id: hex("01"), title: "Member"),
+            chatRow(id: hex("02"), title: "Left", membership: .left),
+            chatRow(id: hex("03"), title: "Removed", membership: .removed),
+        ]
+        let fromRows = MessageForwardDestinationPresentation.destinations(
+            from: rows,
+            excludingGroupIdHex: "other"
+        )
+        #expect(fromRows.map(\.id) == [hex("01")])
     }
 
     @MainActor
@@ -69,8 +98,7 @@ struct MessageMutationPolicyTests {
                 id: group,
                 rowTitle: "Raw group",
                 displayTitle: "Weekend plans",
-                archived: true,
-                membership: .removed
+                archived: true
             ),
         ]
 
