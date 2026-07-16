@@ -69,6 +69,7 @@ struct NewGroupSetupView: View {
                 }
             }
         }
+        .trueBlackScaffoldBackground()
         .navigationTitle("New Group")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)

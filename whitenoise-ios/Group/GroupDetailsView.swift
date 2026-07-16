@@ -95,6 +95,7 @@ struct GroupDetailsView: View {
                 }
             }
         }
+        .trueBlackScaffoldBackground()
         .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
