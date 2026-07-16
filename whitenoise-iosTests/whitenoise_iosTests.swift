@@ -8916,6 +8916,10 @@ struct PhotoLibrarySelectionOrderingTests {
         #expect(!PhotoLibrarySelection.admitsSelection(bytes: 0, cap: 100))
         #expect(PhotoLibrarySelection.admitsSelection(bytes: 100, cap: 100))
         #expect(!PhotoLibrarySelection.admitsSelection(bytes: 101, cap: 100))
+        // Under the per-item cap but over the remaining session budget: the
+        // sum of accepted selections is bounded, not just each item.
+        #expect(!PhotoLibrarySelection.admitsSelection(bytes: 80, cap: 100, remaining: 50))
+        #expect(PhotoLibrarySelection.admitsSelection(bytes: 50, cap: 100, remaining: 50))
 
         let selections = PhotoLibrarySelection.compactPreservingPickerOrder([first, nil, third])
 

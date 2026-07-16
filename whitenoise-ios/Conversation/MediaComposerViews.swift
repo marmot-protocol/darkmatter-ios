@@ -492,10 +492,21 @@ struct PhotoLibrarySelection: Hashable {
         selectionsByPickerIndex.compactMap { $0 }
     }
 
+    /// All accepted selections stay resident until the composer hands them
+    /// off, so the per-item cap alone still allows count × cap in RAM. The
+    /// session budget bounds the sum; selections beyond it are rejected the
+    /// same way as oversized ones.
+    static let maxTotalSelectionBytes = 3 * MediaDraftProcessor.maxAttachmentBytes
+
     /// Size gate applied before any bytes are read into memory; the same cap
-    /// the draft processor enforces, moved ahead of materialization.
-    static func admitsSelection(bytes: Int, cap: Int = MediaDraftProcessor.maxAttachmentBytes) -> Bool {
-        bytes > 0 && bytes <= cap
+    /// the draft processor enforces, moved ahead of materialization, plus the
+    /// remaining session budget.
+    static func admitsSelection(
+        bytes: Int,
+        cap: Int = MediaDraftProcessor.maxAttachmentBytes,
+        remaining: Int = maxTotalSelectionBytes
+    ) -> Bool {
+        bytes > 0 && bytes <= cap && bytes <= remaining
     }
 }
 
@@ -553,12 +564,12 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
             guard !results.isEmpty else { return }
 
             // Assets load one at a time through a file representation with a
-            // size gate, so peak memory is one under-cap asset — a 4K video
-            // (or several selected together) can no longer materialize whole
-            // in RAM just to be rejected by the downstream cap.
+            // size gate, and accepted bytes draw down a session budget — peak
+            // memory is bounded by that budget, not by count × per-item cap.
             Task {
                 var selectionsByPickerIndex = [PhotoLibrarySelection?](repeating: nil, count: results.count)
                 var firstError: Error?
+                var remainingBudget = PhotoLibrarySelection.maxTotalSelectionBytes
 
                 for (index, result) in results.enumerated() {
                     let provider = result.itemProvider
@@ -568,11 +579,14 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
                         typeIdentifier: typeIdentifier
                     )
                     do {
-                        selectionsByPickerIndex[index] = try await Self.loadBoundedSelection(
+                        let selection = try await Self.loadBoundedSelection(
                             provider: provider,
                             typeIdentifier: typeIdentifier,
-                            fileName: fileName
+                            fileName: fileName,
+                            remainingBudget: remainingBudget
                         )
+                        remainingBudget -= selection.data.count
+                        selectionsByPickerIndex[index] = selection
                     } catch {
                         if firstError == nil { firstError = error }
                     }
@@ -598,7 +612,8 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
         private static func loadBoundedSelection(
             provider: NSItemProvider,
             typeIdentifier: String,
-            fileName: String?
+            fileName: String?,
+            remainingBudget: Int
         ) async throws -> PhotoLibrarySelection {
             try await withCheckedThrowingContinuation { continuation in
                 provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
@@ -609,7 +624,7 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
                         return
                     }
                     let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-                    guard PhotoLibrarySelection.admitsSelection(bytes: size) else {
+                    guard PhotoLibrarySelection.admitsSelection(bytes: size, remaining: remainingBudget) else {
                         continuation.resume(
                             throwing: MediaDraftProcessor.Failure.attachmentTooLarge(size)
                         )
