@@ -39,6 +39,10 @@ extension View {
         modifier(CompatibleInputCapsuleChromeModifier(interactive: interactive))
     }
 
+    func compatibleInputRoundedChrome(cornerRadius: CGFloat, interactive: Bool = true) -> some View {
+        modifier(CompatibleInputRoundedChromeModifier(cornerRadius: cornerRadius, interactive: interactive))
+    }
+
     /// Circular companion to `compatibleInputCapsuleChrome()` for side actions.
     func compatibleInputCircleChrome(interactive: Bool = true) -> some View {
         modifier(CompatibleInputCircleChromeModifier(interactive: interactive))
@@ -72,6 +76,23 @@ extension View {
             scrollEdgeEffectStyle(.automatic, for: .bottom)
         } else {
             self
+        }
+    }
+}
+
+private struct CompatibleInputRoundedChromeModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let cornerRadius: CGFloat
+    let interactive: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(inputGlass(for: colorScheme, interactive: interactive), in: shape)
+                .compatibleInputLightStroke(in: shape)
+        } else {
+            content.background(.regularMaterial, in: shape)
         }
     }
 }

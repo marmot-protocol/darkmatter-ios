@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 import MarmotKit
+import Contacts
+import CoreLocation
 
 enum TimelineBottom {
     static let pinnedThreshold: CGFloat = 44
@@ -86,6 +88,13 @@ struct TimelineBottomViewport: Equatable {
     var isPinned: Bool {
         !shouldShowScrollToBottomButton
     }
+}
+
+private struct TimelineDaySection: Identifiable {
+    let day: Date
+    var items: [TimelineItem]
+
+    var id: Date { day }
 }
 
 enum MessageActionsPlacement: Equatable {
@@ -528,13 +537,21 @@ struct ConversationView: View {
     @State private var showCameraCapture = false
     @State private var showPhotoLibraryPicker = false
     @State private var showFileImporter = false
+    @State private var showLocationPicker = false
+    @State private var showContactPicker = false
     @State private var showDetails = false
     @State private var actionsTarget: ActionsTarget?
     @State private var emojiPickerTarget: ActionsTarget?
     @State private var messageInfoTarget: ActionsTarget?
     @State private var reactionDetailsTarget: ReactionDetailsTarget?
     @State private var forwardTarget: ActionsTarget?
-    @State private var editTarget: ActionsTarget?
+    @State private var forwardSelectionTarget: ForwardSelectionTarget?
+    @State private var isSelectingMessages = false
+    @State private var selectedMessageIds = Set<String>()
+    @State private var showBatchDeleteConfirmation = false
+    @State private var batchDeleteInFlight = false
+    @State private var editSession: ComposerEditSession?
+    @State private var editSaveInFlight = false
     @State private var editHistoryTarget: ActionsTarget?
     /// When the long-pressed bubble sits too low for the actions popover to fit
     /// below it, flip the popover above the bubble instead.
@@ -548,6 +565,8 @@ struct ConversationView: View {
     @State private var pendingActionFrameMeasurementClearTask: Task<Void, Never>?
     @State private var composerFocusRequest = 0
     @State private var isAtTimelineBottom = true
+    @State private var isUserScrollingTimeline = false
+    @State private var userMovedAwayFromTimelineBottom = false
     @State private var didPerformInitialBottomScroll = false
     @State private var isInitialTimelinePositionSettled = false
     @State private var initialScrollFollowUpTask: Task<Void, Never>?
@@ -559,6 +578,8 @@ struct ConversationView: View {
     @State private var isInitialBottomStabilizationScheduled = false
     @State private var pendingKeyboardDismissTask: Task<Void, Never>?
     @State private var pendingSearchMatchScrollTask: Task<Void, Never>?
+    @State private var replyNavigationTargetItemId: String?
+    @State private var replyNavigationTask: Task<Void, Never>?
     @State private var visibleChatRoute: VisibleChatRoute?
     /// Global Y bounds of the visible timeline (between nav bar and composer).
     /// The bottom shrinks when the keyboard rises, so placement accounts for it.
@@ -588,6 +609,16 @@ struct ConversationView: View {
         let messageIdHex: String
         let initialEmoji: String
         let id = UUID()
+    }
+
+    private struct ForwardSelectionTarget: Identifiable {
+        let records: [AppMessageRecordFfi]
+        let id = UUID()
+    }
+
+    private struct ComposerEditSession {
+        let message: AppMessageRecordFfi
+        let preservedDraft: String
     }
 
     init(
@@ -640,7 +671,8 @@ struct ConversationView: View {
     private func actionsBinding(for record: AppMessageRecordFfi) -> Binding<Bool> {
         Binding(
             get: {
-                !actionsCentered
+                !isSelectingMessages
+                    && !actionsCentered
                     && actionsTarget?.record.messageIdHex == record.messageIdHex
                     && !record.messageIdHex.isEmpty
             },
@@ -651,7 +683,15 @@ struct ConversationView: View {
     var body: some View {
         timeline
             .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
-            .bottomInputChromeAccessory { composerArea }
+            .bottomInputChromeAccessory {
+                composerArea
+                    .frame(maxWidth: .infinity)
+                    .background {
+                        Color(.systemBackground)
+                            .ignoresSafeArea(edges: .bottom)
+                    }
+            }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             .overlay { centeredActionsOverlay }
             // The identity cluster lives leading-aligned next to the back
             // chevron; an inline system title would double it up.
@@ -661,6 +701,11 @@ struct ConversationView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     conversationTitle
+                }
+                if isSelectingMessages {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(L10n.string("Cancel")) { exitMessageSelection() }
+                    }
                 }
             }
             // An isPresented push fights navigation-path swaps: unwind it
@@ -726,11 +771,30 @@ struct ConversationView: View {
                         .appAppearance()
                 }
             }
-            .sheet(item: $editTarget) { target in
+            .sheet(item: $forwardSelectionTarget) { target in
                 if let viewModel {
-                    EditMessageSheet(message: target.record, viewModel: viewModel)
-                        .appAppearance()
+                    ForwardMessageSheet(
+                        messages: target.records,
+                        viewModel: viewModel,
+                        destinationProvider: {
+                            if let forwardDestinationProvider {
+                                return try await forwardDestinationProvider()
+                            }
+                            return try await viewModel.forwardDestinations()
+                        }
+                    )
+                    .appAppearance()
                 }
+            }
+            .confirmationDialog(
+                L10n.formatted("Delete %lld selected messages?", Int64(selectedMessageIds.count)),
+                isPresented: $showBatchDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string("Delete"), role: .destructive) {
+                    deleteSelectedMessages()
+                }
+                Button(L10n.string("Cancel"), role: .cancel) {}
             }
             .sheet(item: $editHistoryTarget) { target in
                 if let viewModel {
@@ -762,6 +826,25 @@ struct ConversationView: View {
                     }
                 )
                 .ignoresSafeArea()
+            }
+            .sheet(isPresented: $showLocationPicker) {
+                LocationPickerView(
+                    onSend: { coordinate in
+                        showLocationPicker = false
+                        sendSharedLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                    },
+                    onCancel: { showLocationPicker = false }
+                )
+                .appAppearance()
+            }
+            .sheet(isPresented: $showContactPicker) {
+                ContactCardPicker(
+                    onPick: { contact in
+                        showContactPicker = false
+                        addContactCard(contact)
+                    },
+                    onCancel: { showContactPicker = false }
+                )
             }
             .fileImporter(
                 isPresented: $showFileImporter,
@@ -808,7 +891,9 @@ struct ConversationView: View {
                 handleComposerAvailabilityChange(canSendMessages: canSendMessages)
             }
             .onChange(of: draft) { _, draft in
-                persistDraft(draft)
+                if editSession == nil {
+                    persistDraft(draft)
+                }
             }
             .onAppear {
                 visibleChatRoute = appState.beginViewingChat(groupIdHex: chat.groupIdHex)
@@ -821,8 +906,9 @@ struct ConversationView: View {
                 viewModel?.search.end()
                 cancelPendingTimelineFollowUpWork()
                 dismissKeyboard()
-                persistDraft(draft)
+                persistDraft(editSession?.preservedDraft ?? draft)
                 onDraftChanged?()
+                exitMessageSelection()
                 Task { await appState.conversationDraftStore.flush() }
             }
     }
@@ -831,11 +917,15 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var composerArea: some View {
-        if let viewModel, viewModel.hasPendingInvite {
+        if isSelectingMessages, let viewModel {
+            messageSelectionBar(viewModel: viewModel)
+        } else if let viewModel, viewModel.hasPendingInvite {
             inviteResponseArea(viewModel: viewModel)
         } else {
             VStack(spacing: 0) {
-                if let viewModel, let replyingTo = viewModel.replyingTo {
+                if let viewModel, let editSession {
+                    editBar(for: editSession, viewModel: viewModel)
+                } else if let viewModel, let replyingTo = viewModel.replyingTo {
                     replyBar(for: replyingTo, viewModel: viewModel)
                 }
                 let inlineAudioDraft = ComposerMediaDraftPresentation.inlineAudioDraft(in: mediaDrafts)
@@ -858,7 +948,7 @@ struct ConversationView: View {
                 }
                 ComposerBar(
                     draft: $draft,
-                    isSending: viewModel?.sendInFlight ?? false,
+                    isSending: (viewModel?.sendInFlight ?? false) || editSaveInFlight,
                     hasAttachments: !mediaDrafts.isEmpty,
                     audioDraft: inlineAudioDraft,
                     mediaEnabled: viewModel?.canSendMediaAttachments ?? false,
@@ -866,9 +956,17 @@ struct ConversationView: View {
                     voiceRecordingActive: voiceRecorder.isActive,
                     focusRequest: composerFocusRequest,
                     mentionCandidates: mentionCandidates,
+                    submissionEnabled: editSubmissionEnabled,
+                    submissionAccessibilityLabel: editSession == nil
+                        ? L10n.string("Send")
+                        : L10n.string("Save edit"),
+                    voiceMessagesEnabled: editSession == nil,
                     onTakePhoto: takePhoto,
                     onPhotoLibrary: openPhotoLibrary,
                     onAttachFile: openFileImporter,
+                    onShareLocation: openLocationPicker,
+                    onShareContact: openContactPicker,
+                    onPasteImage: pasteImage,
                     onRemoveAudioDraft: removeMediaDraft,
                     onVoicePressBegan: beginVoicePress,
                     onVoiceDragChanged: updateVoiceDrag,
@@ -879,8 +977,58 @@ struct ConversationView: View {
                     onSend: send
                 )
             }
-            .keyboardAdaptiveBottomPadding()
         }
+    }
+
+    private func messageSelectionBar(viewModel: ConversationViewModel) -> some View {
+        let records = selectedMessageRecords(viewModel: viewModel)
+        let canForward = MessageSelectionPolicy.canForward(
+            selectedCount: records.count,
+            allForwardable: records.allSatisfy { MessageForwardingPolicy.forwardableText(for: $0) != nil }
+        )
+        let canDelete = MessageSelectionPolicy.canDelete(
+            selectedCount: records.count,
+            allDeletable: records.allSatisfy {
+                $0.direction == "sent"
+                    && viewModel.canSendMessages
+                    && !viewModel.isDeleted($0.messageIdHex)
+            }
+        )
+
+        return HStack(spacing: 18) {
+            Text(L10n.formatted("%lld selected", Int64(records.count)))
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                guard canForward else { return }
+                forwardSelectionTarget = ForwardSelectionTarget(records: records)
+                exitMessageSelection()
+            } label: {
+                Image(systemName: "arrowshape.turn.up.right")
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canForward)
+            .accessibilityLabel(L10n.string("Forward selected messages"))
+
+            Button(role: .destructive) {
+                guard canDelete else { return }
+                showBatchDeleteConfirmation = true
+            } label: {
+                if batchDeleteInFlight {
+                    ProgressView().frame(width: 38, height: 38)
+                } else {
+                    Image(systemName: "trash").frame(width: 38, height: 38)
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canDelete || batchDeleteInFlight)
+            .accessibilityLabel(L10n.string("Delete selected messages"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
     }
 
     private func inviteResponseArea(viewModel: ConversationViewModel) -> some View {
@@ -989,48 +1137,92 @@ struct ConversationView: View {
         .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
     }
 
+    private func editBar(for session: ComposerEditSession, viewModel: ConversationViewModel) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "pencil")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(L10n.string("Editing message"))
+                    .font(.caption.weight(.semibold))
+                Text(ContentSanitizer.singleLine(viewModel.displayBody(of: session.message), maxLength: 100) ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Button(action: cancelEdit) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: replyCloseIconSize, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .frame(width: replyCloseHitSize, height: replyCloseHitSize)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.string("Cancel edit"))
+        }
+        .padding(.leading, ReplyPreviewLayout.leadingContentInset)
+        .padding(.trailing, ReplyPreviewLayout.closeTrailingInset)
+        .padding(.vertical, ReplyPreviewLayout.contentTopInset)
+        .background(.regularMaterial, in: .rect(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+        }
+        .padding(.horizontal, ReplyPreviewLayout.outerHorizontalInset)
+        .padding(.top, ReplyPreviewLayout.outerTopInset)
+        .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
+    }
+
     /// Leading identity cluster: avatar beside the back chevron, then the
     /// name (with a timer glyph while disappearing messages are on) over the
     /// member count. Tapping it is the single way into the details page for
     /// both direct messages and groups.
     @ViewBuilder
     private var conversationTitle: some View {
-        let chrome = conversationChrome
-        Button {
-            // The destination renders only once the model exists; a tap in
-            // the load window would push an empty page.
-            guard viewModel != nil else { return }
-            showDetails = true
-        } label: {
-            HStack(spacing: 10) {
-                if let viewModel {
-                    let groupDisplay = viewModel.groupDisplay
-                    AvatarBubble(
-                        seed: GroupDisplay.avatarSeed(for: groupDisplay),
-                        title: chrome.title,
-                        pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
-                    )
-                    .frame(width: 34, height: 34)
-                }
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 4) {
-                        Text(chrome.title)
-                            .font(.headline)
-                            .lineLimit(1)
-                        if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
-                            Image(systemName: "timer")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel(L10n.string("Disappearing messages on"))
-                        }
+        if isSelectingMessages {
+            Text(L10n.formatted("%lld selected", Int64(selectedMessageIds.count)))
+                .font(.headline)
+        } else {
+            let chrome = conversationChrome
+            Button {
+                // The destination renders only once the model exists; a tap in
+                // the load window would push an empty page.
+                guard viewModel != nil else { return }
+                showDetails = true
+            } label: {
+                HStack(spacing: 10) {
+                    if let viewModel {
+                        let groupDisplay = viewModel.groupDisplay
+                        AvatarBubble(
+                            seed: GroupDisplay.avatarSeed(for: groupDisplay),
+                            title: chrome.title,
+                            pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+                        )
+                        .frame(width: 34, height: 34)
                     }
-                    conversationHeaderSecondary(subtitle: chrome.subtitle)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 4) {
+                            Text(chrome.title)
+                                .font(.headline)
+                                .lineLimit(1)
+                            if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
+                                Image(systemName: "timer")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel(L10n.string("Disappearing messages on"))
+                            }
+                        }
+                        conversationHeaderSecondary(subtitle: chrome.subtitle)
+                    }
                 }
+                .contentShape(.rect)
             }
-            .contentShape(.rect)
+            .buttonStyle(.plain)
+            .accessibilityHint(L10n.string("Shows conversation details"))
         }
-        .buttonStyle(.plain)
-        .accessibilityHint(L10n.string("Shows conversation details"))
     }
 
     @ViewBuilder
@@ -1142,35 +1334,41 @@ struct ConversationView: View {
                     GeometryReader { outer in
                         ScrollView {
                             VStack(spacing: 0) {
-                                LazyVStack(alignment: .leading, spacing: 4) {
+                                LazyVStack(alignment: .leading, spacing: 4, pinnedViews: [.sectionHeaders]) {
                                     olderTimelineTrigger(viewModel: viewModel)
-                                    ForEach(viewModel.timeline) { item in
-                                        if TimelineUnreadDivider.shouldShow(
-                                            before: item,
-                                            firstUnreadMessageIdHex: initialUnreadMessageIdHex
-                                        ) {
-                                            UnreadMessagesDivider()
-                                                .id(unreadDividerID(for: initialUnreadMessageIdHex ?? ""))
-                                        }
-                                        row(for: item, viewModel: viewModel)
-                                            .background {
-                                                searchMatchHighlight(for: item, viewModel: viewModel)
-                                            }
-                                            .background {
-                                                GeometryReader { rowGeometry in
-                                                    Color.clear.preference(
-                                                        key: TimelineRowViewportFramesKey.self,
-                                                        value: [
-                                                            TimelineRowViewportFrame(
-                                                                key: item.rowFrameKey,
-                                                                frame: rowGeometry.frame(
-                                                                    in: .named(Self.timelineCoordinateSpace)
-                                                                )
-                                                            )
-                                                        ]
-                                                    )
+                                    ForEach(timelineDaySections(viewModel.timeline)) { section in
+                                        Section {
+                                            ForEach(section.items) { item in
+                                                if TimelineUnreadDivider.shouldShow(
+                                                    before: item,
+                                                    firstUnreadMessageIdHex: initialUnreadMessageIdHex
+                                                ) {
+                                                    UnreadMessagesDivider()
+                                                        .id(unreadDividerID(for: initialUnreadMessageIdHex ?? ""))
                                                 }
+                                                row(for: item, viewModel: viewModel)
+                                                    .background {
+                                                        searchMatchHighlight(for: item, viewModel: viewModel)
+                                                    }
+                                                    .background {
+                                                        GeometryReader { rowGeometry in
+                                                            Color.clear.preference(
+                                                                key: TimelineRowViewportFramesKey.self,
+                                                                value: [
+                                                                    TimelineRowViewportFrame(
+                                                                        key: item.rowFrameKey,
+                                                                        frame: rowGeometry.frame(
+                                                                            in: .named(Self.timelineCoordinateSpace)
+                                                                        )
+                                                                    )
+                                                                ]
+                                                            )
+                                                        }
+                                                    }
                                             }
+                                        } header: {
+                                            timelineDateHeader(section)
+                                        }
                                     }
                                     .padding(.bottom, 4)
                                     newerTimelineTrigger(viewModel: viewModel)
@@ -1199,8 +1397,14 @@ struct ConversationView: View {
                         }
                         .coordinateSpace(name: Self.timelineCoordinateSpace)
                         .defaultScrollAnchor(.bottom)
-                        .compatibleBottomScrollEdgeEffect()
+                        .defaultScrollAnchor(.bottom, for: .sizeChanges)
                         .scrollDismissesKeyboard(.interactively)
+                        .onScrollPhaseChange { _, phase in
+                            isUserScrollingTimeline = phase == .interacting || phase == .decelerating
+                            if phase == .idle, isAtTimelineBottom {
+                                userMovedAwayFromTimelineBottom = false
+                            }
+                        }
                         .simultaneousGesture(TapGesture().onEnded { scheduleKeyboardDismiss() })
                         .onPreferenceChange(RowFramesKey.self) { rowFrames.replace(with: $0) }
                         .onPreferenceChange(TimelineRowViewportFramesKey.self) { preferences in
@@ -1249,6 +1453,11 @@ struct ConversationView: View {
                                 )
                             } else {
                                 isAtTimelineBottom = current.isPinned
+                                if current.isPinned {
+                                    userMovedAwayFromTimelineBottom = false
+                                } else if isUserScrollingTimeline {
+                                    userMovedAwayFromTimelineBottom = true
+                                }
                             }
                         }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
@@ -1257,7 +1466,8 @@ struct ConversationView: View {
                                 return
                             }
                             settleInitialTimelinePositionIfNoScrollNeeded(viewModel: viewModel)
-                            if isAtTimelineBottom {
+                            if !userMovedAwayFromTimelineBottom {
+                                isAtTimelineBottom = true
                                 scheduleScrollToBottom(
                                     proxy: proxy,
                                     animated: true,
@@ -1268,24 +1478,21 @@ struct ConversationView: View {
                         }
                         .onChange(of: viewModel.timelineProjectionGeneration) { _, _ in
                             viewModel.search.refreshAfterTimelineChange()
+                            pruneMessageSelection(viewModel: viewModel)
                             handleTimelineProjectionChange(proxy: proxy, viewModel: viewModel)
                         }
                         .onChange(of: viewModel.search.scrollRequest) { _, request in
                             guard let request else { return }
                             scheduleSearchMatchScroll(to: request.itemId, proxy: proxy)
                         }
+                        .onChange(of: replyNavigationTargetItemId) { _, itemId in
+                            guard let itemId else { return }
+                            scheduleSearchMatchScroll(to: itemId, proxy: proxy)
+                            replyNavigationTargetItemId = nil
+                        }
                         .onChange(of: outer.size.height) { _, _ in
-                            let wasAtBottom = isAtTimelineBottom
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
-                            if TimelineBottom.shouldFollowViewportChange(wasPinned: wasAtBottom) {
-                                scheduleScrollToBottom(
-                                    proxy: proxy,
-                                    animated: false,
-                                    reason: .viewportChange,
-                                    targetID: viewModel.timeline.last?.id
-                                )
-                            }
                         }
                         .onAppear {
                             contentTopY = outer.frame(in: .global).minY
@@ -1308,6 +1515,34 @@ struct ConversationView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func timelineDaySections(_ items: [TimelineItem]) -> [TimelineDaySection] {
+        var sections: [TimelineDaySection] = []
+        for item in items {
+            let day = ConversationDateHeader.dayStart(timestamp: item.timestamp)
+            if sections.last?.day == day {
+                sections[sections.count - 1].items.append(item)
+            } else {
+                sections.append(TimelineDaySection(day: day, items: [item]))
+            }
+        }
+        return sections
+    }
+
+    private func timelineDateHeader(_ section: TimelineDaySection) -> some View {
+        Text(ConversationDateHeader.label(timestamp: UInt64(max(0, section.day.timeIntervalSince1970))))
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(.regularMaterial, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 5)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder
@@ -1370,6 +1605,10 @@ struct ConversationView: View {
                     initialEmoji: emoji
                 )
             },
+            onReplyPreviewTap: {
+                guard let targetId = viewModel.replyTargetMessageId(for: record) else { return }
+                navigateToReplyTarget(targetId, viewModel: viewModel)
+            },
             onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
             },
@@ -1377,8 +1616,31 @@ struct ConversationView: View {
                 ? { editHistoryTarget = ActionsTarget(record: record, status: status) }
                 : nil
         )
-        .replySwipeToReply(isEnabled: allowsActions && canReply(to: record, viewModel: viewModel)) {
+        .replySwipeToReply(
+            isEnabled: !isSelectingMessages && allowsActions && canReply(to: record, viewModel: viewModel)
+        ) {
             beginReply(to: record, viewModel: viewModel)
+        }
+        .overlay {
+            if isSelectingMessages {
+                let selected = selectedMessageIds.contains(record.messageIdHex)
+                ZStack(alignment: .leading) {
+                    Color.accentColor.opacity(selected ? 0.10 : 0.001)
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                        .padding(.leading, 10)
+                }
+                .contentShape(.rect)
+                .onTapGesture { toggleMessageSelection(record.messageIdHex) }
+                .accessibilityElement()
+                .accessibilityLabel(
+                    selected
+                        ? L10n.string("Deselect message")
+                        : L10n.string("Select message")
+                )
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
         }
         .background {
             if allowsActions, measuredActionRowFrameKey == item.rowFrameKey {
@@ -1401,7 +1663,8 @@ struct ConversationView: View {
                 updateActionFrameMeasurement(pressing: pressing, rowFrameKey: item.rowFrameKey)
             }
         ) {
-            guard allowsActions,
+            guard !isSelectingMessages,
+                  allowsActions,
                   !record.messageIdHex.isEmpty,
                   !viewModel.isDeleted(record.messageIdHex) else { return }
             Haptics.tap()
@@ -1477,7 +1740,7 @@ struct ConversationView: View {
 
     @ViewBuilder
     private func scrollToBottomButton(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> some View {
-        if !isAtTimelineBottom || viewModel.hasMoreAfter {
+        if userMovedAwayFromTimelineBottom || viewModel.hasMoreAfter {
             Button {
                 Haptics.tap()
                 if viewModel.hasMoreAfter {
@@ -1519,6 +1782,7 @@ struct ConversationView: View {
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool, targetID: String?) {
+        userMovedAwayFromTimelineBottom = false
         if animated {
             withAnimation(.smooth(duration: 0.2)) {
                 proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
@@ -1659,7 +1923,7 @@ struct ConversationView: View {
             return
         }
         let shouldFollow = TimelineBottom.shouldFollowProjectionChange(
-            isPinned: isAtTimelineBottom,
+            isPinned: !userMovedAwayFromTimelineBottom,
             isInitialBottomPositioning: didPerformInitialBottomScroll && !isInitialTimelinePositionSettled,
             hasTargetMessage: initialTargetMessageIdHex != nil
         )
@@ -1809,8 +2073,37 @@ struct ConversationView: View {
 
     private func beginReply(to record: AppMessageRecordFfi, viewModel: ConversationViewModel) {
         guard canReply(to: record, viewModel: viewModel) else { return }
+        cancelEdit()
         viewModel.replyingTo = record
         composerFocusRequest += 1
+    }
+
+    private func beginEdit(_ message: AppMessageRecordFfi, viewModel: ConversationViewModel) {
+        guard MessageEditingPolicy.canEdit(
+            message,
+            isDeleted: viewModel.isDeleted(message.messageIdHex),
+            canSendMessages: viewModel.canSendMessages
+        ) else { return }
+        let preservedDraft = editSession?.preservedDraft ?? draft
+        viewModel.replyingTo = nil
+        mediaDrafts.removeAll()
+        cancelVoiceRecording()
+        editSession = ComposerEditSession(message: message, preservedDraft: preservedDraft)
+        draft = message.plaintext
+        composerFocusRequest += 1
+    }
+
+    private var editSubmissionEnabled: Bool {
+        guard let editSession,
+              let normalized = MessageEditingPolicy.normalizedContent(draft)
+        else { return editSession == nil }
+        return normalized != editSession.message.plaintext
+    }
+
+    private func cancelEdit() {
+        guard let editSession else { return }
+        self.editSession = nil
+        draft = editSession.preservedDraft
     }
 
     private func acceptInvite(viewModel: ConversationViewModel) {
@@ -1830,6 +2123,17 @@ struct ConversationView: View {
 
     private func send() {
         guard viewModel?.canSendMessages == true else { return }
+        if let editSession, editSubmissionEnabled, let viewModel {
+            let editedContent = draft
+            editSaveInFlight = true
+            Task {
+                defer { editSaveInFlight = false }
+                guard await viewModel.editMessage(editSession.message, content: editedContent) else { return }
+                self.editSession = nil
+                draft = editSession.preservedDraft
+            }
+            return
+        }
         guard let payload = ConversationSendPreparation.prepare(
             draft: &draft,
             mediaDrafts: &mediaDrafts,
@@ -1847,11 +2151,14 @@ struct ConversationView: View {
     private func handleComposerAvailabilityChange(canSendMessages: Bool) {
         guard !canSendMessages else { return }
         draft = ""
+        editSession = nil
         viewModel?.replyingTo = nil
         cancelVoiceRecording()
         showCameraCapture = false
         showPhotoLibraryPicker = false
         showFileImporter = false
+        showLocationPicker = false
+        showContactPicker = false
         dismissKeyboard()
     }
 
@@ -1892,6 +2199,45 @@ struct ConversationView: View {
     private func openFileImporter() {
         guard canBeginMediaSelection() else { return }
         showFileImporter = true
+    }
+
+    private func openLocationPicker() {
+        guard viewModel?.canSendMessages == true else { return }
+        showLocationPicker = true
+    }
+
+    private func openContactPicker() {
+        guard canBeginMediaSelection() else { return }
+        showContactPicker = true
+    }
+
+    private func pasteImage(_ image: UIImage) {
+        guard canBeginMediaSelection() else { return }
+        addCameraImage(image)
+    }
+
+    private func sendSharedLocation(latitude: Double, longitude: Double) {
+        guard let viewModel, viewModel.canSendMessages else { return }
+        let text = SharedLocationText.value(latitude: latitude, longitude: longitude)
+        Task { await viewModel.send(text) }
+    }
+
+    private func addContactCard(_ contact: CNContact) {
+        Task { @MainActor in
+            do {
+                let data = try ContactCardExport.data(for: contact)
+                let attachment = try await MediaDraftProcessor.preparedAttachment(
+                    from: data,
+                    fileName: ContactCardExport.fileName(for: contact),
+                    typeIdentifier: "public.vcard"
+                )
+                try appendMediaDraft(attachment)
+            } catch is CancellationError {
+                return
+            } catch {
+                appState.present(.error(L10n.string("Couldn't add contact"), message: error.localizedDescription))
+            }
+        }
     }
 
     private func addCameraImage(_ image: UIImage) {
@@ -2120,10 +2466,39 @@ struct ConversationView: View {
     private func cancelPendingTimelineFollowUpWork() {
         initialScrollFollowUpTask?.cancel()
         initialScrollFollowUpTask = nil
+        replyNavigationTask?.cancel()
+        replyNavigationTask = nil
         cancelPendingBottomScroll()
         cancelPendingSearchMatchScroll()
         cancelPendingKeyboardDismiss()
         cancelActionFrameMeasurement()
+    }
+
+    private func navigateToReplyTarget(_ messageIdHex: String, viewModel: ConversationViewModel) {
+        replyNavigationTask?.cancel()
+        replyNavigationTask = Task { @MainActor in
+            defer { replyNavigationTask = nil }
+
+            if viewModel.record(for: messageIdHex) != nil {
+                replyNavigationTargetItemId = "msg:\(messageIdHex)"
+                return
+            }
+
+            for _ in 0..<12 where viewModel.hasMoreBefore {
+                guard !Task.isCancelled else { return }
+                let previousOldestId = viewModel.timeline.first?.id
+                await viewModel.loadOlderTimelinePage()
+                guard !Task.isCancelled else { return }
+
+                if viewModel.record(for: messageIdHex) != nil {
+                    replyNavigationTargetItemId = "msg:\(messageIdHex)"
+                    return
+                }
+                guard viewModel.timeline.first?.id != previousOldestId else { break }
+            }
+
+            appState.present(.warning(L10n.string("Original message is no longer available")))
+        }
     }
 
     // MARK: - In-conversation search
@@ -2171,6 +2546,75 @@ struct ConversationView: View {
     private func cancelPendingSearchMatchScroll() {
         pendingSearchMatchScrollTask?.cancel()
         pendingSearchMatchScrollTask = nil
+    }
+
+    // MARK: - Message selection
+
+    private func selectedMessageRecords(viewModel: ConversationViewModel) -> [AppMessageRecordFfi] {
+        viewModel.timeline.compactMap { item in
+            guard case .message(let record, _) = item.kind,
+                  selectedMessageIds.contains(record.messageIdHex)
+            else { return nil }
+            return record
+        }
+    }
+
+    private func beginMessageSelection(with record: AppMessageRecordFfi) {
+        guard !record.messageIdHex.isEmpty else { return }
+        cancelEdit()
+        viewModel?.replyingTo = nil
+        dismissKeyboard()
+        isSelectingMessages = true
+        selectedMessageIds = [record.messageIdHex]
+        Haptics.tap()
+    }
+
+    private func toggleMessageSelection(_ messageIdHex: String) {
+        guard isSelectingMessages, !messageIdHex.isEmpty else { return }
+        if selectedMessageIds.contains(messageIdHex) {
+            selectedMessageIds.remove(messageIdHex)
+        } else {
+            selectedMessageIds.insert(messageIdHex)
+        }
+        Haptics.tap()
+    }
+
+    private func exitMessageSelection() {
+        isSelectingMessages = false
+        selectedMessageIds.removeAll()
+        showBatchDeleteConfirmation = false
+    }
+
+    private func pruneMessageSelection(viewModel: ConversationViewModel) {
+        guard isSelectingMessages else { return }
+        let availableIds = Set(viewModel.timeline.compactMap { item -> String? in
+            guard case .message(let record, _) = item.kind else { return nil }
+            return record.messageIdHex
+        })
+        selectedMessageIds.formIntersection(availableIds)
+    }
+
+    private func deleteSelectedMessages() {
+        guard let viewModel, !batchDeleteInFlight else { return }
+        let records = selectedMessageRecords(viewModel: viewModel)
+        guard MessageSelectionPolicy.canDelete(
+            selectedCount: records.count,
+            allDeletable: records.allSatisfy {
+                $0.direction == "sent"
+                    && viewModel.canSendMessages
+                    && !viewModel.isDeleted($0.messageIdHex)
+            }
+        ) else { return }
+
+        batchDeleteInFlight = true
+        Task { @MainActor in
+            for record in records {
+                guard !Task.isCancelled else { break }
+                await viewModel.deleteMessage(record)
+            }
+            batchDeleteInFlight = false
+            exitMessageSelection()
+        }
     }
 
     // MARK: - Message actions placement
@@ -2275,9 +2719,8 @@ struct ConversationView: View {
                 forwardTarget = target
             },
             onEdit: {
-                let target = ActionsTarget(record: record, status: status)
                 dismissActions()
-                editTarget = target
+                beginEdit(record, viewModel: viewModel)
             },
             onViewEditHistory: {
                 let target = ActionsTarget(record: record, status: status)
@@ -2288,6 +2731,10 @@ struct ConversationView: View {
                 let target = ActionsTarget(record: record, status: status)
                 dismissActions()
                 messageInfoTarget = target
+            },
+            onSelect: {
+                dismissActions()
+                beginMessageSelection(with: record)
             },
             onDelete: {
                 Task { await viewModel.deleteMessage(record) }

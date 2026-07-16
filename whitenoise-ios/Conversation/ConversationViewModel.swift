@@ -463,6 +463,10 @@ final class ConversationViewModel {
         timelineStore.replyPreview(for: record)
     }
 
+    func replyTargetMessageId(for record: AppMessageRecordFfi) -> String? {
+        timelineStore.replyTargetMessageId(for: record)
+    }
+
     func displayBody(of record: AppMessageRecordFfi) -> String {
         timelineStore.displayBody(of: record)
     }
@@ -1801,8 +1805,22 @@ final class ConversationViewModel {
         _ message: AppMessageRecordFfi,
         to groupIds: Set<String>
     ) async -> MessageForwardResult {
+        await forwardMessages([message], to: groupIds)
+    }
+
+    /// Forwards selected text messages in timeline order. Messages and
+    /// destinations are processed sequentially so their ordering stays stable
+    /// and one destination's failure cannot cancel successful destinations.
+    func forwardMessages(
+        _ messages: [AppMessageRecordFfi],
+        to groupIds: Set<String>
+    ) async -> MessageForwardResult {
         let destinations = groupIds.filter { !$0.isEmpty && $0 != group.groupIdHex }
-        guard let text = MessageForwardingPolicy.forwardableText(for: message),
+        let texts = messages.prefix(MessageSelectionPolicy.maximumForwardCount).compactMap {
+            MessageForwardingPolicy.forwardableText(for: $0)
+        }
+        guard texts.count == messages.count,
+              !texts.isEmpty,
               !destinations.isEmpty,
               let appState,
               let accountRef = appState.activeAccountRef,
@@ -1815,11 +1833,13 @@ final class ConversationViewModel {
         var failed = Set<String>()
         for destination in destinations {
             do {
-                _ = try await client.sendText(
-                    accountRef: accountRef,
-                    groupIdHex: destination,
-                    text: text
-                )
+                for text in texts {
+                    _ = try await client.sendText(
+                        accountRef: accountRef,
+                        groupIdHex: destination,
+                        text: text
+                    )
+                }
                 successful.insert(destination)
             } catch {
                 failed.insert(destination)
