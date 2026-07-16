@@ -612,7 +612,10 @@ struct ChatsListView: View {
     @MainActor
     private func setMuted(groupIdHex: String, muted: Bool) {
         guard let accountIdHex = appState.activeAccount?.accountIdHex else { return }
-        ChatMuteStore.setMuted(muted, accountIdHex: accountIdHex, groupIdHex: groupIdHex)
+        // Write the tri-state mode, not just the legacy set — an explicit mode
+        // outranks the legacy mute on reads, so a bare setMuted would be
+        // ignored for any chat the details picker ever touched.
+        ChatMuteStore.setNotifyMode(muted ? .nothing : .all, accountIdHex: accountIdHex, groupIdHex: groupIdHex)
         viewModel?.refreshDisplayProjections()
         Haptics.success()
     }

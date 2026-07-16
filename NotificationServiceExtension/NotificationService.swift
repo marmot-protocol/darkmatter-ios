@@ -6,9 +6,14 @@ import UserNotifications
 final class NotificationService: UNNotificationServiceExtension {
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
+    /// Communication-intent copy of the primary content. `updating(from:)`
+    /// returns a new immutable content, so it rides in its own slot and
+    /// `finish` prefers it unless the timeout fallback rewrote the original.
+    private var decoratedContent: UNNotificationContent?
     private var collectionTask: Task<Void, Never>?
     private var expirationTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
+    private var avatarFetchTask: Task<[String: Data], Never>?
     private var activeMarmot: Marmot?
     private var activeMarmotNeedsShutdown = false
     private var didApplyRenderDecision = false
@@ -23,7 +28,9 @@ final class NotificationService: UNNotificationServiceExtension {
         activeMarmot = nil
         activeMarmotNeedsShutdown = false
         additionalPresentationTask = nil
+        avatarFetchTask = nil
         didApplyRenderDecision = false
+        decoratedContent = nil
 
         collectionTask = Task { [weak self] in
             await self?.collectAndDecorateNotification()
@@ -32,6 +39,10 @@ final class NotificationService: UNNotificationServiceExtension {
 
     override func serviceExtensionTimeWillExpire() {
         collectionTask?.cancel()
+        // Unblocks the additional-presentation task: it enqueues immediately
+        // with whatever avatars have resolved instead of waiting out the
+        // remaining fetch deadlines.
+        avatarFetchTask?.cancel()
         let additionalPresentationTask = additionalPresentationTask
         guard let marmot = takeActiveMarmotForShutdown() else {
             if let additionalPresentationTask {
@@ -79,25 +90,42 @@ final class NotificationService: UNNotificationServiceExtension {
                     source: .apnsNse
                 )
                 // One shared-defaults read per wake; per-record lookups hit the
-                // in-memory snapshots. A nil mute snapshot means the shared suite
-                // couldn't be resolved, so mute fails safe (all muted).
-                let mutedSnapshot = ChatMuteStore.mutedChatKeysSnapshot()
+                // in-memory snapshots. A nil mode snapshot means the shared suite
+                // couldn't be resolved, so delivery fails safe (all suppressed).
+                let notifyModeSnapshot = ChatMuteStore.notifyModeSnapshot()
                 let contactNicknames = ContactNicknameStore.nicknamesByKey()
+                let localNotificationsEnabled = NotificationServiceSettingsReadPolicy
+                    .memoizingLocalNotificationsEnabled { accountRef in
+                        NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+                            try marmot.notificationSettings(
+                                accountRef: accountRef
+                            ).localNotificationsEnabled
+                        }
+                    }
+                var rowsByAccountRef: [String: [ChatListRowFfi]] = [:]
+                for accountRef in Set(result.notifications.map(\.accountRef)) {
+                    rowsByAccountRef[accountRef] =
+                        (try? marmot.chatList(accountRef: accountRef, includeArchived: true)) ?? []
+                }
+                let archivedChatKeys = NotificationServiceProjection.archivedChatKeys(
+                    rowsByAccountRef: rowsByAccountRef
+                )
                 let decision = NotificationServiceProjection.decision(
                     for: result,
-                    localNotificationsEnabled: NotificationServiceSettingsReadPolicy
-                        .memoizingLocalNotificationsEnabled { accountRef in
-                            NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
-                                try marmot.notificationSettings(
-                                    accountRef: accountRef
-                                ).localNotificationsEnabled
-                            }
-                        },
-                    isMuted: { accountIdHex, groupIdHex in
-                        ChatMuteStore.isMuted(
+                    localNotificationsEnabled: localNotificationsEnabled,
+                    isArchived: { accountRef, groupIdHex in
+                        archivedChatKeys.contains(
+                            NotificationServiceProjection.archivedChatKey(
+                                accountRef: accountRef,
+                                groupIdHex: groupIdHex
+                            )
+                        )
+                    },
+                    notifyMode: { accountIdHex, groupIdHex in
+                        ChatMuteStore.notifyMode(
                             accountIdHex: accountIdHex,
                             groupIdHex: groupIdHex,
-                            snapshot: mutedSnapshot
+                            snapshot: notifyModeSnapshot
                         )
                     },
                     nickname: { ownerAccountIdHex, contactAccountIdHex in
@@ -108,6 +136,12 @@ final class NotificationService: UNNotificationServiceExtension {
                         )
                     }
                 )
+                // An empty wake can't be attributed: the engine drops
+                // disabled accounts' records at ingest, so `.noData` is
+                // ambiguous between "nothing existed" and "records were
+                // suppressed". Account-wide inference gets both directions
+                // wrong, so the fallback stays audible until the engine
+                // reports suppressed records explicitly.
                 await apply(decision, to: content)
             } catch {
                 applyFallback(to: content)
@@ -140,10 +174,29 @@ final class NotificationService: UNNotificationServiceExtension {
         didApplyRenderDecision = true
         switch decision {
         case .decorate(let presentation, let additionalPresentations):
-            let additionalPresentationTask = startAdditionalPresentations(additionalPresentations)
+            // Enrich the deliverable content BEFORE any avatar work: an
+            // expiration that lands mid-fetch must deliver the decorated
+            // title/body, just without the intent image.
             decorate(content, with: presentation)
+            // The additional-presentation task must exist before any avatar
+            // await — expiration finishes without one, and these records are
+            // already consumed from the background cursor. It awaits the
+            // shared fetch internally; cancelling that fetch releases it to
+            // enqueue with whatever resolved.
+            let avatarFetch = Task { await Self.fetchAvatars(for: [presentation] + additionalPresentations) }
+            avatarFetchTask = avatarFetch
+            let additionalPresentationTask = startAdditionalPresentations(additionalPresentations) {
+                await avatarFetch.value
+            }
+            let avatarsByUrl = await avatarFetch.value
+            decoratedContent = NotificationCommunicationDecorator.decorated(
+                content,
+                presentation: presentation,
+                avatarData: presentation.senderPictureUrl.flatMap { avatarsByUrl[$0] }
+            )
             await additionalPresentationTask?.value
             self.additionalPresentationTask = nil
+            avatarFetchTask = nil
         case .deliverQuietly:
             applyQuietDelivery(to: content)
         case .fallback:
@@ -159,14 +212,21 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private func startAdditionalPresentations(
-        _ additionalPresentations: [LocalNotificationPresentation]
+        _ additionalPresentations: [LocalNotificationPresentation],
+        avatarsByUrl: @escaping @Sendable () async -> [String: Data]
     ) -> Task<Void, Never>? {
         guard !additionalPresentations.isEmpty else { return nil }
         let task = Task { [additionalPresentations] in
+            let avatars = await avatarsByUrl()
             for presentation in additionalPresentations {
+                let content = NotificationCommunicationDecorator.decorated(
+                    NotificationContentDecorator.makeContent(for: presentation),
+                    presentation: presentation,
+                    avatarData: presentation.senderPictureUrl.flatMap { avatars[$0] }
+                )
                 let request = UNNotificationRequest(
                     identifier: presentation.identifier,
-                    content: NotificationContentDecorator.makeContent(for: presentation),
+                    content: content,
                     trigger: nil
                 )
                 try? await UNUserNotificationCenter.current().add(request)
@@ -174,6 +234,38 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         additionalPresentationTask = task
         return task
+    }
+
+    /// Resolves each distinct sender avatar once per wake. Each fetch's
+    /// deadline is clamped to what remains of the aggregate budget, so the
+    /// total avatar wait is a hard bound rather than a loop-entry check that
+    /// a late fetch could overshoot; cache hits are instant and unbudgeted.
+    private static func fetchAvatars(
+        for presentations: [LocalNotificationPresentation]
+    ) async -> [String: Data] {
+        var distinct: [String] = []
+        for presentation in presentations {
+            if let url = presentation.senderPictureUrl, !distinct.contains(url) {
+                distinct.append(url)
+            }
+        }
+        var avatars: [String: Data] = [:]
+        let clock = ContinuousClock()
+        let start = clock.now
+        for url in distinct.prefix(3) {
+            guard !Task.isCancelled,
+                  let deadline = NotificationCommunicationDecorator.avatarFetchDeadline(
+                      elapsed: clock.now - start
+                  )
+            else { break }
+            if let data = await NotificationCommunicationDecorator.avatarData(
+                for: url,
+                deadline: deadline
+            ) {
+                avatars[url] = data
+            }
+        }
+        return avatars
     }
 
     /// Without the filtering entitlement the extension cannot drop the alert
@@ -196,11 +288,14 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func finish(applyingFallbackForTimeout: Bool = false) {
         guard let contentHandler, let bestAttemptContent else { return }
+        var deliverable: UNNotificationContent = bestAttemptContent
         if NotificationServiceTimeoutPolicy.shouldApplyTimeoutFallback(
             applyingFallbackForTimeout: applyingFallbackForTimeout,
             didApplyRenderDecision: didApplyRenderDecision
         ) {
             applyFallback(to: bestAttemptContent)
+        } else if let decoratedContent {
+            deliverable = decoratedContent
         }
         self.contentHandler = nil
         self.bestAttemptContent = nil
@@ -208,6 +303,7 @@ final class NotificationService: UNNotificationServiceExtension {
         self.expirationTask = nil
         self.additionalPresentationTask = nil
         self.didApplyRenderDecision = false
-        contentHandler(bestAttemptContent)
+        self.decoratedContent = nil
+        contentHandler(deliverable)
     }
 }

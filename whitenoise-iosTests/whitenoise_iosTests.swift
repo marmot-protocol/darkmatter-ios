@@ -3789,7 +3789,13 @@ struct NotificationServiceProjectionTests {
         #expect(additional.map(\.identifier) == ["key-b", "key-c"])
     }
 
-    @Test func disabledLocalNotificationsAreNotDecoratedByNSE() {
+    @Test func disabledLocalNotificationsDeliverQuietlyFromTheNSE() {
+        // Disabling local notifications must not produce an audible generic
+        // banner per message; the wake sheds its alert and lands quietly,
+        // matching the all-muted wake. Forward-looking: the pinned engine
+        // currently discards disabled-account records at ingest (the wake
+        // arrives as an empty `.noData` collection instead), so this state
+        // only occurs once the engine surfaces suppressed records.
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [
@@ -3803,7 +3809,7 @@ struct NotificationServiceProjectionTests {
             localNotificationsEnabled: { _ in false }
         )
 
-        #expect(decision == .fallback)
+        #expect(decision == .deliverQuietly)
     }
 
     @Test func archivedNotificationsAreFilteredBeforeChoosingPresentation() {
@@ -3963,14 +3969,66 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
     }
 
-    @Test func selfOnlyCollectionKeepsGenericFallback() {
+    @Test func selfOnlyCollectionDeliversQuietly() {
+        // The wake carried records and every one was the user's own message;
+        // quiet delivery beats an audible generic banner for self content.
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [notificationUpdate(isFromSelf: true)],
             error: nil
         )
 
-        #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
+        #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
+    }
+
+    @Test func overflowSummariesCarryTheOrOfTheirMembersMentionBits() {
+        // A missing bit reads as a mention in willPresent, so an
+        // all-non-mention summary must carry an explicit "0" or it banners
+        // through a later mentions-only switch.
+        let plainSummary = NotificationPresentationPolicy.overflowSummaryPresentations(from: [
+            notificationUpdate(notificationKey: "p1"),
+            notificationUpdate(notificationKey: "p2"),
+        ])
+        #expect(plainSummary.count == 1)
+        #expect(!LocalNotificationProjection.isMention(from: plainSummary[0].userInfo))
+
+        let mentionSummary = NotificationPresentationPolicy.overflowSummaryPresentations(from: [
+            notificationUpdate(notificationKey: "m1"),
+            notificationUpdate(notificationKey: "m2", isMention: true),
+        ])
+        #expect(mentionSummary.count == 1)
+        #expect(LocalNotificationProjection.isMention(from: mentionSummary[0].userInfo))
+    }
+
+    @Test func presentationPersistsTheMentionBitForWillPresent() {
+        let mention = notificationUpdate(notificationKey: "m", isMention: true)
+        let plain = notificationUpdate(notificationKey: "p")
+
+        let mentionInfo = LocalNotificationProjection.makePresentation(for: mention)!.userInfo
+        let plainInfo = LocalNotificationProjection.makePresentation(for: plain)!.userInfo
+
+        #expect(LocalNotificationProjection.isMention(from: mentionInfo))
+        #expect(!LocalNotificationProjection.isMention(from: plainInfo))
+        // Pre-upgrade notifications carry no bit; only an explicit
+        // non-mention is suppressible by a later mentions-only switch.
+        #expect(LocalNotificationProjection.isMention(from: [:]))
+    }
+
+    @Test func archivedChatKeysFoldOnlyArchivedRowsPerAccount() {
+        let rowA = chatListRow(groupIdHex: "group-a", archived: true, title: "A")
+        let rowB = chatListRow(groupIdHex: "group-b", archived: false, title: "B")
+        let rowC = chatListRow(groupIdHex: "group-c", archived: true, title: "C")
+
+        let keys = NotificationServiceProjection.archivedChatKeys(rowsByAccountRef: [
+            "account-1": [rowA, rowB],
+            "account-2": [rowC],
+        ])
+
+        #expect(keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-a")))
+        #expect(keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-2", groupIdHex: "group-c")))
+        #expect(!keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-b")))
+        // Keys are account-scoped: another account's archive doesn't leak.
+        #expect(!keys.contains(NotificationServiceProjection.archivedChatKey(accountRef: "account-1", groupIdHex: "group-c")))
     }
 
     @Test func failedCollectionKeepsGenericFallback() {

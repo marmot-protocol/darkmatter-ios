@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Per-chat notification settings. Mute is the control that exists today;
-/// delivery modes join it when the engine surfaces them.
 struct ChatNotificationsView: View {
     @Environment(AppState.self) private var appState
     @Bindable var model: GroupDetailsViewModel
@@ -9,15 +7,20 @@ struct ChatNotificationsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle(
-                    "Mute",
-                    isOn: Binding(
-                        get: { model.isMuted },
-                        set: { model.setMuted($0, using: appState) }
-                    )
-                )
+                Picker(selection: Binding(
+                    get: { model.notifyMode },
+                    set: { model.setNotifyMode($0, using: appState) }
+                )) {
+                    Text("All messages").tag(ChatNotifyMode.all)
+                    Text("Only mentions").tag(ChatNotifyMode.mentionsOnly)
+                    Text("Nothing").tag(ChatNotifyMode.nothing)
+                } label: {
+                    Text("Notify me about")
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
             } footer: {
-                Text("Muting silences this chat's notification banners and sounds on this device. Messages still arrive and count as unread.")
+                Text("Applies on this device only. Messages still arrive and count as unread. With \"Only mentions\", this chat notifies only when someone mentions you.")
             }
         }
         .navigationTitle("Notifications")
