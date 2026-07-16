@@ -183,7 +183,14 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
-        let content = NotificationContentDecorator.makeContent(for: presentation)
+        let avatarData = await NotificationCommunicationDecorator.avatarData(
+            for: presentation.senderPictureUrl
+        )
+        let content = NotificationCommunicationDecorator.decorated(
+            NotificationContentDecorator.makeContent(for: presentation),
+            presentation: presentation,
+            avatarData: avatarData
+        )
 
         let request = UNNotificationRequest(
             identifier: presentation.identifier,
@@ -212,7 +219,11 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
-                isMuted: isRouteMuted(route),
+                notifyMode: routeNotifyMode(route),
+                // Mention-ness was evaluated when the notification was
+                // created; at willPresent time only a later switch to
+                // "Nothing" should suppress the banner.
+                isMention: true,
                 appSceneActive: appState?.isAppSceneActive ?? true,
                 updateAccountRef: route.accountRef,
                 updateGroupIdHex: route.groupIdHex,
@@ -225,14 +236,14 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         return [.banner, .list, .sound]
     }
 
-    /// Notification routes carry the account label, while the mute store keys
+    /// Notification routes carry the account label, while the mode store keys
     /// by account id; an unresolvable account fails open (presents).
-    private func isRouteMuted(_ route: LocalNotificationRoute) -> Bool {
+    private func routeNotifyMode(_ route: LocalNotificationRoute) -> ChatNotifyMode {
         guard let accountIdHex = appState?.accounts
             .first(where: { $0.label == route.accountRef })?
             .accountIdHex
-        else { return false }
-        return ChatMuteStore.isMuted(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
+        else { return .all }
+        return ChatMuteStore.notifyMode(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
     }
 
     func userNotificationCenter(

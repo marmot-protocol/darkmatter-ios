@@ -44140,6 +44140,90 @@
           }
         }
       }
+    },
+    "All messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle Nachrichten" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Todos los mensajes" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Tous les messages" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Tutti i messaggi" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Todas as mensagens" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Все сообщения" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tüm mesajlar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所有消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "所有訊息" } }
+      }
+    },
+    "Only mentions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nur Erwähnungen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Solo menciones" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mentions uniquement" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Solo menzioni" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Apenas menções" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Только упоминания" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yalnızca bahsetmeler" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅提及" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅提及" } }
+      }
+    },
+    "Nothing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nichts" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Rien" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Niente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ничего" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Hiçbiri" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無" } }
+      }
+    },
+    "Notify me about" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Benachrichtigen bei" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Notificarme sobre" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Me notifier pour" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Notificami per" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Notificar sobre" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Уведомлять о" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şunlar için bildir" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知我" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "通知我" } }
+      }
+    },
+    "Mentions" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erwähnungen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Menciones" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mentions" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Menzioni" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Menções" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Упоминания" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bahsetmeler" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提及" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "提及" } }
+      }
+    },
+    "Applies on this device only. Messages still arrive and count as unread. With \"Only mentions\", this chat notifies only when someone mentions you." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gilt nur auf diesem Gerät. Nachrichten kommen weiterhin an und zählen als ungelesen. Mit „Nur Erwähnungen“ benachrichtigt dieser Chat nur, wenn dich jemand erwähnt." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Se aplica solo en este dispositivo. Los mensajes siguen llegando y cuentan como no leídos. Con \"Solo menciones\", este chat solo notifica cuando alguien te menciona." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "S'applique uniquement à cet appareil. Les messages continuent d'arriver et comptent comme non lus. Avec « Mentions uniquement », cette discussion ne notifie que lorsque quelqu'un vous mentionne." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Vale solo su questo dispositivo. I messaggi continuano ad arrivare e contano come non letti. Con \"Solo menzioni\", questa chat notifica solo quando qualcuno ti menziona." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Aplica-se apenas a este dispositivo. As mensagens continuam chegando e contam como não lidas. Com \"Apenas menções\", este chat só notifica quando alguém menciona você." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Действует только на этом устройстве. Сообщения по-прежнему приходят и считаются непрочитанными. С «Только упоминания» этот чат уведомляет, только когда вас упоминают." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yalnızca bu cihazda geçerlidir. Mesajlar gelmeye ve okunmamış sayılmaya devam eder. \"Yalnızca bahsetmeler\" ile bu sohbet yalnızca biri sizden bahsettiğinde bildirir." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅适用于此设备。消息仍会送达并计为未读。选择“仅提及”后，只有当有人提及你时，此聊天才会通知。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "僅適用於此裝置。訊息仍會送達並計為未讀。選擇「僅提及」後，只有當有人提及你時，此聊天室才會通知。" } }
+      }
     }
   },
   "version" : "1.1"

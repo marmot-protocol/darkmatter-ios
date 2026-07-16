@@ -1,5 +1,13 @@
 import Foundation
 
+/// Per-chat notification delivery mode, mirroring the tri-state control the
+/// details screens expose. Raw values are persisted; do not rename cases.
+nonisolated enum ChatNotifyMode: String, CaseIterable {
+    case all
+    case mentionsOnly
+    case nothing
+}
+
 /// Per-device chat mute preference, keyed by (accountIdHex, groupIdHex).
 ///
 /// Mute is app-side presentation state, not Marmot data, so it lives in the
@@ -114,6 +122,82 @@ nonisolated enum ChatMuteStore {
     static func setMuted(_ muted: Bool, accountIdHex: String, groupIdHex: String) {
         guard let defaults else { return }
         setMuted(muted, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
+    }
+
+    // MARK: - Tri-state notify mode
+
+    static let notifyModeStorageKey = "chats.notifyModeByChatKey"
+
+    /// Once-per-wake snapshot for the extension: the mode map plus the legacy
+    /// mute set it inherits from.
+    struct NotifyModeSnapshot {
+        let modesByChatKey: [String: String]
+        let legacyMutedChatKeys: Set<String>
+    }
+
+    /// `nil` signals the shared suite could not be resolved; readers fail safe
+    /// (treat as `.nothing`), the mute snapshot's polarity.
+    static func notifyModeSnapshot() -> NotifyModeSnapshot? {
+        guard let defaults else { return nil }
+        return notifyModeSnapshot(defaults: defaults)
+    }
+
+    static func notifyModeSnapshot(defaults: UserDefaults) -> NotifyModeSnapshot {
+        NotifyModeSnapshot(
+            modesByChatKey: (defaults.dictionary(forKey: notifyModeStorageKey) as? [String: String]) ?? [:],
+            legacyMutedChatKeys: mutedChatKeys(defaults: defaults)
+        )
+    }
+
+    /// A chat with no explicit mode inherits its legacy mute state — an
+    /// already-muted chat reads as `.nothing`, everything else as `.all` — so
+    /// the tri-state control needs no one-shot migration pass.
+    static func notifyMode(
+        accountIdHex: String,
+        groupIdHex: String,
+        in snapshot: NotifyModeSnapshot
+    ) -> ChatNotifyMode {
+        guard let key = key(accountIdHex: accountIdHex, groupIdHex: groupIdHex) else { return .all }
+        if let raw = snapshot.modesByChatKey[key], let mode = ChatNotifyMode(rawValue: raw) {
+            return mode
+        }
+        return snapshot.legacyMutedChatKeys.contains(key) ? .nothing : .all
+    }
+
+    static func notifyMode(
+        accountIdHex: String,
+        groupIdHex: String,
+        snapshot: NotifyModeSnapshot?
+    ) -> ChatNotifyMode {
+        guard let snapshot else { return .nothing }
+        return notifyMode(accountIdHex: accountIdHex, groupIdHex: groupIdHex, in: snapshot)
+    }
+
+    /// Resolving read for the main app. A `nil` suite fails safe (`.nothing`).
+    static func notifyMode(accountIdHex: String, groupIdHex: String) -> ChatNotifyMode {
+        notifyMode(accountIdHex: accountIdHex, groupIdHex: groupIdHex, snapshot: notifyModeSnapshot())
+    }
+
+    /// Writes the mode and keeps the legacy mute set consistent (`.nothing`
+    /// mutes, anything else unmutes) so mute readers agree with the tri-state
+    /// control.
+    static func setNotifyMode(
+        _ mode: ChatNotifyMode,
+        accountIdHex: String,
+        groupIdHex: String,
+        defaults: UserDefaults
+    ) {
+        guard let key = key(accountIdHex: accountIdHex, groupIdHex: groupIdHex) else { return }
+        var modes = (defaults.dictionary(forKey: notifyModeStorageKey) as? [String: String]) ?? [:]
+        modes[key] = mode.rawValue
+        defaults.set(modes, forKey: notifyModeStorageKey)
+        setMuted(mode == .nothing, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
+    }
+
+    /// Resolving write. No-op when the shared suite can't be resolved.
+    static func setNotifyMode(_ mode: ChatNotifyMode, accountIdHex: String, groupIdHex: String) {
+        guard let defaults else { return }
+        setNotifyMode(mode, accountIdHex: accountIdHex, groupIdHex: groupIdHex, defaults: defaults)
     }
 
     /// Normalizes a key component and rejects blank or separator-bearing input.

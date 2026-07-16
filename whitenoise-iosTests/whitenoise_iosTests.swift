@@ -3789,7 +3789,10 @@ struct NotificationServiceProjectionTests {
         #expect(additional.map(\.identifier) == ["key-b", "key-c"])
     }
 
-    @Test func disabledLocalNotificationsAreNotDecoratedByNSE() {
+    @Test func disabledLocalNotificationsDeliverQuietlyFromTheNSE() {
+        // Disabling local notifications must not produce an audible generic
+        // banner per message (#675); the wake sheds its alert and lands
+        // quietly, matching the all-muted wake.
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [
@@ -3803,7 +3806,7 @@ struct NotificationServiceProjectionTests {
             localNotificationsEnabled: { _ in false }
         )
 
-        #expect(decision == .fallback)
+        #expect(decision == .deliverQuietly)
     }
 
     @Test func archivedNotificationsAreFilteredBeforeChoosingPresentation() {
@@ -3963,14 +3966,16 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
     }
 
-    @Test func selfOnlyCollectionKeepsGenericFallback() {
+    @Test func selfOnlyCollectionDeliversQuietly() {
+        // The wake carried records and every one was the user's own message;
+        // quiet delivery beats an audible generic banner for self content.
         let collection = BackgroundNotificationCollectionFfi(
             status: .newData,
             notifications: [notificationUpdate(isFromSelf: true)],
             error: nil
         )
 
-        #expect(NotificationServiceProjection.decision(for: collection) == .fallback)
+        #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
     }
 
     @Test func failedCollectionKeepsGenericFallback() {

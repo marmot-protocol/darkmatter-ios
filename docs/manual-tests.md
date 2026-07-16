@@ -178,6 +178,28 @@ biometric paths); the simulator can fake enrollment via Features → Face ID.
       restores live foreground notifications (send a message from another
       device) and disappearing-message sweeps without relaunching.
 
+## Per-chat notification controls & avatars
+
+Run with a second device sending into a shared chat; native push enabled on
+the test device.
+
+- [ ] Chat details → Notifications shows All messages / Only mentions /
+      Nothing; the chosen mode persists and the details row summarizes it
+      (On / Mentions / Muted).
+- [ ] "Only mentions": a plain message from the second device arrives
+      silently (no banner/sound, lands in Notification Center); a message
+      @-mentioning you banners normally.
+- [ ] "Nothing" behaves like mute; the chat-list swipe Mute/Unmute stays in
+      sync with the details picker.
+- [ ] With local notifications OFF and native push ON, an incoming message
+      produces no audible banner — the generic record lands quietly in
+      Notification Center (#675).
+- [ ] Message notifications render the sender's avatar (or an initials
+      monogram) via communication notifications, in both DMs and groups;
+      group notifications keep the group name alongside the sender.
+- [ ] A sender with no profile picture still notifies normally (monogram);
+      a hostile/invalid picture URL never delays delivery.
+
 ## Notifications
 
 - [ ] Settings → Notifications: enabling Local notifications prompts for

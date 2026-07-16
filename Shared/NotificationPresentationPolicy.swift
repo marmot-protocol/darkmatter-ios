@@ -7,27 +7,36 @@ nonisolated enum NotificationPresentationPolicy {
     static func shouldPresent(
         localNotificationsEnabled: Bool,
         isArchived: Bool = false,
-        isMuted: Bool = false,
+        notifyMode: ChatNotifyMode = .all,
+        isMention: Bool = false,
         appSceneActive: Bool,
         updateAccountRef: String,
         updateGroupIdHex: String,
         visibleAccountRef: String?,
         visibleGroupIdHex: String?
     ) -> Bool {
-        guard localNotificationsEnabled, !isArchived, !isMuted else { return false }
+        guard localNotificationsEnabled, !isArchived else { return false }
+        switch notifyMode {
+        case .all:
+            break
+        case .mentionsOnly:
+            guard isMention else { return false }
+        case .nothing:
+            return false
+        }
         guard appSceneActive else { return true }
         guard let visibleAccountRef, let visibleGroupIdHex else { return true }
         return visibleAccountRef != updateAccountRef
             || visibleGroupIdHex != updateGroupIdHex
     }
 
-    /// `isMuted` is keyed by (accountIdHex, groupIdHex) — the mute store's key —
-    /// unlike `isArchived`, which takes the update's accountRef.
+    /// `notifyMode` is keyed by (accountIdHex, groupIdHex) — the mute store's
+    /// key — unlike `isArchived`, which takes the update's accountRef.
     static func serviceDecision(
         for collection: BackgroundNotificationCollectionFfi,
         localNotificationsEnabled: (String) -> Bool = { _ in true },
         isArchived: (String, String) -> Bool = { _, _ in false },
-        isMuted: (String, String) -> Bool = { _, _ in false },
+        notifyMode: (String, String) -> ChatNotifyMode = { _, _ in .all },
         nickname: (String, String) -> String? = { _, _ in nil }
     ) -> NotificationServiceRenderDecision {
         switch collection.status {
@@ -37,16 +46,22 @@ nonisolated enum NotificationPresentationPolicy {
                 localNotificationsEnabled: localNotificationsEnabled,
                 isArchived: isArchived
             )
-            let unmutedUpdates = updates.filter {
-                !isMuted($0.accountIdHex, $0.groupIdHex)
+            let allowedUpdates = updates.filter { update in
+                switch notifyMode(update.accountIdHex, update.groupIdHex) {
+                case .all: true
+                case .mentionsOnly: update.isMention
+                case .nothing: false
+                }
             }
             // The alert that woke the extension cannot be dropped, so a wake
-            // whose every presentable record is muted delivers quietly instead
-            // of falling back to audible generic content.
-            if unmutedUpdates.isEmpty, !updates.isEmpty {
+            // whose every record is suppressed — muted or mentions-only chats,
+            // disabled local notifications, archived chats, self-messages —
+            // delivers quietly instead of falling back to audible generic
+            // content the user asked not to hear.
+            if allowedUpdates.isEmpty, !collection.notifications.isEmpty {
                 return .deliverQuietly
             }
-            guard let primaryUpdate = unmutedUpdates.first,
+            guard let primaryUpdate = allowedUpdates.first,
                   let primary = LocalNotificationProjection.makePresentation(
                       for: primaryUpdate,
                       nickname: nickname
@@ -57,7 +72,7 @@ nonisolated enum NotificationPresentationPolicy {
             return .decorate(
                 primary,
                 additionalPresentations: boundedAdditionalPresentations(
-                    from: Array(unmutedUpdates.dropFirst()),
+                    from: Array(allowedUpdates.dropFirst()),
                     nickname: nickname
                 )
             )

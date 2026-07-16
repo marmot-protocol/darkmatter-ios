@@ -6,6 +6,10 @@ import UserNotifications
 final class NotificationService: UNNotificationServiceExtension {
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var bestAttemptContent: UNMutableNotificationContent?
+    /// Communication-intent copy of the primary content. `updating(from:)`
+    /// returns a new immutable content, so it rides in its own slot and
+    /// `finish` prefers it unless the timeout fallback rewrote the original.
+    private var decoratedContent: UNNotificationContent?
     private var collectionTask: Task<Void, Never>?
     private var expirationTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
@@ -24,6 +28,7 @@ final class NotificationService: UNNotificationServiceExtension {
         activeMarmotNeedsShutdown = false
         additionalPresentationTask = nil
         didApplyRenderDecision = false
+        decoratedContent = nil
 
         collectionTask = Task { [weak self] in
             await self?.collectAndDecorateNotification()
@@ -79,9 +84,9 @@ final class NotificationService: UNNotificationServiceExtension {
                     source: .apnsNse
                 )
                 // One shared-defaults read per wake; per-record lookups hit the
-                // in-memory snapshots. A nil mute snapshot means the shared suite
-                // couldn't be resolved, so mute fails safe (all muted).
-                let mutedSnapshot = ChatMuteStore.mutedChatKeysSnapshot()
+                // in-memory snapshots. A nil mode snapshot means the shared suite
+                // couldn't be resolved, so delivery fails safe (all suppressed).
+                let notifyModeSnapshot = ChatMuteStore.notifyModeSnapshot()
                 let contactNicknames = ContactNicknameStore.nicknamesByKey()
                 let decision = NotificationServiceProjection.decision(
                     for: result,
@@ -93,11 +98,11 @@ final class NotificationService: UNNotificationServiceExtension {
                                 ).localNotificationsEnabled
                             }
                         },
-                    isMuted: { accountIdHex, groupIdHex in
-                        ChatMuteStore.isMuted(
+                    notifyMode: { accountIdHex, groupIdHex in
+                        ChatMuteStore.notifyMode(
                             accountIdHex: accountIdHex,
                             groupIdHex: groupIdHex,
-                            snapshot: mutedSnapshot
+                            snapshot: notifyModeSnapshot
                         )
                     },
                     nickname: { ownerAccountIdHex, contactAccountIdHex in
@@ -140,8 +145,17 @@ final class NotificationService: UNNotificationServiceExtension {
         didApplyRenderDecision = true
         switch decision {
         case .decorate(let presentation, let additionalPresentations):
-            let additionalPresentationTask = startAdditionalPresentations(additionalPresentations)
+            let avatarsByUrl = await Self.fetchAvatars(for: [presentation] + additionalPresentations)
+            let additionalPresentationTask = startAdditionalPresentations(
+                additionalPresentations,
+                avatarsByUrl: avatarsByUrl
+            )
             decorate(content, with: presentation)
+            decoratedContent = NotificationCommunicationDecorator.decorated(
+                content,
+                presentation: presentation,
+                avatarData: presentation.senderPictureUrl.flatMap { avatarsByUrl[$0] }
+            )
             await additionalPresentationTask?.value
             self.additionalPresentationTask = nil
         case .deliverQuietly:
@@ -159,14 +173,20 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private func startAdditionalPresentations(
-        _ additionalPresentations: [LocalNotificationPresentation]
+        _ additionalPresentations: [LocalNotificationPresentation],
+        avatarsByUrl: [String: Data]
     ) -> Task<Void, Never>? {
         guard !additionalPresentations.isEmpty else { return nil }
         let task = Task { [additionalPresentations] in
             for presentation in additionalPresentations {
+                let content = NotificationCommunicationDecorator.decorated(
+                    NotificationContentDecorator.makeContent(for: presentation),
+                    presentation: presentation,
+                    avatarData: presentation.senderPictureUrl.flatMap { avatarsByUrl[$0] }
+                )
                 let request = UNNotificationRequest(
                     identifier: presentation.identifier,
-                    content: NotificationContentDecorator.makeContent(for: presentation),
+                    content: content,
                     trigger: nil
                 )
                 try? await UNUserNotificationCenter.current().add(request)
@@ -174,6 +194,27 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         additionalPresentationTask = task
         return task
+    }
+
+    /// Resolves each distinct sender avatar once per wake. Cold fetches are
+    /// individually bounded, and only the first few distinct senders are
+    /// fetched so the extension's delivery budget is never spent on avatars.
+    private static func fetchAvatars(
+        for presentations: [LocalNotificationPresentation]
+    ) async -> [String: Data] {
+        var distinct: [String] = []
+        for presentation in presentations {
+            if let url = presentation.senderPictureUrl, !distinct.contains(url) {
+                distinct.append(url)
+            }
+        }
+        var avatars: [String: Data] = [:]
+        for url in distinct.prefix(3) {
+            if let data = await NotificationCommunicationDecorator.avatarData(for: url) {
+                avatars[url] = data
+            }
+        }
+        return avatars
     }
 
     /// Without the filtering entitlement the extension cannot drop the alert
@@ -196,11 +237,14 @@ final class NotificationService: UNNotificationServiceExtension {
 
     private func finish(applyingFallbackForTimeout: Bool = false) {
         guard let contentHandler, let bestAttemptContent else { return }
+        var deliverable: UNNotificationContent = bestAttemptContent
         if NotificationServiceTimeoutPolicy.shouldApplyTimeoutFallback(
             applyingFallbackForTimeout: applyingFallbackForTimeout,
             didApplyRenderDecision: didApplyRenderDecision
         ) {
             applyFallback(to: bestAttemptContent)
+        } else if let decoratedContent {
+            deliverable = decoratedContent
         }
         self.contentHandler = nil
         self.bestAttemptContent = nil
@@ -208,6 +252,7 @@ final class NotificationService: UNNotificationServiceExtension {
         self.expirationTask = nil
         self.additionalPresentationTask = nil
         self.didApplyRenderDecision = false
-        contentHandler(bestAttemptContent)
+        self.decoratedContent = nil
+        contentHandler(deliverable)
     }
 }

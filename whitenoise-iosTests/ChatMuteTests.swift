@@ -107,7 +107,7 @@ struct ChatMuteSuppressionPolicyTests {
     @Test func mutedChatIsNeverPresented() {
         #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: true,
-            isMuted: true,
+            notifyMode: .nothing,
             appSceneActive: false,
             updateAccountRef: "account-a",
             updateGroupIdHex: "group-a",
@@ -115,7 +115,7 @@ struct ChatMuteSuppressionPolicyTests {
         ))
         #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: true,
-            isMuted: true,
+            notifyMode: .nothing,
             appSceneActive: true,
             updateAccountRef: "account-a",
             updateGroupIdHex: "group-a",
@@ -126,7 +126,28 @@ struct ChatMuteSuppressionPolicyTests {
     @Test func unmutedChatKeepsExistingPresentationBehavior() {
         #expect(LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: true,
-            isMuted: false,
+            notifyMode: .all,
+            appSceneActive: false,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: nil
+        ))
+    }
+
+    @Test func mentionsOnlyPresentsOnlyMentions() {
+        #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            notifyMode: .mentionsOnly,
+            isMention: false,
+            appSceneActive: false,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: nil
+        ))
+        #expect(LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            notifyMode: .mentionsOnly,
+            isMention: true,
             appSceneActive: false,
             updateAccountRef: "account-a",
             updateGroupIdHex: "group-a",
@@ -164,12 +185,12 @@ struct ChatMuteSuppressionPolicyTests {
 
         let decision = NotificationServiceProjection.decision(
             for: collection,
-            isMuted: { accountIdHex, groupIdHex in
+            notifyMode: { accountIdHex, groupIdHex in
                 ChatMuteStore.isMuted(
                     accountIdHex: accountIdHex,
                     groupIdHex: groupIdHex,
                     in: mutedChatKeys
-                )
+                ) ? .nothing : .all
             }
         )
 
@@ -203,19 +224,21 @@ struct ChatMuteSuppressionPolicyTests {
 
         let decision = NotificationServiceProjection.decision(
             for: collection,
-            isMuted: { accountIdHex, groupIdHex in
+            notifyMode: { accountIdHex, groupIdHex in
                 ChatMuteStore.isMuted(
                     accountIdHex: accountIdHex,
                     groupIdHex: groupIdHex,
                     in: mutedChatKeys
-                )
+                ) ? .nothing : .all
             }
         )
 
         #expect(decision == .deliverQuietly)
     }
 
-    @Test func serviceDecisionStillFallsBackWhenNothingWasPresentableBeforeMuteFiltering() {
+    @Test func serviceDecisionDeliversQuietlyWhenTheWakeOnlyCarriedSelfMessages() {
+        // The wake had records, every one suppressed — quiet beats an audible
+        // generic banner for content the user's own devices produced.
         let selfMessage = muteTestUpdate(
             notificationKey: "self",
             groupIdHex: "group-muted",
@@ -230,10 +253,72 @@ struct ChatMuteSuppressionPolicyTests {
 
         let decision = NotificationServiceProjection.decision(
             for: collection,
-            isMuted: { _, _ in true }
+            notifyMode: { _, _ in .nothing }
         )
 
-        #expect(decision == .fallback)
+        #expect(decision == .deliverQuietly)
+    }
+
+    @Test func serviceDecisionDeliversQuietlyWhenLocalNotificationsAreDisabled() {
+        // Native push on + local notifications off must not produce an
+        // audible generic banner per message (#675); the functionally
+        // identical all-muted wake already delivered quietly.
+        let update = muteTestUpdate(
+            notificationKey: "plain",
+            groupIdHex: "group-quiet",
+            timestampMs: 1_000
+        )
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [update],
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(
+            for: collection,
+            localNotificationsEnabled: { _ in false }
+        )
+
+        #expect(decision == .deliverQuietly)
+    }
+
+    @Test func serviceDecisionInMentionsOnlyModeKeepsMentionsAndQuietsTheRest() {
+        let mention = muteTestUpdate(
+            notificationKey: "mention",
+            groupIdHex: "group-mentions",
+            isMention: true,
+            timestampMs: 2_000
+        )
+        let plain = muteTestUpdate(
+            notificationKey: "plain",
+            groupIdHex: "group-mentions",
+            timestampMs: 1_000
+        )
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [plain, mention],
+            error: nil
+        )
+
+        let decision = NotificationServiceProjection.decision(
+            for: collection,
+            notifyMode: { _, _ in .mentionsOnly }
+        )
+
+        #expect(decision == .decorate(
+            LocalNotificationProjection.makePresentation(for: mention)!,
+            additionalPresentations: []
+        ))
+
+        let quietDecision = NotificationServiceProjection.decision(
+            for: BackgroundNotificationCollectionFfi(
+                status: .newData,
+                notifications: [plain],
+                error: nil
+            ),
+            notifyMode: { _, _ in .mentionsOnly }
+        )
+        #expect(quietDecision == .deliverQuietly)
     }
 
     @Test func serviceDecisionFallsBackOnNoDataEvenWithMutedChats() {
@@ -245,7 +330,7 @@ struct ChatMuteSuppressionPolicyTests {
 
         let decision = NotificationServiceProjection.decision(
             for: collection,
-            isMuted: { _, _ in true }
+            notifyMode: { _, _ in .nothing }
         )
 
         #expect(decision == .fallback)
@@ -267,6 +352,66 @@ struct ChatListMuteSwipeActionsTests {
     }
 }
 
+struct ChatNotifyModeStoreTests {
+    private func isolatedDefaults() throws -> (UserDefaults, String) {
+        let suiteName = "chat-notify-mode-tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        return (defaults, suiteName)
+    }
+
+    @Test func modeDefaultsToAllAndInheritsLegacyMute() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = String(repeating: "11", count: 32)
+
+        var snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .all)
+
+        // A chat muted before the tri-state existed reads as Nothing.
+        ChatMuteStore.setMuted(true, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .nothing)
+    }
+
+    @Test func explicitModeOutranksLegacyMuteAndWritesThrough() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let account = String(repeating: "11", count: 32)
+
+        ChatMuteStore.setNotifyMode(.mentionsOnly, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        var snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .mentionsOnly)
+        // Write-through keeps the legacy set consistent: mentions-only is not muted.
+        #expect(!ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
+
+        ChatMuteStore.setNotifyMode(.nothing, accountIdHex: account, groupIdHex: "group-a", defaults: defaults)
+        snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: account, groupIdHex: "group-a", in: snapshot) == .nothing)
+        #expect(ChatMuteStore.isMuted(accountIdHex: account, groupIdHex: "group-a", defaults: defaults))
+    }
+
+    @Test func nilSnapshotFailsSafeAsNothing() {
+        #expect(ChatMuteStore.notifyMode(
+            accountIdHex: String(repeating: "11", count: 32),
+            groupIdHex: "group-a",
+            snapshot: nil
+        ) == .nothing)
+    }
+
+    @Test func modeIsScopedToTheAccountAndGroup() throws {
+        let (defaults, suiteName) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let accountA = String(repeating: "11", count: 32)
+        let accountB = String(repeating: "22", count: 32)
+
+        ChatMuteStore.setNotifyMode(.mentionsOnly, accountIdHex: accountA, groupIdHex: "group-a", defaults: defaults)
+        let snapshot = ChatMuteStore.notifyModeSnapshot(defaults: defaults)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: accountB, groupIdHex: "group-a", in: snapshot) == .all)
+        #expect(ChatMuteStore.notifyMode(accountIdHex: accountA, groupIdHex: "group-b", in: snapshot) == .all)
+    }
+}
+
 private func muteTestUpdate(
     notificationKey: String,
     accountRef: String = "account-a",
@@ -274,6 +419,7 @@ private func muteTestUpdate(
     groupIdHex: String,
     previewText: String? = "Hello",
     isFromSelf: Bool = false,
+    isMention: Bool = false,
     timestampMs: Int64
 ) -> NotificationUpdateFfi {
     NotificationUpdateFfi(
@@ -285,7 +431,7 @@ private func muteTestUpdate(
         groupIdHex: groupIdHex,
         groupName: nil,
         isDm: true,
-        isMention: false,
+        isMention: isMention,
         messageIdHex: "message-\(notificationKey)",
         sender: NotificationUserFfi(
             accountIdHex: String(repeating: "22", count: 32),

@@ -19,6 +19,11 @@ struct LocalNotificationPresentation: Equatable {
     // Defaulted so display-only presentations (summaries, failure fallbacks)
     // stay action-free without touching every construction site.
     var categoryIdentifier: String? = nil
+    // Communication-notification decoration inputs; defaulted so summaries and
+    // fallbacks stay undecorated. The picture URL is pre-sanitized.
+    var senderName: String? = nil
+    var senderPictureUrl: String? = nil
+    var isGroupConversation: Bool = false
 }
 
 nonisolated enum LocalNotificationProjection {
@@ -71,7 +76,10 @@ nonisolated enum LocalNotificationProjection {
             categoryIdentifier: NotificationActionCategory.identifier(
                 trigger: update.trigger,
                 messageIdHex: update.messageIdHex
-            )
+            ),
+            senderName: senderName,
+            senderPictureUrl: ContentSanitizer.imageURL(update.sender.pictureUrl)?.absoluteString,
+            isGroupConversation: !update.isDm
         )
     }
 
