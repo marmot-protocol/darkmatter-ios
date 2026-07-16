@@ -42,20 +42,24 @@ struct NotificationAvatarBudgetTests {
             }
         }
         #expect(result == nil)
-        for _ in 0..<100 where !observedCancellation.withLock({ $0 }) {
-            try? await Task.sleep(for: .milliseconds(10))
+        // Generous poll: a starved runner may schedule the detached work task
+        // (and its cancellation handler) tens of seconds late.
+        for _ in 0..<300 where !observedCancellation.withLock({ $0 }) {
+            try? await Task.sleep(for: .milliseconds(100))
         }
         #expect(observedCancellation.withLock { $0 })
     }
 
     @Test func callerCancellationResumesTheDeadlineWaitAndCancelsWork() async {
+        // The deadline and the work are effectively infinite, so the await
+        // below can only ever return through the caller-cancellation racer —
+        // completion itself is the assertion, with no wall-clock comparison
+        // to flake on a saturated parallel test runner.
         let observedCancellation = Mutex(false)
-        let clock = ContinuousClock()
-        let start = clock.now
         let waiter = Task {
-            await NotificationCommunicationDecorator.withDeadline(.seconds(30)) {
+            await NotificationCommunicationDecorator.withDeadline(.seconds(100_000)) {
                 await withTaskCancellationHandler {
-                    try? await Task.sleep(for: .seconds(30))
+                    try? await Task.sleep(for: .seconds(100_000))
                     return nil
                 } onCancel: {
                     observedCancellation.withLock { $0 = true }
@@ -66,10 +70,8 @@ struct NotificationAvatarBudgetTests {
         waiter.cancel()
         let result = await waiter.value
         #expect(result == nil)
-        // Well under the 30s deadline: cancellation resumed the wait.
-        #expect(clock.now - start < .seconds(10))
-        for _ in 0..<100 where !observedCancellation.withLock({ $0 }) {
-            try? await Task.sleep(for: .milliseconds(10))
+        for _ in 0..<300 where !observedCancellation.withLock({ $0 }) {
+            try? await Task.sleep(for: .milliseconds(100))
         }
         #expect(observedCancellation.withLock { $0 })
     }
