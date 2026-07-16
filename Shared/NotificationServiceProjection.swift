@@ -65,16 +65,23 @@ nonisolated enum NotificationServiceProjection {
     // (e.g. `DuckDuckGoImageSearchClient.maximumResultCount`).
     static let maxAdditionalPresentations = NotificationPresentationPolicy.maxAdditionalPresentations
 
-    /// A `.noData`/`.failed` wake can mean the engine dropped every record at
-    /// ingest because local notifications are disabled for the account. When
-    /// no account wants audible alerts, the generic fallback sheds its sound;
-    /// an empty account list or a throwing settings read keeps the audible
-    /// path (fail open).
+    /// A wake that collected successfully but empty can mean the engine
+    /// dropped every record at ingest because local notifications are disabled
+    /// for the account. When no account wants audible alerts, the generic
+    /// fallback sheds its sound. A `.failed` collection keeps the audible path
+    /// (unknown state fails open), as do an empty account list or a throwing
+    /// settings read. With one enabled account anywhere, the wake stays
+    /// audible — the collection can't attribute an empty wake to a specific
+    /// account, so a disabled account's wake alongside an enabled one still
+    /// alerts generically until the engine reports suppressed records.
     static func shouldQuietFallback(
+        status: BackgroundNotificationStatusFfi,
         accountRefs: [String],
         localNotificationsEnabled: (String) -> Bool
     ) -> Bool {
-        !accountRefs.isEmpty && accountRefs.allSatisfy { !localNotificationsEnabled($0) }
+        status == .noData
+            && !accountRefs.isEmpty
+            && accountRefs.allSatisfy { !localNotificationsEnabled($0) }
     }
 
     static func decision(

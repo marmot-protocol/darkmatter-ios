@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Intents
+import Synchronization
 import UserNotifications
 
 /// Decorates message notifications as communication notifications so the
@@ -66,19 +67,42 @@ nonisolated enum NotificationCommunicationDecorator {
     static func avatarData(for pictureUrl: String?) async -> Data? {
         guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return nil }
         if let cached = cachedAvatarData(for: url) { return cached }
-        return await withTaskGroup(of: Data?.self) { group in
-            group.addTask {
-                guard let fetched = await boundedFetch(url) else { return nil }
-                storeCachedAvatar(fetched, for: url)
-                return fetched
+        return await withDeadline(avatarDeadline) {
+            guard let fetched = await boundedFetch(url) else { return nil }
+            storeCachedAvatar(fetched, for: url)
+            return fetched
+        }
+    }
+
+    /// Resumes with the work's value or `nil` at the deadline, whichever comes
+    /// first. A task group can't provide this bound: it awaits every child at
+    /// scope exit, so a fetch stalled in non-cancellable DNS would hold the
+    /// caller past `cancelAll()`. Here the loser is abandoned — a late fetch
+    /// still finishes into the cache for the next wake.
+    static func withDeadline(
+        _ deadline: Duration,
+        work: @escaping @Sendable () async -> Data?
+    ) async -> Data? {
+        let resumed = Mutex(false)
+        return await withCheckedContinuation { continuation in
+            Task.detached {
+                let value = await work()
+                let shouldResume = resumed.withLock { flag in
+                    if flag { return false }
+                    flag = true
+                    return true
+                }
+                if shouldResume { continuation.resume(returning: value) }
             }
-            group.addTask {
-                try? await Task.sleep(for: avatarDeadline)
-                return nil
+            Task.detached {
+                try? await Task.sleep(for: deadline)
+                let shouldResume = resumed.withLock { flag in
+                    if flag { return false }
+                    flag = true
+                    return true
+                }
+                if shouldResume { continuation.resume(returning: nil) }
             }
-            let winner = await group.next() ?? nil
-            group.cancelAll()
-            return winner
         }
     }
 
@@ -111,8 +135,14 @@ nonisolated enum NotificationCommunicationDecorator {
         return cacheDirectory.appendingPathComponent(name)
     }
 
-    private static func cachedAvatarData(for url: URL) -> Data? {
+    /// Cache entries expire so a changed image behind a stable URL converges;
+    /// a stale hit reads as a miss and the re-fetch overwrites the file.
+    static let avatarCacheLifetime: TimeInterval = 7 * 24 * 3600
+
+    private static func cachedAvatarData(for url: URL, now: Date = Date()) -> Data? {
         guard let file = cacheFileURL(for: url),
+              let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+              now.timeIntervalSince(modified) < avatarCacheLifetime,
               let data = try? Data(contentsOf: file),
               !data.isEmpty, data.count <= maxAvatarBytes
         else { return nil }

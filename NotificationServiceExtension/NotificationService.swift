@@ -116,10 +116,12 @@ final class NotificationService: UNNotificationServiceExtension {
                 )
                 // The engine rejects records for notification-disabled
                 // accounts at ingest, so a disabled account's wake arrives as
-                // an EMPTY collection and would fall back audibly; shed the
-                // sound when no account wants audible alerts.
+                // an EMPTY (but successful) collection and would fall back
+                // audibly; shed the sound when no account wants audible
+                // alerts. Failed collections stay audible.
                 if case .fallback = decision,
                    NotificationServiceProjection.shouldQuietFallback(
+                       status: result.status,
                        accountRefs: (try? marmot.listAccounts().map(\.label)) ?? [],
                        localNotificationsEnabled: localNotificationsEnabled
                    ) {

@@ -3978,20 +3978,32 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
     }
 
-    @Test func quietFallbackRequiresEveryAccountDisabled() {
+    @Test func quietFallbackRequiresEveryAccountDisabledAndASuccessfulEmptyWake() {
         // The engine drops disabled accounts' records at ingest, so their
-        // wakes arrive as empty collections; the fallback sheds its sound
-        // only when no account wants audible alerts.
+        // wakes arrive as empty-but-successful collections; the fallback
+        // sheds its sound only then, and only when no account wants audible
+        // alerts.
         #expect(NotificationServiceProjection.shouldQuietFallback(
+            status: .noData,
             accountRefs: ["a", "b"],
             localNotificationsEnabled: { _ in false }
         ))
+        // A single enabled account keeps every generic wake audible — an
+        // empty collection can't be attributed to a specific account.
         #expect(!NotificationServiceProjection.shouldQuietFallback(
+            status: .noData,
             accountRefs: ["a", "b"],
             localNotificationsEnabled: { $0 == "b" }
         ))
+        // A failed collection is unknown state; it fails open (audible).
+        #expect(!NotificationServiceProjection.shouldQuietFallback(
+            status: .failed,
+            accountRefs: ["a", "b"],
+            localNotificationsEnabled: { _ in false }
+        ))
         // Empty account list keeps the audible path (fail open).
         #expect(!NotificationServiceProjection.shouldQuietFallback(
+            status: .noData,
             accountRefs: [],
             localNotificationsEnabled: { _ in false }
         ))

@@ -55,9 +55,11 @@ nonisolated enum NotificationPresentationPolicy {
             }
             // The alert that woke the extension cannot be dropped, so a wake
             // whose every record is suppressed — muted or mentions-only chats,
-            // disabled local notifications, archived chats, self-messages —
-            // delivers quietly instead of falling back to audible generic
-            // content the user asked not to hear.
+            // disabled local notifications, self-messages — delivers quietly
+            // instead of falling back to audible generic content the user
+            // asked not to hear. (`isArchived` is a capability for callers;
+            // production paths pass no archive resolver until the archived
+            // suppression design lands.)
             if allowedUpdates.isEmpty, !collection.notifications.isEmpty {
                 return .deliverQuietly
             }
