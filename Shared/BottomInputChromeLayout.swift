@@ -10,6 +10,10 @@ enum BottomInputChromeLayout {
     static let bottomInset: CGFloat = 0
     /// Extra breathing room between bottom input chrome and the keyboard.
     static let keyboardInset: CGFloat = 10
+    /// Fixed separation between the composer and any keyboard-height surface below it.
+    static let composerPaneSpacing: CGFloat = 8
+    /// Keeps the final timeline row visually separate from the composer chrome.
+    static let timelineComposerSpacing: CGFloat = 10
     static let topInset: CGFloat = 2
 
     /// Side circles (attach, mic, compose) and minimum pill height.

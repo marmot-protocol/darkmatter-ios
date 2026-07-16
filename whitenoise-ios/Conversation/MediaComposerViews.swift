@@ -163,6 +163,275 @@ struct MediaDraftStrip: View {
     }
 }
 
+struct MediaApprovalView: View {
+    @Binding var attachments: [MediaDraftAttachment]
+    @Binding var caption: String
+    let reservedAttachmentCount: Int
+    let isSending: Bool
+    let onAddSelections: ([PhotoLibrarySelection]) -> Void
+    let onSelectionError: (Error) -> Void
+    let onCancel: () -> Void
+    let onSend: () -> Void
+
+    @State private var selectedID: MediaDraftAttachment.ID?
+    @State private var showPhotoLibraryPicker = false
+
+    init(
+        attachments: Binding<[MediaDraftAttachment]>,
+        caption: Binding<String>,
+        reservedAttachmentCount: Int,
+        isSending: Bool,
+        onAddSelections: @escaping ([PhotoLibrarySelection]) -> Void,
+        onSelectionError: @escaping (Error) -> Void,
+        onCancel: @escaping () -> Void,
+        onSend: @escaping () -> Void
+    ) {
+        _attachments = attachments
+        _caption = caption
+        self.reservedAttachmentCount = reservedAttachmentCount
+        self.isSending = isSending
+        self.onAddSelections = onAddSelections
+        self.onSelectionError = onSelectionError
+        self.onCancel = onCancel
+        self.onSend = onSend
+        _selectedID = State(initialValue: attachments.wrappedValue.first?.id)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                TabView(selection: $selectedID) {
+                    ForEach(attachments) { attachment in
+                        MediaApprovalPage(attachment: attachment)
+                            .tag(Optional(attachment.id))
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                approvalControls
+            }
+            .toolbarBackground(.black.opacity(0.92), for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L10n.string("Cancel"), action: onCancel)
+                        .foregroundStyle(.white)
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(selectionCountLabel)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .destructive, action: removeSelectedAttachment) {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.white)
+                    }
+                    .disabled(selectedID == nil)
+                    .accessibilityLabel(L10n.string("Remove attachment"))
+                }
+            }
+        }
+        .sheet(isPresented: $showPhotoLibraryPicker) {
+            PhotoLibraryPickerView(
+                selectionLimit: remainingSelectionLimit,
+                onSelection: onAddSelections,
+                onError: onSelectionError,
+                onDismiss: { showPhotoLibraryPicker = false }
+            )
+            .ignoresSafeArea()
+        }
+        .onChange(of: attachments.map(\.id)) { _, ids in
+            if let selectedID, ids.contains(selectedID) { return }
+            self.selectedID = ids.first
+            if ids.isEmpty {
+                onCancel()
+            }
+        }
+    }
+
+    private var approvalControls: some View {
+        VStack(spacing: 12) {
+            thumbnailRail
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField(L10n.string("Add a caption…"), text: $caption, axis: .vertical)
+                    .lineLimit(1 ... 4)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 11)
+                    .background(Color.white.opacity(0.12), in: .rect(cornerRadius: 22))
+
+                Button(action: onSend) {
+                    Group {
+                        if isSending {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .font(.body.weight(.bold))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.accentColor, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .disabled(attachments.isEmpty || isSending)
+                .accessibilityLabel(L10n.string("Send"))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private var thumbnailRail: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 9) {
+                if remainingSelectionLimit > 0 {
+                    Button {
+                        showPhotoLibraryPicker = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 54, height: 54)
+                            .background(Color.white.opacity(0.12), in: .rect(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.string("Add more"))
+                }
+
+                ForEach(attachments) { attachment in
+                    Button {
+                        selectedID = attachment.id
+                    } label: {
+                        MediaApprovalThumbnail(attachment: attachment)
+                            .frame(width: 54, height: 54)
+                            .clipShape(.rect(cornerRadius: 10))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(
+                                        attachment.id == selectedID ? Color.white : Color.white.opacity(0.16),
+                                        lineWidth: attachment.id == selectedID ? 3 : 1
+                                    )
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(attachment.fileName)
+                    .accessibilityAddTraits(attachment.id == selectedID ? .isSelected : [])
+                }
+            }
+            .padding(.horizontal, 1)
+        }
+    }
+
+    private var remainingSelectionLimit: Int {
+        max(0, MediaDraftProcessor.maxAttachmentCount - reservedAttachmentCount - attachments.count)
+    }
+
+    private var selectionCountLabel: String {
+        let selectedIndex = attachments.firstIndex(where: { $0.id == selectedID }) ?? 0
+        return L10n.formatted(
+            "%@ of %@",
+            arguments: [
+                LocalizedNumberLabel.decimal(UInt64(selectedIndex + 1)),
+                LocalizedNumberLabel.decimal(UInt64(attachments.count))
+            ],
+            locale: AppLanguage.currentLocale
+        )
+    }
+
+    private func removeSelectedAttachment() {
+        guard let selectedID,
+              let selectedIndex = attachments.firstIndex(where: { $0.id == selectedID })
+        else { return }
+        attachments.remove(at: selectedIndex)
+        guard !attachments.isEmpty else {
+            self.selectedID = nil
+            onCancel()
+            return
+        }
+        self.selectedID = attachments[min(selectedIndex, attachments.count - 1)].id
+    }
+}
+
+private struct MediaApprovalPage: View {
+    let attachment: MediaDraftAttachment
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color.black
+
+            if attachment.kind == .image, let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let thumbnail = attachment.thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Image(systemName: attachment.kind.systemImageName)
+                    .font(.system(size: 48, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if attachment.kind == .video {
+                VideoPreviewPlayOverlay(diameter: VideoPreviewOverlayPresentation.maximumDiameter)
+            }
+        }
+        .task(id: attachment.id) {
+            guard attachment.kind == .image else { return }
+            let longestScreenEdge = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+            image = await MessageMediaFullscreenPresentation.decodedImage(
+                from: attachment.data,
+                maxPixelSize: MessageMediaFullscreenPresentation.fullscreenMaxPixelSize(
+                    forLongestScreenEdge: longestScreenEdge
+                ),
+                scale: UIScreen.main.scale
+            )
+        }
+    }
+}
+
+private struct MediaApprovalThumbnail: View {
+    let attachment: MediaDraftAttachment
+
+    var body: some View {
+        ZStack {
+            if let thumbnail = attachment.thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color(.secondarySystemBackground)
+                Image(systemName: attachment.kind.systemImageName)
+                    .foregroundStyle(.secondary)
+            }
+
+            if attachment.kind == .video {
+                Image(systemName: "play.fill")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(Color.black.opacity(0.52), in: Circle())
+            }
+        }
+    }
+}
+
 struct CameraCaptureView: UIViewControllerRepresentable {
     let onImage: (UIImage) -> Void
     let onCancel: () -> Void

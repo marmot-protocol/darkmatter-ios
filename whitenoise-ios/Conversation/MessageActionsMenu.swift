@@ -18,6 +18,7 @@ struct MessageActionsMenu: View {
     let onEdit: () -> Void
     let onViewEditHistory: () -> Void
     let onInfo: () -> Void
+    let onSelect: () -> Void
     let onDelete: () -> Void
     let onMoreEmoji: () -> Void
 
@@ -50,6 +51,8 @@ struct MessageActionsMenu: View {
             }
             Divider().padding(.leading, 46)
             actionRow("Message info", systemImage: "info.circle", action: onInfo)
+            Divider().padding(.leading, 46)
+            actionRow("Select", systemImage: "checkmark.circle", action: onSelect)
 
             if isMine && canInteract {
                 Divider().padding(.leading, 46)
@@ -61,7 +64,7 @@ struct MessageActionsMenu: View {
     }
 
     private var reactionRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 9) {
             ForEach(quickReactions, id: \.self) { emoji in
                 Button {
                     onReact(emoji)
@@ -103,77 +106,4 @@ struct MessageActionsMenu: View {
         }
         .foregroundStyle(role == .destructive ? Color.red : Color.primary)
     }
-}
-
-/// A simple curated emoji grid used as the "full picker" from the actions row.
-struct EmojiPickerSheet: View {
-    var title: LocalizedStringKey? = "React"
-    let onPick: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            Divider()
-
-            ScrollView {
-                LazyVGrid(columns: EmojiPickerPresentation.columns, spacing: 16) {
-                    ForEach(EmojiPickerPresentation.options) { option in
-                        Button {
-                            onPick(option.emoji)
-                            dismiss()
-                        } label: {
-                            Text(option.emoji)
-                                .font(.largeTitle)
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding()
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private var header: some View {
-        HStack {
-            if let title {
-                Text(title)
-                    .font(.headline)
-            } else {
-                Spacer(minLength: 0)
-            }
-
-            Spacer(minLength: 16)
-
-            Button("Done") { dismiss() }
-                .buttonStyle(.plain)
-                .font(.headline)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-    }
-}
-
-enum EmojiPickerPresentation {
-    static let columnCount = 6
-    static let columns = Array(
-        repeating: GridItem(.flexible(minimum: 36), spacing: 12),
-        count: columnCount
-    )
-    static let options: [EmojiPickerOption] = [
-        "👍", "👎", "❤️", "🔥", "🎉", "😂", "🤣", "😅", "😊", "😍",
-        "😎", "🤔", "🙏", "👏", "🙌", "💪", "🤝", "👀", "😮", "😯",
-        "😢", "😭", "😡", "🤯", "🥳", "😴", "🥲", "💯", "✅", "❌",
-        "⭐️", "🌟", "💜", "💙", "💚", "🧡", "🤍", "🖤", "💔", "✨",
-        "🚀", "👋", "🤙", "🫡", "🫶", "😬", "😇", "🤩", "🥹", "😆"
-    ].map(EmojiPickerOption.init)
-}
-
-struct EmojiPickerOption: Identifiable, Hashable {
-    let emoji: String
-
-    var id: String { emoji }
 }

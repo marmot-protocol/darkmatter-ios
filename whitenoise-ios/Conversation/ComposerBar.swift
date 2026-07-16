@@ -80,11 +80,17 @@ nonisolated struct ComposerAttachmentButtonAppearance: Equatable {
     }
 }
 
-private enum ComposerAttachmentPopover: String, Identifiable {
-    case options
-    case unavailable
+private enum ComposerAttachmentAction {
+    case camera
+    case photos
+    case document
+    case location
+    case contact
+}
 
-    var id: String { rawValue }
+enum ComposerAccessoryPanel: Equatable {
+    case attachments
+    case emoji
 }
 
 nonisolated enum AudioDurationLabel {
@@ -125,7 +131,7 @@ nonisolated enum ComposerAudioDraftPreviewPresentation {
     }
 }
 
-/// Telegram-style composer: attachment + pill input (emoji + send inside) + mic slot.
+/// Conversation composer with attachment, emoji, text, send, and voice controls.
 struct ComposerBar: View {
     @Binding var draft: String
     let isSending: Bool
@@ -136,19 +142,29 @@ struct ComposerBar: View {
     let voiceRecordingActive: Bool
     let focusRequest: Int
     let mentionCandidates: [ComposerMentionCandidate]
+    var submissionEnabled = true
+    var submissionAccessibilityLabel = L10n.string("Send")
+    var voiceMessagesEnabled = true
     let onTakePhoto: () -> Void
     let onPhotoLibrary: () -> Void
     let onAttachFile: () -> Void
+    let onShareLocation: () -> Void
+    let onShareContact: () -> Void
+    let onPasteImage: (UIImage) -> Void
     let onRemoveAudioDraft: (MediaDraftAttachment.ID) -> Void
     let onVoicePressBegan: () -> Void
     let onVoiceDragChanged: (CGSize) -> Void
     let onVoicePressEnded: () -> Void
     let onMentionSelect: (ComposerMentionCandidate) -> Void
     let onSend: () -> Void
-    @FocusState private var focused: Bool
-    @State private var isKeyboardVisible = false
-    @State private var attachmentPopover: ComposerAttachmentPopover?
-    @State private var showEmojiPicker = false
+    @State private var isTextInputFocused = false
+    @State private var showAttachmentUnavailableTooltip = false
+    @State private var activeAccessoryPanel: ComposerAccessoryPanel?
+    @State private var isRestoringKeyboard = false
+    @State private var reservedPaneHeight: CGFloat = 0
+    @State private var rememberedKeyboardPaneHeight: CGFloat = 300
+    @State private var showExpandedEditor = false
+    @State private var localFocusRequest = 0
 
     @ScaledMetric(relativeTo: .body)
     private var controlSize = BottomInputChromeLayout.controlSize
@@ -168,48 +184,90 @@ struct ComposerBar: View {
     private var inputEnabled: Bool { disabledMessage == nil }
 
     var body: some View {
-        VStack(spacing: 6) {
-            if !mentionCandidates.isEmpty {
-                ComposerMentionPicker(candidates: mentionCandidates, onSelect: onMentionSelect)
-            }
-
-            if let disabledMessage {
-                inactiveComposerMessage(disabledMessage)
-            }
-
-            HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                bottomInputGlassContainer {
-                    attachmentButton
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                if !mentionCandidates.isEmpty {
+                    ComposerMentionPicker(candidates: mentionCandidates, onSelect: onMentionSelect)
                 }
-                bottomInputGlassContainer {
-                    HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                        inputCapsule
-                        trailingActionSlot
+
+                if let disabledMessage {
+                    inactiveComposerMessage(disabledMessage)
+                }
+
+                HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
+                    bottomInputGlassContainer {
+                        attachmentButton
+                    }
+                    bottomInputGlassContainer {
+                        HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
+                            inputCapsule
+                            trailingActionSlot
+                        }
                     }
                 }
+                .animation(.easeInOut(duration: 0.22), value: showsMic)
+                .animation(.easeInOut(duration: 0.22), value: showsSend)
+                .disabled(!inputEnabled)
+                .opacity(inputEnabled ? 1 : 0.68)
             }
-            .animation(.easeInOut(duration: 0.22), value: showsMic)
-            .animation(.easeInOut(duration: 0.22), value: showsSend)
-            .disabled(!inputEnabled)
-            .opacity(inputEnabled ? 1 : 0.68)
+            .padding(.horizontal, BottomInputChromeLayout.keyboardOpenHorizontalInset)
+            .padding(.top, BottomInputChromeLayout.topInset)
+            .padding(.bottom, BottomInputChromeLayout.bottomInset)
+
+            reservedBottomPane
         }
         .fixedSize(horizontal: false, vertical: true)
-        .sheet(isPresented: $showEmojiPicker) {
-            EmojiPickerSheet(title: nil) { emoji in
-                draft.append(emoji)
-                focusComposer()
-            }
+        .fullScreenCover(isPresented: $showExpandedEditor) {
+            ExpandedComposerEditor(
+                draft: $draft,
+                canSend: canSend,
+                onDone: { showExpandedEditor = false },
+                onSend: {
+                    triggerSend()
+                    showExpandedEditor = false
+                }
+            )
             .appAppearance()
         }
-        .keyboardAdaptiveHorizontalPadding(isKeyboardVisible: $isKeyboardVisible)
-        .padding(.top, BottomInputChromeLayout.topInset)
-        .padding(.bottom, BottomInputChromeLayout.bottomInset)
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification),
+            perform: handleKeyboardFrameChange
+        )
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification),
+            perform: handleKeyboardDidShow
+        )
+        .onReceive(
+            NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification),
+            perform: handleKeyboardDidHide
+        )
+        .onChange(of: focusRequest) { _, _ in
+            showSystemKeyboard()
+        }
         .onChange(of: inputEnabled) { _, enabled in
             guard !enabled else { return }
-            focused = false
-            attachmentPopover = nil
-            showEmojiPicker = false
+            showAttachmentUnavailableTooltip = false
+            activeAccessoryPanel = nil
+            isRestoringKeyboard = false
+            isTextInputFocused = false
+            reservedPaneHeight = 0
         }
+    }
+
+    @ViewBuilder
+    private var reservedBottomPane: some View {
+        ZStack(alignment: .top) {
+            Color.clear
+            if let activeAccessoryPanel {
+                accessoryPanel(activeAccessoryPanel)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
+                Divider()
+                    .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
+            }
+        }
+        .frame(height: reservedPaneHeight)
+        .clipped()
     }
 
     private func inactiveComposerMessage(_ message: String) -> some View {
@@ -235,7 +293,7 @@ struct ComposerBar: View {
             handleAttachmentTap(appearance.tapBehavior)
         } label: {
             sideCircleIcon(
-                "paperclip",
+                attachmentButtonSystemImage,
                 weight: .medium,
                 size: sideControlIconSize,
                 tone: appearance.iconTone,
@@ -245,10 +303,14 @@ struct ComposerBar: View {
         .buttonStyle(.plain)
         .contentShape(Circle())
         .opacity(appearance.controlOpacity)
-        .accessibilityLabel("Add attachment")
+        .accessibilityLabel(
+            activeAccessoryPanel == .attachments
+                ? L10n.string("Show keyboard")
+                : L10n.string("Add attachment")
+        )
         .accessibilityHint(attachmentAccessibilityHint)
         .popover(
-            item: $attachmentPopover,
+            isPresented: $showAttachmentUnavailableTooltip,
             attachmentAnchor: .rect(.rect(CGRect(
                 x: controlSize / 2,
                 y: -BottomInputChromeLayout.attachmentMenuAnchorLift,
@@ -256,26 +318,8 @@ struct ComposerBar: View {
                 height: 0
             ))),
             arrowEdge: .bottom
-        ) { popover in
-            switch popover {
-            case .options:
-                ComposerAttachmentMenu(
-                    onPhotoLibrary: {
-                        attachmentPopover = nil
-                        onPhotoLibrary()
-                    },
-                    onTakePhoto: {
-                        attachmentPopover = nil
-                        onTakePhoto()
-                    },
-                    onAttachFile: {
-                        attachmentPopover = nil
-                        onAttachFile()
-                    }
-                )
-            case .unavailable:
-                ComposerAttachmentUnavailableTooltip()
-            }
+        ) {
+            ComposerAttachmentUnavailableTooltip()
         }
     }
 
@@ -288,24 +332,39 @@ struct ComposerBar: View {
                 )
                 .transition(.opacity)
             } else {
-                TextField("Message", text: $draft, axis: .vertical)
-                    .focused($focused)
-                    .lineLimit(1...5)
-                    .font(.system(size: fieldFontSize))
-                    .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
-                    .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
-                    .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(TapGesture().onEnded { focusComposer() })
-                    .submitLabel(.send)
-                    .onSubmit(triggerSend)
-                    .onChange(of: focusRequest) { _, _ in focusComposer() }
-                    .onAppear {
-                        if focusRequest > 0 {
-                            focusComposer()
-                        }
+                ZStack(alignment: .topLeading) {
+                    if draft.isEmpty {
+                        Text(L10n.string("Message"))
+                            .font(.system(size: fieldFontSize))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, BottomInputChromeLayout.fieldVerticalPadding)
                     }
+
+                    ComposerTextInput(
+                        text: $draft,
+                        isFocused: $isTextInputFocused,
+                        fontSize: fieldFontSize,
+                        focusRequest: focusRequest &* 1_000 &+ localFocusRequest,
+                        onPasteImage: onPasteImage,
+                        onBeginEditing: restoreKeyboardAfterTextInputTap
+                    )
+                }
+                .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if ComposerExpandedEditorPresentation.shouldShowExpandButton(for: draft) {
+                    Button {
+                        Haptics.tap()
+                        showExpandedEditor = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: controlSize)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.string("Expand editor"))
+                }
 
                 emojiButton
             }
@@ -313,22 +372,38 @@ struct ComposerBar: View {
         }
         .frame(minHeight: controlSize)
         .frame(maxWidth: .infinity)
-        .compatibleInputCapsuleChrome(interactive: false)
+        .compatibleInputRoundedChrome(cornerRadius: controlSize / 2, interactive: false)
     }
 
     private var emojiButton: some View {
         Button {
             Haptics.tap()
-            showEmojiPicker = true
+            toggleEmojiPanel()
         } label: {
-            Image(systemName: "face.smiling")
+            Image(systemName: emojiButtonSystemImage)
                 .font(.system(size: inlineEmojiIconSize))
                 .foregroundStyle(.secondary)
                 .frame(width: inlineAccessoryWidth, height: controlSize)
         }
         .buttonStyle(.plain)
         .padding(.trailing, 4)
-        .accessibilityLabel("Emoji and stickers")
+        .accessibilityLabel(
+            activeAccessoryPanel == .emoji
+                ? L10n.string("Show keyboard")
+                : L10n.string("Emoji and stickers")
+        )
+    }
+
+    private var attachmentButtonSystemImage: String {
+        activeAccessoryPanel == .attachments
+            ? "keyboard"
+            : "paperclip"
+    }
+
+    private var emojiButtonSystemImage: String {
+        activeAccessoryPanel == .emoji
+            ? "keyboard"
+            : "face.smiling"
     }
 
     private var sendButton: some View {
@@ -352,7 +427,7 @@ struct ComposerBar: View {
         .keyboardShortcut(.return, modifiers: .command)
         .disabled(!canSend)
         .opacity(canSend ? 1 : 0.55)
-        .accessibilityLabel("Send")
+        .accessibilityLabel(submissionAccessibilityLabel)
     }
 
     @ViewBuilder
@@ -398,7 +473,7 @@ struct ComposerBar: View {
     }
 
     private var canSend: Bool {
-        inputEnabled && !isSending && hasSendableContent
+        inputEnabled && !isSending && hasSendableContent && submissionEnabled
     }
 
     private var showsSend: Bool {
@@ -406,7 +481,7 @@ struct ComposerBar: View {
     }
 
     private var showsMic: Bool {
-        (!hasSendableContent && !isSending) || voiceRecordingActive
+        voiceMessagesEnabled && ((!hasSendableContent && !isSending) || voiceRecordingActive)
     }
 
     private var voiceGesture: some Gesture {
@@ -438,21 +513,144 @@ struct ComposerBar: View {
     private func handleAttachmentTap(_ behavior: ComposerAttachmentButtonTapBehavior) {
         switch behavior {
         case .showOptions:
-            attachmentPopover = .options
+            if activeAccessoryPanel == .attachments {
+                restoreKeyboardFromAccessoryPanel()
+            } else {
+                presentAccessoryPanel(.attachments)
+            }
         case .showUnavailableTooltip:
-            attachmentPopover = .unavailable
+            showAttachmentUnavailableTooltip = true
         }
     }
 
-    private func focusComposer() {
-        guard inputEnabled else { return }
-        guard audioDraft == nil else { return }
-        guard !focused else { return }
+    private func selectAttachmentAction(_ action: ComposerAttachmentAction) {
+        activeAccessoryPanel = nil
+        isRestoringKeyboard = false
+        isTextInputFocused = false
+        withAnimation(.easeOut(duration: 0.2)) {
+            reservedPaneHeight = 0
+        }
         Task { @MainActor in
             await Task.yield()
-            guard inputEnabled, audioDraft == nil, !focused else { return }
-            focused = true
+            performAttachmentAction(action)
         }
+    }
+
+    private func performAttachmentAction(_ action: ComposerAttachmentAction) {
+        switch action {
+        case .camera:
+            onTakePhoto()
+        case .photos:
+            onPhotoLibrary()
+        case .document:
+            onAttachFile()
+        case .location:
+            onShareLocation()
+        case .contact:
+            onShareContact()
+        }
+    }
+
+    @ViewBuilder
+    private func accessoryPanel(_ panel: ComposerAccessoryPanel) -> some View {
+        switch panel {
+        case .attachments:
+            ComposerAttachmentMenu(
+                onPhotoLibrary: { selectAttachmentAction(.photos) },
+                onTakePhoto: { selectAttachmentAction(.camera) },
+                onAttachFile: { selectAttachmentAction(.document) },
+                onShareLocation: { selectAttachmentAction(.location) },
+                onShareContact: { selectAttachmentAction(.contact) }
+            )
+        case .emoji:
+            ComposerEmojiPanel(
+                onPick: { emoji in
+                    draft.append(emoji)
+                },
+                onDeleteBackward: {
+                    guard !draft.isEmpty else { return }
+                    draft.removeLast()
+                }
+            )
+        }
+    }
+
+    private func toggleEmojiPanel() {
+        if activeAccessoryPanel == .emoji {
+            restoreKeyboardFromAccessoryPanel()
+        } else {
+            presentAccessoryPanel(.emoji)
+        }
+    }
+
+    private func presentAccessoryPanel(_ panel: ComposerAccessoryPanel) {
+        guard inputEnabled, audioDraft == nil else { return }
+        showAttachmentUnavailableTooltip = false
+        isRestoringKeyboard = false
+        if reservedPaneHeight < 0.5 {
+            withAnimation(.easeOut(duration: 0.22)) {
+                reservedPaneHeight = reservedHeight(for: rememberedKeyboardPaneHeight)
+            }
+        }
+        activeAccessoryPanel = panel
+        isTextInputFocused = false
+    }
+
+    private func restoreKeyboardFromAccessoryPanel() {
+        guard activeAccessoryPanel != nil else {
+            showSystemKeyboard()
+            return
+        }
+        isRestoringKeyboard = true
+        isTextInputFocused = true
+    }
+
+    private func restoreKeyboardAfterTextInputTap() {
+        guard activeAccessoryPanel != nil else { return }
+        isRestoringKeyboard = true
+    }
+
+    private func handleKeyboardFrameChange(_ notification: Notification) {
+        let keyboardVisible = KeyboardFrameChange.isVisible(from: notification)
+        if keyboardVisible, let measuredHeight = KeyboardFrameChange.accessoryPanelHeight(from: notification) {
+            let paneHeight = min(420, max(240, measuredHeight))
+            rememberedKeyboardPaneHeight = paneHeight
+            if reservedPaneHeight < 0.5 || activeAccessoryPanel == nil {
+                withAnimation(KeyboardFrameChange.animation(from: notification)) {
+                    reservedPaneHeight = reservedHeight(for: paneHeight)
+                }
+            }
+        } else if activeAccessoryPanel == nil, !isRestoringKeyboard {
+            withAnimation(KeyboardFrameChange.animation(from: notification)) {
+                reservedPaneHeight = 0
+            }
+        }
+
+    }
+
+    private func handleKeyboardDidShow(_: Notification) {
+        guard isRestoringKeyboard, isTextInputFocused else { return }
+        activeAccessoryPanel = nil
+        isRestoringKeyboard = false
+    }
+
+    private func handleKeyboardDidHide(_: Notification) {
+        guard activeAccessoryPanel == nil, !isRestoringKeyboard else { return }
+        reservedPaneHeight = 0
+    }
+
+    private func showSystemKeyboard() {
+        guard inputEnabled else { return }
+        guard audioDraft == nil else { return }
+        if activeAccessoryPanel != nil {
+            isRestoringKeyboard = true
+        }
+        isTextInputFocused = true
+        localFocusRequest &+= 1
+    }
+
+    private func reservedHeight(for paneHeight: CGFloat) -> CGFloat {
+        paneHeight + BottomInputChromeLayout.composerPaneSpacing
     }
 }
 
@@ -644,37 +842,91 @@ private struct ComposerAttachmentMenu: View {
     let onPhotoLibrary: () -> Void
     let onTakePhoto: () -> Void
     let onAttachFile: () -> Void
+    let onShareLocation: () -> Void
+    let onShareContact: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            actionRow("Take Photo", systemImage: "camera", action: onTakePhoto)
-            Divider()
-            actionRow("Photo Library", systemImage: "photo.on.rectangle", action: onPhotoLibrary)
-            Divider()
-            actionRow("Attach File", systemImage: "doc.badge.plus", action: onAttachFile)
+        VStack(alignment: .leading, spacing: 18) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 22) {
+                actionTile("Camera", systemImage: "camera.fill", tint: .blue, action: onTakePhoto)
+                actionTile("Photos", systemImage: "photo.on.rectangle.angled", tint: .purple, action: onPhotoLibrary)
+                actionTile("Document", systemImage: "doc.fill", tint: .cyan, action: onAttachFile)
+                actionTile("Location", systemImage: "location.fill", tint: .green, action: onShareLocation)
+                actionTile("Contact", systemImage: "person.crop.circle.fill", tint: .indigo, action: onShareContact)
+            }
+            Spacer(minLength: 0)
         }
-        .frame(width: 220)
-        .presentationCompactAdaptation(.popover)
+        .padding(.horizontal, 16)
+        .padding(.top, 24)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
     }
 
-    private func actionRow(
+    private func actionTile(
         _ title: LocalizedStringKey,
         systemImage: String,
+        tint: Color,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            VStack(spacing: 8) {
                 Image(systemName: systemImage)
-                    .frame(width: 22)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 58, height: 58)
+                    .background(tint.gradient, in: Circle())
                 Text(title)
-                Spacer()
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.primary)
+    }
+}
+
+nonisolated enum ComposerExpandedEditorPresentation {
+    static let minimumExpandCharacterCount = 180
+    static let minimumExpandLineCount = 4
+
+    static func shouldShowExpandButton(for text: String) -> Bool {
+        text.count >= minimumExpandCharacterCount
+            || text.split(separator: "\n", omittingEmptySubsequences: false).count >= minimumExpandLineCount
+    }
+}
+
+private struct ExpandedComposerEditor: View {
+    @Binding var draft: String
+    let canSend: Bool
+    let onDone: () -> Void
+    let onSend: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $draft)
+                .font(.body)
+                .padding()
+                .focused($focused)
+                .navigationTitle(L10n.string("Message"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L10n.string("Done"), action: onDone)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(action: onSend) {
+                            Image(systemName: "paperplane.fill")
+                        }
+                        .disabled(!canSend)
+                        .accessibilityLabel(L10n.string("Send"))
+                    }
+                }
+        }
+        .onAppear { focused = true }
     }
 }
 

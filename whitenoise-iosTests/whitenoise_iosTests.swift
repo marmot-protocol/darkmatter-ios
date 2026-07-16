@@ -8835,12 +8835,12 @@ struct PhotoLibrarySelectionOrderingTests {
 
 struct MessageMediaGridPresentationTests {
 
-    @Test func gridShowsAtMostFourTilesAndCountsHiddenAttachments() {
+    @Test func gridShowsAtMostFiveTilesAndCountsHiddenAttachments() {
         #expect(MessageMediaGridPresentation.visibleCount(totalCount: 1) == 1)
         #expect(MessageMediaGridPresentation.visibleCount(totalCount: 4) == 4)
-        #expect(MessageMediaGridPresentation.visibleCount(totalCount: 6) == 4)
+        #expect(MessageMediaGridPresentation.visibleCount(totalCount: 6) == 5)
         #expect(MessageMediaGridPresentation.hiddenCount(totalCount: 4) == 0)
-        #expect(MessageMediaGridPresentation.hiddenCount(totalCount: 6) == 2)
+        #expect(MessageMediaGridPresentation.hiddenCount(totalCount: 6) == 1)
     }
 
     @Test func gridUsesSingleTileOneRowOrTwoByTwoLayouts() {
@@ -8851,7 +8851,7 @@ struct MessageMediaGridPresentationTests {
         #expect(MessageMediaGridPresentation.columnCount(totalCount: 3) == 2)
         #expect(MessageMediaGridPresentation.rowCount(totalCount: 3) == 2)
         #expect(MessageMediaGridPresentation.columnCount(totalCount: 10) == 2)
-        #expect(MessageMediaGridPresentation.rowCount(totalCount: 10) == 2)
+        #expect(MessageMediaGridPresentation.rowCount(totalCount: 10) == 3)
     }
 
     @Test func gridRoundsOnlyOuterTileCorners() {
@@ -8883,7 +8883,7 @@ struct MessageMediaGridPresentationTests {
         #expect(!sparseBottomLeft.topLeading)
         #expect(!sparseBottomLeft.topTrailing)
         #expect(sparseBottomLeft.bottomLeading)
-        #expect(!sparseBottomLeft.bottomTrailing)
+        #expect(sparseBottomLeft.bottomTrailing)
 
         let sparseEmptySlot = MessageMediaGridPresentation.roundedCorners(totalCount: 3, tileIndex: 3)
         #expect(!sparseEmptySlot.hasRoundedCorners)
@@ -10493,19 +10493,6 @@ private actor NotificationSubscriptionProbe {
             errorCount: errorCount,
             sleepDelays: sleepDelays
         )
-    }
-}
-
-struct EmojiPickerPresentationTests {
-
-    @Test func emojiPickerUsesStablePrecomputedOptions() {
-        let options = EmojiPickerPresentation.options
-
-        #expect(options.count == 50)
-        #expect(Set(options.map(\.id)).count == options.count)
-        #expect(options.first?.emoji == "👍")
-        #expect(options.last?.emoji == "😆")
-        #expect(EmojiPickerPresentation.columns.count == EmojiPickerPresentation.columnCount)
     }
 }
 

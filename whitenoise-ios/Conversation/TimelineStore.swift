@@ -300,6 +300,10 @@ final class TimelineStore {
         return value
     }
 
+    func replyTargetMessageId(for record: AppMessageRecordFfi) -> String? {
+        replyTargetId(for: record)
+    }
+
     /// The visible body for a message, projected from the decoded unsigned
     /// Nostr app event's kind/tags/content.
     func displayBody(of record: AppMessageRecordFfi) -> String {

@@ -68,6 +68,7 @@ nonisolated enum MediaAttachmentPolicy {
         "text/json",
         "text/plain",
         "text/rtf",
+        "text/vcard",
     ]
 
     static let supportedDocumentExtensions: Set<String> = [
@@ -80,6 +81,7 @@ nonisolated enum MediaAttachmentPolicy {
         "pptx",
         "rtf",
         "txt",
+        "vcf",
         "xls",
         "xlsx",
     ]
@@ -157,6 +159,7 @@ nonisolated enum MediaAttachmentPolicy {
         case "mov": return "video/quicktime"
         case "mp4", "m4v": return "video/mp4"
         case "txt": return "text/plain"
+        case "vcf": return "text/vcard"
         case "csv": return "text/csv"
         case "json": return "application/json"
         case "rtf": return "application/rtf"
@@ -192,6 +195,7 @@ nonisolated enum MediaAttachmentPolicy {
         case "application/rtf", "text/rtf": return "rtf"
         case "text/csv": return "csv"
         case "text/plain": return "txt"
+        case "text/vcard": return "vcf"
         case "application/msword": return "doc"
         case "application/vnd.openxmlformats-officedocument.wordprocessingml.document": return "docx"
         case "application/vnd.ms-excel": return "xls"
