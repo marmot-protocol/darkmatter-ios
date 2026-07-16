@@ -220,10 +220,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
                 notifyMode: routeNotifyMode(route),
-                // Mention-ness was evaluated when the notification was
-                // created; at willPresent time only a later switch to
-                // "Nothing" should suppress the banner.
-                isMention: true,
+                isMention: LocalNotificationProjection.isMention(
+                    from: notification.request.content.userInfo
+                ),
                 appSceneActive: appState?.isAppSceneActive ?? true,
                 updateAccountRef: route.accountRef,
                 updateGroupIdHex: route.groupIdHex,

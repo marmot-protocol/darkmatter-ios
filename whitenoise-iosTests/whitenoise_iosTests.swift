@@ -3978,6 +3978,39 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
     }
 
+    @Test func quietFallbackRequiresEveryAccountDisabled() {
+        // The engine drops disabled accounts' records at ingest, so their
+        // wakes arrive as empty collections; the fallback sheds its sound
+        // only when no account wants audible alerts.
+        #expect(NotificationServiceProjection.shouldQuietFallback(
+            accountRefs: ["a", "b"],
+            localNotificationsEnabled: { _ in false }
+        ))
+        #expect(!NotificationServiceProjection.shouldQuietFallback(
+            accountRefs: ["a", "b"],
+            localNotificationsEnabled: { $0 == "b" }
+        ))
+        // Empty account list keeps the audible path (fail open).
+        #expect(!NotificationServiceProjection.shouldQuietFallback(
+            accountRefs: [],
+            localNotificationsEnabled: { _ in false }
+        ))
+    }
+
+    @Test func presentationPersistsTheMentionBitForWillPresent() {
+        let mention = notificationUpdate(notificationKey: "m", isMention: true)
+        let plain = notificationUpdate(notificationKey: "p")
+
+        let mentionInfo = LocalNotificationProjection.makePresentation(for: mention)!.userInfo
+        let plainInfo = LocalNotificationProjection.makePresentation(for: plain)!.userInfo
+
+        #expect(LocalNotificationProjection.isMention(from: mentionInfo))
+        #expect(!LocalNotificationProjection.isMention(from: plainInfo))
+        // Pre-upgrade notifications carry no bit; only an explicit
+        // non-mention is suppressible by a later mentions-only switch.
+        #expect(LocalNotificationProjection.isMention(from: [:]))
+    }
+
     @Test func failedCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .failed,

@@ -134,6 +134,38 @@ struct ChatMuteSuppressionPolicyTests {
         ))
     }
 
+    @Test func mentionsOnlyMatrixCoversActiveSceneAndVisibleChat() {
+        // Active scene, different chat visible: mention presents, plain doesn't.
+        #expect(LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            notifyMode: .mentionsOnly,
+            isMention: true,
+            appSceneActive: true,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: VisibleChatRoute(accountRef: "account-a", groupIdHex: "group-b")
+        ))
+        #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            notifyMode: .mentionsOnly,
+            isMention: false,
+            appSceneActive: true,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: VisibleChatRoute(accountRef: "account-a", groupIdHex: "group-b")
+        ))
+        // The visible chat suppresses even a mention.
+        #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
+            localNotificationsEnabled: true,
+            notifyMode: .mentionsOnly,
+            isMention: true,
+            appSceneActive: true,
+            updateAccountRef: "account-a",
+            updateGroupIdHex: "group-a",
+            visibleChat: VisibleChatRoute(accountRef: "account-a", groupIdHex: "group-a")
+        ))
+    }
+
     @Test func mentionsOnlyPresentsOnlyMentions() {
         #expect(!LocalNotificationSuppressionPolicy.shouldPresent(
             localNotificationsEnabled: true,

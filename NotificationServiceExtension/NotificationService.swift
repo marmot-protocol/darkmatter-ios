@@ -88,16 +88,17 @@ final class NotificationService: UNNotificationServiceExtension {
                 // couldn't be resolved, so delivery fails safe (all suppressed).
                 let notifyModeSnapshot = ChatMuteStore.notifyModeSnapshot()
                 let contactNicknames = ContactNicknameStore.nicknamesByKey()
-                let decision = NotificationServiceProjection.decision(
+                let localNotificationsEnabled = NotificationServiceSettingsReadPolicy
+                    .memoizingLocalNotificationsEnabled { accountRef in
+                        NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
+                            try marmot.notificationSettings(
+                                accountRef: accountRef
+                            ).localNotificationsEnabled
+                        }
+                    }
+                var decision = NotificationServiceProjection.decision(
                     for: result,
-                    localNotificationsEnabled: NotificationServiceSettingsReadPolicy
-                        .memoizingLocalNotificationsEnabled { accountRef in
-                            NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
-                                try marmot.notificationSettings(
-                                    accountRef: accountRef
-                                ).localNotificationsEnabled
-                            }
-                        },
+                    localNotificationsEnabled: localNotificationsEnabled,
                     notifyMode: { accountIdHex, groupIdHex in
                         ChatMuteStore.notifyMode(
                             accountIdHex: accountIdHex,
@@ -113,6 +114,17 @@ final class NotificationService: UNNotificationServiceExtension {
                         )
                     }
                 )
+                // The engine rejects records for notification-disabled
+                // accounts at ingest, so a disabled account's wake arrives as
+                // an EMPTY collection and would fall back audibly; shed the
+                // sound when no account wants audible alerts.
+                if case .fallback = decision,
+                   NotificationServiceProjection.shouldQuietFallback(
+                       accountRefs: (try? marmot.listAccounts().map(\.label)) ?? [],
+                       localNotificationsEnabled: localNotificationsEnabled
+                   ) {
+                    decision = .deliverQuietly
+                }
                 await apply(decision, to: content)
             } catch {
                 applyFallback(to: content)
@@ -145,12 +157,15 @@ final class NotificationService: UNNotificationServiceExtension {
         didApplyRenderDecision = true
         switch decision {
         case .decorate(let presentation, let additionalPresentations):
+            // Enrich the deliverable content BEFORE any avatar work: an
+            // expiration that lands mid-fetch must deliver the decorated
+            // title/body, just without the intent image.
+            decorate(content, with: presentation)
             let avatarsByUrl = await Self.fetchAvatars(for: [presentation] + additionalPresentations)
             let additionalPresentationTask = startAdditionalPresentations(
                 additionalPresentations,
                 avatarsByUrl: avatarsByUrl
             )
-            decorate(content, with: presentation)
             decoratedContent = NotificationCommunicationDecorator.decorated(
                 content,
                 presentation: presentation,
@@ -196,9 +211,10 @@ final class NotificationService: UNNotificationServiceExtension {
         return task
     }
 
-    /// Resolves each distinct sender avatar once per wake. Cold fetches are
-    /// individually bounded, and only the first few distinct senders are
-    /// fetched so the extension's delivery budget is never spent on avatars.
+    /// Resolves each distinct sender avatar once per wake. Every fetch races a
+    /// hard per-call deadline and the loop stops at an aggregate budget, so
+    /// slow avatar hosts (or redirect chains) can never spend the extension's
+    /// delivery window; cache hits are instant and unbudgeted.
     private static func fetchAvatars(
         for presentations: [LocalNotificationPresentation]
     ) async -> [String: Data] {
@@ -209,7 +225,10 @@ final class NotificationService: UNNotificationServiceExtension {
             }
         }
         var avatars: [String: Data] = [:]
+        let clock = ContinuousClock()
+        let start = clock.now
         for url in distinct.prefix(3) {
+            guard clock.now - start < .seconds(6) else { break }
             if let data = await NotificationCommunicationDecorator.avatarData(for: url) {
                 avatars[url] = data
             }

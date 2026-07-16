@@ -10,6 +10,10 @@ import UserNotifications
 nonisolated enum NotificationCommunicationDecorator {
     static let maxAvatarBytes = 512 * 1024
     static let avatarRequestTimeout: TimeInterval = 4
+    /// Hard wall-clock bound per avatar resolution. The URLRequest timeout
+    /// restarts across redirects and resolved endpoints, so delivery races
+    /// this deadline instead and abandons the fetch when it loses.
+    static let avatarDeadline: Duration = .seconds(3)
     static let maxCachedAvatars = 32
 
     static func decorated(
@@ -62,9 +66,20 @@ nonisolated enum NotificationCommunicationDecorator {
     static func avatarData(for pictureUrl: String?) async -> Data? {
         guard let pictureUrl, let url = ContentSanitizer.imageURL(pictureUrl) else { return nil }
         if let cached = cachedAvatarData(for: url) { return cached }
-        guard let fetched = await boundedFetch(url) else { return nil }
-        storeCachedAvatar(fetched, for: url)
-        return fetched
+        return await withTaskGroup(of: Data?.self) { group in
+            group.addTask {
+                guard let fetched = await boundedFetch(url) else { return nil }
+                storeCachedAvatar(fetched, for: url)
+                return fetched
+            }
+            group.addTask {
+                try? await Task.sleep(for: avatarDeadline)
+                return nil
+            }
+            let winner = await group.next() ?? nil
+            group.cancelAll()
+            return winner
+        }
     }
 
     private static func boundedFetch(_ url: URL) async -> Data? {
