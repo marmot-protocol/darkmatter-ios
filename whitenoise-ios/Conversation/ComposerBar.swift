@@ -261,7 +261,9 @@ struct ComposerBar: View {
             if let activeAccessoryPanel {
                 accessoryPanel(activeAccessoryPanel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
                 Divider()
+                    .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
             }
         }
         .frame(height: reservedPaneHeight)
@@ -587,7 +589,7 @@ struct ComposerBar: View {
         isRestoringKeyboard = false
         if reservedPaneHeight < 0.5 {
             withAnimation(.easeOut(duration: 0.22)) {
-                reservedPaneHeight = rememberedKeyboardPaneHeight
+                reservedPaneHeight = reservedHeight(for: rememberedKeyboardPaneHeight)
             }
         }
         activeAccessoryPanel = panel
@@ -615,7 +617,7 @@ struct ComposerBar: View {
             rememberedKeyboardPaneHeight = paneHeight
             if reservedPaneHeight < 0.5 || activeAccessoryPanel == nil {
                 withAnimation(KeyboardFrameChange.animation(from: notification)) {
-                    reservedPaneHeight = paneHeight
+                    reservedPaneHeight = reservedHeight(for: paneHeight)
                 }
             }
         } else if activeAccessoryPanel == nil, !isRestoringKeyboard {
@@ -645,6 +647,10 @@ struct ComposerBar: View {
         }
         isTextInputFocused = true
         localFocusRequest &+= 1
+    }
+
+    private func reservedHeight(for paneHeight: CGFloat) -> CGFloat {
+        paneHeight + BottomInputChromeLayout.composerPaneSpacing
     }
 }
 

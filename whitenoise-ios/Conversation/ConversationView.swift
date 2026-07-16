@@ -536,6 +536,9 @@ struct ConversationView: View {
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
     @State private var showCameraCapture = false
     @State private var showPhotoLibraryPicker = false
+    @State private var showMediaApproval = false
+    @State private var mediaApprovalDrafts: [MediaDraftAttachment] = []
+    @State private var mediaApprovalCaption = ""
     @State private var showFileImporter = false
     @State private var showLocationPicker = false
     @State private var showContactPicker = false
@@ -826,6 +829,24 @@ struct ConversationView: View {
                     }
                 )
                 .ignoresSafeArea()
+            }
+            .fullScreenCover(isPresented: $showMediaApproval) {
+                MediaApprovalView(
+                    attachments: $mediaApprovalDrafts,
+                    caption: $mediaApprovalCaption,
+                    reservedAttachmentCount: mediaDrafts.count,
+                    isSending: viewModel?.sendInFlight ?? false,
+                    onAddSelections: addMediaApprovalSelections,
+                    onSelectionError: { error in
+                        appState.present(.error(
+                            L10n.string("Couldn't add attachment"),
+                            message: error.localizedDescription
+                        ))
+                    },
+                    onCancel: dismissMediaApproval,
+                    onSend: sendApprovedMedia
+                )
+                .appAppearance()
             }
             .sheet(isPresented: $showLocationPicker) {
                 LocationPickerView(
@@ -1376,7 +1397,7 @@ struct ConversationView: View {
                                 timelineBottomSentinel
                             }
                             .padding(.top, 8)
-                            .padding(.bottom, 2)
+                            .padding(.bottom, BottomInputChromeLayout.timelineComposerSpacing)
                             .background {
                                 InitialBottomScrollClamp(
                                     isEnabled: isInitialBottomPositioning(viewModel: viewModel)
@@ -2156,6 +2177,9 @@ struct ConversationView: View {
         cancelVoiceRecording()
         showCameraCapture = false
         showPhotoLibraryPicker = false
+        showMediaApproval = false
+        mediaApprovalDrafts.removeAll()
+        mediaApprovalCaption = ""
         showFileImporter = false
         showLocationPicker = false
         showContactPicker = false
@@ -2244,7 +2268,7 @@ struct ConversationView: View {
         Task { @MainActor in
             do {
                 let attachment = try await MediaDraftProcessor.preparedAttachment(from: image, fileName: nil)
-                try appendMediaDraft(attachment)
+                presentMediaApproval([attachment])
             } catch is CancellationError {
                 return
             } catch {
@@ -2269,6 +2293,7 @@ struct ConversationView: View {
         }
 
         Task { @MainActor in
+            var prepared: [MediaDraftAttachment] = []
             for selection in selected {
                 do {
                     let attachment = try await MediaDraftProcessor.preparedAttachment(
@@ -2276,13 +2301,75 @@ struct ConversationView: View {
                         fileName: selection.fileName,
                         typeIdentifier: selection.typeIdentifier
                     )
-                    try appendMediaDraft(attachment)
+                    prepared.append(attachment)
                 } catch is CancellationError {
                     return
                 } catch {
                     appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
                 }
             }
+            guard !prepared.isEmpty else { return }
+            presentMediaApproval(prepared)
+        }
+    }
+
+    private func presentMediaApproval(_ attachments: [MediaDraftAttachment]) {
+        guard !attachments.isEmpty else { return }
+        mediaApprovalDrafts = attachments
+        mediaApprovalCaption = draft
+        showMediaApproval = true
+    }
+
+    private func addMediaApprovalSelections(_ selections: [PhotoLibrarySelection]) {
+        let availableSlots = max(
+            0,
+            MediaDraftProcessor.maxAttachmentCount - mediaDrafts.count - mediaApprovalDrafts.count
+        )
+        guard availableSlots > 0 else {
+            presentMaxAttachmentWarning()
+            return
+        }
+        let selected = Array(selections.prefix(availableSlots))
+        if selected.count < selections.count {
+            presentMaxAttachmentWarning()
+        }
+
+        Task { @MainActor in
+            for selection in selected {
+                do {
+                    let attachment = try await MediaDraftProcessor.preparedAttachment(
+                        from: selection.data,
+                        fileName: selection.fileName,
+                        typeIdentifier: selection.typeIdentifier
+                    )
+                    mediaApprovalDrafts.append(attachment)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                }
+            }
+        }
+    }
+
+    private func dismissMediaApproval() {
+        showMediaApproval = false
+        mediaApprovalDrafts.removeAll()
+        mediaApprovalCaption = ""
+    }
+
+    private func sendApprovedMedia() {
+        guard let viewModel,
+              viewModel.canSendMessages,
+              !viewModel.sendInFlight,
+              !mediaApprovalDrafts.isEmpty
+        else { return }
+        let attachments = mediaApprovalDrafts
+        let caption = mediaApprovalCaption
+        draft = ""
+        dismissMediaApproval()
+        Task {
+            await viewModel.sendMedia(attachments, caption: caption)
         }
     }
 
