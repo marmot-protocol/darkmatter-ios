@@ -491,6 +491,12 @@ struct PhotoLibrarySelection: Hashable {
     static func compactPreservingPickerOrder(_ selectionsByPickerIndex: [PhotoLibrarySelection?]) -> [PhotoLibrarySelection] {
         selectionsByPickerIndex.compactMap { $0 }
     }
+
+    /// Size gate applied before any bytes are read into memory; the same cap
+    /// the draft processor enforces, moved ahead of materialization.
+    static func admitsSelection(bytes: Int, cap: Int = MediaDraftProcessor.maxAttachmentBytes) -> Bool {
+        bytes > 0 && bytes <= cap
+    }
 }
 
 private enum PhotoLibraryPickerError: LocalizedError {
@@ -531,7 +537,6 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
         private let onSelection: ([PhotoLibrarySelection]) -> Void
         private let onError: (Error) -> Void
         private let onDismiss: () -> Void
-        private let resultQueue = DispatchQueue(label: "dev.ipf.whitenoise.ios.photo-library-picker")
 
         init(
             onSelection: @escaping ([PhotoLibrarySelection]) -> Void,
@@ -547,41 +552,72 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
             onDismiss()
             guard !results.isEmpty else { return }
 
-            let group = DispatchGroup()
-            var selectionsByPickerIndex = [PhotoLibrarySelection?](repeating: nil, count: results.count)
-            var firstError: Error?
+            // Assets load one at a time through a file representation with a
+            // size gate, so peak memory is one under-cap asset — a 4K video
+            // (or several selected together) can no longer materialize whole
+            // in RAM just to be rejected by the downstream cap.
+            Task {
+                var selectionsByPickerIndex = [PhotoLibrarySelection?](repeating: nil, count: results.count)
+                var firstError: Error?
 
-            for (index, result) in results.enumerated() {
-                let provider = result.itemProvider
-                guard let typeIdentifier = Self.mediaTypeIdentifier(from: provider) else { continue }
-                let fileName = Self.fileName(
-                    suggestedName: provider.suggestedName,
-                    typeIdentifier: typeIdentifier
-                )
+                for (index, result) in results.enumerated() {
+                    let provider = result.itemProvider
+                    guard let typeIdentifier = Self.mediaTypeIdentifier(from: provider) else { continue }
+                    let fileName = Self.fileName(
+                        suggestedName: provider.suggestedName,
+                        typeIdentifier: typeIdentifier
+                    )
+                    do {
+                        selectionsByPickerIndex[index] = try await Self.loadBoundedSelection(
+                            provider: provider,
+                            typeIdentifier: typeIdentifier,
+                            fileName: fileName
+                        )
+                    } catch {
+                        if firstError == nil { firstError = error }
+                    }
+                }
 
-                group.enter()
-                provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, error in
-                    self.resultQueue.async {
-                        if let data, !data.isEmpty {
-                            selectionsByPickerIndex[index] = PhotoLibrarySelection(
-                                data: data,
-                                fileName: fileName,
-                                typeIdentifier: typeIdentifier
-                            )
-                        } else if let error, firstError == nil {
-                            firstError = error
-                        }
-                        group.leave()
+                let selections = PhotoLibrarySelection.compactPreservingPickerOrder(selectionsByPickerIndex)
+                await MainActor.run {
+                    if selections.isEmpty {
+                        self.onError(firstError ?? PhotoLibraryPickerError.noReadableMedia)
+                    } else {
+                        self.onSelection(selections)
                     }
                 }
             }
+        }
 
-            group.notify(queue: .main) {
-                let selections = PhotoLibrarySelection.compactPreservingPickerOrder(selectionsByPickerIndex)
-                if selections.isEmpty {
-                    self.onError(firstError ?? PhotoLibraryPickerError.noReadableMedia)
-                } else {
-                    self.onSelection(selections)
+        private static func loadBoundedSelection(
+            provider: NSItemProvider,
+            typeIdentifier: String,
+            fileName: String?
+        ) async throws -> PhotoLibrarySelection {
+            try await withCheckedThrowingContinuation { continuation in
+                provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
+                    // The provider deletes the temp file when this handler
+                    // returns, so the size gate and the read both happen here.
+                    guard let url else {
+                        continuation.resume(throwing: error ?? PhotoLibraryPickerError.noReadableMedia)
+                        return
+                    }
+                    let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    guard PhotoLibrarySelection.admitsSelection(bytes: size) else {
+                        continuation.resume(
+                            throwing: MediaDraftProcessor.Failure.attachmentTooLarge(size)
+                        )
+                        return
+                    }
+                    guard size > 0, let data = try? Data(contentsOf: url), !data.isEmpty else {
+                        continuation.resume(throwing: PhotoLibraryPickerError.noReadableMedia)
+                        return
+                    }
+                    continuation.resume(returning: PhotoLibrarySelection(
+                        data: data,
+                        fileName: fileName,
+                        typeIdentifier: typeIdentifier
+                    ))
                 }
             }
         }

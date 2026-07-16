@@ -8912,6 +8912,11 @@ struct PhotoLibrarySelectionOrderingTests {
     @Test func compactingLoadedSelectionsDropsUnreadableSlotsWithoutReordering() {
         let first = PhotoLibrarySelection(data: Data([1]), fileName: "first.jpg")
         let third = PhotoLibrarySelection(data: Data([3]), fileName: "third.jpg")
+        // The size gate runs before any bytes are materialized in memory.
+        #expect(!PhotoLibrarySelection.admitsSelection(bytes: 0, cap: 100))
+        #expect(PhotoLibrarySelection.admitsSelection(bytes: 100, cap: 100))
+        #expect(!PhotoLibrarySelection.admitsSelection(bytes: 101, cap: 100))
+
         let selections = PhotoLibrarySelection.compactPreservingPickerOrder([first, nil, third])
 
         #expect(selections.map(\.fileName) == ["first.jpg", "third.jpg"])
