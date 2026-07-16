@@ -3981,6 +3981,25 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
     }
 
+    @Test func overflowSummariesCarryTheOrOfTheirMembersMentionBits() {
+        // A missing bit reads as a mention in willPresent, so an
+        // all-non-mention summary must carry an explicit "0" or it banners
+        // through a later mentions-only switch.
+        let plainSummary = NotificationPresentationPolicy.overflowSummaryPresentations(from: [
+            notificationUpdate(notificationKey: "p1"),
+            notificationUpdate(notificationKey: "p2"),
+        ])
+        #expect(plainSummary.count == 1)
+        #expect(!LocalNotificationProjection.isMention(from: plainSummary[0].userInfo))
+
+        let mentionSummary = NotificationPresentationPolicy.overflowSummaryPresentations(from: [
+            notificationUpdate(notificationKey: "m1"),
+            notificationUpdate(notificationKey: "m2", isMention: true),
+        ])
+        #expect(mentionSummary.count == 1)
+        #expect(LocalNotificationProjection.isMention(from: mentionSummary[0].userInfo))
+    }
+
     @Test func presentationPersistsTheMentionBitForWillPresent() {
         let mention = notificationUpdate(notificationKey: "m", isMention: true)
         let plain = notificationUpdate(notificationKey: "p")

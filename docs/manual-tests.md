@@ -193,7 +193,10 @@ the test device.
       sync with the details picker.
 - [ ] With local notifications OFF and native push ON, an incoming message
       produces no audible banner — the generic record lands quietly in
-      Notification Center (#675).
+      Notification Center (#675). Currently expected to FAIL (audible generic
+      banner): the engine discards suppressed records and reports the wake as
+      an unattributable empty collection, which stays audible by design. Gated
+      on mdk#888.
 - [ ] Message notifications render the sender's avatar (or an initials
       monogram) via communication notifications, in both DMs and groups;
       group notifications keep the group name alongside the sender.

@@ -88,6 +88,17 @@ struct NotificationAvatarBudgetTests {
         #expect(NotificationCommunicationDecorator.claimWarmSlot("c", in: &inFlight, limit: 2))
     }
 
+    @Test func dnsSlotsFailFastAtTheCap() {
+        // Pure claim logic on a local counter — the process-wide counter is
+        // shared with parallel suites doing real fetches.
+        var inFlight = 0
+        #expect(PinnedHTTPSFetcher.claimDnsSlot(&inFlight, limit: 2))
+        #expect(PinnedHTTPSFetcher.claimDnsSlot(&inFlight, limit: 2))
+        #expect(!PinnedHTTPSFetcher.claimDnsSlot(&inFlight, limit: 2))
+        inFlight -= 1
+        #expect(PinnedHTTPSFetcher.claimDnsSlot(&inFlight, limit: 2))
+    }
+
     @Test func workWinReturnsItsValueBeforeTheDeadline() async {
         let result = await NotificationCommunicationDecorator.withDeadline(.seconds(30)) {
             Data([0x1])

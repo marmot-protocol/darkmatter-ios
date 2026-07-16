@@ -194,6 +194,12 @@ nonisolated enum NotificationCommunicationDecorator {
                     return state.resumed
                 }
                 if alreadyResumed {
+                    // A cancellation that won between the continuation being
+                    // stored and the handles registering resumed with neither
+                    // handle to cancel — the fetch would run to completion
+                    // behind an already-returned caller. (After a work win
+                    // both cancels are no-ops.)
+                    workTask.cancel()
                     timerTask.cancel()
                 }
             }

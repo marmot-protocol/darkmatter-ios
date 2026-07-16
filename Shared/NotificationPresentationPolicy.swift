@@ -128,14 +128,14 @@ nonisolated enum NotificationPresentationPolicy {
         from overflowUpdates: [NotificationUpdateFfi],
         nickname: (String, String) -> String? = { _, _ in nil }
     ) -> [LocalNotificationPresentation] {
-        var buckets: [OverflowRouteKey: (first: NotificationUpdateFfi, count: Int)] = [:]
+        var buckets: [OverflowRouteKey: (first: NotificationUpdateFfi, count: Int, containsMention: Bool)] = [:]
         var order: [OverflowRouteKey] = []
         for update in overflowUpdates {
             let key = OverflowRouteKey(update)
             if let existing = buckets[key] {
-                buckets[key] = (existing.first, existing.count + 1)
+                buckets[key] = (existing.first, existing.count + 1, existing.containsMention || update.isMention)
             } else {
-                buckets[key] = (update, 1)
+                buckets[key] = (update, 1, update.isMention)
                 order.append(key)
             }
         }
@@ -144,13 +144,21 @@ nonisolated enum NotificationPresentationPolicy {
             guard let bucket = buckets[key],
                   let base = LocalNotificationProjection.makePresentation(for: bucket.first, nickname: nickname)
             else { return nil }
-            return summaryPresentation(after: base, overflowCount: bucket.count)
+            return summaryPresentation(
+                after: base,
+                overflowCount: bucket.count,
+                containsMention: bucket.containsMention
+            )
         }
     }
 
+    /// The summary inherits the OR of its members' mention bits: a missing
+    /// bit reads as a mention in `willPresent`, so an all-non-mention summary
+    /// would banner through a later mentions-only switch.
     static func summaryPresentation(
         after base: LocalNotificationPresentation,
-        overflowCount: Int
+        overflowCount: Int,
+        containsMention: Bool
     ) -> LocalNotificationPresentation {
         let route = LocalNotificationRoute(
             accountRef: base.route.accountRef,
@@ -166,7 +174,10 @@ nonisolated enum NotificationPresentationPolicy {
             body: L10n.plural("%lld more messages", Int64(overflowCount)),
             route: route,
             timestamp: base.timestamp,
-            userInfo: LocalNotificationProjection.userInfo(for: route)
+            userInfo: LocalNotificationProjection.userInfo(for: route).merging(
+                [LocalNotificationProjection.isMentionKey: containsMention ? "1" : "0"],
+                uniquingKeysWith: { _, new in new }
+            )
         )
     }
 

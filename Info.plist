@@ -11,6 +11,10 @@
 		<key>UIImageRespectsSafeAreaInsets</key>
 		<true/>
 	</dict>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
 	<key>WhiteNoisePushRelayHint</key>
 	<string>$(WHITENOISE_PUSH_RELAY_HINT)</string>
 	<key>WhiteNoisePushServerPubkeyHex</key>

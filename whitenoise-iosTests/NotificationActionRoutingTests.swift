@@ -137,7 +137,11 @@ struct NotificationActionCategoryTests {
 
     @Test func summaryPresentationsStayActionFree() throws {
         let base = try #require(LocalNotificationProjection.makePresentation(for: actionTestUpdate()))
-        let summary = NotificationPresentationPolicy.summaryPresentation(after: base, overflowCount: 3)
+        let summary = NotificationPresentationPolicy.summaryPresentation(
+            after: base,
+            overflowCount: 3,
+            containsMention: false
+        )
         #expect(summary.categoryIdentifier == nil)
     }
 
