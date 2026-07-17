@@ -102,9 +102,66 @@ struct ComposerMentionQueryTests {
         let outgoing = ComposerMentionCanonicalizer.canonicalize(
             "ping @Jeff ",
             candidates: candidates,
-            selectedNpubByDisplayName: ["Jeff": aliceNpub]
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: aliceNpub
+            )]
         )
         #expect(outgoing == "ping @\(aliceNpub) ")
+    }
+
+    @Test func ambiguousSelectionsStayBoundToTheirOwnOccurrences() {
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+        ]
+        let secondLocation = "@Jeff and ".utf16.count
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "@Jeff and @Jeff",
+            candidates: candidates,
+            selectedMentions: [
+                ComposerMentionSelection(
+                    utf16Location: 0,
+                    utf16Length: "@Jeff".utf16.count,
+                    displayName: "Jeff",
+                    npub: jeffNpub
+                ),
+                ComposerMentionSelection(
+                    utf16Location: secondLocation,
+                    utf16Length: "@Jeff".utf16.count,
+                    displayName: "Jeff",
+                    npub: aliceNpub
+                ),
+            ]
+        )
+
+        #expect(outgoing == "@\(jeffNpub) and @\(aliceNpub)")
+    }
+
+    @Test func deletedSelectionDoesNotBindRetypedAmbiguousText() {
+        let original = "ping @Jeff "
+        var selections = [ComposerMentionSelection(
+            utf16Location: "ping ".utf16.count,
+            utf16Length: "@Jeff".utf16.count,
+            displayName: "Jeff",
+            npub: aliceNpub
+        )]
+        selections = ComposerMentionSelectionTracker.reconcile(selections, from: original, to: "ping ")
+        selections = ComposerMentionSelectionTracker.reconcile(selections, from: "ping ", to: original)
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            original,
+            candidates: [
+                mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+                mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+            ],
+            selectedMentions: selections
+        )
+
+        #expect(selections.isEmpty)
+        #expect(outgoing == original)
     }
 
     @Test func canonicalizeIgnoresSelectionsPointingOutsideTheRoster() {
@@ -117,7 +174,12 @@ struct ComposerMentionQueryTests {
         let outgoing = ComposerMentionCanonicalizer.canonicalize(
             "ping @Jeff ",
             candidates: candidates,
-            selectedNpubByDisplayName: ["Jeff": "npub1notinroster"]
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: "npub1notinroster"
+            )]
         )
         #expect(outgoing == "ping @Jeff ")
     }

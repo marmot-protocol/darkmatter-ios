@@ -107,6 +107,71 @@ enum ComposerMentionQuery {
     }
 }
 
+nonisolated struct ComposerMentionSelection: Equatable, Sendable {
+    var utf16Location: Int
+    let utf16Length: Int
+    let displayName: String
+    let npub: String
+}
+
+/// Keeps selected mention identities attached to the text occurrence the user
+/// tapped. Edits outside a token shift its UTF-16 range; edits touching a token
+/// discard the binding so ambiguous free text always fails closed.
+nonisolated enum ComposerMentionSelectionTracker {
+    static func reconcile(
+        _ selections: [ComposerMentionSelection],
+        from oldText: String,
+        to newText: String
+    ) -> [ComposerMentionSelection] {
+        guard oldText != newText else {
+            return selections.filter { selectionIsPresent($0, in: newText) }
+        }
+
+        let oldUnits = Array(oldText.utf16)
+        let newUnits = Array(newText.utf16)
+        var commonPrefix = 0
+        while commonPrefix < oldUnits.count,
+              commonPrefix < newUnits.count,
+              oldUnits[commonPrefix] == newUnits[commonPrefix] {
+            commonPrefix += 1
+        }
+
+        var commonSuffix = 0
+        while commonSuffix < oldUnits.count - commonPrefix,
+              commonSuffix < newUnits.count - commonPrefix {
+            let oldIndex = oldUnits.count - commonSuffix - 1
+            let newIndex = newUnits.count - commonSuffix - 1
+            guard oldUnits[oldIndex] == newUnits[newIndex] else { break }
+            commonSuffix += 1
+        }
+
+        let oldChangeEnd = oldUnits.count - commonSuffix
+        let newChangeEnd = newUnits.count - commonSuffix
+        let delta = newChangeEnd - oldChangeEnd
+
+        return selections.compactMap { selection in
+            let selectionEnd = selection.utf16Location + selection.utf16Length
+            var adjusted = selection
+            if selectionEnd <= commonPrefix {
+                // The edit is entirely after this token.
+            } else if selection.utf16Location >= oldChangeEnd {
+                adjusted.utf16Location += delta
+            } else {
+                return nil
+            }
+            return selectionIsPresent(adjusted, in: newText) ? adjusted : nil
+        }
+    }
+
+    private static func selectionIsPresent(_ selection: ComposerMentionSelection, in text: String) -> Bool {
+        let units = Array(text.utf16)
+        let end = selection.utf16Location + selection.utf16Length
+        guard selection.utf16Location >= 0, end <= units.count else { return false }
+        let token = String(decoding: units[selection.utf16Location..<end], as: UTF16.self)
+        return token == "@\(selection.displayName)"
+    }
+}
+
 nonisolated enum ComposerMentionCanonicalizer {
     private static let underscoreScalar = UnicodeScalar("_")
     private static let slashScalar = UnicodeScalar("/")
@@ -114,7 +179,7 @@ nonisolated enum ComposerMentionCanonicalizer {
     static func canonicalize(
         _ text: String,
         candidates: [ComposerMentionCandidate],
-        selectedNpubByDisplayName: [String: String] = [:]
+        selectedMentions: [ComposerMentionSelection] = []
     ) -> String {
         guard text.contains("@") else { return text }
         let replacements = candidates
@@ -136,7 +201,7 @@ nonisolated enum ComposerMentionCanonicalizer {
                    in: text,
                    at: index,
                    candidates: replacements,
-                   selectedNpubByDisplayName: selectedNpubByDisplayName
+                   selectedMentions: selectedMentions
                ) {
                 canonical += "@\(match.npub)"
                 index = match.endIndex
@@ -152,7 +217,7 @@ nonisolated enum ComposerMentionCanonicalizer {
         in text: String,
         at atIndex: String.Index,
         candidates: [ComposerMentionCandidate],
-        selectedNpubByDisplayName: [String: String]
+        selectedMentions: [ComposerMentionSelection]
     ) -> (npub: String, endIndex: String.Index)? {
         let nameStart = text.index(after: atIndex)
         for candidate in candidates {
@@ -169,9 +234,15 @@ nonisolated enum ComposerMentionCanonicalizer {
             if distinctNpubs.count == 1 {
                 return (candidate.npub, nameEnd)
             }
-            if let selected = selectedNpubByDisplayName[candidate.displayName],
-               distinctNpubs.contains(selected) {
-                return (selected, nameEnd)
+            let location = text[..<atIndex].utf16.count
+            let length = "@\(candidate.displayName)".utf16.count
+            if let selected = selectedMentions.first(where: {
+                $0.utf16Location == location
+                    && $0.utf16Length == length
+                    && $0.displayName == candidate.displayName
+                    && distinctNpubs.contains($0.npub)
+            }) {
+                return (selected.npub, nameEnd)
             }
             return nil
         }
@@ -218,6 +289,8 @@ nonisolated struct MentionCandidateCacheKey: Equatable {
 final class ComposerMentionController {
     private var cachedCandidates: [ComposerMentionCandidate]?
     private var cachedKey: MentionCandidateCacheKey?
+    private(set) var selectedMentions: [ComposerMentionSelection] = []
+    private var observedDraft: String?
 
     func candidates(
         for draft: String,
@@ -226,6 +299,7 @@ final class ComposerMentionController {
         groupMemberDetails: [GroupMemberDetailsFfi],
         rosterGeneration: UInt64
     ) -> [ComposerMentionCandidate] {
+        synchronizeSelections(with: draft)
         guard let appState,
               let session = ComposerMentionQuery.active(in: draft),
               !ComposerMentionQuery.looksLikeCompleteNpub(session.query)
@@ -241,28 +315,40 @@ final class ComposerMentionController {
         )
     }
 
-    /// Display name → npub for every mention the user explicitly tapped in
-    /// this draft. Canonicalization consults it when a display name is shared
-    /// by several members: the tapped identity wins, and an ambiguous name
-    /// with no recorded tap is left as literal text. (Mentioning two
-    /// same-named members in one draft resolves both to the last tap — a
-    /// user-chosen identity either way.)
-    private(set) var selectedNpubByDisplayName: [String: String] = [:]
-
     func applySelection(_ candidate: ComposerMentionCandidate, to draft: inout String) {
+        synchronizeSelections(with: draft)
         guard let session = ComposerMentionQuery.active(in: draft) else { return }
-        if !candidate.npub.isEmpty {
-            selectedNpubByDisplayName[candidate.displayName] = candidate.npub
-        }
-        draft = ComposerMentionQuery.replacing(
+        let updated = ComposerMentionQuery.replacing(
             session: session,
             in: draft,
             with: candidate.displayName
         )
+        selectedMentions = ComposerMentionSelectionTracker.reconcile(
+            selectedMentions,
+            from: draft,
+            to: updated
+        )
+        if !candidate.npub.isEmpty {
+            let location = draft[..<session.atIndex].utf16.count
+            let length = "@\(candidate.displayName)".utf16.count
+            let end = location + length
+            selectedMentions.removeAll {
+                max(location, $0.utf16Location) < min(end, $0.utf16Location + $0.utf16Length)
+            }
+            selectedMentions.append(ComposerMentionSelection(
+                utf16Location: location,
+                utf16Length: length,
+                displayName: candidate.displayName,
+                npub: candidate.npub
+            ))
+        }
+        observedDraft = updated
+        draft = updated
     }
 
     func clearSelections() {
-        selectedNpubByDisplayName = [:]
+        selectedMentions = []
+        observedDraft = nil
     }
 
     func canonicalizeMentions(
@@ -272,6 +358,7 @@ final class ComposerMentionController {
         groupMemberDetails: [GroupMemberDetailsFfi],
         rosterGeneration: UInt64
     ) -> String {
+        synchronizeSelections(with: text)
         guard let appState else { return text }
         return ComposerMentionCanonicalizer.canonicalize(
             text,
@@ -281,8 +368,21 @@ final class ComposerMentionController {
                 groupMemberDetails: groupMemberDetails,
                 rosterGeneration: rosterGeneration
             ),
-            selectedNpubByDisplayName: selectedNpubByDisplayName
+            selectedMentions: selectedMentions
         )
+    }
+
+    private func synchronizeSelections(with draft: String) {
+        guard let observedDraft else {
+            self.observedDraft = draft
+            return
+        }
+        selectedMentions = ComposerMentionSelectionTracker.reconcile(
+            selectedMentions,
+            from: observedDraft,
+            to: draft
+        )
+        self.observedDraft = draft
     }
 
     private func allCandidates(

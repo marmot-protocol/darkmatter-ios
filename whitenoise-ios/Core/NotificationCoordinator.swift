@@ -74,13 +74,46 @@ nonisolated enum NotificationPresentationRuntimeGate {
         isAppSceneActive: Bool,
         runtimeSuspendedForBackground: Bool,
         isRuntimeSuspending: Bool,
+        isSigningOut: Bool,
         hasRuntimeClient: Bool
     ) -> Bool {
         !isTaskCancelled
             && isAppSceneActive
             && !runtimeSuspendedForBackground
             && !isRuntimeSuspending
+            && !isSigningOut
             && hasRuntimeClient
+    }
+}
+
+nonisolated struct NotificationArchivedKeysCache {
+    private struct Entry {
+        let keys: Set<String>
+        let readAt: ContinuousClock.Instant
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    mutating func keys(
+        for accountRef: String,
+        now: ContinuousClock.Instant,
+        lifetime: Duration
+    ) -> Set<String>? {
+        guard let entry = entries[accountRef], now - entry.readAt < lifetime else {
+            entries.removeValue(forKey: accountRef)
+            return nil
+        }
+        return entry.keys
+    }
+
+    mutating func store(
+        _ keys: Set<String>,
+        for accountRef: String,
+        readAt: ContinuousClock.Instant,
+        lifetime: Duration
+    ) {
+        entries = entries.filter { readAt - $0.value.readAt < lifetime }
+        entries[accountRef] = Entry(keys: keys, readAt: readAt)
     }
 }
 
@@ -266,11 +299,12 @@ final class NotificationCoordinator {
             isAppSceneActive: host.isAppSceneActive,
             runtimeSuspendedForBackground: host.runtimeSuspendedForBackground,
             isRuntimeSuspending: host.isRuntimeSuspendingForNotificationCoordinator,
+            isSigningOut: host.isSigningOutForNotificationCoordinator,
             hasRuntimeClient: host.client != nil
         )
     }
 
-    private var archivedKeysCache: (accountRef: String, keys: Set<String>, readAt: ContinuousClock.Instant)?
+    private var archivedKeysCache = NotificationArchivedKeysCache()
     /// Long enough to cover a foreground catch-up burst draining buffered
     /// updates back-to-back, short enough that archiving a chat takes effect
     /// on the next real message. Archiving from this device also cancels its
@@ -296,17 +330,24 @@ final class NotificationCoordinator {
               let client = host.client
         else { return false }
         let now = ContinuousClock.now
-        if let cache = archivedKeysCache,
-           cache.accountRef == update.accountRef,
-           now - cache.readAt < Self.archivedKeysCacheLifetime {
-            return cache.keys.contains(update.groupIdHex)
+        if let keys = archivedKeysCache.keys(
+            for: update.accountRef,
+            now: now,
+            lifetime: Self.archivedKeysCacheLifetime
+        ) {
+            return keys.contains(update.groupIdHex)
         }
         guard let rows = try? await client.chatList(
             accountRef: update.accountRef,
             includeArchived: true
         ) else { return false }
         let keys = Self.archivedKeys(from: rows)
-        archivedKeysCache = (update.accountRef, keys, now)
+        archivedKeysCache.store(
+            keys,
+            for: update.accountRef,
+            readAt: ContinuousClock.now,
+            lifetime: Self.archivedKeysCacheLifetime
+        )
         return keys.contains(update.groupIdHex)
     }
 

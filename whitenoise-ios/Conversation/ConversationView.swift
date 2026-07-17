@@ -825,7 +825,7 @@ struct ConversationView: View {
                         capability: viewModel.deleteCapability(for: target.record),
                         isMine: viewModel.isMessageMine(target.record),
                         onDeleteForMe: {
-                            viewModel.deleteMessageForMe(target.record)
+                            await viewModel.deleteMessageForMe(target.record)
                         },
                         onDeleteForEveryone: {
                             await viewModel.deleteMessageForEveryone(target.record)

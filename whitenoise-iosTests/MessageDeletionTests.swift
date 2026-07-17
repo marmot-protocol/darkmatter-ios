@@ -83,7 +83,7 @@ struct MessageDeletionTests {
         #expect(MessageDeletePresentation.supportingCopy(capability: both, isMine: false) == .moderation)
     }
 
-    @Test func viewModelCapabilityRejectsMissingAccountAndMalformedMessageIds() throws {
+    @Test func viewModelCapabilityRejectsMissingAccountAndMalformedMessageIds() async throws {
         let accountRef = "delete-capability-\(UUID().uuidString)"
         let me = hex("11")
         let group = groupRecord(id: hex("aa"), name: "Capability test")
@@ -97,7 +97,7 @@ struct MessageDeletionTests {
         #expect(viewModel.deleteCapability(for: valid) == .unavailable)
         appState.activeAccountRef = nil
         #expect(viewModel.deleteCapability(for: valid) == .unavailable)
-        #expect(!viewModel.deleteMessageForMe(valid))
+        #expect(!(await viewModel.deleteMessageForMe(valid)))
     }
 
     @Test func localHideIsScopedIdempotentAndClearedPerAccount() throws {
@@ -212,7 +212,7 @@ struct MessageDeletionTests {
         #expect(renderedMessageIds(in: store) == [visibleId, replyId])
     }
 
-    @Test func deleteForMePublishesNothingAndSurvivesViewModelRecreation() throws {
+    @Test func deleteForMePublishesNothingAndSurvivesViewModelRecreation() async throws {
         let accountRef = "delete-local-\(UUID().uuidString)"
         let me = hex("11")
         let group = groupRecord(id: hex("aa"), name: "Local delete test")
@@ -236,7 +236,7 @@ struct MessageDeletionTests {
             deleteMessageOperation: operation
         )
         first.applyTimelinePage(page, placement: .window)
-        #expect(first.deleteMessageForMe(message))
+        #expect(await first.deleteMessageForMe(message))
         #expect(first.timeline.isEmpty)
         #expect(remoteDeleteCalls == 0)
 

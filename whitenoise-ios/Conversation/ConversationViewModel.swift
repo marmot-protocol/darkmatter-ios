@@ -1961,7 +1961,7 @@ final class ConversationViewModel {
     /// Hides a message only in this account's local timeline. This path never
     /// invokes Marmot and therefore cannot publish a delete event.
     @discardableResult
-    func deleteMessageForMe(_ message: AppMessageRecordFfi) -> Bool {
+    func deleteMessageForMe(_ message: AppMessageRecordFfi) async -> Bool {
         guard let canonical = canonicalDeleteRecord(for: message),
               deleteCapability(for: canonical).canDeleteForMe,
               let accountRef = appState?.activeAccountRef
@@ -1975,7 +1975,7 @@ final class ConversationViewModel {
         guard !hidden.isEmpty else { return false }
         timelineStore.setHiddenMessageIds(hidden)
         guard timelineStore.isHidden(canonical.messageIdHex) else { return false }
-        purgeCachedMedia(for: canonical)
+        await purgeCachedMedia(for: canonical)
         Haptics.warning()
         return true
     }
@@ -1983,13 +1983,11 @@ final class ConversationViewModel {
     /// Deleting a message also removes its decrypted plaintext from the
     /// media caches — hiding or tombstoning the record while its attachments
     /// stay readable on disk would contradict what "delete" promises.
-    private func purgeCachedMedia(for record: AppMessageRecordFfi) {
+    private func purgeCachedMedia(for record: AppMessageRecordFfi) async {
         let references = mediaItems(for: record).compactMap(\.reference)
         guard !references.isEmpty else { return }
         let hashes = Set(references.map { $0.ciphertextSha256.lowercased() })
-        Task.detached(priority: .utility) {
-            await MessageMediaCache.removeCachedData(forCiphertextHashes: hashes, in: references)
-        }
+        await MessageMediaCache.removeCachedData(forCiphertextHashes: hashes, in: references)
     }
 
     /// Tombstones a message for every participant. Authorization is rechecked
@@ -2012,7 +2010,7 @@ final class ConversationViewModel {
                 group.groupIdHex,
                 canonical.messageIdHex
             )
-            purgeCachedMedia(for: canonical)
+            await purgeCachedMedia(for: canonical)
             Haptics.warning()
             return true
         } catch {

@@ -570,7 +570,7 @@ final class AppState {
             return false
         }
 
-        await completeSignOut(
+        _ = await completeSignOut(
             removedRef: signingOut,
             removedAccountIdHex: signingOutAccountIdHex,
             destructive: false
@@ -587,7 +587,8 @@ final class AppState {
         removedRef: String,
         removedAccountIdHex: String?,
         destructive: Bool
-    ) async {
+    ) async -> [WipeFailureItem] {
+        var localCleanupFailures: [WipeFailureItem] = []
         if destructive {
             conversationDraftStore.removeDrafts(accountRef: removedRef)
             await conversationDraftStore.flush()
@@ -605,15 +606,15 @@ final class AppState {
                 ChatMuteStore.clearAll(accountIdHex: removedAccountIdHex)
             }
             if await !NotificationCommunicationDecorator.deleteAllDonatedInteractions() {
-                present(.error(
-                    L10n.string("Couldn't clear notification history"),
-                    message: L10n.string("Some notification previews may remain on this device.")
+                localCleanupFailures.append(WipeFailureItem(
+                    subject: nil,
+                    reason: L10n.string("Some notification previews may remain on this device.")
                 ))
             }
             if await !MessageMediaCache.purgeAllDecryptedMedia() {
-                present(.error(
-                    L10n.string("Couldn't clear cached media"),
-                    message: L10n.string("Some decrypted media may remain on this device.")
+                localCleanupFailures.append(WipeFailureItem(
+                    subject: nil,
+                    reason: L10n.string("Some decrypted media may remain on this device.")
                 ))
             }
         }
@@ -625,7 +626,14 @@ final class AppState {
                 accountStore.accounts.removeAll { $0.label == removedRef }
             }
             accountUnreadStore.pruneToCurrentAccounts(accounts)
-            present(.error(L10n.string("Couldn't refresh accounts"), message: error.localizedDescription))
+            if destructive {
+                localCleanupFailures.append(WipeFailureItem(
+                    subject: nil,
+                    reason: "\(L10n.string("Couldn't refresh accounts")): \(error.localizedDescription)"
+                ))
+            } else {
+                present(.error(L10n.string("Couldn't refresh accounts"), message: error.localizedDescription))
+            }
         }
 
         activeAccountRef = accounts.first { account in
@@ -668,6 +676,7 @@ final class AppState {
         if activeAccountRef != nil {
             scheduleNativePushRegistrationIfEnabled()
         }
+        return localCleanupFailures
     }
 
     /// Destructive "Sign Out & Wipe" of the active account. Drives the engine's
@@ -734,13 +743,16 @@ final class AppState {
         // The wipe returned: the account ref is invalid now. Do the same local
         // removal + routing the normal sign-out does — regardless of per-stage
         // best-effort failures — then surface a report only when something remains.
-        await completeSignOut(
+        let localCleanupFailures = await completeSignOut(
             removedRef: wipingRef,
             removedAccountIdHex: wipingAccountIdHex,
             destructive: true
         )
 
-        let report = WipeReportProjection.report(from: outcome)
+        let report = WipeReportProjection.report(
+            from: outcome,
+            additionalLocalFailures: localCleanupFailures
+        )
         if report.clean {
             present(.success(L10n.string("Profile wiped from this device")))
         } else {

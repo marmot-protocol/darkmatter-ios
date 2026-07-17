@@ -18,21 +18,32 @@ final class ProfileViewModel {
     let starter = DirectChatStarter()
     let directory = RecipientDirectory()
     private var attemptedNip05Verification: String?
+    private var resolutionGeneration: UInt64 = 0
 
     func resolve(npub: String, using appState: AppState) async {
+        resolutionGeneration &+= 1
+        let generation = resolutionGeneration
+        // A reused profile surface must fail closed while the new identity is
+        // resolving. Keeping the previous account visible through a failed
+        // client lookup would also keep its trust and shared-group state.
+        applyResolvedAccount(nil)
+        sharedGroups = []
+        addableGroups = []
         guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
-            applyResolvedAccount(nil)
             return
         }
         guard let client = try? appState.currentMarmotClient() else { return }
         let resolvedHex = await client.accountIdHex(reference: reference)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, generation == resolutionGeneration else { return }
         applyResolvedAccount(resolvedHex)
         guard let resolvedHex else { return }
         // Trigger enrichment (cached read + background relay fetch).
         _ = appState.profile(forAccountIdHex: resolvedHex)
         await directory.load(using: appState, force: true)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              generation == resolutionGeneration,
+              hex == resolvedHex
+        else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
             snapshots: directory.snapshots,
             targetAccountIdHex: resolvedHex,
@@ -66,14 +77,21 @@ final class ProfileViewModel {
               let declared = ContentSanitizer.profileAddress(declared),
               attemptedNip05Verification != declared
         else { return }
+        let verifyingHex = hex
         attemptedNip05Verification = declared
-        if await Nip05Resolver.verifies(
+        let verified = await Nip05Resolver.verifies(
             declaredAddress: declared,
-            accountIdHex: hex,
+            accountIdHex: verifyingHex,
             transport: transport
-        ) {
-            verifiedNip05 = declared
-        }
+        )
+        // The profile can change while the network lookup is suspended. Only
+        // the identity and declaration that started this request may receive
+        // its result.
+        guard !Task.isCancelled,
+              hex == verifyingHex,
+              attemptedNip05Verification == declared
+        else { return }
+        verifiedNip05 = verified ? declared : nil
     }
 
     func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {
