@@ -470,7 +470,7 @@ private final class CountingConversationMediaCache: ConversationMediaCacheAccess
         cachedDataReadReleased.signal()
     }
 
-    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
+    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, producerGeneration: Int?) async {
         storedPayloads.append(data)
         storedReferenceHashes.append(reference.plaintextSha256)
         storedSourceEpochs.append(reference.sourceEpoch)

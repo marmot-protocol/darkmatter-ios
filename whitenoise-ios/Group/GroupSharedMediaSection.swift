@@ -234,6 +234,7 @@ struct GroupSharedMediaThumbnail: View {
         didFail = false
         defer { isLoading = false }
         do {
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             let data = try await onLoadMedia.data(for: item)
             guard !Task.isCancelled else { return }
             if item.isImage {
@@ -254,7 +255,7 @@ struct GroupSharedMediaThumbnail: View {
                 sourceData = data
                 thumbnail = decoded
             } else if item.isVideo,
-                      let url = await MediaPlaybackFileStore.fileURL(for: item, data: data),
+                      let url = await MediaPlaybackFileStore.fileURL(for: item, data: data, producerEpoch: producerEpoch),
                       let decoded = await MessageVideoThumbnailDecoder.thumbnail(
                         url: url,
                         maxPixelSize: maxPixelSize,

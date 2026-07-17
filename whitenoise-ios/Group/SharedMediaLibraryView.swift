@@ -8,6 +8,11 @@ import MarmotKit
 @Observable
 final class SharedMediaLibraryViewModel {
     private(set) var items: [GroupSharedMediaItem] = []
+    // Derived once per load: `body` re-runs on segment switches and gallery
+    // presentation, and regrouping every item plus a fresh DateFormatter per
+    // render is pure waste for a media-heavy group.
+    private(set) var visualItems: [GroupSharedMediaItem] = []
+    private(set) var visualMonthSections: [SharedMediaLibraryPresentation.MonthSection] = []
     private(set) var links: [SharedMediaLibraryPresentation.LinkItem] = []
     private(set) var isLoading = false
     private(set) var isLoadingLinks = false
@@ -16,6 +21,13 @@ final class SharedMediaLibraryViewModel {
     var linksError: String?
     private var didLoad = false
     private var didLoadLinks = false
+
+    /// Month titles and buckets bake in the calendar and locale at build
+    /// time; a language or time-zone change while the screen stays alive
+    /// re-derives them (wired via notifications in the view).
+    func rebuildMonthSections() {
+        visualMonthSections = SharedMediaLibraryPresentation.monthSections(visualItems)
+    }
 
     static let linkScanMessageLimit = 2000
     static let linkScanPageLimit: UInt32 = 200
@@ -31,6 +43,8 @@ final class SharedMediaLibraryViewModel {
             let records = try await client.listMedia(accountRef: accountRef, groupIdHex: groupIdHex)
             try Task.checkCancellation()
             items = GroupSharedMediaPresentation.items(from: records)
+            visualItems = GroupSharedMediaPresentation.visualItems(from: items)
+            rebuildMonthSections()
             didLoad = true
         } catch is CancellationError {
             return
@@ -155,6 +169,17 @@ struct SharedMediaLibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState) }
+        .onReceive(NotificationCenter.default.publisher(for: AppLanguage.didChangeNotification)) { _ in
+            model.rebuildMonthSections()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            model.rebuildMonthSections()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+            // With "System" language selected the app-language notification
+            // never fires for a region/calendar change; this one does.
+            model.rebuildMonthSections()
+        }
         .task(id: category) {
             if category == .links {
                 await model.loadLinks(groupIdHex: conversation.group.groupIdHex, using: appState)
@@ -222,7 +247,7 @@ struct SharedMediaLibraryView: View {
 
     @ViewBuilder
     private var mediaSections: some View {
-        let visual = GroupSharedMediaPresentation.visualItems(from: model.items)
+        let visual = model.visualItems
         if model.isLoading && model.items.isEmpty {
             loadingRow
         } else if let error = model.loadError, model.items.isEmpty {
@@ -232,7 +257,7 @@ struct SharedMediaLibraryView: View {
         } else if visual.isEmpty {
             emptyRow(title: "No photos or videos", systemImage: "photo.on.rectangle.angled")
         } else {
-            ForEach(SharedMediaLibraryPresentation.monthSections(visual)) { section in
+            ForEach(model.visualMonthSections) { section in
                 Section {
                     LazyVGrid(columns: columns, spacing: 3) {
                         ForEach(section.items) { item in
@@ -499,11 +524,13 @@ struct SharedMediaLibraryView: View {
         loadingFileID = item.id
         defer { loadingFileID = nil }
         do {
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             let data = try await mediaLoader.data(for: item.attachment)
             guard !Task.isCancelled,
                   let url = await MediaPlaybackFileStore.fileURL(
                     for: item.attachment,
-                    data: data
+                    data: data,
+                    producerEpoch: producerEpoch
                   )
             else { return }
             fileShare = SharedMediaFileShare(url: url)
