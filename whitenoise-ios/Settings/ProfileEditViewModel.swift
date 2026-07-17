@@ -23,6 +23,16 @@ final class ProfileEditViewModel {
     var error: String?
 
     private(set) var loadedAccountIdHex: String?
+    // The reset detector must see every attempt: a failed load never moves
+    // the Save gate above, so gating alone would treat a return to the
+    // previously loaded account as "same account" and let another account's
+    // typed draft survive into a publishable state.
+    private var lastAttemptedAccountIdHex: String?
+    // Tickets order overlapping loads. The throwing read runs detached and
+    // can outlive SwiftUI task cancellation, so an account-only completion
+    // guard would let a stale A read re-authorize Save during a newer A load
+    // after an A→B→A cycle.
+    private(set) var loadTicket = 0
 
     var currentDraft: ProfileEditMetadataDraft {
         ProfileEditMetadataDraft(
@@ -50,32 +60,109 @@ final class ProfileEditViewModel {
 
     func loadExisting(using appState: AppState) async {
         guard let id = appState.activeAccount?.accountIdHex else { return }
-        let cachedProfile = appState.profile(forAccountIdHex: id)
-        let loadedProfile = await appState.reloadProfileProjection(forAccountIdHex: id)?.profile
-        // The reload is async; if the active account changed under us, drop the
+        let ticket = beginLoadAttempt(accountIdHex: id)
+        // The projection batch erases read errors (`try?`), so the editor
+        // takes its authority from the throwing read: nil is definitive
+        // absence, a throw is unknown state that must gate publishing. The
+        // display cache gets no vote — it can trail the relays.
+        var loadedProfile: UserProfileMetadataFfi?
+        var readFailed = false
+        do {
+            loadedProfile = try await appState.currentMarmotClient()
+                .userProfileForEditing(accountIdHex: id)
+        } catch {
+            readFailed = true
+        }
+        // The read is async; if the active account changed under us, drop the
         // result rather than seed this editor with another account's metadata.
+        // (The ticket check in `applyLoadOutcome` separately drops results
+        // whose load window has been superseded.)
         guard appState.activeAccount?.accountIdHex == id else { return }
-        guard let profile = loadedProfile ?? cachedProfile else { return }
+        applyLoadOutcome(
+            ProfileEditLoadResolution.resolve(
+                hasLoadedProfile: loadedProfile != nil,
+                readFailed: readFailed
+            ),
+            accountIdHex: id,
+            profile: loadedProfile,
+            ticket: ticket
+        )
+    }
+
+    /// Marks the start of a load window: revokes publishing authorization,
+    /// records the attempt, and — on an account change — resets every
+    /// editable field immediately, BEFORE any await. Recording at completion
+    /// instead would let a discarded mid-switch load leave another account's
+    /// typed draft behind as an apparent same-account edit.
+    @discardableResult
+    func beginLoadAttempt(accountIdHex id: String) -> Int {
+        loadTicket += 1
+        // Publishing authorization is revoked for the whole load window and
+        // re-granted only by a successful outcome — a failed or in-flight
+        // load must never leave Save armed with a previous account's grant.
+        loadedAccountIdHex = nil
         let isDifferentAccount = ProfileEditLoadSeeding.isDifferentLoadedAccount(
-            previousAccountId: loadedAccountIdHex,
+            previousAccountId: lastAttemptedAccountIdHex,
             loading: id
         )
-        let formFields = ProfileEditFormFields(profile: profile)
-        existingName = formFields.name
-        existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
-        displayName = ProfileEditFieldSeeding.seeded(
-            current: displayName, loaded: formFields.displayName, isNewAccount: isDifferentAccount
-        )
-        about = ProfileEditFieldSeeding.seeded(
-            current: about, loaded: formFields.about, isNewAccount: isDifferentAccount
-        )
-        picture = ProfileEditFieldSeeding.seeded(
-            current: picture, loaded: formFields.picture, isNewAccount: isDifferentAccount
-        )
-        nip05 = ProfileEditFieldSeeding.seeded(
-            current: nip05, loaded: formFields.nip05, isNewAccount: isDifferentAccount
-        )
-        loadedAccountIdHex = id
+        lastAttemptedAccountIdHex = id
+        if isDifferentAccount {
+            existingName = nil
+            existingLud16 = nil
+            displayName = ""
+            about = ""
+            picture = ""
+            nip05 = ""
+            error = nil
+        }
+        return loadTicket
+    }
+
+    /// Split from `loadExisting` so the field state machine is testable
+    /// without an `AppState`. Outcomes carry the ticket of the load window
+    /// that produced them; anything superseded is dropped whole.
+    func applyLoadOutcome(
+        _ resolution: ProfileEditLoadResolution,
+        accountIdHex id: String,
+        profile: UserProfileMetadataFfi?,
+        ticket: Int
+    ) {
+        guard ticket == loadTicket else { return }
+        switch resolution {
+        case .loadFailed:
+            loadedAccountIdHex = nil
+            error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
+        case .enableFirstPublish:
+            existingName = nil
+            existingLud16 = nil
+            // A same-account retry after a failed read keeps the form (no
+            // account change), so the stale failure message must clear here —
+            // Save arming under a visible load error reads as a broken screen.
+            error = nil
+            loadedAccountIdHex = id
+        case .seedExisting:
+            guard let profile else { return }
+            error = nil
+            let formFields = ProfileEditFormFields(profile: profile)
+            existingName = formFields.name
+            existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
+            // Cross-account resets already happened when the window opened,
+            // so seeding only has the same-account case left: typed input
+            // wins over loaded values.
+            displayName = ProfileEditFieldSeeding.seeded(
+                current: displayName, loaded: formFields.displayName, isNewAccount: false
+            )
+            about = ProfileEditFieldSeeding.seeded(
+                current: about, loaded: formFields.about, isNewAccount: false
+            )
+            picture = ProfileEditFieldSeeding.seeded(
+                current: picture, loaded: formFields.picture, isNewAccount: false
+            )
+            nip05 = ProfileEditFieldSeeding.seeded(
+                current: nip05, loaded: formFields.nip05, isNewAccount: false
+            )
+            loadedAccountIdHex = id
+        }
     }
 
     func publish(using appState: AppState) async {

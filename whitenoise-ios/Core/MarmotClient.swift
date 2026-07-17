@@ -372,6 +372,16 @@ final class MarmotClient {
         await Self.profileProjections(for: requests, marmot: marmot)
     }
 
+    /// Throwing read for callers that must distinguish "no kind:0 exists"
+    /// from a failed read — the projection batch above erases errors with
+    /// `try?`, so its output can't gate a destructive publish.
+    func userProfileForEditing(accountIdHex: String) async throws -> UserProfileMetadataFfi? {
+        let marmot = self.marmot
+        return try await Task.detached(priority: .utility) {
+            try marmot.userProfile(accountIdHex: accountIdHex)
+        }.value
+    }
+
     static func profileProjections(
         for requests: [ProfileProjectionRequest],
         marmot: Marmot

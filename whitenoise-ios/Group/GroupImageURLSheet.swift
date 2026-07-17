@@ -290,7 +290,7 @@ struct GroupImageURLSheet: View {
                     .foregroundStyle(.orange)
             }
 
-            if normalizedInitialURL != nil {
+            if hasStoredImageURL {
                 Button(role: .destructive) {
                     Task { await removeImage() }
                 } label: {
@@ -380,10 +380,38 @@ struct GroupImageURLSheet: View {
         Self.validatedImageURL(initialURL)?.absoluteString
     }
 
+    /// The stored value is peer-controlled and may fail this client's
+    /// sanitizer; clearing it must stay possible, so presence is judged on
+    /// the raw string, not the sanitized form.
+    private var hasStoredImageURL: Bool {
+        !(initialURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var saveDisabled: Bool {
+        Self.saveDisabled(
+            isSaving: isSaving,
+            trimmedDraft: trimmedDraft,
+            normalizedDraft: normalizedDraftURL,
+            hasStoredURL: hasStoredImageURL,
+            normalizedStored: normalizedInitialURL
+        )
+    }
+
+    static func saveDisabled(
+        isSaving: Bool,
+        trimmedDraft: String,
+        normalizedDraft: String?,
+        hasStoredURL: Bool,
+        normalizedStored: String?
+    ) -> Bool {
         if isSaving { return true }
-        if hasDraft && normalizedDraftURL == nil { return true }
-        return normalizedDraftURL == normalizedInitialURL
+        if !trimmedDraft.isEmpty, normalizedDraft == nil { return true }
+        if trimmedDraft.isEmpty {
+            // Save-to-clear is judged on raw stored presence so an
+            // unsanitizable peer-set URL can still be cleared.
+            return !hasStoredURL
+        }
+        return normalizedDraft == normalizedStored
     }
 
     private var searchButtonDisabled: Bool {
