@@ -63,11 +63,28 @@ nonisolated enum NotificationCommunicationDecorator {
         )
         let interaction = INInteraction(intent: intent, response: nil)
         interaction.direction = .incoming
+        // The donation carries decrypted preview text and sender identity
+        // into the system interaction store, outside the sandbox — it must
+        // be addressable so a wipe can delete it.
+        interaction.groupIdentifier = presentation.threadIdentifier
         interaction.donate(completion: nil)
         do {
             return try content.updating(from: intent)
         } catch {
             return content
+        }
+    }
+
+    /// Donated interactions carry decrypted previews and sender identities
+    /// in the system-wide interaction store; a wipe's "removed from this
+    /// device" promise has to cover them. Deletion is all-donations rather
+    /// than per-account — the store cannot be queried, only deleted by id or
+    /// wholesale, and over-deleting costs Siri suggestions, not data.
+    static func deleteAllDonatedInteractions() async -> Bool {
+        await withCheckedContinuation { continuation in
+            INInteraction.deleteAll { error in
+                continuation.resume(returning: error == nil)
+            }
         }
     }
 

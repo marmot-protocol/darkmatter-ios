@@ -604,6 +604,12 @@ final class AppState {
                 // the account either.
                 ChatMuteStore.clearAll(accountIdHex: removedAccountIdHex)
             }
+            if await !NotificationCommunicationDecorator.deleteAllDonatedInteractions() {
+                present(.error(
+                    L10n.string("Couldn't clear notification history"),
+                    message: L10n.string("Some notification previews may remain on this device.")
+                ))
+            }
             if await !MessageMediaCache.purgeAllDecryptedMedia() {
                 present(.error(
                     L10n.string("Couldn't clear cached media"),
