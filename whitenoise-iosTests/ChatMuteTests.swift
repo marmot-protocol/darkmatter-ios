@@ -5,6 +5,31 @@ import Testing
 
 struct ChatMuteStoreTests {
 
+    @Test func clearAllRemovesOnlyTheOwnersMuteAndModeEntries() throws {
+        let suiteName = "chat-mute-clear-all-tests"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let ownedMute = try #require(ChatMuteStore.key(accountIdHex: "aa11", groupIdHex: "0001"))
+        let foreignMute = try #require(ChatMuteStore.key(accountIdHex: "bb22", groupIdHex: "0001"))
+        defaults.set([ownedMute, foreignMute], forKey: ChatMuteStore.storageKey)
+        let ownedMode = try #require(ChatMuteStore.key(accountIdHex: "aa11", groupIdHex: "0002"))
+        let foreignMode = try #require(ChatMuteStore.key(accountIdHex: "bb22", groupIdHex: "0002"))
+        defaults.set(
+            [ownedMode: "mentions", foreignMode: "mentions"],
+            forKey: ChatMuteStore.notifyModeStorageKey
+        )
+
+        ChatMuteStore.clearAll(accountIdHex: "AA11", defaults: defaults)
+
+        // Only the wiped account's entries go; the other account's mute and
+        // mode survive untouched.
+        #expect(ChatMuteStore.mutedChatKeys(defaults: defaults) == [foreignMute])
+        let modes = defaults.dictionary(forKey: ChatMuteStore.notifyModeStorageKey) as? [String: String]
+        #expect(modes == [foreignMode: "mentions"])
+    }
+
     @Test func keyNormalizesCaseAndWhitespace() throws {
         let key = try #require(ChatMuteStore.key(
             accountIdHex: "  ABCDEF01  ",
