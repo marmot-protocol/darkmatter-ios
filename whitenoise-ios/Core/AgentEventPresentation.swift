@@ -77,7 +77,12 @@ nonisolated enum AgentEventPresentation {
     }
 
     private static func parsePayload(_ plaintext: String) -> Payload? {
-        guard let data = plaintext.data(using: .utf8),
+        // JSONSerialization materializes the whole blob before any field is
+        // read, and this runs on MainActor render paths — the same ceiling
+        // the media-preview parser applies must bound this peer-controlled
+        // payload too.
+        guard plaintext.utf8.count <= MessagePreview.timelineMediaPreviewMaxJsonBytes,
+              let data = plaintext.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         return Payload(

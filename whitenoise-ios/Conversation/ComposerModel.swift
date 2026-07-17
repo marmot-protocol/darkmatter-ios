@@ -148,6 +148,10 @@ final class ComposerModel {
         sendInFlight = true
         defer { sendInFlight = false }
 
+        // Captured before the upload round-trip: a wipe completing while the
+        // send is in flight must invalidate the post-upload cache store.
+        let uploadEpoch = MessageMediaCache.currentProducerEpoch()
+
         let captionTokens: MarkdownDocumentFfi = outgoingCaption.isEmpty
             ? .emptyDocument
             : await appState.parseMarkdown(text: outgoingCaption)
@@ -185,7 +189,11 @@ final class ComposerModel {
             )
             let references = verifiedAttachments.map(\.reference)
             for attachment in verifiedAttachments {
-                await MessageMediaCache.store(attachment.data, for: attachment.reference)
+                await MessageMediaCache.store(
+                    attachment.data,
+                    for: attachment.reference,
+                    producerGeneration: uploadEpoch
+                )
             }
             let confirmed = AppMessageRecordFfi(
                 messageIdHex: "",

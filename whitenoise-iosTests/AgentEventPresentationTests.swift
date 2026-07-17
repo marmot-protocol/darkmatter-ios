@@ -4,6 +4,33 @@ import Testing
 @testable import MarmotKit
 
 struct AgentEventPresentationTests {
+    @Test func oversizedPayloadIsRejectedBeforeParsing() {
+        // The cap runs before JSONSerialization materializes anything — a
+        // hostile multi-megabyte payload must not stall the MainActor.
+        let padding = String(repeating: "a", count: MessagePreview.timelineMediaPreviewMaxJsonBytes)
+        let oversized = "{\"v\":1,\"status\":\"thinking\",\"text\":\"" + padding + "\"}"
+        let record = agentRecord(
+            kind: MessageSemantics.kindAgentActivity,
+            plaintext: oversized,
+            tags: [MessageTagFfi(values: ["status", "thinking"])]
+        )
+
+        let display = AgentEventPresentation.display(for: record)
+
+        // The oversized payload must be treated exactly like an unparseable
+        // one — same degraded presentation, none of the attacker-sized text.
+        // (Asserting equality with the unparseable baseline also fails if a
+        // future change surfaces truncated payload text.)
+        let unparseableBaseline = AgentEventPresentation.display(for: agentRecord(
+            kind: MessageSemantics.kindAgentActivity,
+            plaintext: "not json",
+            tags: [MessageTagFfi(values: ["status", "thinking"])]
+        ))
+        #expect(display?.primaryText == unparseableBaseline?.primaryText)
+        #expect(display?.kind == unparseableBaseline?.kind)
+        #expect(display?.primaryText.contains(padding) != true)
+    }
+
     @Test func activityDisplayUsesJsonTextAndStatusTag() {
         let record = agentRecord(
             kind: MessageSemantics.kindAgentActivity,

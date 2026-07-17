@@ -11,6 +11,10 @@ import MarmotKit
 final class KeyPackagesViewModel {
     var packages: [AccountKeyPackageFfi] = []
     var lists: AccountRelayListsFfi?
+    private var loadedRef: String?
+    // Overlapping reloads (pull-to-refresh racing the task restart) must not
+    // let an older result overwrite a newer one, even for the same account.
+    private var reloadTicket = 0
     var isLoading = false
     var isPublishing = false
     var deletingEventIds: Set<String> = []
@@ -28,17 +32,42 @@ final class KeyPackagesViewModel {
         }
         isLoading = true
         loadError = nil
-        defer { isLoading = false }
+        reloadTicket += 1
+        let ticket = reloadTicket
+        // A superseded reload must not clear the newer reload's spinner —
+        // that flashes "no key packages" while the real load is in flight.
+        defer {
+            if reloadTicket == ticket {
+                isLoading = false
+            }
+        }
+        // The model persists across account changes; never show one
+        // account's data while another's loads.
+        if loadedRef != ref {
+            packages = []
+            lists = nil
+        }
 
         do {
             let client = try appState.currentMarmotClient()
             let loadedLists = try await client.accountRelayLists(accountRef: ref)
-            lists = loadedLists
-            packages = try await client.accountKeyPackages(
+            // The screen's task restarts on account change, but the cancelled
+            // body still runs to completion — a straggling load must not
+            // render the previous account's key packages and bootstrap relays
+            // under the new one. Both values commit together after the final
+            // guard so a failed or cancelled package load can't leave
+            // mixed-account state.
+            guard !Task.isCancelled, reloadTicket == ticket, appState.activeAccountRef == ref else { return }
+            let loadedPackages = try await client.accountKeyPackages(
                 accountRef: ref,
                 bootstrapRelays: RelaySettings.bootstrapRelays(from: loadedLists)
             )
+            guard !Task.isCancelled, reloadTicket == ticket, appState.activeAccountRef == ref else { return }
+            lists = loadedLists
+            packages = loadedPackages
+            loadedRef = ref
         } catch {
+            guard reloadTicket == ticket, appState.activeAccountRef == ref else { return }
             loadError = error.localizedDescription
         }
     }

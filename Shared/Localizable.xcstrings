@@ -1286,6 +1286,136 @@
           }
         }
       },
+      "Couldn't clear cached media": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Zwischengespeicherte Medien konnten nicht gelöscht werden"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Couldn't clear cached media"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "No se pudieron borrar los archivos en caché"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Impossible d'effacer les médias en cache"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Impossibile cancellare i media nella cache"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Não foi possível limpar a mídia em cache"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Не удалось очистить кэшированные медиафайлы"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Önbelleğe alınan medya temizlenemedi"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "无法清除缓存的媒体"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "無法清除快取的媒體"
+            }
+          }
+        }
+      },
+      "Some decrypted media may remain on this device.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Einige entschlüsselte Medien könnten auf diesem Gerät verbleiben."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Some decrypted media may remain on this device."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Es posible que queden archivos descifrados en este dispositivo."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Certains médias déchiffrés peuvent rester sur cet appareil."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Alcuni media decifrati potrebbero rimanere su questo dispositivo."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Algumas mídias descriptografadas podem permanecer neste dispositivo."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Некоторые расшифрованные медиафайлы могут остаться на этом устройстве."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Bazı şifresi çözülmüş medya bu cihazda kalabilir."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "部分已解密的媒体可能仍保留在此设备上。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "部分已解密的媒體可能仍保留在此裝置上。"
+            }
+          }
+        }
+      },
       "Couldn't load shared media.": {
         "extractionState": "manual",
         "localizations": {

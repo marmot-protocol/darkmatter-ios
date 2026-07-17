@@ -42,6 +42,27 @@ nonisolated enum ChatMuteStore {
         Set(defaults.stringArray(forKey: storageKey) ?? [])
     }
 
+    /// Removes every mute and notify-mode entry the account owns. Called on
+    /// destructive sign-out; mirrors `ContactNicknameStore.clearAll`, the
+    /// documented sibling this store was missing.
+    static func clearAll(accountIdHex: String, defaults: UserDefaults? = ChatMuteStore.defaults) {
+        guard let defaults, let account = normalizedComponent(accountIdHex) else { return }
+        let prefix = "\(account):"
+        let muted = mutedChatKeys(defaults: defaults)
+        let remainingMuted = muted.filter { !$0.hasPrefix(prefix) }
+        if remainingMuted.count != muted.count {
+            defaults.set(Array(remainingMuted), forKey: storageKey)
+        }
+        var modes = (defaults.dictionary(forKey: notifyModeStorageKey) as? [String: String]) ?? [:]
+        let ownedModeKeys = modes.keys.filter { $0.hasPrefix(prefix) }
+        if !ownedModeKeys.isEmpty {
+            for key in ownedModeKeys {
+                modes.removeValue(forKey: key)
+            }
+            defaults.set(modes, forKey: notifyModeStorageKey)
+        }
+    }
+
     /// Resolving snapshot for in-app display. A `nil` suite reads as empty here;
     /// the extension uses `mutedChatKeysSnapshot()`, which keeps the failure
     /// distinguishable so the audible path can fail safe.

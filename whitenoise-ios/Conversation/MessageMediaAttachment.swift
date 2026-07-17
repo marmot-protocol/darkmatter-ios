@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import CryptoKit
 import MarmotKit
+import Synchronization
 import UIKit
 import UniformTypeIdentifiers
 
@@ -1173,7 +1174,11 @@ nonisolated enum MediaPlaybackFileStore {
     /// so media open never blocks the UI thread (#351). `MessageMediaAttachment`
     /// is not `Sendable`, so only its content-addressed inputs cross into the
     /// detached task, which reconstructs a minimal item for the synchronous core.
-    static func fileURL(for item: MessageMediaAttachment, data: Data) async -> URL? {
+    static func fileURL(
+        for item: MessageMediaAttachment,
+        data: Data,
+        producerEpoch: Int? = nil
+    ) async -> URL? {
         guard let cachesDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -1196,7 +1201,8 @@ nonisolated enum MediaPlaybackFileStore {
                 cachesDirectory: cachesDirectory,
                 mediaPolicy: .media,
                 playbackPolicy: .playback,
-                now: Date()
+                now: Date(),
+                producerEpoch: producerEpoch
             )
         }.value
     }
@@ -1207,7 +1213,8 @@ nonisolated enum MediaPlaybackFileStore {
         cachesDirectory: URL,
         mediaPolicy: DecryptedMediaCacheEvictionPolicy,
         playbackPolicy: DecryptedMediaCacheEvictionPolicy,
-        now: Date = Date()
+        now: Date = Date(),
+        producerEpoch: Int? = nil
     ) -> URL? {
         if let reference = item.reference,
            let cachedURL = MessageMediaCache.cacheURL(for: reference, cachesDirectory: cachesDirectory)
@@ -1217,7 +1224,8 @@ nonisolated enum MediaPlaybackFileStore {
                 for: reference,
                 cachesDirectory: cachesDirectory,
                 policy: mediaPolicy,
-                now: now
+                now: now,
+                producerGeneration: producerEpoch
             )
             return FileManager.default.fileExists(atPath: cachedURL.path) ? cachedURL : nil
         }
@@ -1225,28 +1233,35 @@ nonisolated enum MediaPlaybackFileStore {
         let fileExtension = MediaAttachmentPolicy.fileExtension(for: item.mediaType, fileName: item.fileName)
         let directory = cachesDirectory.appendingPathComponent("EncryptedMediaPlayback", isDirectory: true)
         let url = directory.appendingPathComponent("\(sha256Hex(of: data)).\(fileExtension)")
-        do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: protectedAttributes
-            )
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
-            if !FileManager.default.fileExists(atPath: url.path) {
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
-                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+        // Same critical section as the display cache: stale producers are
+        // rejected before writing and no write interleaves with a purge.
+        let stored: Bool = MessageMediaCache.purgeGeneration.withLock { generation in
+            if let producerEpoch, producerEpoch != generation { return false }
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: protectedAttributes
+                )
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    try data.write(to: url, options: [.atomic, .completeFileProtection])
+                    try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+                }
+                return true
+            } catch {
+                return false
             }
-            DecryptedMediaCacheEvictor.touch(url, at: now)
-            DecryptedMediaCacheEvictor.trim(
-                directory: directory,
-                policy: playbackPolicy,
-                preserving: url,
-                now: now
-            )
-            return url
-        } catch {
-            return nil
         }
+        guard stored else { return nil }
+        DecryptedMediaCacheEvictor.touch(url, at: now)
+        DecryptedMediaCacheEvictor.trim(
+            directory: directory,
+            policy: playbackPolicy,
+            preserving: url,
+            now: now
+        )
+        return url
     }
 
     private static func sha256Hex(of data: Data) -> String {
@@ -1294,10 +1309,19 @@ nonisolated enum MessageMediaCache {
 
     /// Writes the decrypted plaintext to the cache off the MainActor so the
     /// `data.write(to:)` and eviction sweep never block the UI thread (#351).
-    static func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
+    static func store(
+        _ data: Data,
+        for reference: MediaAttachmentReferenceFfi,
+        producerGeneration: Int? = nil
+    ) async {
         guard let cachesDirectory = defaultCachesDirectory else { return }
         await Task.detached(priority: .utility) {
-            store(data, for: reference, cachesDirectory: cachesDirectory)
+            store(
+                data,
+                for: reference,
+                cachesDirectory: cachesDirectory,
+                producerGeneration: producerGeneration
+            )
         }.value
     }
 
@@ -1306,29 +1330,38 @@ nonisolated enum MessageMediaCache {
         for reference: MediaAttachmentReferenceFfi,
         cachesDirectory: URL,
         policy: DecryptedMediaCacheEvictionPolicy = .media,
-        now: Date = Date()
+        now: Date = Date(),
+        producerGeneration: Int? = nil
     ) {
         guard let url = cacheURL(for: reference, cachesDirectory: cachesDirectory) else { return }
         let directory = url.deletingLastPathComponent()
-        do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: protectedAttributes
-            )
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
-            DecryptedMediaCacheEvictor.touch(url, at: now)
-            DecryptedMediaCacheEvictor.trim(
-                directory: directory,
-                policy: policy,
-                preserving: url,
-                now: now
-            )
-        } catch {
-            return
+        // The write happens inside the purge's own critical section: a stale
+        // producer (bytes obtained before a wipe) is rejected before touching
+        // the filesystem, and no write can interleave with directory removal.
+        let stored: Bool = purgeGeneration.withLock { generation in
+            if let producerGeneration, producerGeneration != generation { return false }
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: protectedAttributes
+                )
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+                return true
+            } catch {
+                return false
+            }
         }
+        guard stored else { return }
+        DecryptedMediaCacheEvictor.touch(url, at: now)
+        DecryptedMediaCacheEvictor.trim(
+            directory: directory,
+            policy: policy,
+            preserving: url,
+            now: now
+        )
     }
 
     /// Removes cached decrypted plaintext for expired attachments off the
@@ -1345,14 +1378,72 @@ nonisolated enum MessageMediaCache {
         }.value
     }
 
+    static let decryptedMediaDirectoryNames = ["EncryptedMedia", "EncryptedMediaPlayback"]
+
+    /// Bumped by a purge; a store that straddles the bump removes its own
+    /// file so an in-flight decrypt can't quietly resurrect plaintext the
+    /// wipe just promised was gone.
+    static let purgeGeneration = Mutex(0)
+
+    /// Destructive sign-out removes every decrypted plaintext copy — the
+    /// content-addressed display cache and the playback store. The wipe's
+    /// "removed from this device" promise covers media the user has viewed;
+    /// age/size eviction alone can leave plaintext behind indefinitely.
+    /// Returns whether both directories are verifiably gone, so the caller
+    /// can report an incomplete wipe instead of assuming success.
+    @discardableResult
+    static func purgeAllDecryptedMedia() async -> Bool {
+        guard let cachesDirectory = defaultCachesDirectory else { return false }
+        return await Task.detached(priority: .utility) {
+            purgeAllDecryptedMedia(cachesDirectory: cachesDirectory)
+        }.value
+    }
+
+    /// The bump and the removal share one critical section with every cache
+    /// write, so no writer can interleave with the purge — generation checks
+    /// alone left a window where a write could land between removal and a
+    /// later bump and survive.
+    static func purgeAllDecryptedMedia(cachesDirectory: URL) -> Bool {
+        purgeGeneration.withLock { generation in
+            generation += 1
+            var allRemoved = true
+            for name in decryptedMediaDirectoryNames {
+                let directory = cachesDirectory.appendingPathComponent(name, isDirectory: true)
+                try? FileManager.default.removeItem(at: directory)
+                if FileManager.default.fileExists(atPath: directory.path) {
+                    allRemoved = false
+                }
+            }
+            return allRemoved
+        }
+    }
+
+    /// Captured by producers BEFORE the async gap that yields their bytes
+    /// (cache read, download, upload round-trip); the write rejects a stale
+    /// epoch before touching the filesystem.
+    static func currentProducerEpoch() -> Int {
+        purgeGeneration.withLock { $0 }
+    }
+
     static func removeCachedData(
         forCiphertextHashes hashes: Set<String>,
         in references: [MediaAttachmentReferenceFfi],
         cachesDirectory: URL
     ) {
+        let directory = cachesDirectory.appendingPathComponent("EncryptedMedia", isDirectory: true)
+        let existing = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
         for reference in references where hashes.contains(reference.ciphertextSha256.lowercased()) {
-            guard let url = cacheURL(for: reference, cachesDirectory: cachesDirectory) else { continue }
-            try? FileManager.default.removeItem(at: url)
+            // Every file sharing the hash stem goes, not just the current
+            // media-type name: older builds keyed by peer filename extension,
+            // and expired plaintext must not survive under a legacy name.
+            let hash = reference.plaintextSha256.lowercased()
+            guard hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else { continue }
+            for file in existing where file.lastPathComponent.hasPrefix("\(hash).") {
+                try? FileManager.default.removeItem(at: file)
+            }
         }
     }
 
@@ -1366,9 +1457,13 @@ nonisolated enum MessageMediaCache {
         guard hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else {
             return nil
         }
+        // Content-addressed: the extension comes from the media type alone.
+        // Folding in the peer-controlled filename made pic.jpg and pic.jpeg
+        // of identical plaintext miss each other's cache entries, forcing a
+        // redundant download + decrypt and a duplicate plaintext copy.
         return cachesDirectory
             .appendingPathComponent("EncryptedMedia", isDirectory: true)
-            .appendingPathComponent("\(hash).\(MediaAttachmentPolicy.fileExtension(for: reference.mediaType, fileName: reference.fileName))")
+            .appendingPathComponent("\(hash).\(MediaAttachmentPolicy.fileExtension(for: reference.mediaType))")
     }
 
     private static var defaultCachesDirectory: URL? {

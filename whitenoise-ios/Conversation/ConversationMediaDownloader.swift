@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import CryptoKit
 import MarmotKit
 
@@ -70,7 +71,7 @@ nonisolated enum MediaPlaintextHash {
 @MainActor
 protocol ConversationMediaCacheAccessing {
     func cachedData(for reference: MediaAttachmentReferenceFfi) async -> Data?
-    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async
+    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, producerGeneration: Int?) async
 }
 
 struct DefaultConversationMediaCache: ConversationMediaCacheAccessing {
@@ -78,8 +79,8 @@ struct DefaultConversationMediaCache: ConversationMediaCacheAccessing {
         await MessageMediaCache.cachedData(for: reference)
     }
 
-    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
-        await MessageMediaCache.store(data, for: reference)
+    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, producerGeneration: Int?) async {
+        await MessageMediaCache.store(data, for: reference, producerGeneration: producerGeneration)
     }
 }
 
@@ -124,6 +125,9 @@ final class ConversationMediaDownloader {
         return try await inFlight.data(
             for: MediaDownloadInFlightKey(reference: reference)
         ) {
+            // Captured before any async gap — cache read or download — so a
+            // wipe completing mid-operation invalidates this producer's store.
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             if let cached = await self.cache.cachedData(for: reference),
                await MediaPlaintextHash.matches(cached, expectedSha256: reference.plaintextSha256)
             {
@@ -142,7 +146,7 @@ final class ConversationMediaDownloader {
             ) else {
                 throw MediaDataError.plaintextHashMismatch
             }
-            await self.cache.store(result.plaintext, for: reference)
+            await self.cache.store(result.plaintext, for: reference, producerGeneration: producerEpoch)
             return result.plaintext
         }
     }

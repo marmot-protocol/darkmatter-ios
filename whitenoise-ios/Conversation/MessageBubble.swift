@@ -1857,8 +1857,9 @@ private struct MessageVideoAttachmentView: View {
         if let playbackURL {
             return playbackURL
         }
+        let producerEpoch = MessageMediaCache.currentProducerEpoch()
         let data = try await onLoadMedia.data(for: item)
-        guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
+        guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data, producerEpoch: producerEpoch) else {
             throw MessageVideoAttachmentError.playbackFileUnavailable
         }
         playbackURL = url
@@ -2416,8 +2417,9 @@ private struct MessageDocumentAttachmentView: View {
         didFail = false
         defer { isLoading = false }
         do {
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             let data = try await onLoadMedia.data(for: item)
-            guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
+            guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data, producerEpoch: producerEpoch) else {
                 didFail = true
                 return
             }
@@ -2903,8 +2905,9 @@ private struct MessageMediaFullscreenVideoPage: View {
         if let playbackURL {
             return playbackURL
         }
+        let producerEpoch = MessageMediaCache.currentProducerEpoch()
         let data = try await onLoadMedia.data(for: item)
-        guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data) else {
+        guard let url = await MediaPlaybackFileStore.fileURL(for: item, data: data, producerEpoch: producerEpoch) else {
             throw MessageVideoAttachmentError.playbackFileUnavailable
         }
         playbackURL = url
