@@ -1,7 +1,7 @@
-mdk-sha: fc64391
-mdk-branch: fix/admin-delete-timeline-ingest
+mdk-sha: 3071274
+mdk-branch: master
 mdk-tag:
-built-at: 2026-07-15T23:26:03Z
+built-at: 2026-07-17T07:23:10Z
 uniffi-version: 0.28.3
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
