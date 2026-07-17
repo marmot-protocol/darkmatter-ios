@@ -72,8 +72,35 @@ private enum AppAppearanceRuntime {
     }
 }
 
+private struct TrueBlackScaffoldBackgroundModifier: ViewModifier {
+    @AppStorage(AppearanceTheme.storageKey) private var themeRawValue = AppearanceTheme.system.rawValue
+
+    private var isActive: Bool {
+        AppearanceTheme.resolved(rawValue: themeRawValue).usesTrueBlackSurfaces
+    }
+
+    func body(content: Content) -> some View {
+        // Branch on modifier values, not view structure, so switching themes
+        // keeps scroll position and other subtree state.
+        content
+            .scrollContentBackground(isActive ? .hidden : .automatic)
+            .background {
+                if isActive {
+                    Color.black.ignoresSafeArea()
+                }
+            }
+    }
+}
+
 extension View {
     func appAppearance() -> some View {
         modifier(AppAppearanceModifier())
+    }
+
+    /// Paints this scaffold surface pure black while the true black theme is
+    /// active. Apply to top-level scroll containers (chat list, conversation
+    /// timeline, settings forms), not to individual components.
+    func trueBlackScaffoldBackground() -> some View {
+        modifier(TrueBlackScaffoldBackgroundModifier())
     }
 }
