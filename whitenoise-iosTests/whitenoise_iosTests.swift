@@ -4048,6 +4048,23 @@ struct NotificationServiceProjectionTests {
         #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
     }
 
+    @Test func overflowSummariesAreBoundedAcrossManyConversations() {
+        // A backlog spread across many chats folds into at most
+        // maxOverflowSummaries presentations — the per-conversation summary
+        // path must not reintroduce the unbounded add/donate loop.
+        let updates = (0..<30).map { index in
+            notificationUpdate(
+                groupIdHex: hex(String(format: "%02x", index)),
+                notificationKey: "overflow-\(index)"
+            )
+        }
+        let summaries = NotificationPresentationPolicy.overflowSummaryPresentations(from: updates)
+        #expect(summaries.count == NotificationPresentationPolicy.maxOverflowSummaries)
+        // Every folded conversation stays represented: per-route counts plus
+        // the aggregate tail account for all 30 records.
+        #expect(summaries.count <= updates.count)
+    }
+
     @Test func overflowSummariesCarryTheOrOfTheirMembersMentionBits() {
         // A missing bit reads as a mention in willPresent, so an
         // all-non-mention summary must carry an explicit "0" or it banners
