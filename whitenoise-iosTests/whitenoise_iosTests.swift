@@ -4054,8 +4054,8 @@ struct NotificationServiceProjectionTests {
         // path must not reintroduce the unbounded add/donate loop.
         let updates = (0..<30).map { index in
             notificationUpdate(
-                groupIdHex: hex(String(format: "%02x", index)),
-                notificationKey: "overflow-\(index)"
+                notificationKey: "overflow-\(index)",
+                groupIdHex: hex(String(format: "%02x", index))
             )
         }
         let summaries = NotificationPresentationPolicy.overflowSummaryPresentations(from: updates)
