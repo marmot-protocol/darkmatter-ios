@@ -119,10 +119,10 @@ struct ComposerMentionQueryTests {
         #expect(ComposerMentionQuery.looksLikeCompleteNpub(jeffNpub))
     }
 
-    @Test func groupMemberDetailsProfileLookupsUseMappedAccountId() {
+    @Test func groupMemberDetailsProfileLookupsUseNostrMemberId() {
         let member = GroupMemberDetailsFfi(
-            memberIdHex: "mls-member-id",
-            account: "nostr-account-id",
+            memberIdHex: "nostr-account-id",
+            account: "local-account-label",
             local: false,
             isAdmin: false,
             isSelf: false,
@@ -134,7 +134,7 @@ struct ComposerMentionQueryTests {
             GroupMemberDetailsPresentation.profileAccountIdHex(for: member) == "nostr-account-id")
     }
 
-    @Test func groupMemberDetailsProfileLookupsFallBackToMemberIdWithoutAccount() {
+    @Test func groupMemberDetailsProfileLookupsUseNostrMemberIdWithoutAccountLabel() {
         let missingAccount = GroupMemberDetailsFfi(
             memberIdHex: "mls-member-id",
             account: nil,
