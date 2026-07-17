@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import CryptoKit
 import MarmotKit
 
@@ -70,7 +71,7 @@ nonisolated enum MediaPlaintextHash {
 @MainActor
 protocol ConversationMediaCacheAccessing {
     func cachedData(for reference: MediaAttachmentReferenceFfi) async -> Data?
-    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async
+    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, producerGeneration: Int?) async
 }
 
 struct DefaultConversationMediaCache: ConversationMediaCacheAccessing {
@@ -78,8 +79,8 @@ struct DefaultConversationMediaCache: ConversationMediaCacheAccessing {
         await MessageMediaCache.cachedData(for: reference)
     }
 
-    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi) async {
-        await MessageMediaCache.store(data, for: reference)
+    func store(_ data: Data, for reference: MediaAttachmentReferenceFfi, producerGeneration: Int?) async {
+        await MessageMediaCache.store(data, for: reference, producerGeneration: producerGeneration)
     }
 }
 
@@ -133,6 +134,9 @@ final class ConversationMediaDownloader {
                 throw MediaDataError.missingAccount
             }
             let client = try appState.currentMarmotClient()
+            // Captured before the download: a wipe that completes while the
+            // bytes are in flight must invalidate this producer's store.
+            let producerGeneration = MessageMediaCache.purgeGeneration.withLock { $0 }
             // Row references already carry the real source_epoch, so the reference
             // is directly downloadable — no listMedia round-trip to recover it.
             let result = try await self.downloadMedia(client, accountRef, groupIdHex, reference)
@@ -142,7 +146,7 @@ final class ConversationMediaDownloader {
             ) else {
                 throw MediaDataError.plaintextHashMismatch
             }
-            await self.cache.store(result.plaintext, for: reference)
+            await self.cache.store(result.plaintext, for: reference, producerGeneration: producerGeneration)
             return result.plaintext
         }
     }

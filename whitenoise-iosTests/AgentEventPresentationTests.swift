@@ -17,8 +17,17 @@ struct AgentEventPresentationTests {
 
         let display = AgentEventPresentation.display(for: record)
 
-        // Parsing is rejected; the presentation degrades to its no-payload
-        // form rather than surfacing attacker-sized text.
+        // The oversized payload must be treated exactly like an unparseable
+        // one — same degraded presentation, none of the attacker-sized text.
+        // (Asserting equality with the unparseable baseline also fails if a
+        // future change surfaces truncated payload text.)
+        let unparseableBaseline = AgentEventPresentation.display(for: agentRecord(
+            kind: MessageSemantics.kindAgentActivity,
+            plaintext: "not json",
+            tags: [MessageTagFfi(values: ["status", "thinking"])]
+        ))
+        #expect(display?.primaryText == unparseableBaseline?.primaryText)
+        #expect(display?.kind == unparseableBaseline?.kind)
         #expect(display?.primaryText.contains(padding) != true)
     }
 

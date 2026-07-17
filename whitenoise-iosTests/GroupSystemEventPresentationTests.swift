@@ -4,6 +4,26 @@ import Testing
 @testable import MarmotKit
 
 struct GroupSystemEventPresentationTests {
+    @Test func oversizedPayloadIsRejectedBeforeParsing() {
+        // Same ceiling as the agent-event parser: the cap must run before
+        // JSONSerialization materializes an attacker-sized payload. The
+        // oversized record renders exactly like an unparseable one.
+        let padding = String(repeating: "a", count: MessagePreview.timelineMediaPreviewMaxJsonBytes)
+        let oversized = "{\"v\":1,\"system_type\":\"member_added\",\"text\":\"" + padding + "\"}"
+
+        let display = GroupSystemEventPresentation.displayText(
+            for: groupSystemRecord(plaintext: oversized),
+            displayName: testDisplayName
+        )
+        let unparseableBaseline = GroupSystemEventPresentation.displayText(
+            for: groupSystemRecord(plaintext: "not json"),
+            displayName: testDisplayName
+        )
+
+        #expect(display == unparseableBaseline)
+        #expect(display?.contains(padding) != true)
+    }
+
     @Test func displayTextUsesJsonTextFieldWhenStructuredDataMissing() {
         let record = groupSystemRecord(
             plaintext: #"{"v":1,"system_type":"member_added","text":"Member added"}"#

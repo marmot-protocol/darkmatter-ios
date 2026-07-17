@@ -589,7 +589,12 @@ final class AppState {
                 // the account either.
                 ChatMuteStore.clearAll(accountIdHex: removedAccountIdHex)
             }
-            await MessageMediaCache.purgeAllDecryptedMedia()
+            if await !MessageMediaCache.purgeAllDecryptedMedia() {
+                present(.error(
+                    L10n.string("Couldn't clear cached media"),
+                    message: L10n.string("Some decrypted media may remain on this device.")
+                ))
+            }
         }
 
         do {

@@ -22,6 +22,13 @@ final class SharedMediaLibraryViewModel {
     private var didLoad = false
     private var didLoadLinks = false
 
+    /// Month titles and buckets bake in the calendar and locale at build
+    /// time; a language or time-zone change while the screen stays alive
+    /// re-derives them (wired via notifications in the view).
+    func rebuildMonthSections() {
+        visualMonthSections = SharedMediaLibraryPresentation.monthSections(visualItems)
+    }
+
     static let linkScanMessageLimit = 2000
     static let linkScanPageLimit: UInt32 = 200
 
@@ -37,7 +44,7 @@ final class SharedMediaLibraryViewModel {
             try Task.checkCancellation()
             items = GroupSharedMediaPresentation.items(from: records)
             visualItems = GroupSharedMediaPresentation.visualItems(from: items)
-            visualMonthSections = SharedMediaLibraryPresentation.monthSections(visualItems)
+            rebuildMonthSections()
             didLoad = true
         } catch is CancellationError {
             return
@@ -162,6 +169,17 @@ struct SharedMediaLibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState) }
+        .onReceive(NotificationCenter.default.publisher(for: AppLanguage.didChangeNotification)) { _ in
+            model.rebuildMonthSections()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            model.rebuildMonthSections()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+            // With "System" language selected the app-language notification
+            // never fires for a region/calendar change; this one does.
+            model.rebuildMonthSections()
+        }
         .task(id: category) {
             if category == .links {
                 await model.loadLinks(groupIdHex: conversation.group.groupIdHex, using: appState)
