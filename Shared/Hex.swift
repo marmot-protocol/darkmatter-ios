@@ -35,6 +35,22 @@ nonisolated enum Hex {
         return trimmed.lowercased()
     }
 
+    /// MLS group ids are engine-controlled opaque hex — the current engine
+    /// emits 16-byte ids, and the MLS spec allows other lengths. Callers that
+    /// key or compare by group id normalize case and validate hex content,
+    /// but must NOT demand the 32-byte shape that nostr event ids have:
+    /// that assumption made every real conversation's delete capability
+    /// resolve to unavailable.
+    static func normalizedGroupIdHex(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              trimmed.utf8.count.isMultiple(of: 2),
+              trimmed.utf8.count <= 128,
+              trimmed.utf8.allSatisfy(isHexByte)
+        else { return nil }
+        return trimmed.lowercased()
+    }
+
     private static func isHexByte(_ byte: UInt8) -> Bool {
         switch byte {
         case 0x30...0x39, 0x41...0x46, 0x61...0x66: // 0-9, A-F, a-f

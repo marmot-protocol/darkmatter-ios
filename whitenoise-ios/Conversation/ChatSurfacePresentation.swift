@@ -118,12 +118,20 @@ nonisolated struct ReactionSummaryPresentation: Equatable {
     }
 }
 
+/// A tombstone keeps its timestamp — a removed message still has a place in
+/// the timeline — but drops the delivery checkmark, which says nothing once
+/// the message is gone.
+nonisolated enum MessageTombstonePresentation {
+    static func showsDeliveryStatus(isDeleted: Bool) -> Bool { !isDeleted }
+}
+
 struct MessageMetadataFooter: View {
     let time: String
     let isEdited: Bool
     let status: MessageStatus
     let isFromMe: Bool
     let usesLightForeground: Bool
+    var showsDeliveryStatus: Bool = true
     var onViewEditHistory: (() -> Void)?
 
     private var presentation: MessageFooterPresentation {
@@ -147,7 +155,7 @@ struct MessageMetadataFooter: View {
                     Text(L10n.string("Edited"))
                 }
             }
-            if let systemImage = presentation.systemImage {
+            if showsDeliveryStatus, let systemImage = presentation.systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 10, weight: .semibold))
                     .accessibilityLabel(presentation.accessibilityLabel ?? "")

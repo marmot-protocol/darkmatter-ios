@@ -31,6 +31,19 @@ struct HexValidationTests {
         #expect(!Hex.is32Bytes(String(repeating: "g", count: 64)))
     }
 
+    @Test func normalizedGroupIdHexAcceptsOpaqueEngineLengths() {
+        // 16-byte (current engine) and 32-byte ids both normalize.
+        #expect(Hex.normalizedGroupIdHex(String(repeating: "AB", count: 16)) == String(repeating: "ab", count: 16))
+        #expect(Hex.normalizedGroupIdHex(String(repeating: "ab", count: 32)) == String(repeating: "ab", count: 32))
+        #expect(Hex.normalizedGroupIdHex("  AB12  ") == "ab12")
+        // Odd length, non-hex, blank, and oversized inputs are rejected.
+        #expect(Hex.normalizedGroupIdHex("abc") == nil)
+        #expect(Hex.normalizedGroupIdHex("zz") == nil)
+        #expect(Hex.normalizedGroupIdHex("") == nil)
+        #expect(Hex.normalizedGroupIdHex(String(repeating: "ab", count: 65)) == nil)
+        #expect(Hex.normalizedGroupIdHex(nil) == nil)
+    }
+
     @Test func normalized32BytesTrimsValidatesAndLowercases() {
         #expect(Hex.normalized32Bytes("  \(valid64.uppercased())  ") == valid64)
         #expect(Hex.normalized32Bytes(nil) == nil)
