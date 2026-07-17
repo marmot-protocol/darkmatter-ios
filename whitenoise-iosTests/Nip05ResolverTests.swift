@@ -67,6 +67,27 @@ struct Nip05ResolverTests {
         #expect(badKey == .noProfile)
     }
 
+    @MainActor
+    @Test func resolvedAccountChangeShedsTheVerifiedBadge() async {
+        let model = ProfileViewModel()
+        model.applyResolvedAccount(hex)
+        await model.verifyDeclaredNip05(
+            "alice@example.com",
+            transport: stub(returning: "{\"names\":{\"alice\":\"\(hex)\"}}")
+        )
+        #expect(model.verifiedNip05 == "alice@example.com")
+
+        // Same account re-resolves: the badge survives.
+        model.applyResolvedAccount(hex)
+        #expect(model.verifiedNip05 == "alice@example.com")
+
+        // A different pubkey takes over the surface: the badge — earned by
+        // the previous pubkey — must not carry across, and the attempt
+        // memo resets so the new account gets its own verification.
+        model.applyResolvedAccount(String(repeating: "f", count: 64))
+        #expect(model.verifiedNip05 == nil)
+    }
+
     @Test func malformedDocumentsAndTransportFailuresFail() async {
         let malformed = await Nip05Resolver.resolve(
             name: "alice",

@@ -21,13 +21,13 @@ final class ProfileViewModel {
 
     func resolve(npub: String, using appState: AppState) async {
         guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
-            hex = nil
+            applyResolvedAccount(nil)
             return
         }
         guard let client = try? appState.currentMarmotClient() else { return }
         let resolvedHex = await client.accountIdHex(reference: reference)
         guard !Task.isCancelled else { return }
-        hex = resolvedHex
+        applyResolvedAccount(resolvedHex)
         guard let resolvedHex else { return }
         // Trigger enrichment (cached read + background relay fetch).
         _ = appState.profile(forAccountIdHex: resolvedHex)
@@ -43,6 +43,17 @@ final class ProfileViewModel {
             targetAccountIdHex: resolvedHex,
             myAccountIdHex: appState.activeAccount?.accountIdHex
         )
+    }
+
+    /// The verified badge is earned per pubkey. A reused profile surface
+    /// resolving to a different account must shed it — retaining it would
+    /// paint another pubkey's verification, a fail-open trust signal.
+    func applyResolvedAccount(_ resolvedHex: String?) {
+        if hex != resolvedHex {
+            verifiedNip05 = nil
+            attemptedNip05Verification = nil
+        }
+        hex = resolvedHex
     }
 
     /// One bounded lookup per declared address; the verified state appears
