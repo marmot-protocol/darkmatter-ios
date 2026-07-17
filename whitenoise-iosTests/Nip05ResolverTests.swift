@@ -71,6 +71,13 @@ struct Nip05ResolverTests {
     @Test func resolvedAccountChangeShedsTheVerifiedBadge() async {
         let model = ProfileViewModel()
         model.applyResolvedAccount(hex)
+        model.startPrompt = StartChatPrompt(
+            kind: .error(message: "retry"),
+            recipientName: "Previous profile",
+            accountIdHex: hex,
+            memberRef: "previous-member",
+            existingGroupIdHex: nil
+        )
         await model.verifyDeclaredNip05(
             "alice@example.com",
             transport: stub(returning: "{\"names\":{\"alice\":\"\(hex)\"}}")
@@ -86,6 +93,7 @@ struct Nip05ResolverTests {
         // memo resets so the new account gets its own verification.
         model.applyResolvedAccount(String(repeating: "f", count: 64))
         #expect(model.verifiedNip05 == nil)
+        #expect(model.startPrompt == nil)
     }
 
     @MainActor

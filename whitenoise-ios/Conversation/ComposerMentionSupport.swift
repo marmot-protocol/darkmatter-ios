@@ -148,8 +148,18 @@ nonisolated enum ComposerMentionSelectionTracker {
         let oldChangeEnd = oldUnits.count - commonSuffix
         let newChangeEnd = newUnits.count - commonSuffix
         let delta = newChangeEnd - oldChangeEnd
+        let ambiguousNames = Set(selections.lazy.map(\.displayName).filter { displayName in
+            let token = "@\(displayName)"
+            let oldCount = occurrenceCount(of: token, in: oldText)
+            let newCount = occurrenceCount(of: token, in: newText)
+            // Prefix/suffix inference cannot tell which identical token was
+            // inserted or removed. Discard every affected binding rather than
+            // attach a tapped identity to the wrong surviving occurrence.
+            return oldCount != newCount && max(oldCount, newCount) > 1
+        })
 
         return selections.compactMap { selection in
+            guard !ambiguousNames.contains(selection.displayName) else { return nil }
             let selectionEnd = selection.utf16Location + selection.utf16Length
             var adjusted = selection
             if selectionEnd <= commonPrefix {
@@ -169,6 +179,20 @@ nonisolated enum ComposerMentionSelectionTracker {
         guard selection.utf16Location >= 0, end <= units.count else { return false }
         let token = String(decoding: units[selection.utf16Location..<end], as: UTF16.self)
         return token == "@\(selection.displayName)"
+    }
+
+    private static func occurrenceCount(of token: String, in text: String) -> Int {
+        let haystack = text as NSString
+        var searchRange = NSRange(location: 0, length: haystack.length)
+        var count = 0
+        while searchRange.length > 0 {
+            let match = haystack.range(of: token, options: [], range: searchRange)
+            guard match.location != NSNotFound else { break }
+            count += 1
+            let nextLocation = NSMaxRange(match)
+            searchRange = NSRange(location: nextLocation, length: haystack.length - nextLocation)
+        }
+        return count
     }
 }
 

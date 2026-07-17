@@ -56,6 +56,23 @@ struct GroupSharedMediaPresentationTests {
         #expect(Set(items.map(\.id)).count == 2)
         #expect(Set(items.map(\.attachment.id)).count == 2)
     }
+
+    @Test func duplicateRecordsWithoutMessageIDsRemainDistinctAndStable() {
+        let record = mediaRecord(
+            messageID: "",
+            index: 0,
+            mediaType: "image/jpeg",
+            fileName: "same.jpg",
+            timestamp: 10
+        )
+
+        let firstProjection = GroupSharedMediaPresentation.items(from: [record, record])
+        let secondProjection = GroupSharedMediaPresentation.items(from: [record, record])
+
+        #expect(Set(firstProjection.map(\.id)).count == 2)
+        #expect(Set(firstProjection.map(\.attachment.id)).count == 2)
+        #expect(firstProjection.map(\.id) == secondProjection.map(\.id))
+    }
 }
 
 private func mediaRecord(

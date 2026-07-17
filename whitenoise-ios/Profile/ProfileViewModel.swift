@@ -27,6 +27,7 @@ final class ProfileViewModel {
         // resolving. Keeping the previous account visible through a failed
         // client lookup would also keep its trust and shared-group state.
         applyResolvedAccount(nil)
+        startPrompt = nil
         sharedGroups = []
         addableGroups = []
         guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
@@ -63,6 +64,7 @@ final class ProfileViewModel {
         if hex != resolvedHex {
             verifiedNip05 = nil
             attemptedNip05Verification = nil
+            startPrompt = nil
         }
         hex = resolvedHex
     }

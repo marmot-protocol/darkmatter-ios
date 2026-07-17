@@ -164,6 +164,41 @@ struct ComposerMentionQueryTests {
         #expect(outgoing == original)
     }
 
+    @Test func deletingOneOfTwoIdenticalMentionsDropsAmbiguousBindings() {
+        let original = "@Jeff x @Jeff"
+        let selections = [
+            ComposerMentionSelection(
+                utf16Location: 0,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: jeffNpub
+            ),
+            ComposerMentionSelection(
+                utf16Location: "@Jeff x ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: aliceNpub
+            ),
+        ]
+
+        let reconciled = ComposerMentionSelectionTracker.reconcile(
+            selections,
+            from: original,
+            to: "@Jeff"
+        )
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "@Jeff",
+            candidates: [
+                mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+                mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+            ],
+            selectedMentions: reconciled
+        )
+
+        #expect(reconciled.isEmpty)
+        #expect(outgoing == "@Jeff")
+    }
+
     @Test func canonicalizeIgnoresSelectionsPointingOutsideTheRoster() {
         // A stale selection whose npub no longer belongs to any member with
         // that name must not resolve the mention.
