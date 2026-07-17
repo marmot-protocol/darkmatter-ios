@@ -270,8 +270,21 @@ final class NotificationCoordinator {
         )
     }
 
+    private var archivedKeysCache: (accountRef: String, keys: Set<String>, readAt: ContinuousClock.Instant)?
+    /// Long enough to cover a foreground catch-up burst draining buffered
+    /// updates back-to-back, short enough that archiving a chat takes effect
+    /// on the next real message. Archiving from this device also cancels its
+    /// own presentations, so staleness only delays suppression, never data.
+    static let archivedKeysCacheLifetime: Duration = .seconds(2)
+
+    static func archivedKeys(from rows: [ChatListRowFfi]) -> Set<String> {
+        Set(rows.filter(\.archived).map(\.groupIdHex))
+    }
+
     /// Archived chats keep their history but shed notification attention;
-    /// a failed read fails open (presents).
+    /// a failed read fails open (presents). The full projection is read once
+    /// per burst, not once per update — a catch-up drain delivers many
+    /// updates back-to-back and each read is O(all chats).
     private func chatIsArchivedForPresentation(
         update: NotificationUpdateFfi,
         host: NotificationCoordinatorHost
@@ -282,11 +295,19 @@ final class NotificationCoordinator {
               !host.isRuntimeSuspendingForNotificationCoordinator,
               let client = host.client
         else { return false }
+        let now = ContinuousClock.now
+        if let cache = archivedKeysCache,
+           cache.accountRef == update.accountRef,
+           now - cache.readAt < Self.archivedKeysCacheLifetime {
+            return cache.keys.contains(update.groupIdHex)
+        }
         guard let rows = try? await client.chatList(
             accountRef: update.accountRef,
             includeArchived: true
         ) else { return false }
-        return rows.contains { $0.groupIdHex == update.groupIdHex && $0.archived }
+        let keys = Self.archivedKeys(from: rows)
+        archivedKeysCache = (update.accountRef, keys, now)
+        return keys.contains(update.groupIdHex)
     }
 
     private func localNotificationsEnabledForPresentation(
