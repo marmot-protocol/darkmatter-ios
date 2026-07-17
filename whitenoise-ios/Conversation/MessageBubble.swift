@@ -215,12 +215,20 @@ struct MessageBubble: View {
     }
 
     private var deletedBubble: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            HStack(spacing: 5) {
-                Image(systemName: "trash")
-                Text("This message was deleted")
-            }
-            messageMetadataFooter
+        // Single row at the original font: icon + label on the left, the
+        // timestamp inline to the right (no new line). The delivery checkmark
+        // stays dropped — it means nothing on a removed message.
+        HStack(spacing: 6) {
+            Image(systemName: "trash")
+            Text("This message was deleted")
+            MessageMetadataFooter(
+                time: timeLabel,
+                isEdited: false,
+                status: status,
+                isFromMe: isFromMe,
+                usesLightForeground: usesSentBubbleForeground,
+                showsDeliveryStatus: MessageTombstonePresentation.showsDeliveryStatus(isDeleted: isDeleted)
+            )
         }
         .font(.callout)
         .italic()
