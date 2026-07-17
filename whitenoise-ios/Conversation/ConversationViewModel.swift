@@ -75,6 +75,13 @@ typealias TimelineTailRefreshOperation = @MainActor () async -> Void
 @MainActor
 final class ConversationViewModel {
 
+    typealias DeleteMessageOperation = @MainActor (
+        _ client: MarmotClient,
+        _ accountRef: String,
+        _ groupIdHex: String,
+        _ messageIdHex: String
+    ) async throws -> SendSummaryFfi
+
     /// One emoji's tally on a target message.
     nonisolated struct ReactionTally: Identifiable, Hashable {
         let emoji: String
@@ -194,6 +201,7 @@ final class ConversationViewModel {
 
     @ObservationIgnored private var timelineSubscription: TimelineMessagesSubscription?
     @ObservationIgnored private let mediaDownloader = ConversationMediaDownloader()
+    @ObservationIgnored private let deleteMessageOperation: DeleteMessageOperation
     // Lazy so its `[weak self]` loaded-window closure can capture a fully
     // initialized self; first touched on the post-start apply/mark paths.
     @ObservationIgnored private lazy var readMarker = ConversationReadMarker(
@@ -543,7 +551,14 @@ final class ConversationViewModel {
         initialTitle: String? = nil,
         initialOtherMember: String? = nil,
         initialMemberCount: Int? = nil,
-        onChatListRowUpdated: ((ChatListRowFfi) -> Void)? = nil
+        onChatListRowUpdated: ((ChatListRowFfi) -> Void)? = nil,
+        deleteMessageOperation: @escaping DeleteMessageOperation = { client, accountRef, groupIdHex, messageIdHex in
+            try await client.deleteMessage(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                targetMessageId: messageIdHex
+            )
+        }
     ) {
         self.appState = appState
         self.group = group
@@ -551,7 +566,15 @@ final class ConversationViewModel {
         self.initialOtherMember = initialOtherMember
         self.initialMemberCount = initialMemberCount
         self.onChatListRowUpdated = onChatListRowUpdated
-        self.timelineStore = TimelineStore(appState: appState, groupIdHex: group.groupIdHex)
+        self.deleteMessageOperation = deleteMessageOperation
+        let hiddenMessageIds = appState.activeAccountRef.map {
+            MessageHideStore.hiddenMessageIds(accountRef: $0, groupIdHex: group.groupIdHex)
+        } ?? []
+        self.timelineStore = TimelineStore(
+            appState: appState,
+            groupIdHex: group.groupIdHex,
+            hiddenMessageIds: hiddenMessageIds
+        )
         self.streamWatcher = StreamWatcher(appState: appState, groupIdHex: group.groupIdHex)
         self.composer = ComposerModel(appState: appState, groupIdHex: group.groupIdHex, timelineStore: timelineStore)
         self.search = ConversationSearchModel()
@@ -643,15 +666,37 @@ final class ConversationViewModel {
         readMarker.pruneMarkedReadMessageIds(force: force)
     }
 
-    static func canDeleteMessage(
-        _ message: AppMessageRecordFfi,
-        myAccountId: String?,
-        isSelfAdmin: Bool
-    ) -> Bool {
-        guard !message.messageIdHex.isEmpty else { return false }
-        if isSelfAdmin { return true }
+    func deleteCapability(for message: AppMessageRecordFfi) -> MessageDeleteCapability {
+        guard let canonical = canonicalDeleteRecord(for: message) else {
+            return .unavailable
+        }
+        let hasActiveAccount = appState?.activeAccountRef?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty == false
+        return MessageDeletePolicy.capability(
+            isDirectMessage: groupDisplay.isDirectMessage,
+            isMine: isMessageMine(canonical),
+            isSelfAdmin: isSelfAdmin,
+            localDeleteSupported: hasActiveAccount,
+            remoteDeleteSupported: hasActiveAccount && canSendMessages,
+            isDeleted: isDeleted(canonical.messageIdHex),
+            isHidden: timelineStore.isHidden(canonical.messageIdHex)
+        )
+    }
+
+    private func canonicalDeleteRecord(for message: AppMessageRecordFfi) -> AppMessageRecordFfi? {
+        guard let messageId = Hex.normalized32Bytes(message.messageIdHex),
+              let canonical = timelineStore.record(for: messageId),
+              let canonicalGroupId = Hex.normalized32Bytes(canonical.groupIdHex),
+              let currentGroupId = Hex.normalized32Bytes(group.groupIdHex),
+              canonicalGroupId == currentGroupId
+        else { return nil }
+        return canonical
+    }
+
+    func isMessageMine(_ message: AppMessageRecordFfi) -> Bool {
         guard let myAccountId, !myAccountId.isEmpty else { return false }
-        return message.sender == myAccountId
+        return message.sender.caseInsensitiveCompare(myAccountId) == .orderedSame
     }
 
     static func nextLiveSubscriptionRetryDelay(after delay: UInt64) -> UInt64 {
@@ -1909,33 +1954,57 @@ final class ConversationViewModel {
 
     // MARK: - Reactions
 
-    /// Tombstone a message we are allowed to delete. Optimistically marks it
-    /// deleted, then publishes the delete payload (reverting on failure).
-    func deleteMessage(_ message: AppMessageRecordFfi) async {
-        guard canSendMessages,
-              let appState, let accountRef = appState.activeAccountRef,
-              !message.messageIdHex.isEmpty,
-              Self.canDeleteMessage(message, myAccountId: myAccountId, isSelfAdmin: isSelfAdmin)
-        else { return }
-        timelineStore.deletedProjections.insertOptimistic(message.messageIdHex)
+    /// Hides a message only in this account's local timeline. This path never
+    /// invokes Marmot and therefore cannot publish a delete event.
+    @discardableResult
+    func deleteMessageForMe(_ message: AppMessageRecordFfi) -> Bool {
+        guard let canonical = canonicalDeleteRecord(for: message),
+              deleteCapability(for: canonical).canDeleteForMe,
+              let accountRef = appState?.activeAccountRef
+        else { return false }
+
+        let hidden = MessageHideStore.hideMessage(
+            accountRef: accountRef,
+            groupIdHex: group.groupIdHex,
+            messageIdHex: canonical.messageIdHex
+        )
+        guard !hidden.isEmpty else { return false }
+        timelineStore.setHiddenMessageIds(hidden)
+        guard timelineStore.isHidden(canonical.messageIdHex) else { return false }
+        Haptics.warning()
+        return true
+    }
+
+    /// Tombstones a message for every participant. Authorization is rechecked
+    /// here so stale UI state cannot request a broader delete scope.
+    @discardableResult
+    func deleteMessageForEveryone(_ message: AppMessageRecordFfi) async -> Bool {
+        guard let canonical = canonicalDeleteRecord(for: message),
+              deleteCapability(for: canonical).canDeleteForEveryone,
+              let appState, let accountRef = appState.activeAccountRef
+        else { return false }
+        timelineStore.deletedProjections.insertOptimistic(canonical.messageIdHex)
         if timelineStore.deletedProjections.rebuild() {
             timelineStore.noteProjectionChanged()
         }
         do {
             let client = try appState.currentMarmotClient()
-            _ = try await client.deleteMessage(
-                accountRef: accountRef,
-                groupIdHex: group.groupIdHex,
-                targetMessageId: message.messageIdHex
+            _ = try await deleteMessageOperation(
+                client,
+                accountRef,
+                group.groupIdHex,
+                canonical.messageIdHex
             )
             Haptics.warning()
+            return true
         } catch {
-            timelineStore.deletedProjections.removeOptimistic(message.messageIdHex)
+            timelineStore.deletedProjections.removeOptimistic(canonical.messageIdHex)
             if timelineStore.deletedProjections.rebuild() {
                 timelineStore.noteProjectionChanged()
             }
             Haptics.error()
             appState.present(.error(L10n.string("Couldn't delete message"), message: error.localizedDescription))
+            return false
         }
     }
 
