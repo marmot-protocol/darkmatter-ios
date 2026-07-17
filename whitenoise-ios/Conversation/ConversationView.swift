@@ -1494,6 +1494,11 @@ struct ConversationView: View {
                         .coordinateSpace(name: Self.timelineCoordinateSpace)
                         .defaultScrollAnchor(.bottom)
                         .defaultScrollAnchor(.bottom, for: .sizeChanges)
+                        // Only scroll/bounce when the messages actually exceed
+                        // the viewport; with a few messages the timeline stays
+                        // put instead of rubber-banding under the pinned day
+                        // header.
+                        .scrollBounceBehavior(.basedOnSize)
                         .scrollDismissesKeyboard(.immediately)
                         .onScrollPhaseChange { _, phase in
                             isUserScrollingTimeline = phase == .interacting || phase == .decelerating
