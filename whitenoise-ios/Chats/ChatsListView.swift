@@ -58,6 +58,7 @@ struct ChatsListView: View {
                     ProgressView()
                 }
             }
+            .trueBlackScaffoldBackground()
             .navigationTitle("Chats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -5,6 +5,7 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
     case system
     case light
     case dark
+    case trueBlack
 
     static let storageKey = "appearance.theme"
 
@@ -20,7 +21,7 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             nil
         case .light:
             .light
-        case .dark:
+        case .dark, .trueBlack:
             .dark
         }
     }
@@ -31,9 +32,15 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             .unspecified
         case .light:
             .light
-        case .dark:
+        case .dark, .trueBlack:
             .dark
         }
+    }
+
+    /// True black behaves as dark mode but repaints the main scaffold surfaces
+    /// pure black for OLED displays — component colors keep dark-mode semantics.
+    var usesTrueBlackSurfaces: Bool {
+        self == .trueBlack
     }
 
     var displayName: LocalizedStringKey {
@@ -44,6 +51,8 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             "Light"
         case .dark:
             "Dark"
+        case .trueBlack:
+            "True Black"
         }
     }
 }

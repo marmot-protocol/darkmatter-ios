@@ -59,6 +59,7 @@ struct AddMembersSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .trueBlackScaffoldBackground()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
