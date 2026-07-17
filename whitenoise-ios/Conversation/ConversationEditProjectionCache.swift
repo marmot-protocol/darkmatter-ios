@@ -45,11 +45,13 @@ final class ConversationEditProjectionCache {
         editIdsByTarget[targetMessageIdHex, default: []].insert(record.messageIdHex)
         affected.insert(targetMessageIdHex)
 
+        // The overlay clears on ANY matching authoritative arrival. An
+        // invalidated or deleted record is the authority saying the edit was
+        // rejected — leaving the overlay in place keeps rendering the
+        // rejected text indefinitely.
         if let optimistic = optimisticByTarget[targetMessageIdHex],
            optimistic.sender == record.sender,
-           optimistic.plaintext == record.plaintext,
-           !invalidated,
-           !deleted {
+           optimistic.plaintext == record.plaintext {
             optimisticByTarget[targetMessageIdHex] = nil
         }
         return affected

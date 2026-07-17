@@ -4,6 +4,29 @@ import Testing
 @testable import MarmotKit
 
 struct MessageMediaCachePurgeTests {
+
+    @Test func targetedRemovalRejectsAProducerThatStartedBeforeDeletion() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("targeted-purge-race-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let reference = purgeTestReference()
+        let url = try #require(MessageMediaCache.cacheURL(for: reference, cachesDirectory: root))
+        let staleEpoch = MessageMediaCache.currentProducerEpoch()
+
+        MessageMediaCache.removeCachedData(
+            forCiphertextHashes: [reference.ciphertextSha256.lowercased()],
+            in: [reference],
+            cachesDirectory: root
+        )
+        MessageMediaCache.store(
+            Data([0x1]),
+            for: reference,
+            cachesDirectory: root,
+            producerGeneration: staleEpoch
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
     @Test func staleProducerCannotStorePlaintextAfterAPurge() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("purge-race-tests-\(UUID().uuidString)", isDirectory: true)

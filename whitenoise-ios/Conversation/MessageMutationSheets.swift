@@ -267,7 +267,7 @@ struct MessageDeleteSheet: View {
 
     let capability: MessageDeleteCapability
     let isMine: Bool
-    let onDeleteForMe: () -> Bool
+    let onDeleteForMe: () async -> Bool
     let onDeleteForEveryone: () async -> Bool
 
     @State private var activeDeleteScope: DeleteScope?
@@ -311,7 +311,7 @@ struct MessageDeleteSheet: View {
                             subtitle: "Removes this message only from this device.",
                             systemImage: "trash"
                         ) {
-                            onDeleteForMe()
+                            await onDeleteForMe()
                         }
                     }
                 }

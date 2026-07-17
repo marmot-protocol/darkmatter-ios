@@ -49,8 +49,17 @@ enum WipeReportProjection {
     /// them so a pathologically long diagnostic can't blow up layout.
     static let maxReasonLength = 200
 
-    static func report(from outcome: WipeOutcomeFfi) -> WipeReport {
-        WipeReport(stages: [
+    static func report(
+        from outcome: WipeOutcomeFfi,
+        additionalLocalFailures: [WipeFailureItem] = []
+    ) -> WipeReport {
+        let engineLocalFailures = outcome.localCleanup.completed
+            ? []
+            : [WipeFailureItem(subject: nil, reason: boundedReason(outcome.localCleanup.reason ?? ""))]
+        let localFailures = engineLocalFailures + additionalLocalFailures.map {
+            WipeFailureItem(subject: $0.subject, reason: boundedReason($0.reason))
+        }
+        return WipeReport(stages: [
             WipeStageReport(
                 stage: .leavingGroups,
                 completedCount: Int(outcome.groupsLeft),
@@ -68,9 +77,7 @@ enum WipeReportProjection {
             WipeStageReport(
                 stage: .wipingLocalData,
                 completedCount: nil,
-                failures: outcome.localCleanup.completed
-                    ? []
-                    : [WipeFailureItem(subject: nil, reason: boundedReason(outcome.localCleanup.reason ?? ""))]
+                failures: localFailures
             )
         ])
     }

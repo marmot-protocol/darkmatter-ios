@@ -1286,6 +1286,136 @@
           }
         }
       },
+      "Couldn't clear notification history": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Benachrichtigungsverlauf konnte nicht gelöscht werden"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Couldn't clear notification history"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "No se pudo borrar el historial de notificaciones"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Impossible d'effacer l'historique des notifications"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Impossibile cancellare la cronologia delle notifiche"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Não foi possível limpar o histórico de notificações"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Не удалось очистить историю уведомлений"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Bildirim geçmişi temizlenemedi"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "无法清除通知历史记录"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "無法清除通知歷史記錄"
+            }
+          }
+        }
+      },
+      "Some notification previews may remain on this device.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Einige Benachrichtigungsvorschauen könnten auf diesem Gerät verbleiben."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Some notification previews may remain on this device."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Es posible que queden vistas previas de notificaciones en este dispositivo."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Certains aperçus de notifications peuvent rester sur cet appareil."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Alcune anteprime delle notifiche potrebbero rimanere su questo dispositivo."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Algumas prévias de notificações podem permanecer neste dispositivo."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Некоторые предпросмотры уведомлений могут остаться на этом устройстве."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Bazı bildirim önizlemeleri bu cihazda kalabilir."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "部分通知预览可能仍保留在此设备上。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "部分通知預覽可能仍保留在此裝置上。"
+            }
+          }
+        }
+      },
       "Couldn't clear cached media": {
         "extractionState": "manual",
         "localizations": {

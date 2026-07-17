@@ -61,13 +61,22 @@ nonisolated enum NotificationCommunicationDecorator {
             sender: sender,
             attachments: nil
         )
-        let interaction = INInteraction(intent: intent, response: nil)
-        interaction.direction = .incoming
-        interaction.donate(completion: nil)
         do {
             return try content.updating(from: intent)
         } catch {
             return content
+        }
+    }
+
+    /// Older versions donated decrypted previews and sender identities to the
+    /// system interaction store. Current notification styling uses only
+    /// `content.updating(from:)`, but a destructive wipe must still clear that
+    /// historical residue.
+    static func deleteAllDonatedInteractions() async -> Bool {
+        await withCheckedContinuation { continuation in
+            INInteraction.deleteAll { error in
+                continuation.resume(returning: error == nil)
+            }
         }
     }
 

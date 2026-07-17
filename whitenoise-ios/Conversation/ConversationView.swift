@@ -825,7 +825,7 @@ struct ConversationView: View {
                         capability: viewModel.deleteCapability(for: target.record),
                         isMine: viewModel.isMessageMine(target.record),
                         onDeleteForMe: {
-                            viewModel.deleteMessageForMe(target.record)
+                            await viewModel.deleteMessageForMe(target.record)
                         },
                         onDeleteForEveryone: {
                             await viewModel.deleteMessageForEveryone(target.record)
@@ -2855,7 +2855,7 @@ struct ConversationView: View {
                 beginReply(to: record, viewModel: viewModel)
             },
             onCopy: {
-                SensitiveClipboard.copy(viewModel.displayBody(of: record))
+                SensitiveClipboard.copyLocalOnly(viewModel.displayBody(of: record))
                 Haptics.tap()
                 dismissActions()
             },

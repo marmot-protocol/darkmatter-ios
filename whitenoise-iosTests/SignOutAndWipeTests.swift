@@ -116,6 +116,22 @@ struct SignOutAndWipeTests {
         #expect(report.stages[2].failures.first?.reason == "")
     }
 
+    @Test func swiftCleanupFailuresMakeAnOtherwiseCleanWipeReportIncomplete() {
+        let report = WipeReportProjection.report(
+            from: outcome(),
+            additionalLocalFailures: [
+                WipeFailureItem(subject: nil, reason: "notification residue"),
+                WipeFailureItem(subject: nil, reason: "media residue"),
+            ]
+        )
+
+        #expect(!report.clean)
+        #expect(report.stages[2].failures.map(\.reason) == [
+            "notification residue",
+            "media residue",
+        ])
+    }
+
     @Test func pathologicallyLongReasonIsBounded() {
         let huge = String(repeating: "x", count: WipeReportProjection.maxReasonLength + 50)
         let bounded = WipeReportProjection.boundedReason(huge)

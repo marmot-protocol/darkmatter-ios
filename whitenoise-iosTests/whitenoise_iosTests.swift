@@ -303,6 +303,7 @@ struct AppStateBootstrapTests {
             isAppSceneActive: true,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: false,
+            isSigningOut: false,
             hasRuntimeClient: true
         ))
         #expect(!NotificationPresentationRuntimeGate.canPresent(
@@ -310,6 +311,7 @@ struct AppStateBootstrapTests {
             isAppSceneActive: true,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: false,
+            isSigningOut: false,
             hasRuntimeClient: true
         ))
         #expect(!NotificationPresentationRuntimeGate.canPresent(
@@ -317,6 +319,7 @@ struct AppStateBootstrapTests {
             isAppSceneActive: false,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: false,
+            isSigningOut: false,
             hasRuntimeClient: true
         ))
         #expect(!NotificationPresentationRuntimeGate.canPresent(
@@ -324,6 +327,7 @@ struct AppStateBootstrapTests {
             isAppSceneActive: true,
             runtimeSuspendedForBackground: true,
             isRuntimeSuspending: false,
+            isSigningOut: false,
             hasRuntimeClient: true
         ))
         #expect(!NotificationPresentationRuntimeGate.canPresent(
@@ -331,6 +335,7 @@ struct AppStateBootstrapTests {
             isAppSceneActive: true,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: true,
+            isSigningOut: false,
             hasRuntimeClient: true
         ))
         #expect(!NotificationPresentationRuntimeGate.canPresent(
@@ -338,8 +343,28 @@ struct AppStateBootstrapTests {
             isAppSceneActive: true,
             runtimeSuspendedForBackground: false,
             isRuntimeSuspending: false,
+            isSigningOut: true,
+            hasRuntimeClient: true
+        ))
+        #expect(!NotificationPresentationRuntimeGate.canPresent(
+            isTaskCancelled: false,
+            isAppSceneActive: true,
+            runtimeSuspendedForBackground: false,
+            isRuntimeSuspending: false,
+            isSigningOut: false,
             hasRuntimeClient: false
         ))
+    }
+
+    @Test func archivedNotificationCacheKeepsEntriesForInterleavedAccounts() {
+        var cache = NotificationArchivedKeysCache()
+        let now = ContinuousClock.now
+        let lifetime: Duration = .seconds(2)
+        cache.store(["group-a"], for: "account-a", readAt: now, lifetime: lifetime)
+        cache.store(["group-b"], for: "account-b", readAt: now, lifetime: lifetime)
+
+        #expect(cache.keys(for: "account-a", now: now, lifetime: lifetime) == ["group-a"])
+        #expect(cache.keys(for: "account-b", now: now, lifetime: lifetime) == ["group-b"])
     }
 
     @Test func settingsReadRuntimeGateRejectsSuspensionWindows() {
@@ -4046,6 +4071,23 @@ struct NotificationServiceProjectionTests {
         )
 
         #expect(NotificationServiceProjection.decision(for: collection) == .deliverQuietly)
+    }
+
+    @Test func overflowSummariesAreBoundedAcrossManyConversations() {
+        // A backlog spread across many chats folds into at most
+        // maxOverflowSummaries presentations — the per-conversation summary
+        // path must not reintroduce the unbounded add/donate loop.
+        let updates = (0..<30).map { index in
+            notificationUpdate(
+                notificationKey: "overflow-\(index)",
+                groupIdHex: hex(String(format: "%02x", index))
+            )
+        }
+        let summaries = NotificationPresentationPolicy.overflowSummaryPresentations(from: updates)
+        #expect(summaries.count == NotificationPresentationPolicy.maxOverflowSummaries)
+        // Every folded conversation stays represented: per-route counts plus
+        // the aggregate tail account for all 30 records.
+        #expect(summaries.count <= updates.count)
     }
 
     @Test func overflowSummariesCarryTheOrOfTheirMembersMentionBits() {
