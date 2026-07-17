@@ -47,7 +47,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
             avatarUrl: details?.group.avatarUrl ?? row.avatarUrl,
             isSelfMember: GroupManagementPresentation.isActiveChatListMember(row.selfMembership),
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
-            memberIdsHex: details?.members.map(\.memberIdHex) ?? [],
+            memberIdsHex: details?.members.map(GroupMemberDetailsPresentation.profileAccountIdHex) ?? [],
             lastSenderIdHex: row.lastMessage?.sender,
             welcomerIdHex: details?.group.welcomerAccountIdHex,
             adminIdsHex: details?.group.admins ?? []

@@ -106,7 +106,7 @@ enum WipeConfirmation {
 /// it. This is the union of the two strongest existing guards: the settings-read
 /// runtime gate (scene active, not suspended/suspending, live client) plus the
 /// `.ready` phase gate the audit-log delete uses. Pure so the gate is testable.
-enum DestructiveWipeGate {
+enum AccountExitGate {
     static func canBegin(
         isReady: Bool,
         isAppSceneActive: Bool,
@@ -119,5 +119,23 @@ enum DestructiveWipeGate {
             && !runtimeSuspendedForBackground
             && !isRuntimeSuspending
             && hasRuntimeClient
+    }
+}
+
+enum DestructiveWipeGate {
+    static func canBegin(
+        isReady: Bool,
+        isAppSceneActive: Bool,
+        runtimeSuspendedForBackground: Bool,
+        isRuntimeSuspending: Bool,
+        hasRuntimeClient: Bool
+    ) -> Bool {
+        AccountExitGate.canBegin(
+            isReady: isReady,
+            isAppSceneActive: isAppSceneActive,
+            runtimeSuspendedForBackground: runtimeSuspendedForBackground,
+            isRuntimeSuspending: isRuntimeSuspending,
+            hasRuntimeClient: hasRuntimeClient
+        )
     }
 }

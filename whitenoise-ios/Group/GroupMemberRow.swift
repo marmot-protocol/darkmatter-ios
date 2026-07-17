@@ -112,11 +112,8 @@ struct GroupMemberDetailsRow: View {
 }
 
 enum GroupMemberDetailsPresentation {
-    static func profileAccountIdHex(for member: GroupMemberDetailsFfi) -> String {
-        guard let account = member.account, !account.isEmpty else {
-            return member.memberIdHex
-        }
-        return account
+    nonisolated static func profileAccountIdHex(for member: GroupMemberDetailsFfi) -> String {
+        member.memberIdHex
     }
 
     @MainActor

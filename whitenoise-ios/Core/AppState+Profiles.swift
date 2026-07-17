@@ -154,6 +154,12 @@ extension AppState {
 
     @MainActor
     @discardableResult
+    func pauseProfileFetchQueue() -> Task<Void, Never>? {
+        profileStore.pauseProfileFetchQueue()
+    }
+
+    @MainActor
+    @discardableResult
     func cancelProfileFetchQueue() -> Task<Void, Never>? {
         profileStore.cancelProfileFetchQueue()
     }

@@ -135,6 +135,69 @@ struct RecipientCandidateDerivationTests {
         #expect(snapshot.isSelfMember)
     }
 
+    @Test func snapshotRosterUsesMemberIdsInsteadOfLocalAccountLabels() {
+        let row = ChatListRowFfi(
+            groupIdHex: "dm-1",
+            archived: false,
+            pendingConfirmation: false,
+            title: "Alice",
+            groupName: "",
+            avatarUrl: nil,
+            avatar: nil,
+            lastMessage: nil,
+            unreadCount: 0,
+            hasUnread: false,
+            unreadMentionCount: 0,
+            unreadMention: false,
+            firstUnreadMessageIdHex: nil,
+            lastReadMessageIdHex: nil,
+            lastReadTimelineAt: nil,
+            updatedAt: 7,
+            selfMembership: .member
+        )
+        let details = GroupDetailsFfi(
+            group: AppGroupRecordFfi(
+                groupIdHex: "dm-1",
+                endpoint: "",
+                name: "",
+                description: "",
+                admins: [],
+                relays: [],
+                nostrGroupIdHex: "",
+                avatarUrl: nil,
+                avatarDim: nil,
+                avatarThumbhash: nil,
+                encryptedMedia: AppGroupEncryptedMediaComponentFfi(
+                    componentId: 0,
+                    component: "",
+                    required: false,
+                    mediaFormat: "",
+                    allowedLocatorKinds: [],
+                    defaultBlobEndpoints: []
+                ),
+                archived: false,
+                pendingConfirmation: false,
+                selfMembership: .member,
+                welcomerAccountIdHex: nil,
+                viaWelcomeMessageIdHex: nil
+            ),
+            members: [
+                member(memberIdHex: me, accountLabel: "primary", isSelf: true),
+                member(memberIdHex: alice, accountLabel: nil),
+            ]
+        )
+
+        let snapshot = RecipientGroupSnapshot(row: row, details: details)
+        let candidates = RecipientCandidateDerivation.candidates(
+            from: [snapshot],
+            myAccountIdHex: me
+        )
+
+        #expect(snapshot.memberIdsHex == [me, alice])
+        #expect(candidates.map(\.accountIdHex) == [alice])
+        #expect(candidates.first?.directChatGroupIdHex == "dm-1")
+    }
+
     private func snapshot(
         groupIdHex: String,
         name: String?,
@@ -154,6 +217,22 @@ struct RecipientCandidateDerivationTests {
             memberIdsHex: members,
             lastSenderIdHex: lastSender,
             welcomerIdHex: welcomer
+        )
+    }
+
+    private func member(
+        memberIdHex: String,
+        accountLabel: String?,
+        isSelf: Bool = false
+    ) -> GroupMemberDetailsFfi {
+        GroupMemberDetailsFfi(
+            memberIdHex: memberIdHex,
+            account: accountLabel,
+            local: isSelf,
+            isAdmin: false,
+            isSelf: isSelf,
+            npub: "npub1test",
+            displayName: nil
         )
     }
 }
