@@ -125,6 +125,9 @@ final class ConversationMediaDownloader {
         return try await inFlight.data(
             for: MediaDownloadInFlightKey(reference: reference)
         ) {
+            // Captured before any async gap — cache read or download — so a
+            // wipe completing mid-operation invalidates this producer's store.
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             if let cached = await self.cache.cachedData(for: reference),
                await MediaPlaintextHash.matches(cached, expectedSha256: reference.plaintextSha256)
             {
@@ -134,9 +137,6 @@ final class ConversationMediaDownloader {
                 throw MediaDataError.missingAccount
             }
             let client = try appState.currentMarmotClient()
-            // Captured before the download: a wipe that completes while the
-            // bytes are in flight must invalidate this producer's store.
-            let producerGeneration = MessageMediaCache.purgeGeneration.withLock { $0 }
             // Row references already carry the real source_epoch, so the reference
             // is directly downloadable — no listMedia round-trip to recover it.
             let result = try await self.downloadMedia(client, accountRef, groupIdHex, reference)
@@ -146,7 +146,7 @@ final class ConversationMediaDownloader {
             ) else {
                 throw MediaDataError.plaintextHashMismatch
             }
-            await self.cache.store(result.plaintext, for: reference, producerGeneration: producerGeneration)
+            await self.cache.store(result.plaintext, for: reference, producerGeneration: producerEpoch)
             return result.plaintext
         }
     }

@@ -524,11 +524,13 @@ struct SharedMediaLibraryView: View {
         loadingFileID = item.id
         defer { loadingFileID = nil }
         do {
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
             let data = try await mediaLoader.data(for: item.attachment)
             guard !Task.isCancelled,
                   let url = await MediaPlaybackFileStore.fileURL(
                     for: item.attachment,
-                    data: data
+                    data: data,
+                    producerEpoch: producerEpoch
                   )
             else { return }
             fileShare = SharedMediaFileShare(url: url)

@@ -1174,7 +1174,11 @@ nonisolated enum MediaPlaybackFileStore {
     /// so media open never blocks the UI thread (#351). `MessageMediaAttachment`
     /// is not `Sendable`, so only its content-addressed inputs cross into the
     /// detached task, which reconstructs a minimal item for the synchronous core.
-    static func fileURL(for item: MessageMediaAttachment, data: Data) async -> URL? {
+    static func fileURL(
+        for item: MessageMediaAttachment,
+        data: Data,
+        producerEpoch: Int? = nil
+    ) async -> URL? {
         guard let cachesDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -1197,7 +1201,8 @@ nonisolated enum MediaPlaybackFileStore {
                 cachesDirectory: cachesDirectory,
                 mediaPolicy: .media,
                 playbackPolicy: .playback,
-                now: Date()
+                now: Date(),
+                producerEpoch: producerEpoch
             )
         }.value
     }
@@ -1208,7 +1213,8 @@ nonisolated enum MediaPlaybackFileStore {
         cachesDirectory: URL,
         mediaPolicy: DecryptedMediaCacheEvictionPolicy,
         playbackPolicy: DecryptedMediaCacheEvictionPolicy,
-        now: Date = Date()
+        now: Date = Date(),
+        producerEpoch: Int? = nil
     ) -> URL? {
         if let reference = item.reference,
            let cachedURL = MessageMediaCache.cacheURL(for: reference, cachesDirectory: cachesDirectory)
@@ -1218,7 +1224,8 @@ nonisolated enum MediaPlaybackFileStore {
                 for: reference,
                 cachesDirectory: cachesDirectory,
                 policy: mediaPolicy,
-                now: now
+                now: now,
+                producerGeneration: producerEpoch
             )
             return FileManager.default.fileExists(atPath: cachedURL.path) ? cachedURL : nil
         }
@@ -1226,35 +1233,35 @@ nonisolated enum MediaPlaybackFileStore {
         let fileExtension = MediaAttachmentPolicy.fileExtension(for: item.mediaType, fileName: item.fileName)
         let directory = cachesDirectory.appendingPathComponent("EncryptedMediaPlayback", isDirectory: true)
         let url = directory.appendingPathComponent("\(sha256Hex(of: data)).\(fileExtension)")
-        let generationBeforeWrite = MessageMediaCache.purgeGeneration.withLock { $0 }
-        do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: protectedAttributes
-            )
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
-            if !FileManager.default.fileExists(atPath: url.path) {
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
-                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+        // Same critical section as the display cache: stale producers are
+        // rejected before writing and no write interleaves with a purge.
+        let stored: Bool = MessageMediaCache.purgeGeneration.withLock { generation in
+            if let producerEpoch, producerEpoch != generation { return false }
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: protectedAttributes
+                )
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    try data.write(to: url, options: [.atomic, .completeFileProtection])
+                    try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+                }
+                return true
+            } catch {
+                return false
             }
-            // A wipe that raced this write wins: the just-written plaintext
-            // goes with it rather than resurrecting a purged directory.
-            if MessageMediaCache.purgeGeneration.withLock({ $0 }) != generationBeforeWrite {
-                try? FileManager.default.removeItem(at: url)
-                return nil
-            }
-            DecryptedMediaCacheEvictor.touch(url, at: now)
-            DecryptedMediaCacheEvictor.trim(
-                directory: directory,
-                policy: playbackPolicy,
-                preserving: url,
-                now: now
-            )
-            return url
-        } catch {
-            return nil
         }
+        guard stored else { return nil }
+        DecryptedMediaCacheEvictor.touch(url, at: now)
+        DecryptedMediaCacheEvictor.trim(
+            directory: directory,
+            policy: playbackPolicy,
+            preserving: url,
+            now: now
+        )
+        return url
     }
 
     private static func sha256Hex(of data: Data) -> String {
@@ -1328,33 +1335,33 @@ nonisolated enum MessageMediaCache {
     ) {
         guard let url = cacheURL(for: reference, cachesDirectory: cachesDirectory) else { return }
         let directory = url.deletingLastPathComponent()
-        // A producer that began work before the purge (a slow download) must
-        // not store plaintext after it; its captured generation outranks the
-        // write-entry capture.
-        let generationBeforeWrite = producerGeneration ?? purgeGeneration.withLock { $0 }
-        do {
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true,
-                attributes: protectedAttributes
-            )
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
-            try data.write(to: url, options: [.atomic, .completeFileProtection])
-            try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
-            if purgeGeneration.withLock({ $0 }) != generationBeforeWrite {
-                try? FileManager.default.removeItem(at: url)
-                return
+        // The write happens inside the purge's own critical section: a stale
+        // producer (bytes obtained before a wipe) is rejected before touching
+        // the filesystem, and no write can interleave with directory removal.
+        let stored: Bool = purgeGeneration.withLock { generation in
+            if let producerGeneration, producerGeneration != generation { return false }
+            do {
+                try FileManager.default.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true,
+                    attributes: protectedAttributes
+                )
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: directory.path)
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                try? FileManager.default.setAttributes(protectedAttributes, ofItemAtPath: url.path)
+                return true
+            } catch {
+                return false
             }
-            DecryptedMediaCacheEvictor.touch(url, at: now)
-            DecryptedMediaCacheEvictor.trim(
-                directory: directory,
-                policy: policy,
-                preserving: url,
-                now: now
-            )
-        } catch {
-            return
         }
+        guard stored else { return }
+        DecryptedMediaCacheEvictor.touch(url, at: now)
+        DecryptedMediaCacheEvictor.trim(
+            directory: directory,
+            policy: policy,
+            preserving: url,
+            now: now
+        )
     }
 
     /// Removes cached decrypted plaintext for expired attachments off the
@@ -1388,12 +1395,17 @@ nonisolated enum MessageMediaCache {
     static func purgeAllDecryptedMedia() async -> Bool {
         guard let cachesDirectory = defaultCachesDirectory else { return false }
         return await Task.detached(priority: .utility) {
-            // Bump on both sides of the removal: a writer entering before the
-            // first bump fails its end-of-write check against the second, and
-            // one entering between bump and removal fails it too — any write
-            // window overlapping any part of the purge undoes itself. Writers
-            // starting after the second bump are genuinely post-wipe work.
-            purgeGeneration.withLock { $0 += 1 }
+            purgeAllDecryptedMedia(cachesDirectory: cachesDirectory)
+        }.value
+    }
+
+    /// The bump and the removal share one critical section with every cache
+    /// write, so no writer can interleave with the purge — generation checks
+    /// alone left a window where a write could land between removal and a
+    /// later bump and survive.
+    static func purgeAllDecryptedMedia(cachesDirectory: URL) -> Bool {
+        purgeGeneration.withLock { generation in
+            generation += 1
             var allRemoved = true
             for name in decryptedMediaDirectoryNames {
                 let directory = cachesDirectory.appendingPathComponent(name, isDirectory: true)
@@ -1402,9 +1414,15 @@ nonisolated enum MessageMediaCache {
                     allRemoved = false
                 }
             }
-            purgeGeneration.withLock { $0 += 1 }
             return allRemoved
-        }.value
+        }
+    }
+
+    /// Captured by producers BEFORE the async gap that yields their bytes
+    /// (cache read, download, upload round-trip); the write rejects a stale
+    /// epoch before touching the filesystem.
+    static func currentProducerEpoch() -> Int {
+        purgeGeneration.withLock { $0 }
     }
 
     static func removeCachedData(
