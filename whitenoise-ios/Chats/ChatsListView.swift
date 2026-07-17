@@ -65,12 +65,18 @@ struct ChatsListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsButton
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    filterMenu
-                    Button {
-                        showNewChat = true
-                    } label: {
-                        Label("New message", systemImage: "square.and.pencil")
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 0) {
+                        filterMenu
+                        Button {
+                            showNewChat = true
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 40, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .accessibilityLabel("New message")
                     }
                 }
             }
@@ -214,11 +220,7 @@ struct ChatsListView: View {
     // MARK: - Filter
 
     private var filterMenu: some View {
-        let filterIcon = scope == .active
-            ? "line.3.horizontal.decrease.circle"
-            : "line.3.horizontal.decrease.circle.fill"
-
-        return Menu {
+        Menu {
             Picker("Filter", selection: $scope) {
                 ForEach(ChatScope.allCases, id: \.self) { scope in
                     Label(scope.title, systemImage: scope.systemImage)
@@ -226,7 +228,11 @@ struct ChatsListView: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: filterIcon)
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(scope == .active ? Color.primary : Color.accentColor)
+                .frame(width: 40, height: 44)
+                .contentShape(.rect)
         }
         .accessibilityLabel("Filter chats")
     }
@@ -276,6 +282,7 @@ struct ChatsListView: View {
                 }
             }
             .listStyle(.plain)
+            .contentMargins(.top, 8, for: .scrollContent)
             .compatibleBottomScrollEdgeEffect()
             .overlay {
                 if rows.isEmpty { emptyState }
