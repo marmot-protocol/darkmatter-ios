@@ -83,6 +83,46 @@ struct MessageDeletionTests {
         #expect(MessageDeletePresentation.supportingCopy(capability: both, isMine: false) == .moderation)
     }
 
+    @Test func viewModelCapabilityIsAvailableForIngestedMessages() throws {
+        // Positive regression coverage for delete availability through the
+        // full view-model wiring: an ingested message must surface delete
+        // scopes. The pure-policy positives alone let a wiring break hide.
+        let accountRef = "delete-available-\(UUID().uuidString)"
+        let me = hex("11")
+        let other = hex("22")
+        // Engine-shaped 16-byte group id (the real engine's MLS group id
+        // length, verified against a live-created group). Fixtures previously
+        // used 64-char ids by construction, which let a 32-byte length gate
+        // on group ids pass every test while making every REAL conversation's
+        // delete capability unavailable. This deterministic fixture is the
+        // permanent guard — it needs no account transport.
+        let group = groupRecord(id: String(repeating: "ab", count: 16), name: "Availability", admins: [me])
+        let appState = try appState(accountRef: accountRef, accountIdHex: me)
+        let viewModel = ConversationViewModel(appState: appState, group: group)
+
+        let mine = appRecord(id: hex("44"), groupId: group.groupIdHex, sender: me, direction: "sent")
+        let theirs = appRecord(id: hex("55"), groupId: group.groupIdHex, sender: other, direction: "received")
+        let page = TimelinePageFfi(
+            messages: [
+                timelineRecord(id: mine.messageIdHex, groupId: group.groupIdHex, sender: me, at: 1),
+                timelineRecord(id: theirs.messageIdHex, groupId: group.groupIdHex, sender: other, at: 2),
+            ],
+            hasMoreBefore: false,
+            hasMoreAfter: false
+        )
+        viewModel.applyTimelinePage(page, placement: .window)
+
+        // Own message in a named group: both scopes.
+        let mineCapability = viewModel.deleteCapability(for: mine)
+        #expect(mineCapability.canDeleteForMe)
+        #expect(mineCapability.canDeleteForEveryone)
+
+        // Another member's message, while self is admin: moderation scope.
+        let theirsCapability = viewModel.deleteCapability(for: theirs)
+        #expect(theirsCapability.canDeleteForMe)
+        #expect(theirsCapability.canDeleteForEveryone)
+    }
+
     @Test func viewModelCapabilityRejectsMissingAccountAndMalformedMessageIds() async throws {
         let accountRef = "delete-capability-\(UUID().uuidString)"
         let me = hex("11")
@@ -98,6 +138,17 @@ struct MessageDeletionTests {
         appState.activeAccountRef = nil
         #expect(viewModel.deleteCapability(for: valid) == .unavailable)
         #expect(!(await viewModel.deleteMessageForMe(valid)))
+    }
+
+    @Test func hideStoreAcceptsEngineShapedGroupIds() {
+        // The for-me path persists through MessageHideStore; a 16-byte group
+        // id must produce a valid conversation key.
+        let key = MessageHideStore.conversationKey(
+            accountRef: "account-a",
+            groupIdHex: String(repeating: "AB", count: 16)
+        )
+        #expect(key != nil)
+        #expect(key?.hasSuffix(String(repeating: "ab", count: 16)) == true)
     }
 
     @Test func localHideIsScopedIdempotentAndClearedPerAccount() throws {

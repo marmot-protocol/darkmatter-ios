@@ -12,7 +12,7 @@ nonisolated enum MessageHideStore {
 
     static func conversationKey(accountRef: String, groupIdHex: String) -> String? {
         guard let account = normalizedAccountRef(accountRef),
-              let group = Hex.normalized32Bytes(groupIdHex)
+              let group = Hex.normalizedGroupIdHex(groupIdHex)
         else { return nil }
         return "\(account.utf8.count):\(account):\(group)"
     }
