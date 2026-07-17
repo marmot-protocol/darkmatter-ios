@@ -67,6 +67,68 @@ struct Nip05ResolverTests {
         #expect(badKey == .noProfile)
     }
 
+    @MainActor
+    @Test func resolvedAccountChangeShedsTheVerifiedBadge() async {
+        let model = ProfileViewModel()
+        model.applyResolvedAccount(hex)
+        model.startPrompt = StartChatPrompt(
+            kind: .error(message: "retry"),
+            recipientName: "Previous profile",
+            accountIdHex: hex,
+            memberRef: "previous-member",
+            existingGroupIdHex: nil
+        )
+        await model.verifyDeclaredNip05(
+            "alice@example.com",
+            transport: stub(returning: "{\"names\":{\"alice\":\"\(hex)\"}}")
+        )
+        #expect(model.verifiedNip05 == "alice@example.com")
+
+        // Same account re-resolves: the badge survives.
+        model.applyResolvedAccount(hex)
+        #expect(model.verifiedNip05 == "alice@example.com")
+
+        // A different pubkey takes over the surface: the badge — earned by
+        // the previous pubkey — must not carry across, and the attempt
+        // memo resets so the new account gets its own verification.
+        model.applyResolvedAccount(String(repeating: "f", count: 64))
+        #expect(model.verifiedNip05 == nil)
+        #expect(model.startPrompt == nil)
+    }
+
+    @MainActor
+    @Test func staleVerificationCannotRestoreBadgeAfterAccountChange() async {
+        let gate = Nip05TransportGate()
+        let model = ProfileViewModel()
+        model.applyResolvedAccount(hex)
+        let verifiedHex = hex
+        let verification = Task { @MainActor in
+            await model.verifyDeclaredNip05(
+                "alice@example.com",
+                transport: { request, _ in
+                    await gate.suspendUntilReleased()
+                    let response = HTTPURLResponse(
+                        url: request.url ?? URL(fileURLWithPath: "/"),
+                        statusCode: 200,
+                        httpVersion: "HTTP/1.1",
+                        headerFields: nil
+                    )
+                    return (
+                        Data("{\"names\":{\"alice\":\"\(verifiedHex)\"}}".utf8),
+                        response ?? URLResponse()
+                    )
+                }
+            )
+        }
+
+        await gate.waitUntilStarted()
+        model.applyResolvedAccount(String(repeating: "f", count: 64))
+        await gate.release()
+        await verification.value
+
+        #expect(model.verifiedNip05 == nil)
+    }
+
     @Test func malformedDocumentsAndTransportFailuresFail() async {
         let malformed = await Nip05Resolver.resolve(
             name: "alice",
@@ -137,5 +199,38 @@ struct Nip05ResolverTests {
             )
             return (Data(body.utf8), response ?? URLResponse())
         }
+    }
+}
+
+private actor Nip05TransportGate {
+    private var started = false
+    private var released = false
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func suspendUntilReleased() async {
+        started = true
+        let waiters = startedWaiters
+        startedWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            releaseWaiter = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        released = true
+        releaseWaiter?.resume()
+        releaseWaiter = nil
     }
 }

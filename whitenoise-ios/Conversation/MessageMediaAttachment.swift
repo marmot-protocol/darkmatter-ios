@@ -1364,7 +1364,7 @@ nonisolated enum MessageMediaCache {
         )
     }
 
-    /// Removes cached decrypted plaintext for expired attachments off the
+    /// Removes cached decrypted plaintext for deleted attachments off the
     /// MainActor. The engine's secure-delete result reports pruned media by
     /// ciphertext hash while cache files are keyed by plaintext hash, so
     /// callers pass the pre-prune reference snapshot to resolve the URLs.
@@ -1426,6 +1426,24 @@ nonisolated enum MessageMediaCache {
     }
 
     static func removeCachedData(
+        forCiphertextHashes hashes: Set<String>,
+        in references: [MediaAttachmentReferenceFfi],
+        cachesDirectory: URL
+    ) {
+        purgeGeneration.withLock { generation in
+            // Invalidate every producer that began before this deletion, then
+            // remove under the same lock used by stores. No in-flight decrypt
+            // can recreate plaintext after the delete operation returns.
+            generation += 1
+            removeCachedDataUnlocked(
+                forCiphertextHashes: hashes,
+                in: references,
+                cachesDirectory: cachesDirectory
+            )
+        }
+    }
+
+    private static func removeCachedDataUnlocked(
         forCiphertextHashes hashes: Set<String>,
         in references: [MediaAttachmentReferenceFfi],
         cachesDirectory: URL

@@ -17,7 +17,17 @@ enum SensitiveClipboard {
     ) {
         pasteboard.setItems(
             [[UIPasteboard.typeAutomatic: text]],
-            options: [.expirationDate: expiresAt]
+            options: [.expirationDate: expiresAt, .localOnly: true]
+        )
+    }
+
+    /// Ordinary user copies (message text) — E2EE plaintext must not ride
+    /// Universal Clipboard to iCloud-paired devices, but unlike a consumed
+    /// nsec it should not silently vanish from the pasteboard either.
+    static func copyLocalOnly(_ text: String, to pasteboard: UIPasteboard = .general) {
+        pasteboard.setItems(
+            [[UIPasteboard.typeAutomatic: text]],
+            options: [.localOnly: true]
         )
     }
 

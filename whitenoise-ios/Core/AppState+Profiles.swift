@@ -117,7 +117,11 @@ extension AppState {
     /// Falls back to the hex if conversion fails (shouldn't, for a valid pubkey).
     @MainActor
     func npub(forAccountIdHex id: String) -> String {
-        marmot.npub(accountIdHex: id) ?? id
+        // Pure bech32 encode: the runtime accessor rebuilds the released
+        // client (reopening on-disk storage) and traps if that throws —
+        // callers here are SwiftUI body paths that may render while the
+        // runtime is suspended.
+        NostrProfileReference.npub(fromAccountIdHex: id) ?? id
     }
 
     /// Truncated npub for compact UI (e.g. `npub1abc...wxyz`).

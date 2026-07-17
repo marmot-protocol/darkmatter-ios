@@ -74,13 +74,46 @@ nonisolated enum NotificationPresentationRuntimeGate {
         isAppSceneActive: Bool,
         runtimeSuspendedForBackground: Bool,
         isRuntimeSuspending: Bool,
+        isSigningOut: Bool,
         hasRuntimeClient: Bool
     ) -> Bool {
         !isTaskCancelled
             && isAppSceneActive
             && !runtimeSuspendedForBackground
             && !isRuntimeSuspending
+            && !isSigningOut
             && hasRuntimeClient
+    }
+}
+
+nonisolated struct NotificationArchivedKeysCache {
+    private struct Entry {
+        let keys: Set<String>
+        let readAt: ContinuousClock.Instant
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    mutating func keys(
+        for accountRef: String,
+        now: ContinuousClock.Instant,
+        lifetime: Duration
+    ) -> Set<String>? {
+        guard let entry = entries[accountRef], now - entry.readAt < lifetime else {
+            entries.removeValue(forKey: accountRef)
+            return nil
+        }
+        return entry.keys
+    }
+
+    mutating func store(
+        _ keys: Set<String>,
+        for accountRef: String,
+        readAt: ContinuousClock.Instant,
+        lifetime: Duration
+    ) {
+        entries = entries.filter { readAt - $0.value.readAt < lifetime }
+        entries[accountRef] = Entry(keys: keys, readAt: readAt)
     }
 }
 
@@ -266,12 +299,26 @@ final class NotificationCoordinator {
             isAppSceneActive: host.isAppSceneActive,
             runtimeSuspendedForBackground: host.runtimeSuspendedForBackground,
             isRuntimeSuspending: host.isRuntimeSuspendingForNotificationCoordinator,
+            isSigningOut: host.isSigningOutForNotificationCoordinator,
             hasRuntimeClient: host.client != nil
         )
     }
 
+    private var archivedKeysCache = NotificationArchivedKeysCache()
+    /// Long enough to cover a foreground catch-up burst draining buffered
+    /// updates back-to-back, short enough that archiving a chat takes effect
+    /// on the next real message. Archiving from this device also cancels its
+    /// own presentations, so staleness only delays suppression, never data.
+    static let archivedKeysCacheLifetime: Duration = .seconds(2)
+
+    static func archivedKeys(from rows: [ChatListRowFfi]) -> Set<String> {
+        Set(rows.filter(\.archived).map(\.groupIdHex))
+    }
+
     /// Archived chats keep their history but shed notification attention;
-    /// a failed read fails open (presents).
+    /// a failed read fails open (presents). The full projection is read once
+    /// per burst, not once per update — a catch-up drain delivers many
+    /// updates back-to-back and each read is O(all chats).
     private func chatIsArchivedForPresentation(
         update: NotificationUpdateFfi,
         host: NotificationCoordinatorHost
@@ -282,11 +329,26 @@ final class NotificationCoordinator {
               !host.isRuntimeSuspendingForNotificationCoordinator,
               let client = host.client
         else { return false }
+        let now = ContinuousClock.now
+        if let keys = archivedKeysCache.keys(
+            for: update.accountRef,
+            now: now,
+            lifetime: Self.archivedKeysCacheLifetime
+        ) {
+            return keys.contains(update.groupIdHex)
+        }
         guard let rows = try? await client.chatList(
             accountRef: update.accountRef,
             includeArchived: true
         ) else { return false }
-        return rows.contains { $0.groupIdHex == update.groupIdHex && $0.archived }
+        let keys = Self.archivedKeys(from: rows)
+        archivedKeysCache.store(
+            keys,
+            for: update.accountRef,
+            readAt: ContinuousClock.now,
+            lifetime: Self.archivedKeysCacheLifetime
+        )
+        return keys.contains(update.groupIdHex)
     }
 
     private func localNotificationsEnabledForPresentation(
@@ -378,6 +440,10 @@ final class NotificationCoordinator {
         accountRef: String,
         host: NotificationCoordinatorHost
     ) async throws -> NotificationSettingsFfi {
+        // Mirror the disable path: a background registration sync already in
+        // flight must finish (or be cancelled) before this enable issues its
+        // own upsert, or two concurrent upsertPushRegistration calls race.
+        await cancelNativePushRegistrationTask()
         let coordinator = NativePushEnableCoordinator(
             setNativePushEnabled: { [weak host] enabled in
                 guard let host else { throw CancellationError() }
@@ -413,6 +479,7 @@ final class NotificationCoordinator {
         host: NotificationCoordinatorHost
     ) async {
         do {
+            await cancelNativePushRegistrationTask()
             let granted = try await host.notifications.requestAuthorization()
             guard granted else {
                 _ = try? await host.currentMarmotClient()

@@ -212,11 +212,21 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
             let recorder = try AVAudioRecorder(url: url, settings: settings)
             recorder.isMeteringEnabled = true
             guard recorder.record() else { throw Failure.startFailed }
+            // A release that ran between the pre-flight checkpoint and here
+            // already cancelled this task; committing anyway leaves a live
+            // microphone behind a banner the user believes they dismissed.
+            if Task.isCancelled {
+                recorder.stop()
+                try? FileManager.default.removeItem(at: url)
+                throw CancellationError()
+            }
             self.recorder = recorder
             self.recordingURL = url
             state = .recording(locked: VoiceRecordingGesturePolicy.shouldLock(translation: currentDragTranslation))
             Haptics.tap()
             startMetering()
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             throw Failure.startFailed
         }

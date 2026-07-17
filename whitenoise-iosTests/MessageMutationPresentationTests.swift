@@ -182,6 +182,28 @@ struct MessageMutationPolicyTests {
 
 @MainActor
 struct ConversationEditProjectionTests {
+    @Test func rejectedAuthoritativeEditClearsTheOptimisticOverlay() {
+        let cache = ConversationEditProjectionCache()
+        let target = appRecord(id: hex("10"), sender: hex("aa"), plaintext: "original", at: 1)
+        cache.setOptimistic(
+            targetMessageIdHex: target.messageIdHex,
+            sender: target.sender,
+            plaintext: "rejected edit",
+            contentTokens: MarkdownDocumentFfi.emptyDocument
+        )
+
+        // The authoritative record for the same edit arrives invalidated:
+        // the authority has rejected it, so the overlay must clear instead
+        // of rendering the rejected text indefinitely.
+        let rejected = editRecord(
+            id: hex("20"), target: target.messageIdHex, sender: target.sender, text: "rejected edit", at: 2
+        )
+        _ = cache.setRecord(rejected, invalidated: true, deleted: false)
+
+        #expect(cache.displayRecord(for: target).plaintext == "original")
+    }
+
+
     @Test func latestValidEditFromOriginalAuthorWinsAndOptimisticEditCanRollBack() {
         let cache = ConversationEditProjectionCache()
         let target = appRecord(id: hex("10"), sender: hex("aa"), plaintext: "original", at: 1)

@@ -15,11 +15,24 @@ nonisolated struct GroupSharedMediaItem: Identifiable, Equatable {
 
 nonisolated enum GroupSharedMediaPresentation {
     static func items(from records: [MediaRecordFfi]) -> [GroupSharedMediaItem] {
-        records.map { record in
+        var duplicateCountByOwnerID: [String: Int] = [:]
+        return records.map { record in
+            // Records without a message id fall back to content identity;
+            // identical plaintext re-sent as separate records must still get
+            // distinct ForEach ids, so the fallback folds in the ciphertext
+            // hash and record timestamps too.
             let stableRecordID = record.messageIdHex.isEmpty
-                ? record.reference.plaintextSha256.lowercased()
+                ? "\(record.reference.plaintextSha256.lowercased()):\(record.reference.ciphertextSha256.lowercased()):\(record.recordedAt):\(record.receivedAt)"
                 : record.messageIdHex
-            let ownerID = "shared-media:\(stableRecordID):\(record.attachmentIndex)"
+            let baseOwnerID = "shared-media:\(stableRecordID):\(record.attachmentIndex)"
+            let duplicateIndex = duplicateCountByOwnerID[baseOwnerID, default: 0]
+            duplicateCountByOwnerID[baseOwnerID] = duplicateIndex + 1
+            // MediaRecordFfi exposes no timeline-row identity when messageIdHex
+            // is empty. Preserve a deterministic occurrence ordinal so even
+            // byte-for-byte duplicate projection rows remain distinct in SwiftUI.
+            let ownerID = duplicateIndex == 0
+                ? baseOwnerID
+                : "\(baseOwnerID):duplicate-\(duplicateIndex)"
             let attachment = MessageMediaAttachment.displayItems(
                 from: [record.reference],
                 ownerId: ownerID
