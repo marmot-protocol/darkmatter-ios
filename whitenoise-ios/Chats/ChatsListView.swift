@@ -51,12 +51,17 @@ struct ChatsListView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if let viewModel {
-                    content(viewModel: viewModel)
-                } else {
-                    ProgressView()
+            VStack(spacing: 0) {
+                chatListSearchBar
+
+                Group {
+                    if let viewModel {
+                        content(viewModel: viewModel)
+                    } else {
+                        ProgressView()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .trueBlackScaffoldBackground()
             .navigationTitle("Chats")
@@ -79,9 +84,6 @@ struct ChatsListView: View {
                         .accessibilityLabel("New message")
                     }
                 }
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                chatListSearchBar
             }
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
@@ -238,9 +240,8 @@ struct ChatsListView: View {
         )
         .padding(.horizontal, 16)
         .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
         .background(Color(.systemBackground))
-        .zIndex(1)
     }
 
     private var subscriptionScope: SubscriptionScope {
