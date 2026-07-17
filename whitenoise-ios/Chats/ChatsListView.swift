@@ -8,8 +8,8 @@ struct ChatsListView: View {
     @State private var showSettings = false
     @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
-    @State private var searchPresented = false
     @State private var scope: ChatScope = .active
+    @FocusState private var searchFocused: Bool
 
     enum ChatScope: CaseIterable, Hashable {
         case active, archived, unread
@@ -51,12 +51,17 @@ struct ChatsListView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if let viewModel {
-                    content(viewModel: viewModel)
-                } else {
-                    ProgressView()
+            VStack(spacing: 0) {
+                chatListSearchBar
+
+                Group {
+                    if let viewModel {
+                        content(viewModel: viewModel)
+                    } else {
+                        ProgressView()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .trueBlackScaffoldBackground()
             .navigationTitle("Chats")
@@ -65,21 +70,21 @@ struct ChatsListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsButton
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    filterMenu
-                    Button {
-                        showNewChat = true
-                    } label: {
-                        Label("New message", systemImage: "square.and.pencil")
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 0) {
+                        filterMenu
+                        Button {
+                            showNewChat = true
+                        } label: {
+                            Image(systemName: "square.and.pencil")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 40, height: 44)
+                                .contentShape(.rect)
+                        }
+                        .accessibilityLabel("New message")
                     }
                 }
             }
-            .searchable(
-                text: $searchText,
-                isPresented: $searchPresented,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: Text("Search chats")
-            )
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
@@ -193,8 +198,50 @@ struct ChatsListView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            searchPresented = false
+            searchFocused = false
         }
+    }
+
+    // MARK: - Search
+
+    private var chatListSearchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            TextField("Search chats", text: $searchText)
+                .focused($searchFocused)
+                .font(.body)
+                .submitLabel(.search)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 40, height: 40)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, searchText.isEmpty ? 12 : 0)
+        .frame(minHeight: 40)
+        .background(
+            Color(.secondarySystemFill),
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+        .background(Color(.systemBackground))
     }
 
     private var subscriptionScope: SubscriptionScope {
@@ -214,11 +261,7 @@ struct ChatsListView: View {
     // MARK: - Filter
 
     private var filterMenu: some View {
-        let filterIcon = scope == .active
-            ? "line.3.horizontal.decrease.circle"
-            : "line.3.horizontal.decrease.circle.fill"
-
-        return Menu {
+        Menu {
             Picker("Filter", selection: $scope) {
                 ForEach(ChatScope.allCases, id: \.self) { scope in
                     Label(scope.title, systemImage: scope.systemImage)
@@ -226,7 +269,11 @@ struct ChatsListView: View {
                 }
             }
         } label: {
-            Label("Filter", systemImage: filterIcon)
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(scope == .active ? Color.primary : Color.accentColor)
+                .frame(width: 40, height: 44)
+                .contentShape(.rect)
         }
         .accessibilityLabel("Filter chats")
     }
