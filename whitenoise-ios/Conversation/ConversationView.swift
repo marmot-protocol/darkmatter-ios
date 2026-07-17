@@ -819,20 +819,32 @@ struct ConversationView: View {
                         .appAppearance()
                 }
             }
-            .sheet(item: $deleteTarget) { target in
+            .confirmationDialog(
+                "Delete message?",
+                isPresented: Binding(
+                    get: { deleteTarget != nil },
+                    set: { if !$0 { deleteTarget = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: deleteTarget
+            ) { target in
                 if let viewModel {
-                    MessageDeleteSheet(
-                        capability: viewModel.deleteCapability(for: target.record),
-                        isMine: viewModel.isMessageMine(target.record),
-                        onDeleteForMe: {
-                            await viewModel.deleteMessageForMe(target.record)
-                        },
-                        onDeleteForEveryone: {
-                            await viewModel.deleteMessageForEveryone(target.record)
+                    let capability = viewModel.deleteCapability(for: target.record)
+                    if capability.canDeleteForEveryone {
+                        Button("Delete for everyone", role: .destructive) {
+                            Task { await viewModel.deleteMessageForEveryone(target.record) }
                         }
-                    )
-                    .appAppearance()
+                    }
+                    if capability.canDeleteForMe {
+                        Button(
+                            capability.canDeleteForEveryone ? "Delete for me" : "Delete",
+                            role: .destructive
+                        ) {
+                            Task { _ = await viewModel.deleteMessageForMe(target.record) }
+                        }
+                    }
                 }
+                Button("Cancel", role: .cancel) {}
             }
             .sheet(isPresented: $showCameraCapture) {
                 CameraCaptureView(
@@ -1241,6 +1253,9 @@ struct ConversationView: View {
                 // The destination renders only once the model exists; a tap in
                 // the load window would push an empty page.
                 guard viewModel != nil else { return }
+                // Resign the composer before pushing so the keyboard animates
+                // down first instead of flashing mid-screen during the push.
+                dismissKeyboard()
                 showDetails = true
             } label: {
                 HStack(spacing: 10) {
@@ -1448,7 +1463,7 @@ struct ConversationView: View {
                         .coordinateSpace(name: Self.timelineCoordinateSpace)
                         .defaultScrollAnchor(.bottom)
                         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-                        .scrollDismissesKeyboard(.interactively)
+                        .scrollDismissesKeyboard(.immediately)
                         .onScrollPhaseChange { _, phase in
                             isUserScrollingTimeline = phase == .interacting || phase == .decelerating
                             if phase == .idle, isAtTimelineBottom {
