@@ -139,7 +139,7 @@ struct SettingsView: View {
                     showAccountActions = true
                 } label: {
                     HStack {
-                        Label("Profile Actions", systemImage: "person.crop.circle.badge.minus")
+                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                         Spacer()
                         Image(systemName: "chevron.up")
                             .font(.caption.weight(.semibold))
@@ -147,6 +147,8 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(appState.activeAccount == nil)
+            } header: {
+                Text("Account")
             } footer: {
                 Text("Sign out while keeping this profile on the device, or permanently remove its local data.")
                     .font(.footnote)
@@ -252,7 +254,7 @@ private struct AccountActionsSheet: View {
                     )
                 }
             }
-            .navigationTitle("Profile Actions")
+            .navigationTitle("Sign Out")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

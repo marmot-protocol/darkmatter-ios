@@ -7,13 +7,19 @@ struct DetailsActionButton: View {
     let title: LocalizedStringKey
     let systemImage: String
     var isDisabled = false
+    var isLoading = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.body.weight(.semibold))
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.body.weight(.semibold))
+                }
                 Text(title)
                     .font(.caption2)
                     .lineLimit(1)
@@ -23,7 +29,7 @@ struct DetailsActionButton: View {
             .contentShape(.rect)
         }
         .buttonStyle(.bordered)
-        .disabled(isDisabled)
+        .disabled(isDisabled || isLoading)
     }
 }
 

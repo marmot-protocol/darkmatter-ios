@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import MarmotKit
 
 struct ChatsListView: View {
@@ -9,28 +8,8 @@ struct ChatsListView: View {
     @State private var showSettings = false
     @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
-    @State private var searchEditing = false
+    @State private var searchPresented = false
     @State private var scope: ChatScope = .active
-    @FocusState private var searchFocused: Bool
-    @State private var isKeyboardVisible = false
-    @Environment(\.colorScheme) private var colorScheme
-
-    @ScaledMetric(relativeTo: .body)
-    private var searchIconSize = BottomInputChromeLayout.inlineAccessoryIconSize
-    @ScaledMetric(relativeTo: .body)
-    private var searchFieldFontSize = BottomInputChromeLayout.fieldFontSize
-    @ScaledMetric(relativeTo: .body)
-    private var sideControlIconSize = BottomInputChromeLayout.sideControlIconSize
-    @ScaledMetric(relativeTo: .body)
-    private var searchControlSize = BottomInputChromeLayout.controlSize
-
-    private var hasSearchText: Bool {
-        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var searchCancellationActive: Bool {
-        isKeyboardVisible || searchFocused || hasSearchText
-    }
 
     enum ChatScope: CaseIterable, Hashable {
         case active, archived, unread
@@ -85,13 +64,21 @@ struct ChatsListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsButton
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
                     filterMenu
+                    Button {
+                        showNewChat = true
+                    } label: {
+                        Label("New message", systemImage: "square.and.pencil")
+                    }
                 }
             }
-            .bottomInputChromeAccessory {
-                chatListSearchControls
-            }
+            .searchable(
+                text: $searchText,
+                isPresented: $searchPresented,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: Text("Search chats")
+            )
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
@@ -201,131 +188,12 @@ struct ChatsListView: View {
         }
     }
 
-    // MARK: - Search
-
-    private var chatListSearchControls: some View {
-        HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-            bottomInputGlassContainer {
-                chatSearchBar
-            }
-            bottomInputGlassContainer {
-                searchActionButton
-            }
-        }
-        .keyboardAdaptiveHorizontalPadding(isKeyboardVisible: $isKeyboardVisible)
-        .padding(.top, BottomInputChromeLayout.topInset)
-        .padding(.bottom, BottomInputChromeLayout.bottomInset)
-        .keyboardAdaptiveBottomPadding()
-    }
-
-    private var chatSearchBar: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: searchIconSize, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                ZStack(alignment: .leading) {
-                    if searchText.isEmpty {
-                        Text("Search")
-                            .font(.system(size: searchFieldFontSize))
-                            .foregroundStyle(searchPlaceholderColor)
-                            .allowsHitTesting(false)
-                    }
-
-                    TextField("", text: $searchText, onEditingChanged: { isEditing in
-                        searchEditing = isEditing
-                    })
-                    .focused($searchFocused)
-                    .font(.system(size: searchFieldFontSize))
-                    .submitLabel(.search)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onChange(of: searchFocused) { _, isFocused in
-                        searchEditing = isFocused
-                    }
-                }
-            }
-            .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
-            .padding(.vertical, BottomInputChromeLayout.fieldVerticalPadding)
-            .padding(.trailing, BottomInputChromeLayout.fieldTrailingPadding)
-        }
-        .frame(minHeight: searchControlSize)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .simultaneousGesture(TapGesture().onEnded { focusSearchField() })
-        .compatibleInputCapsuleChrome(interactive: false)
-    }
-
-    private var searchActionButton: some View {
-        Button(action: searchActionTapped) {
-            Group {
-                if searchCancellationActive {
-                    Image(systemName: "xmark")
-                } else {
-                    Image(systemName: "square.and.pencil")
-                        .offset(x: 0.85, y: -1.25)
-                }
-            }
-            .font(.system(size: sideControlIconSize, weight: .semibold))
-            .foregroundStyle(searchCancellationActive ? Color.secondary : Color.primary)
-            .frame(width: searchControlSize, height: searchControlSize)
-            .compatibleInputCircleChrome()
-        }
-        .buttonStyle(.plain)
-        .contentShape(Circle())
-        .accessibilityLabel(searchCancellationActive ? Text("Clear search") : Text("New message"))
-    }
-
-    private var searchPlaceholderColor: Color {
-        colorScheme == .light ? Color.primary.opacity(0.38) : Color.secondary
-    }
-
-    private func searchActionTapped() {
-        if searchCancellationActive {
-            cancelSearch()
-        } else {
-            showNewChat = true
-        }
-    }
-
-    private func focusSearchField() {
-        Task { @MainActor in
-            await Task.yield()
-            searchFocused = true
-            searchEditing = true
-        }
-    }
-
     private func dismissSearchKeyboard() {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            searchEditing = false
-            searchFocused = false
+            searchPresented = false
         }
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
-    }
-
-    private func cancelSearch() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            searchText = ""
-            searchEditing = false
-            searchFocused = false
-        }
-        UIApplication.shared.sendAction(
-            #selector(UIResponder.resignFirstResponder),
-            to: nil,
-            from: nil,
-            for: nil
-        )
     }
 
     private var subscriptionScope: SubscriptionScope {
