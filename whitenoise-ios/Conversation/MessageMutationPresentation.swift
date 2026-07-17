@@ -45,6 +45,62 @@ nonisolated enum MessageEditingPolicy {
     }
 }
 
+nonisolated struct MessageDeleteCapability: Equatable, Sendable {
+    let canDeleteForMe: Bool
+    let canDeleteForEveryone: Bool
+
+    static let unavailable = MessageDeleteCapability(
+        canDeleteForMe: false,
+        canDeleteForEveryone: false
+    )
+
+    var canDelete: Bool {
+        canDeleteForMe || canDeleteForEveryone
+    }
+}
+
+nonisolated enum MessageDeletePolicy {
+    /// The single authorization model shared by the actions menu and both
+    /// mutation paths. Group-admin status never grants moderation inside a DM.
+    static func capability(
+        isDirectMessage: Bool,
+        isMine: Bool,
+        isSelfAdmin: Bool,
+        localDeleteSupported: Bool,
+        remoteDeleteSupported: Bool,
+        isDeleted: Bool,
+        isHidden: Bool
+    ) -> MessageDeleteCapability {
+        guard !isDeleted, !isHidden else { return .unavailable }
+        let canModerate = !isDirectMessage && isSelfAdmin
+        return MessageDeleteCapability(
+            canDeleteForMe: localDeleteSupported,
+            canDeleteForEveryone: remoteDeleteSupported && (isMine || canModerate)
+        )
+    }
+}
+
+nonisolated enum MessageDeleteSupportingCopy: Equatable, Sendable {
+    case chooseScope
+    case localOnly
+    case moderation
+}
+
+nonisolated enum MessageDeletePresentation {
+    static func supportingCopy(
+        capability: MessageDeleteCapability,
+        isMine: Bool
+    ) -> MessageDeleteSupportingCopy {
+        if capability.canDeleteForEveryone && !isMine {
+            return .moderation
+        }
+        if capability.canDeleteForEveryone {
+            return .chooseScope
+        }
+        return .localOnly
+    }
+}
+
 struct MessageForwardDestination: Identifiable, Hashable {
     let id: String
     let title: String

@@ -82,6 +82,10 @@ final class TimelineStore {
     /// Bounded to a recent window (`maxStreamDebugTimelineItems`) so a long-lived
     /// stream can't grow this map for the conversation's lifetime (#431).
     @ObservationIgnored private var streamDebugTimelineItems: [String: TimelineItem] = [:]
+    /// Account/group-scoped message ids hidden by the local "Delete for me"
+    /// action. Records stay mirrored so reply/edit/reaction projections remain
+    /// internally consistent; only the rendered timeline filters them.
+    @ObservationIgnored private var hiddenMessageIds: Set<String>
 
     /// Upper bound on retained streaming-debug rows. Higher than
     /// `maxSystemTimelineItems` because debug events are far higher volume.
@@ -102,9 +106,14 @@ final class TimelineStore {
     /// the view model so this store holds no profile state.
     @ObservationIgnored var mentionResolver: MarkdownMentionResolver = { _ in nil }
 
-    init(appState: AppState?, groupIdHex: String) {
+    init(
+        appState: AppState?,
+        groupIdHex: String,
+        hiddenMessageIds: Set<String> = []
+    ) {
         self.appState = appState
         self.groupIdHex = groupIdHex
+        self.hiddenMessageIds = Set(hiddenMessageIds.compactMap { Hex.normalized32Bytes($0) })
     }
 
     // Loading / pagination edges are set by the view model's IO methods.
@@ -313,6 +322,22 @@ final class TimelineStore {
     func isDeleted(_ messageIdHex: String) -> Bool {
         _ = timelineProjectionGeneration
         return deletedProjections.contains(messageIdHex)
+    }
+
+    func isHidden(_ messageIdHex: String) -> Bool {
+        _ = timelineProjectionGeneration
+        guard let messageId = Hex.normalized32Bytes(messageIdHex) else { return false }
+        return hiddenMessageIds.contains(messageId)
+    }
+
+    @discardableResult
+    func setHiddenMessageIds(_ messageIds: Set<String>) -> Bool {
+        let normalized = Set(messageIds.compactMap { Hex.normalized32Bytes($0) })
+        guard hiddenMessageIds != normalized else { return false }
+        hiddenMessageIds = normalized
+        let changed = rebuildTimeline()
+        noteProjectionChanged()
+        return changed
     }
 
     func isEdited(_ messageIdHex: String) -> Bool {
@@ -739,6 +764,10 @@ final class TimelineStore {
         for record: AppMessageRecordFfi,
         status: MessageStatus?
     ) -> TimelineItem? {
+        if let messageId = Hex.normalized32Bytes(record.messageIdHex),
+           hiddenMessageIds.contains(messageId) {
+            return nil
+        }
         switch MessageSemantics.classify(record) {
         case .chat, .reply, .media, .streamFinal:
             return TimelineItem.message(editProjections.displayRecord(for: record), status: status)
