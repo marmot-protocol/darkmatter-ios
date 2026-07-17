@@ -33,12 +33,20 @@ final class KeyPackagesViewModel {
         do {
             let client = try appState.currentMarmotClient()
             let loadedLists = try await client.accountRelayLists(accountRef: ref)
+            // The screen's task restarts on account change, but this model
+            // persists and the cancelled body still runs to completion — a
+            // straggling load must not render the previous account's
+            // key packages and bootstrap relays under the new one.
+            guard !Task.isCancelled, appState.activeAccountRef == ref else { return }
             lists = loadedLists
-            packages = try await client.accountKeyPackages(
+            let loadedPackages = try await client.accountKeyPackages(
                 accountRef: ref,
                 bootstrapRelays: RelaySettings.bootstrapRelays(from: loadedLists)
             )
+            guard !Task.isCancelled, appState.activeAccountRef == ref else { return }
+            packages = loadedPackages
         } catch {
+            guard appState.activeAccountRef == ref else { return }
             loadError = error.localizedDescription
         }
     }
