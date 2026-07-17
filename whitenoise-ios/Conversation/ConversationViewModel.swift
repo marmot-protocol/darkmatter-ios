@@ -685,10 +685,13 @@ final class ConversationViewModel {
     }
 
     private func canonicalDeleteRecord(for message: AppMessageRecordFfi) -> AppMessageRecordFfi? {
+        // Message ids are 32-byte nostr event ids and stay strictly
+        // validated; group ids are opaque engine hex (16 bytes today) and
+        // must not be forced through the 32-byte gate.
         guard let messageId = Hex.normalized32Bytes(message.messageIdHex),
               let canonical = timelineStore.record(for: messageId),
-              let canonicalGroupId = Hex.normalized32Bytes(canonical.groupIdHex),
-              let currentGroupId = Hex.normalized32Bytes(group.groupIdHex),
+              let canonicalGroupId = Hex.normalizedGroupIdHex(canonical.groupIdHex),
+              let currentGroupId = Hex.normalizedGroupIdHex(group.groupIdHex),
               canonicalGroupId == currentGroupId
         else { return nil }
         return canonical
