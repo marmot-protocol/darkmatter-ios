@@ -140,7 +140,27 @@ nonisolated enum NotificationPresentationPolicy {
             }
         }
 
-        return order.compactMap { key in
+        // One summary per conversation is itself unbounded — a backlog spread
+        // across many chats would reintroduce the very add()/donate() flood
+        // the cap exists to prevent. Distinct-route summaries are bounded and
+        // the tail folds into one aggregate (its route points at the first
+        // folded chat; any tap opens the app, which catches up fully).
+        var boundedOrder = order
+        var aggregate: (first: NotificationUpdateFfi, count: Int, containsMention: Bool)?
+        if order.count > maxOverflowSummaries {
+            let tail = order.dropFirst(maxOverflowSummaries - 1)
+            boundedOrder = Array(order.prefix(maxOverflowSummaries - 1))
+            let tailBuckets = tail.compactMap { buckets[$0] }
+            if let firstTail = tailBuckets.first {
+                aggregate = (
+                    first: firstTail.first,
+                    count: tailBuckets.reduce(0) { $0 + $1.count },
+                    containsMention: tailBuckets.contains { $0.containsMention }
+                )
+            }
+        }
+
+        var summaries = boundedOrder.compactMap { key -> LocalNotificationPresentation? in
             guard let bucket = buckets[key],
                   let base = LocalNotificationProjection.makePresentation(for: bucket.first, nickname: nickname)
             else { return nil }
@@ -150,7 +170,19 @@ nonisolated enum NotificationPresentationPolicy {
                 containsMention: bucket.containsMention
             )
         }
+        if let aggregate,
+           let base = LocalNotificationProjection.makePresentation(for: aggregate.first, nickname: nickname) {
+            summaries.append(summaryPresentation(
+                after: base,
+                overflowCount: aggregate.count,
+                containsMention: aggregate.containsMention
+            ))
+        }
+        return summaries
     }
+
+    /// Upper bound on distinct-conversation overflow summaries per wake.
+    static let maxOverflowSummaries = maxAdditionalPresentations
 
     /// The summary inherits the OR of its members' mention bits: a missing
     /// bit reads as a mention in `willPresent`, so an all-non-mention summary
