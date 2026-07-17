@@ -8,6 +8,11 @@ import MarmotKit
 @Observable
 final class SharedMediaLibraryViewModel {
     private(set) var items: [GroupSharedMediaItem] = []
+    // Derived once per load: `body` re-runs on segment switches and gallery
+    // presentation, and regrouping every item plus a fresh DateFormatter per
+    // render is pure waste for a media-heavy group.
+    private(set) var visualItems: [GroupSharedMediaItem] = []
+    private(set) var visualMonthSections: [SharedMediaLibraryPresentation.MonthSection] = []
     private(set) var links: [SharedMediaLibraryPresentation.LinkItem] = []
     private(set) var isLoading = false
     private(set) var isLoadingLinks = false
@@ -31,6 +36,8 @@ final class SharedMediaLibraryViewModel {
             let records = try await client.listMedia(accountRef: accountRef, groupIdHex: groupIdHex)
             try Task.checkCancellation()
             items = GroupSharedMediaPresentation.items(from: records)
+            visualItems = GroupSharedMediaPresentation.visualItems(from: items)
+            visualMonthSections = SharedMediaLibraryPresentation.monthSections(visualItems)
             didLoad = true
         } catch is CancellationError {
             return
@@ -222,7 +229,7 @@ struct SharedMediaLibraryView: View {
 
     @ViewBuilder
     private var mediaSections: some View {
-        let visual = GroupSharedMediaPresentation.visualItems(from: model.items)
+        let visual = model.visualItems
         if model.isLoading && model.items.isEmpty {
             loadingRow
         } else if let error = model.loadError, model.items.isEmpty {
@@ -232,7 +239,7 @@ struct SharedMediaLibraryView: View {
         } else if visual.isEmpty {
             emptyRow(title: "No photos or videos", systemImage: "photo.on.rectangle.angled")
         } else {
-            ForEach(SharedMediaLibraryPresentation.monthSections(visual)) { section in
+            ForEach(model.visualMonthSections) { section in
                 Section {
                     LazyVGrid(columns: columns, spacing: 3) {
                         ForEach(section.items) { item in
