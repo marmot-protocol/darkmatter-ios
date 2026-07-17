@@ -2855,7 +2855,7 @@ struct ConversationView: View {
                 beginReply(to: record, viewModel: viewModel)
             },
             onCopy: {
-                SensitiveClipboard.copy(viewModel.displayBody(of: record))
+                SensitiveClipboard.copyLocalOnly(viewModel.displayBody(of: record))
                 Haptics.tap()
                 dismissActions()
             },
