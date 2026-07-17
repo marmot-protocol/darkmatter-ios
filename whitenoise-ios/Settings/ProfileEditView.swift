@@ -87,7 +87,32 @@ struct ProfileEditView: View {
     private var saveDisabled: Bool {
         model.isPublishing
             || appState.activeAccountRef == nil
+            || model.loadedAccountIdHex != appState.activeAccount?.accountIdHex
             || model.currentDraft.validationError != nil
+    }
+}
+
+/// What `loadExisting` should do when the profile lookup settles: seed the
+/// form, unlock a first publish (fresh identity, definitively no kind:0), or
+/// stay gated because the read itself threw and publishing could replace
+/// existing metadata with blanks. The distinction rides on the throwing
+/// `userProfile` read — a nil return is authoritative absence, a throw is
+/// unknown state.
+nonisolated enum ProfileEditLoadResolution: Equatable {
+    case seedExisting
+    case enableFirstPublish
+    case loadFailed
+
+    static func resolve(
+        hasLoadedProfile: Bool,
+        readFailed: Bool
+    ) -> ProfileEditLoadResolution {
+        // The throwing read is the only authority. A failure gates
+        // publishing outright, and a successful nil is definitive absence —
+        // the display cache gets no vote in either direction, because a
+        // stale projection could otherwise unlock a republish of old fields.
+        if readFailed { return .loadFailed }
+        return hasLoadedProfile ? .seedExisting : .enableFirstPublish
     }
 }
 

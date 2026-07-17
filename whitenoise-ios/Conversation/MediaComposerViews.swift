@@ -491,6 +491,23 @@ struct PhotoLibrarySelection: Hashable {
     static func compactPreservingPickerOrder(_ selectionsByPickerIndex: [PhotoLibrarySelection?]) -> [PhotoLibrarySelection] {
         selectionsByPickerIndex.compactMap { $0 }
     }
+
+    /// All accepted selections stay resident until the composer hands them
+    /// off, so the per-item cap alone still allows count × cap in RAM. The
+    /// session budget bounds the sum; selections beyond it are rejected the
+    /// same way as oversized ones.
+    static let maxTotalSelectionBytes = 3 * MediaDraftProcessor.maxAttachmentBytes
+
+    /// Size gate applied before any bytes are read into memory; the same cap
+    /// the draft processor enforces, moved ahead of materialization, plus the
+    /// remaining session budget.
+    static func admitsSelection(
+        bytes: Int,
+        cap: Int = MediaDraftProcessor.maxAttachmentBytes,
+        remaining: Int = maxTotalSelectionBytes
+    ) -> Bool {
+        bytes > 0 && bytes <= cap && bytes <= remaining
+    }
 }
 
 private enum PhotoLibraryPickerError: LocalizedError {
@@ -531,7 +548,6 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
         private let onSelection: ([PhotoLibrarySelection]) -> Void
         private let onError: (Error) -> Void
         private let onDismiss: () -> Void
-        private let resultQueue = DispatchQueue(label: "dev.ipf.whitenoise.ios.photo-library-picker")
 
         init(
             onSelection: @escaping ([PhotoLibrarySelection]) -> Void,
@@ -547,41 +563,87 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
             onDismiss()
             guard !results.isEmpty else { return }
 
-            let group = DispatchGroup()
-            var selectionsByPickerIndex = [PhotoLibrarySelection?](repeating: nil, count: results.count)
-            var firstError: Error?
+            // Assets load one at a time through a file representation with a
+            // size gate, and accepted bytes draw down a session budget — peak
+            // memory is bounded by that budget, not by count × per-item cap.
+            Task {
+                var selectionsByPickerIndex = [PhotoLibrarySelection?](repeating: nil, count: results.count)
+                var firstError: Error?
+                var remainingBudget = PhotoLibrarySelection.maxTotalSelectionBytes
 
-            for (index, result) in results.enumerated() {
-                let provider = result.itemProvider
-                guard let typeIdentifier = Self.mediaTypeIdentifier(from: provider) else { continue }
-                let fileName = Self.fileName(
-                    suggestedName: provider.suggestedName,
-                    typeIdentifier: typeIdentifier
-                )
+                for (index, result) in results.enumerated() {
+                    let provider = result.itemProvider
+                    guard let typeIdentifier = Self.mediaTypeIdentifier(from: provider) else { continue }
+                    let fileName = Self.fileName(
+                        suggestedName: provider.suggestedName,
+                        typeIdentifier: typeIdentifier
+                    )
+                    do {
+                        let selection = try await Self.loadBoundedSelection(
+                            provider: provider,
+                            typeIdentifier: typeIdentifier,
+                            fileName: fileName,
+                            remainingBudget: remainingBudget
+                        )
+                        remainingBudget -= selection.data.count
+                        selectionsByPickerIndex[index] = selection
+                    } catch {
+                        if firstError == nil { firstError = error }
+                    }
+                }
 
-                group.enter()
-                provider.loadDataRepresentation(forTypeIdentifier: typeIdentifier) { data, error in
-                    self.resultQueue.async {
-                        if let data, !data.isEmpty {
-                            selectionsByPickerIndex[index] = PhotoLibrarySelection(
-                                data: data,
-                                fileName: fileName,
-                                typeIdentifier: typeIdentifier
-                            )
-                        } else if let error, firstError == nil {
-                            firstError = error
-                        }
-                        group.leave()
+                let selections = PhotoLibrarySelection.compactPreservingPickerOrder(selectionsByPickerIndex)
+                await MainActor.run {
+                    // A failure among successes (an oversized video next to a
+                    // valid photo) surfaces alongside the delivered selections
+                    // instead of silently dropping the item.
+                    if let firstError, !selections.isEmpty {
+                        self.onError(firstError)
+                    }
+                    if selections.isEmpty {
+                        self.onError(firstError ?? PhotoLibraryPickerError.noReadableMedia)
+                    } else {
+                        self.onSelection(selections)
                     }
                 }
             }
+        }
 
-            group.notify(queue: .main) {
-                let selections = PhotoLibrarySelection.compactPreservingPickerOrder(selectionsByPickerIndex)
-                if selections.isEmpty {
-                    self.onError(firstError ?? PhotoLibraryPickerError.noReadableMedia)
-                } else {
-                    self.onSelection(selections)
+        private static func loadBoundedSelection(
+            provider: NSItemProvider,
+            typeIdentifier: String,
+            fileName: String?,
+            remainingBudget: Int
+        ) async throws -> PhotoLibrarySelection {
+            try await withCheckedThrowingContinuation { continuation in
+                provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
+                    // The provider deletes the temp file when this handler
+                    // returns, so the size gate and the read both happen here.
+                    guard let url else {
+                        continuation.resume(throwing: error ?? PhotoLibraryPickerError.noReadableMedia)
+                        return
+                    }
+                    guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+                          size > 0
+                    else {
+                        continuation.resume(throwing: PhotoLibraryPickerError.noReadableMedia)
+                        return
+                    }
+                    guard PhotoLibrarySelection.admitsSelection(bytes: size, remaining: remainingBudget) else {
+                        continuation.resume(
+                            throwing: MediaDraftProcessor.Failure.attachmentTooLarge(size)
+                        )
+                        return
+                    }
+                    guard let data = try? Data(contentsOf: url), !data.isEmpty else {
+                        continuation.resume(throwing: PhotoLibraryPickerError.noReadableMedia)
+                        return
+                    }
+                    continuation.resume(returning: PhotoLibrarySelection(
+                        data: data,
+                        fileName: fileName,
+                        typeIdentifier: typeIdentifier
+                    ))
                 }
             }
         }

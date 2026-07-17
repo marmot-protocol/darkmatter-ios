@@ -61,7 +61,10 @@ nonisolated enum MessageForwardDestinationPresentation {
             items.compactMap { item in
                 guard item.id != currentGroupIdHex,
                       !item.id.isEmpty,
-                      !item.row.pendingConfirmation
+                      !item.row.pendingConfirmation,
+                      // Left/removed rows persist in the chat list; a forward
+                      // to one fails at send (no membership, no keys).
+                      item.isActiveMember
                 else { return nil }
                 return MessageForwardDestination(
                     id: item.id,
@@ -82,6 +85,7 @@ nonisolated enum MessageForwardDestinationPresentation {
                 row.groupIdHex != currentGroupIdHex
                     && !row.groupIdHex.isEmpty
                     && !row.pendingConfirmation
+                    && GroupManagementPresentation.isActiveChatListMember(row.selfMembership)
                     && seen.insert(row.groupIdHex).inserted
             }
             .map { row in
