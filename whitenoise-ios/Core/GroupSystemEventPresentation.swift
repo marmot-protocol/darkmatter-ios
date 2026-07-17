@@ -38,7 +38,10 @@ nonisolated enum GroupSystemEventPresentation {
     }
 
     private static func parsePayload(_ plaintext: String) -> Payload? {
-        guard let data = plaintext.data(using: .utf8),
+        // Same ceiling as the media-preview parser: a hostile multi-megabyte
+        // payload must not force a full synchronous parse on the MainActor.
+        guard plaintext.utf8.count <= MessagePreview.timelineMediaPreviewMaxJsonBytes,
+              let data = plaintext.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
 
