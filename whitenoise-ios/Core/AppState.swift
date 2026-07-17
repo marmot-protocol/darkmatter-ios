@@ -584,7 +584,12 @@ final class AppState {
             // including nicknames) for reactivation.
             if let removedAccountIdHex {
                 profileStore.clearContactNicknames(ownerAccountIdHex: removedAccountIdHex)
+                // The wiped identity's per-chat mute and notify-mode entries
+                // live in the shared suite for the NSE; they must not outlive
+                // the account either.
+                ChatMuteStore.clearAll(accountIdHex: removedAccountIdHex)
             }
+            await MessageMediaCache.purgeAllDecryptedMedia()
         }
 
         do {

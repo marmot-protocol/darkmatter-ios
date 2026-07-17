@@ -1345,6 +1345,23 @@ nonisolated enum MessageMediaCache {
         }.value
     }
 
+    static let decryptedMediaDirectoryNames = ["EncryptedMedia", "EncryptedMediaPlayback"]
+
+    /// Destructive sign-out removes every decrypted plaintext copy — the
+    /// content-addressed display cache and the playback store. The wipe's
+    /// "removed from this device" promise covers media the user has viewed;
+    /// age/size eviction alone can leave plaintext behind indefinitely.
+    static func purgeAllDecryptedMedia() async {
+        guard let cachesDirectory = defaultCachesDirectory else { return }
+        await Task.detached(priority: .utility) {
+            for name in decryptedMediaDirectoryNames {
+                try? FileManager.default.removeItem(
+                    at: cachesDirectory.appendingPathComponent(name, isDirectory: true)
+                )
+            }
+        }.value
+    }
+
     static func removeCachedData(
         forCiphertextHashes hashes: Set<String>,
         in references: [MediaAttachmentReferenceFfi],
