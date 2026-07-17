@@ -61,6 +61,7 @@ final class ProfileStore {
     var queuedProfileFetchIDs: [String] = []
     var scheduledProfileFetchIDs: Set<String> = []
     var activeProfileFetchID: String?
+    var profileProjectionCacheNeedsReloadOnResume = false
 
     // Contact nicknames: private per-device labels layered over the projection
     // cache. Only the main app writes them, so the snapshot is loaded once and
@@ -264,6 +265,9 @@ final class ProfileStore {
     ) -> ProfileDisplayProjection? {
         _ = appState?.profileRefreshGeneration
         if let projection = profileProjectionCache[id] {
+            if refreshAfterLoad, !projection.hasRemoteIdentity {
+                scheduleProfileRefresh(forAccountIdHex: id)
+            }
             return projection
         }
         scheduleProfileProjectionLoad(forAccountIdHex: id, refreshAfterLoad: refreshAfterLoad)
@@ -271,7 +275,7 @@ final class ProfileStore {
     }
 
     private func scheduleProfileProjectionLoad(forAccountIdHex id: String, refreshAfterLoad: Bool) {
-        guard !id.isEmpty, canRefreshProfiles else { return }
+        guard !id.isEmpty else { return }
         if refreshAfterLoad {
             profileProjectionRefreshAfterLoadIDs.insert(id)
         }
@@ -284,7 +288,10 @@ final class ProfileStore {
     }
 
     private func startProfileProjectionLoadQueueIfNeeded() {
-        guard profileProjectionLoadTask == nil, !queuedProfileProjectionLoadIDs.isEmpty else { return }
+        guard canRefreshProfiles,
+              profileProjectionLoadTask == nil,
+              !queuedProfileProjectionLoadIDs.isEmpty
+        else { return }
         let taskID = UUID()
         profileProjectionLoadTaskID = taskID
         profileProjectionLoadTask = Task { [weak self] in
@@ -411,7 +418,6 @@ final class ProfileStore {
 
     private func scheduleProfileRefresh(forAccountIdHex id: String) {
         guard !id.isEmpty,
-              canRefreshProfiles,
               !scheduledProfileFetchIDs.contains(id)
         else { return }
         scheduledProfileFetchIDs.insert(id)
@@ -420,7 +426,10 @@ final class ProfileStore {
     }
 
     private func startProfileFetchQueueIfNeeded() {
-        guard profileFetchQueueTask == nil, !queuedProfileFetchIDs.isEmpty else { return }
+        guard canRefreshProfiles,
+              profileFetchQueueTask == nil,
+              !queuedProfileFetchIDs.isEmpty
+        else { return }
         let taskID = UUID()
         profileFetchQueueTaskID = taskID
         profileFetchQueueTask = Task { [weak self] in
@@ -431,6 +440,12 @@ final class ProfileStore {
 
     func resumeProfileFetchQueueIfNeeded() {
         guard canRefreshProfiles else { return }
+        if profileProjectionCacheNeedsReloadOnResume {
+            profileProjectionCacheNeedsReloadOnResume = false
+            for id in profileProjectionCache.keys.sorted() {
+                scheduleProfileProjectionLoad(forAccountIdHex: id, refreshAfterLoad: true)
+            }
+        }
         startProfileProjectionLoadQueueIfNeeded()
         startProfileFetchQueueIfNeeded()
     }
@@ -463,6 +478,40 @@ final class ProfileStore {
         return queuedProfileFetchIDs.removeFirst()
     }
 
+    /// Pauses profile work for runtime suspension without losing the identities
+    /// that still need hydration or relay refresh. Foreground resume rebuilds
+    /// the tasks after the runtime is live again and reloads cached projections
+    /// that Marmot catch-up may have updated while this process was backgrounded.
+    @discardableResult
+    func pauseProfileFetchQueue() -> Task<Void, Never>? {
+        profileProjectionCacheNeedsReloadOnResume = true
+
+        queuedProfileProjectionLoadIDs = Self.orderedPendingIDs(
+            preferred: queuedProfileProjectionLoadIDs,
+            including: scheduledProfileProjectionLoadIDs
+                .union(profileProjectionRefreshAfterLoadIDs)
+        )
+        scheduledProfileProjectionLoadIDs.formUnion(queuedProfileProjectionLoadIDs)
+        let projectionTask = profileProjectionLoadTask
+        profileProjectionLoadTask = nil
+        profileProjectionLoadTaskID = nil
+        projectionTask?.cancel()
+
+        let activeFetchIDs = activeProfileFetchID.map { [$0] } ?? []
+        queuedProfileFetchIDs = Self.orderedPendingIDs(
+            preferred: activeFetchIDs + queuedProfileFetchIDs,
+            including: scheduledProfileFetchIDs
+        )
+        scheduledProfileFetchIDs.formUnion(queuedProfileFetchIDs)
+        activeProfileFetchID = nil
+        let fetchTask = profileFetchQueueTask
+        profileFetchQueueTask = nil
+        profileFetchQueueTaskID = nil
+        fetchTask?.cancel()
+
+        return Self.drainTask(projectionTask, fetchTask)
+    }
+
     @discardableResult
     func cancelProfileFetchQueue() -> Task<Void, Never>? {
         queuedProfileProjectionLoadIDs.removeAll()
@@ -484,6 +533,7 @@ final class ProfileStore {
         profileProjectionLoadTask = nil
         profileProjectionLoadTaskID = nil
         projectionTask?.cancel()
+        profileProjectionCacheNeedsReloadOnResume = false
 
         queuedProfileFetchIDs.removeAll()
         scheduledProfileFetchIDs.removeAll()
@@ -493,6 +543,25 @@ final class ProfileStore {
         profileFetchQueueTaskID = nil
         fetchTask?.cancel()
 
+        return Self.drainTask(projectionTask, fetchTask)
+    }
+
+    private static func orderedPendingIDs(
+        preferred: [String],
+        including additional: Set<String>
+    ) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for id in preferred + additional.sorted() where seen.insert(id).inserted {
+            result.append(id)
+        }
+        return result
+    }
+
+    private static func drainTask(
+        _ projectionTask: Task<Void, Never>?,
+        _ fetchTask: Task<Void, Never>?
+    ) -> Task<Void, Never>? {
         guard projectionTask != nil || fetchTask != nil else { return nil }
         return Task {
             await projectionTask?.value
@@ -510,6 +579,7 @@ final class ProfileStore {
     func clearForSignOut() {
         profileProjectionCache.removeAll()
         profileProjectionLoadVersions.removeAll()
+        profileProjectionCacheNeedsReloadOnResume = false
     }
 
     private func refreshProfile(forAccountIdHex id: String) async {

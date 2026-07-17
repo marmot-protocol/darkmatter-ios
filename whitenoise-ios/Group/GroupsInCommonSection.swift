@@ -11,6 +11,7 @@ struct GroupsInCommonSection: View {
     let sharedGroups: [SharedGroupsProjection.SharedGroup]
     let addableGroups: [SharedGroupsProjection.SharedGroup]
     let onOpenChat: (String) -> Void
+    var showsActions = true
     /// Hoisted to the owning screen: sheets attached to a `Section` detach
     /// when the list re-renders (the same hazard as the picker scanner).
     var onStartGroup: () -> Void = {}
@@ -22,28 +23,30 @@ struct GroupsInCommonSection: View {
 
     var body: some View {
         Section {
-            Button {
-                onStartGroup()
-            } label: {
-                Label(
-                    L10n.formatted("Create group with %@", contactName),
-                    systemImage: "plus"
-                )
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-
-            if !addableGroups.isEmpty {
+            if showsActions {
                 Button {
-                    onAddToGroup()
+                    onStartGroup()
                 } label: {
-                    Label("Add to group", systemImage: "person.2.badge.plus")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
+                    Label(
+                        L10n.formatted("Create group with %@", contactName),
+                        systemImage: "plus"
+                    )
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+
+                if !addableGroups.isEmpty {
+                    Button {
+                        onAddToGroup()
+                    } label: {
+                        Label("Add to group", systemImage: "person.2.badge.plus")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             ForEach(visibleShared) { group in

@@ -588,6 +588,11 @@ final class RuntimeLifecycle {
     }
 
     private func cancelForegroundMaintenance() async {
+        // Account teardown owns the live runtime until it finishes. Waiting
+        // here prevents background suspension from releasing the shared store
+        // underneath a sign-out or wipe already in progress.
+        await appState?.waitForAccountExitToFinish()
+
         let foregroundTask = foregroundActivationTask
         foregroundActivationTask = nil
         foregroundActivationTaskID = UUID()

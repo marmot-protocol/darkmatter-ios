@@ -31,7 +31,7 @@ final class ProfileViewModel {
         guard let resolvedHex else { return }
         // Trigger enrichment (cached read + background relay fetch).
         _ = appState.profile(forAccountIdHex: resolvedHex)
-        await directory.load(using: appState)
+        await directory.load(using: appState, force: true)
         guard !Task.isCancelled else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
             snapshots: directory.snapshots,
@@ -70,7 +70,7 @@ final class ProfileViewModel {
         startPrompt = nil
         // The reuse decision needs the directory; join any in-flight load so
         // a fast tap can't create a duplicate direct chat.
-        await directory.load(using: appState)
+        await directory.load(using: appState, force: true)
         let memberRef = ProfileReferenceResolution.referenceForResolution(npub) ?? hex
         await runStart(
             accountIdHex: hex,

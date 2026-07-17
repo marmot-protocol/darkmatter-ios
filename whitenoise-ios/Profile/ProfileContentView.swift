@@ -133,33 +133,37 @@ struct ProfileContentView: View {
         }
     }
 
-    // MARK: - Message
+    // MARK: - Actions
 
     @ViewBuilder
     private var primaryActionSection: some View {
         if canMessage {
             Section {
-                Button {
-                    Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
-                } label: {
-                    VStack(spacing: 4) {
-                        if model.starter.isCreating {
-                            ProgressView()
-                                .controlSize(.small)
-                                .frame(height: 20)
-                        } else {
-                            Image(systemName: "message")
-                                .font(.body.weight(.semibold))
-                                .frame(height: 20)
-                        }
-                        Text("Message")
-                            .font(.caption2)
+                HStack(spacing: 10) {
+                    DetailsActionButton(
+                        title: "Message",
+                        systemImage: "message",
+                        isLoading: model.starter.isCreating
+                    ) {
+                        Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .contentShape(.rect)
+
+                    DetailsActionButton(
+                        title: "New Group",
+                        systemImage: "person.2.badge.plus"
+                    ) {
+                        showStartGroup = true
+                    }
+                    .accessibilityLabel(L10n.formatted("Create group with %@", title))
+
+                    DetailsActionButton(
+                        title: "Add to Group",
+                        systemImage: "person.badge.plus",
+                        isDisabled: model.addableGroups.isEmpty
+                    ) {
+                        showAddToGroup = true
+                    }
                 }
-                .buttonStyle(.bordered)
-                .disabled(model.starter.isCreating)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             }
@@ -190,6 +194,7 @@ struct ProfileContentView: View {
                 sharedGroups: model.sharedGroups,
                 addableGroups: model.addableGroups,
                 onOpenChat: openChat,
+                showsActions: false,
                 onStartGroup: { showStartGroup = true },
                 onAddToGroup: { showAddToGroup = true }
             )
