@@ -2754,7 +2754,7 @@ struct ConversationView: View {
         Task { @MainActor in
             for record in records {
                 guard !Task.isCancelled else { break }
-                await viewModel.deleteMessage(record)
+                _ = await viewModel.deleteMessageForEveryone(record)
             }
             guard batchDeleteOperationID == operationID else { return }
             batchDeleteOperationID = nil
