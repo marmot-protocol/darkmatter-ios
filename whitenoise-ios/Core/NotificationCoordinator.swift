@@ -399,6 +399,10 @@ final class NotificationCoordinator {
         accountRef: String,
         host: NotificationCoordinatorHost
     ) async throws -> NotificationSettingsFfi {
+        // Mirror the disable path: a background registration sync already in
+        // flight must finish (or be cancelled) before this enable issues its
+        // own upsert, or two concurrent upsertPushRegistration calls race.
+        await cancelNativePushRegistrationTask()
         let coordinator = NativePushEnableCoordinator(
             setNativePushEnabled: { [weak host] enabled in
                 guard let host else { throw CancellationError() }
@@ -434,6 +438,7 @@ final class NotificationCoordinator {
         host: NotificationCoordinatorHost
     ) async {
         do {
+            await cancelNativePushRegistrationTask()
             let granted = try await host.notifications.requestAuthorization()
             guard granted else {
                 _ = try? await host.currentMarmotClient()
