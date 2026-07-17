@@ -530,6 +530,7 @@ struct ConversationView: View {
     let onGroupDeleted: ((String) -> Void)?
     let onDraftChanged: (() -> Void)?
 
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel: ConversationViewModel?
     @State private var draft: String = ""
     @State private var mediaDrafts: [MediaDraftAttachment] = []
@@ -706,17 +707,14 @@ struct ConversationView: View {
             // chevron; an inline system title would double it up.
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarRole(.editor)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    conversationTitle
-                }
-                if isSelectingMessages {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(L10n.string("Cancel")) { exitMessageSelection() }
-                    }
-                }
-            }
+            // The identity lives in an in-content header instead of a toolbar
+            // item: SwiftUI paints custom toolbar content only after the push
+            // settles, which blanked the header for ~1s on every entry. In
+            // content it is present from the first frame, and the custom back
+            // button can resign the keyboard before popping so it no longer
+            // flashes mid-screen during the transition.
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) { conversationHeaderBar }
             // An isPresented push fights navigation-path swaps: unwind it
             // before the pending chat replaces the stack, or the details page
             // re-asserts itself over the new conversation.
@@ -1242,6 +1240,39 @@ struct ConversationView: View {
     /// name (with a timer glyph while disappearing messages are on) over the
     /// member count. Tapping it is the single way into the details page for
     /// both direct messages and groups.
+    private var conversationHeaderBar: some View {
+        HStack(spacing: 8) {
+            Button {
+                // Resign the composer before popping so the keyboard animates
+                // down first instead of flashing mid-screen during the pop.
+                dismissKeyboard()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.backward")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.string("Back"))
+
+            conversationTitle
+
+            Spacer(minLength: 0)
+
+            if isSelectingMessages {
+                Button(L10n.string("Cancel")) { exitMessageSelection() }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
     @ViewBuilder
     private var conversationTitle: some View {
         if isSelectingMessages {
