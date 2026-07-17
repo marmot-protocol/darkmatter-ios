@@ -111,7 +111,11 @@ nonisolated enum ComposerMentionCanonicalizer {
     private static let underscoreScalar = UnicodeScalar("_")
     private static let slashScalar = UnicodeScalar("/")
 
-    static func canonicalize(_ text: String, candidates: [ComposerMentionCandidate]) -> String {
+    static func canonicalize(
+        _ text: String,
+        candidates: [ComposerMentionCandidate],
+        selectedNpubByDisplayName: [String: String] = [:]
+    ) -> String {
         guard text.contains("@") else { return text }
         let replacements = candidates
             .filter { candidate in
@@ -128,8 +132,13 @@ nonisolated enum ComposerMentionCanonicalizer {
         while index < text.endIndex {
             if text[index] == "@",
                leftBoundaryAllowsMention(at: index, in: text),
-               let match = matchCandidate(in: text, at: index, candidates: replacements) {
-                canonical += "@\(match.candidate.npub)"
+               let match = matchCandidate(
+                   in: text,
+                   at: index,
+                   candidates: replacements,
+                   selectedNpubByDisplayName: selectedNpubByDisplayName
+               ) {
+                canonical += "@\(match.npub)"
                 index = match.endIndex
                 continue
             }
@@ -142,14 +151,29 @@ nonisolated enum ComposerMentionCanonicalizer {
     private static func matchCandidate(
         in text: String,
         at atIndex: String.Index,
-        candidates: [ComposerMentionCandidate]
-    ) -> (candidate: ComposerMentionCandidate, endIndex: String.Index)? {
+        candidates: [ComposerMentionCandidate],
+        selectedNpubByDisplayName: [String: String]
+    ) -> (npub: String, endIndex: String.Index)? {
         let nameStart = text.index(after: atIndex)
         for candidate in candidates {
             guard text[nameStart...].hasPrefix(candidate.displayName) else { continue }
             let nameEnd = text.index(nameStart, offsetBy: candidate.displayName.count)
             guard rightBoundaryAllowsMention(at: nameEnd, in: text) else { continue }
-            return (candidate, nameEnd)
+            // The identity comes from what the user actually tapped, never
+            // from a text race: with several members sharing this display
+            // name, only an explicit selection resolves it — a peer cloning
+            // a name cannot capture an unselected mention, it just stays
+            // literal text.
+            let sharingName = candidates.filter { $0.displayName == candidate.displayName }
+            let distinctNpubs = Set(sharingName.map(\.npub))
+            if distinctNpubs.count == 1 {
+                return (candidate.npub, nameEnd)
+            }
+            if let selected = selectedNpubByDisplayName[candidate.displayName],
+               distinctNpubs.contains(selected) {
+                return (selected, nameEnd)
+            }
+            return nil
         }
         return nil
     }
@@ -217,13 +241,28 @@ final class ComposerMentionController {
         )
     }
 
+    /// Display name → npub for every mention the user explicitly tapped in
+    /// this draft. Canonicalization consults it when a display name is shared
+    /// by several members: the tapped identity wins, and an ambiguous name
+    /// with no recorded tap is left as literal text. (Mentioning two
+    /// same-named members in one draft resolves both to the last tap — a
+    /// user-chosen identity either way.)
+    private(set) var selectedNpubByDisplayName: [String: String] = [:]
+
     func applySelection(_ candidate: ComposerMentionCandidate, to draft: inout String) {
         guard let session = ComposerMentionQuery.active(in: draft) else { return }
+        if !candidate.npub.isEmpty {
+            selectedNpubByDisplayName[candidate.displayName] = candidate.npub
+        }
         draft = ComposerMentionQuery.replacing(
             session: session,
             in: draft,
             with: candidate.displayName
         )
+    }
+
+    func clearSelections() {
+        selectedNpubByDisplayName = [:]
     }
 
     func canonicalizeMentions(
@@ -241,7 +280,8 @@ final class ComposerMentionController {
                 members: members,
                 groupMemberDetails: groupMemberDetails,
                 rosterGeneration: rosterGeneration
-            )
+            ),
+            selectedNpubByDisplayName: selectedNpubByDisplayName
         )
     }
 

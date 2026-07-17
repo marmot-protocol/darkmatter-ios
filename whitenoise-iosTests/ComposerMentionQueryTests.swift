@@ -79,6 +79,49 @@ struct ComposerMentionQueryTests {
         #expect(outgoing == "ping @\(jeffNpub) ")
     }
 
+    @Test func canonicalizeRefusesAmbiguousNamesWithoutASelection() {
+        // Two members share the display name: without an explicit tap, the
+        // mention stays literal text — a peer cloning a name cannot capture
+        // an unselected mention through match ordering.
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: candidates
+        )
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func canonicalizeResolvesAmbiguousNamesThroughTheTappedIdentity() {
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: candidates,
+            selectedNpubByDisplayName: ["Jeff": aliceNpub]
+        )
+        #expect(outgoing == "ping @\(aliceNpub) ")
+    }
+
+    @Test func canonicalizeIgnoresSelectionsPointingOutsideTheRoster() {
+        // A stale selection whose npub no longer belongs to any member with
+        // that name must not resolve the mention.
+        let candidates = [
+            mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            mentionCandidate(name: "Jeff", npub: aliceNpub, hex: "222"),
+        ]
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: candidates,
+            selectedNpubByDisplayName: ["Jeff": "npub1notinroster"]
+        )
+        #expect(outgoing == "ping @Jeff ")
+    }
+
     @Test func canonicalizeDisplayNameMentionWithSpacesAndPunctuation() {
         let candidates = [
             mentionCandidate(name: "Jeff Smith", npub: jeffNpub, hex: "111")
