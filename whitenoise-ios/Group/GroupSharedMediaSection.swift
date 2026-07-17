@@ -16,8 +16,12 @@ nonisolated struct GroupSharedMediaItem: Identifiable, Equatable {
 nonisolated enum GroupSharedMediaPresentation {
     static func items(from records: [MediaRecordFfi]) -> [GroupSharedMediaItem] {
         records.map { record in
+            // Records without a message id fall back to content identity;
+            // identical plaintext re-sent as separate records must still get
+            // distinct ForEach ids, so the fallback folds in the ciphertext
+            // hash and record timestamps too.
             let stableRecordID = record.messageIdHex.isEmpty
-                ? record.reference.plaintextSha256.lowercased()
+                ? "\(record.reference.plaintextSha256.lowercased()):\(record.reference.ciphertextSha256.lowercased()):\(record.recordedAt):\(record.receivedAt)"
                 : record.messageIdHex
             let ownerID = "shared-media:\(stableRecordID):\(record.attachmentIndex)"
             let attachment = MessageMediaAttachment.displayItems(
