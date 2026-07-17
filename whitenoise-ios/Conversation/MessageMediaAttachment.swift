@@ -1383,9 +1383,13 @@ nonisolated enum MessageMediaCache {
         guard hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil else {
             return nil
         }
+        // Content-addressed: the extension comes from the media type alone.
+        // Folding in the peer-controlled filename made pic.jpg and pic.jpeg
+        // of identical plaintext miss each other's cache entries, forcing a
+        // redundant download + decrypt and a duplicate plaintext copy.
         return cachesDirectory
             .appendingPathComponent("EncryptedMedia", isDirectory: true)
-            .appendingPathComponent("\(hash).\(MediaAttachmentPolicy.fileExtension(for: reference.mediaType, fileName: reference.fileName))")
+            .appendingPathComponent("\(hash).\(MediaAttachmentPolicy.fileExtension(for: reference.mediaType))")
     }
 
     private static var defaultCachesDirectory: URL? {
