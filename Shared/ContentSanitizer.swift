@@ -150,6 +150,8 @@ nonisolated enum ContentSanitizer {
               let comps = URLComponents(string: trimmed),
               let scheme = comps.scheme?.lowercased(),
               scheme == "https",
+              comps.user == nil,
+              comps.password == nil,
               let host = comps.host,
               !host.isEmpty,
               !isPrivateOrLoopbackHost(host),

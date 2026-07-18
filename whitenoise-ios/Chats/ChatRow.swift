@@ -13,7 +13,7 @@ struct ChatRow: View {
     var body: some View {
         HStack(spacing: 12) {
             AvatarBubble(
-                seed: item.id,
+                seed: item.avatarSeed,
                 title: title,
                 pictureURL: item.avatarURL
             )

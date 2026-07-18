@@ -51,6 +51,18 @@ struct SharedMediaLibraryPresentationTests {
         #expect(Set(links.map(\.messageIdHex)) == ["m1", "m2"])
     }
 
+    @Test func emptyMessageIdsStillProduceUniqueLinkItemIds() {
+        let records = [
+            record("", kind: 9, content: "https://one.example/path", at: 9),
+            record("", kind: 9, content: "https://two.example/path", at: 5),
+        ]
+
+        let links = SharedMediaLibraryPresentation.linkItems(from: records)
+
+        #expect(links.count == 2)
+        #expect(Set(links.map(\.id)).count == 2)
+    }
+
     @Test func boundsDisplayTextForHostileUrls() {
         let long = "https://example.com/" + String(repeating: "a", count: 500)
         let links = SharedMediaLibraryPresentation.linkItems(from: [record("m1", kind: 9, content: long, at: 1)])

@@ -12,8 +12,11 @@ import Foundation
 nonisolated enum ContactNicknameStore {
     static let storageKey = "contacts.nicknamesByContactKey"
 
-    static var defaults: UserDefaults {
-        UserDefaults(suiteName: AppContainerConfig.appGroupIdentifier) ?? .standard
+    /// The shared App Group suite, or `nil` when it cannot be resolved. Never
+    /// fall back to `.standard`: the app and extension have different standard
+    /// domains, so that would silently lose cross-process nickname state.
+    static var defaults: UserDefaults? {
+        UserDefaults(suiteName: AppContainerConfig.appGroupIdentifier)
     }
 
     /// Composite storage key. Hex components are normalized so callers that
@@ -27,8 +30,9 @@ nonisolated enum ContactNicknameStore {
         return "\(owner):\(contact)"
     }
 
-    static func nicknamesByKey(defaults: UserDefaults = ContactNicknameStore.defaults) -> [String: String] {
-        (defaults.dictionary(forKey: storageKey) ?? [:]).compactMapValues { $0 as? String }
+    static func nicknamesByKey(defaults: UserDefaults? = ContactNicknameStore.defaults) -> [String: String] {
+        guard let defaults else { return [:] }
+        return (defaults.dictionary(forKey: storageKey) ?? [:]).compactMapValues { $0 as? String }
     }
 
     /// Stored values are re-sanitized on read so a tampered or legacy defaults
@@ -47,7 +51,7 @@ nonisolated enum ContactNicknameStore {
     static func nickname(
         ownerAccountIdHex: String,
         contactAccountIdHex: String,
-        defaults: UserDefaults = ContactNicknameStore.defaults
+        defaults: UserDefaults? = ContactNicknameStore.defaults
     ) -> String? {
         nickname(
             ownerAccountIdHex: ownerAccountIdHex,
@@ -63,9 +67,11 @@ nonisolated enum ContactNicknameStore {
         _ rawNickname: String?,
         ownerAccountIdHex: String,
         contactAccountIdHex: String,
-        defaults: UserDefaults = ContactNicknameStore.defaults
+        defaults: UserDefaults? = ContactNicknameStore.defaults
     ) {
-        guard let key = key(ownerAccountIdHex: ownerAccountIdHex, contactAccountIdHex: contactAccountIdHex) else {
+        guard let defaults,
+              let key = key(ownerAccountIdHex: ownerAccountIdHex, contactAccountIdHex: contactAccountIdHex)
+        else {
             return
         }
         var nicknames = nicknamesByKey(defaults: defaults)
@@ -81,9 +87,9 @@ nonisolated enum ContactNicknameStore {
     /// The owner hex cannot contain the separator, so the prefix match is exact.
     static func clearAll(
         ownerAccountIdHex: String,
-        defaults: UserDefaults = ContactNicknameStore.defaults
+        defaults: UserDefaults? = ContactNicknameStore.defaults
     ) {
-        guard let owner = normalizedComponent(ownerAccountIdHex) else { return }
+        guard let defaults, let owner = normalizedComponent(ownerAccountIdHex) else { return }
         let prefix = "\(owner):"
         var nicknames = nicknamesByKey(defaults: defaults)
         let ownedKeys = nicknames.keys.filter { $0.hasPrefix(prefix) }

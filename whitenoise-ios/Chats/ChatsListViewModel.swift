@@ -17,6 +17,7 @@ final class ChatsListViewModel {
     struct Item: Equatable, Identifiable {
         let row: ChatListRowFfi
         let avatarURL: URL?
+        let avatarSeed: String
         let title: String
         let isMuted: Bool
         let previewText: String?
@@ -26,6 +27,7 @@ final class ChatsListViewModel {
         init(
             row: ChatListRowFfi,
             avatarURL: URL?,
+            avatarSeed: String? = nil,
             title: String,
             isMuted: Bool = false,
             draftText: String? = nil,
@@ -37,6 +39,7 @@ final class ChatsListViewModel {
             )
             self.row = row
             self.avatarURL = avatarURL
+            self.avatarSeed = avatarSeed ?? row.groupIdHex
             self.title = title
             self.isMuted = isMuted
             self.previewText = previewText
@@ -524,6 +527,7 @@ final class ChatsListViewModel {
         return Item(
             row: row,
             avatarURL: display.avatarURL,
+            avatarSeed: display.avatarSeed,
             title: display.title,
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
@@ -584,16 +588,41 @@ final class ChatsListViewModel {
     private func display(
         for row: ChatListRowFfi,
         details: GroupDetailsFfi?
-    ) -> (title: String, avatarURL: URL?) {
+    ) -> Display {
         let fallbackAvatarURL = ContentSanitizer.imageURL(row.avatarUrl ?? avatarURLByGroupId[row.groupIdHex])
+        return Self.display(
+            for: row,
+            details: details,
+            appState: appState,
+            fallbackAvatarURL: fallbackAvatarURL
+        )
+    }
+
+    struct Display {
+        let title: String
+        let avatarURL: URL?
+        let avatarSeed: String
+    }
+
+    static func display(
+        for row: ChatListRowFfi,
+        details: GroupDetailsFfi?,
+        appState: AppState?,
+        fallbackAvatarURL: URL? = nil
+    ) -> Display {
         guard let details, let appState else {
-            return (title: Item.sanitizedTitle(for: row), avatarURL: fallbackAvatarURL)
+            return Display(
+                title: Item.sanitizedTitle(for: row),
+                avatarURL: fallbackAvatarURL,
+                avatarSeed: row.groupIdHex
+            )
         }
 
         let groupDisplay = Self.groupDisplay(for: details, appState: appState)
-        return (
+        return Display(
             title: GroupDisplay.title(for: groupDisplay, appState: appState),
-            avatarURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState) ?? fallbackAvatarURL
+            avatarURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState) ?? fallbackAvatarURL,
+            avatarSeed: GroupDisplay.avatarSeed(for: groupDisplay)
         )
     }
 
@@ -611,9 +640,7 @@ final class ChatsListViewModel {
         details: GroupDetailsFfi?,
         appState: AppState?
     ) -> String {
-        guard let details, let appState else { return Item.sanitizedTitle(for: row) }
-        let groupDisplay = groupDisplay(for: details, appState: appState)
-        return GroupDisplay.title(for: groupDisplay, appState: appState)
+        display(for: row, details: details, appState: appState).title
     }
 
     private static func groupDisplay(
