@@ -551,6 +551,7 @@ struct ConversationView: View {
     @State private var editSaveInFlight = false
     @State private var editHistoryTarget: ActionsTarget?
     @State private var deleteTarget: ActionsTarget?
+    @State private var failedSendTarget: FailedSendTarget?
     /// When the long-pressed bubble sits too low for the actions popover to fit
     /// below it, flip the popover above the bubble instead.
     @State private var actionsAbove = false
@@ -602,6 +603,38 @@ struct ConversationView: View {
         let record: AppMessageRecordFfi
         let status: MessageStatus
         let id = UUID()
+    }
+
+    private struct FailedSendTarget: Identifiable {
+        let rowId: String
+        var id: String { rowId }
+    }
+
+    /// Extracted so the conversation body's modifier chain stays within the
+    /// Swift type-checker's budget.
+    private struct FailedSendDialogModifier: ViewModifier {
+        @Binding var target: FailedSendTarget?
+        let canRetry: (String) -> Bool
+        let onRetry: (String) -> Void
+        let onDiscard: (String) -> Void
+
+        func body(content: Content) -> some View {
+            content.confirmationDialog(
+                "Message not sent",
+                isPresented: Binding(
+                    get: { target != nil },
+                    set: { if !$0 { target = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: target
+            ) { target in
+                if canRetry(target.rowId) {
+                    Button("Try Again") { onRetry(target.rowId) }
+                }
+                Button("Delete", role: .destructive) { onDiscard(target.rowId) }
+                Button("Cancel", role: .cancel) {}
+            }
+        }
     }
 
     private struct ReactionDetailsTarget: Identifiable {
@@ -837,6 +870,12 @@ struct ConversationView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             }
+            .modifier(FailedSendDialogModifier(
+                target: $failedSendTarget,
+                canRetry: { viewModel?.canRetryFailedSend(rowId: $0) ?? false },
+                onRetry: { rowId in Task { await viewModel?.retryFailedSend(rowId: rowId) } },
+                onDiscard: { viewModel?.discardFailedSend(rowId: $0) }
+            ))
             .sheet(isPresented: $showCameraCapture) {
                 CameraCaptureView(
                     onImage: { image in
@@ -1697,6 +1736,9 @@ struct ConversationView: View {
             },
             onViewEditHistory: viewModel.hasEditHistory(record.messageIdHex)
                 ? { editHistoryTarget = ActionsTarget(record: record, status: status) }
+                : nil,
+            onFailedTap: status == .failed
+                ? { failedSendTarget = FailedSendTarget(rowId: item.id) }
                 : nil
         )
         .replySwipeToReply(

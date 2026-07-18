@@ -6024,6 +6024,62 @@ struct ConversationTimelineProjectionTests {
         #expect(messages.first?.2 == projected.timelineAt)
     }
 
+    @Test func failedSendRowSupportsRetryGatingAndDiscard() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let tempId = "retry-1"
+        let rowId = "msg:\(tempId)"
+        let text = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "retry me",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+        viewModel.applyPendingOutgoingMessage(tempId: tempId, record: text)
+        viewModel.markFailedForTesting(tempId: tempId)
+
+        // A failed text row is retryable and discardable.
+        #expect(viewModel.canRetryFailedSend(rowId: rowId))
+
+        // A failed media row (carrying the pending-media marker) is NOT
+        // retryable here — its compressed bytes aren't retained — but can
+        // still be discarded.
+        let mediaTempId = "retry-media"
+        let mediaRowId = "msg:\(mediaTempId)"
+        let media = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [MessageTagFfi(values: ["_media_pending"])],
+            recordedAt: 11,
+            receivedAt: 11
+        )
+        viewModel.applyPendingOutgoingMessage(tempId: mediaTempId, record: media)
+        viewModel.markFailedForTesting(tempId: mediaTempId)
+        #expect(!viewModel.canRetryFailedSend(rowId: mediaRowId))
+
+        // Discard removes the failed row from the timeline.
+        viewModel.discardFailedSend(rowId: rowId)
+        let remaining = viewModel.timeline.compactMap { item -> String? in
+            guard case .message = item.kind else { return nil }
+            return item.id
+        }
+        #expect(!remaining.contains(rowId))
+        #expect(remaining.contains(mediaRowId))
+    }
+
     @Test func projectedOutgoingMessageReplacesMatchingFailedPendingBubble() throws {
         let sender = hex("11")
         let groupIdHex = hex("aa")

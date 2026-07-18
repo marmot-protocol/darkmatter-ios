@@ -52,7 +52,28 @@ final class ComposerModel {
         self.timelineStore = timelineStore
     }
 
+    /// Re-sends a failed text message from its retained optimistic record.
+    /// The failed row is discarded first so the retry produces a single fresh
+    /// pending row; media sends are not retried here (their compressed bytes
+    /// aren't retained), only discarded. Returns false when the row isn't a
+    /// retryable failed text send.
+    @discardableResult
+    func retryFailedTextSend(rowId: String) async -> Bool {
+        guard let record = timelineStore.failedTransientRecord(rowId: rowId),
+              record.tags.allSatisfy({ $0.values.first != "_media_pending" }),
+              !record.plaintext.isEmpty
+        else { return false }
+        let replyTargetId = ConversationViewModel.replyTargetMessageId(in: record)
+        timelineStore.discardTransientRow(rowId: rowId)
+        await send(record.plaintext, replyTargetId: replyTargetId)
+        return true
+    }
+
     func send(_ text: String) async {
+        await send(text, replyTargetId: nil)
+    }
+
+    private func send(_ text: String, replyTargetId overrideReplyTargetId: String?) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sendInFlight,
               canSendMessages(),
@@ -70,7 +91,7 @@ final class ComposerModel {
         sendInFlight = true
         defer { sendInFlight = false }
 
-        let replyTargetId = replyTargetMessageId()
+        let replyTargetId = overrideReplyTargetId ?? replyTargetMessageId()
         let tempId = UUID().uuidString
         let now = UInt64(Date().timeIntervalSince1970)
         // A reply is a kind-9 with `e` + `q` tags pointing at the parent; a plain

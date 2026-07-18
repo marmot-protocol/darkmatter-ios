@@ -1008,6 +1008,29 @@ final class TimelineStore {
         }
     }
 
+    /// The optimistic record still held for a failed outgoing row, if that
+    /// row exists and is in the `.failed` state. Retry/discard key off the
+    /// row id (`msg:<tempId>`), the only stable handle for an optimistic
+    /// message whose real message id is still empty.
+    func failedTransientRecord(rowId: String) -> AppMessageRecordFfi? {
+        guard let item = transientTimelineItems[rowId],
+              case .message(let record, let status) = item.kind,
+              status == .failed
+        else { return nil }
+        return record
+    }
+
+    /// Removes a transient (optimistic) row outright — used to discard a
+    /// failed send the user no longer wants.
+    func discardTransientRow(rowId: String) {
+        guard transientTimelineItems[rowId] != nil else { return }
+        transientTimelineItems[rowId] = nil
+        mediaProjections.removePending(forRowId: rowId)
+        if removeTimelineItem(id: rowId) {
+            noteProjectionChanged()
+        }
+    }
+
     func markFailed(tempId: String) {
         let rowId = "msg:\(tempId)"
         guard let item = transientTimelineItems[rowId],

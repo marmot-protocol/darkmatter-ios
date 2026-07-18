@@ -93,6 +93,9 @@ struct MessageBubble: View {
     /// Set when the message has viewable edit history; makes the inline "Edited"
     /// label tap to open the history sheet, the same sheet the actions menu opens.
     var onViewEditHistory: (() -> Void)? = nil
+    /// Set for a failed outgoing message; a tap on the bubble opens the
+    /// retry/discard sheet.
+    var onFailedTap: (() -> Void)? = nil
 
     @State private var mediaGallery: MessageMediaGallery?
     @State private var fullBodyPresentation: MessageFullBodyPresentation?
@@ -173,6 +176,10 @@ struct MessageBubble: View {
                 } else {
                     textBubble
                         .opacity(status == .sending ? 0.7 : 1)
+                        .contentShape(.rect)
+                        .onTapGesture {
+                            if status == .failed { onFailedTap?() }
+                        }
 
                     if !reactions.isEmpty, showsStandardBody {
                         reactionChips

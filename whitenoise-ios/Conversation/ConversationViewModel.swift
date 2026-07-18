@@ -698,6 +698,22 @@ final class ConversationViewModel {
         return canonical
     }
 
+    /// A failed row can be retried only when it's a text send (media bytes
+    /// aren't retained for re-upload); everything failed can be discarded.
+    func canRetryFailedSend(rowId: String) -> Bool {
+        guard let record = timelineStore.failedTransientRecord(rowId: rowId) else { return false }
+        return !record.plaintext.isEmpty
+            && record.tags.allSatisfy { $0.values.first != "_media_pending" }
+    }
+
+    func retryFailedSend(rowId: String) async {
+        await composer.retryFailedTextSend(rowId: rowId)
+    }
+
+    func discardFailedSend(rowId: String) {
+        timelineStore.discardTransientRow(rowId: rowId)
+    }
+
     func isMessageMine(_ message: AppMessageRecordFfi) -> Bool {
         guard let myAccountId, !myAccountId.isEmpty else { return false }
         return message.sender.caseInsensitiveCompare(myAccountId) == .orderedSame
