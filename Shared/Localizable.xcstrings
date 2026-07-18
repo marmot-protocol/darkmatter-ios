@@ -2976,6 +2976,136 @@
           }
         }
       },
+      "Select All": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Alle auswählen"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Select All"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Seleccionar todo"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Tout sélectionner"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Seleziona tutto"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Selecionar tudo"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Выбрать все"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Tümünü seç"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "全选"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "全選"
+            }
+          }
+        }
+      },
+      "Copy selected messages": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Ausgewählte Nachrichten kopieren"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Copy selected messages"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Copiar mensajes seleccionados"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Copier les messages sélectionnés"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Copia i messaggi selezionati"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Copiar mensagens selecionadas"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Копировать выбранные сообщения"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Seçili mesajları kopyala"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "复制所选消息"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "複製所選訊息"
+            }
+          }
+        }
+      },
       "Couldn't load shared media.": {
         "extractionState": "manual",
         "localizations": {

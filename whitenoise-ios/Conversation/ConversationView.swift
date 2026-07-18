@@ -1087,10 +1087,29 @@ struct ConversationView: View {
             }
         )
 
+        let bodies = records.map { viewModel.displayBody(of: $0) }
+        let canCopy = MessageSelectionPolicy.canCopy(
+            selectedCount: records.count,
+            anyHasText: bodies.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        )
+
         return HStack(spacing: 18) {
             Text(L10n.plural("%lld selected", Int64(records.count)))
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                guard canCopy else { return }
+                SensitiveClipboard.copyLocalOnly(MessageSelectionPolicy.combinedCopyText(bodies))
+                Haptics.tap()
+                exitMessageSelection()
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .frame(width: 38, height: 38)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!canCopy)
+            .accessibilityLabel(L10n.string("Copy selected messages"))
 
             Button {
                 guard canForward else { return }
