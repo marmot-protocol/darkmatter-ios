@@ -101,7 +101,6 @@ nonisolated enum SharedMediaLibraryPresentation {
         var results: [LinkItem] = []
         var seen: Set<String> = []
         for record in records where record.kind == chatMessageKind {
-            var indexInMessage = 0
             for token in record.content.split(whereSeparator: { $0.isWhitespace || $0.isNewline }) {
                 guard let urlString = normalizedLink(String(token)) else { continue }
                 let dedupeKey = "\(record.messageIdHex)#\(urlString.lowercased())"
@@ -109,14 +108,13 @@ nonisolated enum SharedMediaLibraryPresentation {
                 let display = ContentSanitizer.singleLine(urlString, maxLength: 120) ?? urlString
                 let host = URL(string: urlString)?.host?.lowercased() ?? ""
                 results.append(LinkItem(
-                    id: "\(record.messageIdHex)#\(indexInMessage)",
+                    id: dedupeKey,
                     messageIdHex: record.messageIdHex,
                     urlString: urlString,
                     display: display,
                     timelineAt: record.timelineAt,
                     hasInternationalizedHost: host.contains("xn--")
                 ))
-                indexInMessage += 1
             }
         }
         return results

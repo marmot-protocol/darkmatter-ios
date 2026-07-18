@@ -134,6 +134,25 @@ struct ContactNicknameStoreTests {
         #expect(ContactNicknameStore.nickname(ownerAccountIdHex: "owner-1", contactAccountIdHex: "c-b", in: snapshot) == nil)
         #expect(ContactNicknameStore.nickname(ownerAccountIdHex: "", contactAccountIdHex: "c-a", in: snapshot) == nil)
     }
+
+    @Test func unresolvedSharedSuiteDegradesWithoutWritingAnotherDomain() {
+        #expect(ContactNicknameStore.nicknamesByKey(defaults: nil).isEmpty)
+        #expect(ContactNicknameStore.nickname(
+            ownerAccountIdHex: "owner-1",
+            contactAccountIdHex: "contact-a",
+            defaults: nil
+        ) == nil)
+
+        ContactNicknameStore.setNickname(
+            "Bestie",
+            ownerAccountIdHex: "owner-1",
+            contactAccountIdHex: "contact-a",
+            defaults: nil
+        )
+        ContactNicknameStore.clearAll(ownerAccountIdHex: "owner-1", defaults: nil)
+
+        #expect(ContactNicknameStore.nicknamesByKey(defaults: nil).isEmpty)
+    }
 }
 
 struct ContactNicknameOwnerGateTests {

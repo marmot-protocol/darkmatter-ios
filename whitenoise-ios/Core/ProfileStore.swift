@@ -67,7 +67,7 @@ final class ProfileStore {
     // cache. Only the main app writes them, so the snapshot is loaded once and
     // kept in sync by the write path — no cross-process invalidation needed.
     // Injectable defaults keep nickname tests hermetic.
-    var contactNicknameDefaults: UserDefaults = ContactNicknameStore.defaults
+    var contactNicknameDefaults: UserDefaults? = ContactNicknameStore.defaults
     private var contactNicknamesByKey: [String: String]?
 
     // MARK: - Dependencies (read through AppState; never retained)
