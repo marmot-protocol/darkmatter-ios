@@ -38,6 +38,44 @@ struct ChatSurfacePresentationTests {
         #expect(EmojiCatalogSearch.results(in: entries, query: "face joy").map(\.emoji) == ["😂"])
     }
 
+    @Test func emojiCatalogDecodingPrecomputesCaseInsensitiveSearchTerms() throws {
+        let data = Data(#"[{"e":"x","n":"Smiling FACE","g":0,"k":["HAPPY","Joy"]}]"#.utf8)
+        let entry = try #require(JSONDecoder().decode([EmojiCatalogEntry].self, from: data).first)
+
+        #expect(entry.nameLowercased == "smiling face")
+        #expect(entry.keywordsLowercased == ["happy", "joy"])
+        #expect(EmojiCatalogSearch.results(in: [entry], query: "FACE joy") == [entry])
+    }
+
+    @Test func timelineDaySectionsReuseGenerationAndInvalidateForCalendarContext() {
+        let cache = ConversationDaySectionProjectionCache()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let locale = Locale(identifier: "en_US")
+        let items = [
+            TimelineItem.systemEvent(id: "1", event: .groupCreated, timestamp: 86_400),
+            TimelineItem.systemEvent(id: "2", event: .rosterChanged, timestamp: 86_401),
+            TimelineItem.systemEvent(id: "3", event: .groupArchived, timestamp: 172_800),
+        ]
+
+        let first = cache.sections(for: items, generation: 1, calendar: calendar, locale: locale)
+        let cached = cache.sections(for: items, generation: 1, calendar: calendar, locale: locale)
+        #expect(first == cached)
+        #expect(first.map(\.items.count) == [2, 1])
+        #expect(cache.buildCountForTesting == 1)
+
+        calendar.timeZone = TimeZone(secondsFromGMT: 3_600)!
+        _ = cache.sections(for: items, generation: 1, calendar: calendar, locale: locale)
+        _ = cache.sections(
+            for: items,
+            generation: 1,
+            calendar: calendar,
+            locale: Locale(identifier: "fr_FR")
+        )
+        _ = cache.sections(for: items, generation: 2, calendar: calendar, locale: locale)
+        #expect(cache.buildCountForTesting == 4)
+    }
+
     @Test func mediaGridHandlesOneThroughOverflowWithoutMoreThanFiveTiles() {
         for count in 1...8 {
             let visible = MessageMediaGridPresentation.visibleCount(totalCount: count)

@@ -92,6 +92,7 @@ final class TimelineStore {
     nonisolated static let maxStreamDebugTimelineItems = 256
 
     @ObservationIgnored let markdownProjections = ConversationMarkdownProjectionCache()
+    @ObservationIgnored let agentEventProjections = ConversationAgentEventProjectionCache()
     @ObservationIgnored let mediaProjections = ConversationMediaProjectionCache()
     @ObservationIgnored let reactionProjections = ConversationReactionProjectionCache()
     @ObservationIgnored let deletedProjections = ConversationDeletedMessageProjection()
@@ -128,11 +129,13 @@ final class TimelineStore {
 
 #if DEBUG
     var markdownProjectionBuildCountForTesting: Int { markdownProjections.buildCountForTesting }
+    var agentEventProjectionBuildCountForTesting: Int { agentEventProjections.buildCountForTesting }
     var groupSystemProjectionBuildCountForTesting: Int { groupSystemProjectionBuildCount }
     var mediaItemProjectionBuildCountForTesting: Int { mediaProjections.buildCountForTesting }
     var mediaReferenceCountForTesting: Int { mediaProjections.referenceCountForTesting }
     var streamDebugTimelineItemCountForTesting: Int { streamDebugTimelineItems.count }
     private(set) var timelineRebuildCountForTesting = 0
+    private(set) var reactionTargetCollectionCountForTesting = 0
     private var groupSystemProjectionBuildCount = 0
 #endif
 
@@ -147,6 +150,9 @@ final class TimelineStore {
         let tokenBlockCount: Int
         let tokensTruncated: Bool
         let tagCount: Int
+        let agentStatus: String?
+        let agentOperation: String?
+        let agentOperationName: String?
 
         init(_ record: AppMessageRecordFfi) {
             messageIdHex = record.messageIdHex
@@ -159,6 +165,16 @@ final class TimelineStore {
             tokenBlockCount = record.contentTokens.blocks.count
             tokensTruncated = record.contentTokens.truncated
             tagCount = record.tags.count
+            switch MessageSemantics.classify(record) {
+            case .agentActivity, .agentOperation:
+                agentStatus = MessageSemantics.firstValue(of: "status", in: record.tags)
+                agentOperation = MessageSemantics.firstValue(of: "operation", in: record.tags)
+                agentOperationName = MessageSemantics.firstValue(of: "operation-name", in: record.tags)
+            default:
+                agentStatus = nil
+                agentOperation = nil
+                agentOperationName = nil
+            }
         }
     }
 
@@ -400,6 +416,11 @@ final class TimelineStore {
         return text
     }
 
+    func agentEventDisplay(for item: TimelineItem) -> AgentEventPresentation.Display? {
+        _ = timelineProjectionGeneration
+        return agentEventProjections.display(for: item)
+    }
+
     // MARK: - Page application (driven by the view model's IO)
 
     func applyTimelinePage(_ page: TimelinePageFfi, placement: ConversationViewModel.TimelinePagePlacement) {
@@ -436,7 +457,6 @@ final class TimelineStore {
                 if confirmedPendingTimelineRecordIds.contains(messageId), !hasCompleteAuthoritativeWindow {
                     continue
                 }
-                collectReactionTargets(affectedByRemovingMessageId: messageId, into: &changedReactionTargets)
                 projectionChanged = removeTimelineRecord(
                     messageIdHex: messageId,
                     updateTimeline: false
@@ -445,7 +465,12 @@ final class TimelineStore {
         }
         streamWatcher?.recordFinalizedStreams(in: page.messages)
         for record in page.messages {
-            collectReactionTargets(affectedBy: ConversationViewModel.appMessageRecord(from: record), into: &changedReactionTargets)
+            if !shouldEvictAbsentRecords {
+                collectReactionTargets(
+                    affectedBy: ConversationViewModel.appMessageRecord(from: record),
+                    into: &changedReactionTargets
+                )
+            }
             projectionChanged = applyTimelineRecord(
                 record,
                 updateTimeline: perRecordTimelineUpdate
@@ -709,6 +734,7 @@ final class TimelineStore {
             resolver: mentionDisplayNameResolver
         )
         let mediaChanged = mediaProjections.rebuild(for: next)
+        agentEventProjections.prune(keeping: Set(next.map(\.id)))
         return assignTimeline(next) || markdownChanged || mediaChanged
     }
 
@@ -772,8 +798,9 @@ final class TimelineStore {
         case .chat, .reply, .media, .streamFinal:
             return TimelineItem.message(editProjections.displayRecord(for: record), status: status)
         case .agentActivity, .agentOperation:
-            guard AgentEventPresentation.display(for: record) != nil else { return nil }
-            return TimelineItem.message(record, status: status)
+            let item = TimelineItem.message(record, status: status)
+            guard agentEventProjections.display(for: item) != nil else { return nil }
+            return item
         case .groupSystem:
             guard GroupSystemEventPresentation.isDisplayable(record) else { return nil }
             return TimelineItem.message(record, status: status)
@@ -807,6 +834,7 @@ final class TimelineStore {
         let next = timeline.filter { $0.id != id }
         let markdownChanged = markdownProjections.remove(rowId: id)
         let mediaChanged = mediaProjections.remove(rowId: id)
+        agentEventProjections.remove(rowId: id)
         return assignTimeline(next) || markdownChanged || mediaChanged
     }
 
@@ -872,20 +900,13 @@ final class TimelineStore {
     var reactions: [String: [ConversationViewModel.ReactionTally]] { reactionProjections.allTallies }
 
     private func collectReactionTargets(affectedBy record: AppMessageRecordFfi, into targets: inout Set<String>) {
+#if DEBUG
+        reactionTargetCollectionCountForTesting += 1
+#endif
         if !record.messageIdHex.isEmpty {
             targets.insert(record.messageIdHex)
         }
         if case .reaction(let target) = MessageSemantics.classify(record), !target.isEmpty {
-            targets.insert(target)
-        }
-    }
-
-    private func collectReactionTargets(affectedByRemovingMessageId messageIdHex: String, into targets: inout Set<String>) {
-        guard !messageIdHex.isEmpty else { return }
-        targets.insert(messageIdHex)
-        if let existing = messageById[messageIdHex],
-           case .reaction(let target) = MessageSemantics.classify(existing),
-           !target.isEmpty {
             targets.insert(target)
         }
     }
