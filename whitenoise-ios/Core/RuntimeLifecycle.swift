@@ -332,6 +332,11 @@ final class RuntimeLifecycle {
     func prepareForBackgroundSuspension() async {
         defer { runtimeSuspensionTask = nil }
         await cancelForegroundMaintenance()
+        // A notification action can be using the live durable client while the
+        // scene transitions to the background. Keep this suspension request
+        // alive until the action releases its lease so teardown cannot close
+        // the runtime underneath in-flight FFI work.
+        await waitForRuntimeSuspensionToFinish()
         // `isAppSceneActive` is owned by the synchronous scene-phase entry
         // points (`startRuntimeSuspension` / `startForegroundActivation` /
         // `setAppSceneActive`), which run in true scene-delivery order. After
@@ -357,8 +362,7 @@ final class RuntimeLifecycle {
             }
         }
         guard phaseOwnsLiveRuntime,
-              !runtimeSuspendedForBackground,
-              !isRuntimeSuspending
+              !runtimeSuspendedForBackground
         else { return }
 
         isRuntimeSuspending = true
@@ -485,15 +489,13 @@ final class RuntimeLifecycle {
         guard phaseOwnsLiveRuntime else {
             throw NotificationActionError.runtimeUnavailable
         }
+        // Both lease kinds claim the same suspension gate for the full action.
+        // The live-client branch needs this too: its FFI work must finish before
+        // a concurrent background transition can tear the durable runtime down.
+        isRuntimeSuspending = true
         if !runtimeSuspendedForBackground, let client {
             return NotificationActionRuntimeLease(client: client, ownsEphemeralRuntime: false)
         }
-        // Claim the suspension gate for the whole action so concurrent
-        // suspensions and foreground activations park on the waiter machinery
-        // instead of tearing down or adopting the ephemeral runtime. The
-        // foreground work gates stay closed for the action's duration, which
-        // matches the durable runtime's actual availability.
-        isRuntimeSuspending = true
         let ephemeral: MarmotClient
         do {
             ephemeral = try MarmotClient(
@@ -519,31 +521,23 @@ final class RuntimeLifecycle {
         return NotificationActionRuntimeLease(client: ephemeral, ownsEphemeralRuntime: true)
     }
 
-    /// Ends a notification-action lease. A lease on the live foreground client
-    /// changes nothing. An ephemeral lease shuts its frozen runtime down
-    /// unconditionally — it must never outlive the action — then releases the
-    /// suspension claim; the durable slot is already in the suspended state
-    /// (`client == nil`, `runtimeSuspendedForBackground == true`). A scene
-    /// that activated mid-action then gets a fresh durable runtime through the
-    /// normal resume path. Both race directions are safe because the standard
-    /// entry points re-check the authoritative scene flag.
+    /// Ends a notification-action lease. An ephemeral lease shuts its frozen
+    /// runtime down unconditionally — it must never outlive the action — then
+    /// both lease kinds release the suspension claim. A scene transition that
+    /// arrived mid-action then continues through the normal suspend / resume
+    /// path after re-checking the authoritative scene flag.
     func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
-        guard lease.ownsEphemeralRuntime else {
-            // A live-client lease on a cold UI-less launch rides the runtime
-            // that the action's own bootstrap just started. No scene ever
-            // reports a phase on that launch (`isAppSceneActive` keeps its
-            // optimistic default), so nothing else suspends the runtime before
-            // iOS freezes the process with the App Group SQLite lock held
-            // (0xdead10cc). Any launch where a scene did report keeps today's
-            // behavior: the scene machinery owns suspension.
-            if !sceneHasReportedPhase {
-                await startRuntimeSuspension().value
-            }
-            return
+        if lease.ownsEphemeralRuntime {
+            await lease.client.marmot.shutdown()
         }
-        await lease.client.marmot.shutdown()
         finishRuntimeSuspensionWait()
-        if isAppSceneActive {
+
+        // A live-client lease on a cold UI-less launch rides the runtime that
+        // the action's own bootstrap started. With no scene transition to own
+        // teardown, suspend it here after releasing the lease gate.
+        if !sceneHasReportedPhase {
+            await startRuntimeSuspension().value
+        } else if lease.ownsEphemeralRuntime, isAppSceneActive {
             startForegroundActivation()
         }
     }
@@ -556,20 +550,21 @@ final class RuntimeLifecycle {
     }
 
     private func waitForRuntimeSuspensionToFinish() async {
-        guard isRuntimeSuspending else { return }
-        let waiterID = UUID()
+        while isRuntimeSuspending, !Task.isCancelled {
+            let waiterID = UUID()
 
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                guard isRuntimeSuspending, !Task.isCancelled else {
-                    continuation.resume()
-                    return
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    guard isRuntimeSuspending, !Task.isCancelled else {
+                        continuation.resume()
+                        return
+                    }
+                    runtimeSuspensionWaiters[waiterID] = continuation
                 }
-                runtimeSuspensionWaiters[waiterID] = continuation
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.resumeRuntimeSuspensionWaiter(id: waiterID)
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    self?.resumeRuntimeSuspensionWaiter(id: waiterID)
+                }
             }
         }
     }
