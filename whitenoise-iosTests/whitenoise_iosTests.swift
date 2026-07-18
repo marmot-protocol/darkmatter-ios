@@ -976,6 +976,44 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// A live notification-action lease can overlap the scene's background
+    /// transition while its FFI call is suspended. Background teardown must
+    /// wait for the lease instead of shutting down the same durable client.
+    @Test func backgroundSuspensionWaitsForLiveNotificationActionLease() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        appState.setAppSceneActive(true)
+
+        let lease = try await appState.runtimeLifecycle.startRuntimeForNotificationAction()
+        #expect(!lease.ownsEphemeralRuntime)
+        #expect(lease.client === appState.client)
+        #expect(appState.runtimeLifecycle.isRuntimeSuspendingNow)
+
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+
+        await Task.yield()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(!suspensionCompleted)
+        #expect(appState.client === lease.client)
+        #expect(!appState.runtimeSuspendedForBackground)
+
+        await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+        await suspension.value
+        await observer.value
+
+        #expect(suspensionCompleted)
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+
+        await stopReadyRuntime(appState)
+    }
+
     /// A notification action on a cold UI-less launch (terminated app)
     /// bootstraps the durable runtime itself and no scene ever reports a
     /// phase, so nothing else suspends that runtime before iOS freezes the
