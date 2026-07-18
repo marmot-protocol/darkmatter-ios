@@ -464,10 +464,23 @@ nonisolated enum ThumbHash {
 final class ThumbHashImageCache {
     static let shared = ThumbHashImageCache()
 
-    private let images = NSCache<NSString, UIImage>()
-    private var inFlight: [String: Task<ThumbHash.DecodedImage?, Never>] = [:]
+    typealias Decoder = @Sendable (String) async -> ThumbHash.DecodedImage?
 
-    private init() {
+    private struct Entry {
+        let id: UUID
+        let task: Task<ThumbHash.DecodedImage?, Never>
+    }
+
+    private let images = NSCache<NSString, UIImage>()
+    private let decoder: Decoder
+    private var inFlight: [String: Entry] = [:]
+
+    init(decoder: @escaping Decoder = { encoded in
+        await Task.detached(priority: .utility) {
+            ThumbHash.decodedImage(from: encoded)
+        }.value
+    }) {
+        self.decoder = decoder
         images.countLimit = 128
     }
 
@@ -477,23 +490,29 @@ final class ThumbHashImageCache {
         }
 
         let task: Task<ThumbHash.DecodedImage?, Never>
-        if let existing = inFlight[encoded] {
-            task = existing
+        if let entry = inFlight[encoded] {
+            task = entry.task
         } else {
-            task = Task.detached(priority: .utility) {
-                ThumbHash.decodedImage(from: encoded)
+            let id = UUID()
+            task = Task { @MainActor [weak self, decoder = self.decoder] in
+                defer { self?.clearTask(for: encoded, id: id) }
+                return await decoder(encoded)
             }
-            inFlight[encoded] = task
+            inFlight[encoded] = Entry(id: id, task: task)
         }
 
         let decoded = await task.value
-        inFlight[encoded] = nil
         if let image = images.object(forKey: encoded as NSString) {
             return image
         }
         guard let decoded, let image = makeImage(from: decoded) else { return nil }
         images.setObject(image, forKey: encoded as NSString)
         return image
+    }
+
+    private func clearTask(for encoded: String, id: UUID) {
+        guard inFlight[encoded]?.id == id else { return }
+        inFlight[encoded] = nil
     }
 
     private func makeImage(from decoded: ThumbHash.DecodedImage) -> UIImage? {

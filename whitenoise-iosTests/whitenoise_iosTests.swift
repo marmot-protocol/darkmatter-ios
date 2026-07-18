@@ -4290,6 +4290,11 @@ struct ContentSanitizerTests {
         #expect(ContentSanitizer.imageURL("https://example.com:80/a.png") == nil)
     }
 
+    @Test func imageURLRejectsUserInfo() {
+        #expect(ContentSanitizer.imageURL("https://user@example.com/a.png") == nil)
+        #expect(ContentSanitizer.imageURL("https://user:password@example.com/a.png") == nil)
+    }
+
     @Test func imageURLRejectsOverLengthStrings() {
         // Peer-controlled fields (kind:0 `picture`, group `avatarUrl`, DuckDuckGo
         // results) are unbounded; reject before parsing past the length cap (#381).
@@ -5125,6 +5130,27 @@ struct ChatsListProjectionTests {
         )
 
         #expect(title == appState.shortNpub(forAccountIdHex: other))
+    }
+
+    @MainActor
+    @Test func chatListDisplayUsesPeerAvatarSeedForUnnamedDirectMessage() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let me = hex("31")
+        let other = hex("32")
+        let groupId = hex("ab")
+        let row = chatListRow(groupIdHex: groupId, title: groupId, groupName: "")
+        let details = GroupDetailsFfi(
+            group: group(name: "", id: groupId),
+            members: [
+                groupMember(memberIdHex: me, isAdmin: true, isSelf: true),
+                groupMember(memberIdHex: other, isAdmin: false, isSelf: false),
+            ]
+        )
+
+        let display = ChatsListViewModel.display(for: row, details: details, appState: appState)
+
+        #expect(display.avatarSeed == other)
+        #expect(display.avatarSeed != groupId)
     }
 
     @Test func itemAvatarURLRejectsUnsafeProjectedGroupAvatarURL() throws {
@@ -8719,6 +8745,86 @@ struct ThumbHashDecoderTests {
         #expect(decoded.width == 32)
         #expect(decoded.height == 18)
         #expect(decoded.rgba.count == decoded.width * decoded.height * 4)
+    }
+
+    @MainActor
+    @Test func imageCacheCoalescesConcurrentDecodes() async {
+        let probe = ThumbHashDecoderProbe(shouldSuspend: true)
+        let cache = ThumbHashImageCache { encoded in
+            await probe.decode(encoded)
+        }
+
+        let first = Task { @MainActor in await cache.image(for: "same") }
+        await probe.waitUntilStarted()
+        let second = Task { @MainActor in await cache.image(for: "same") }
+        for _ in 0..<10 { await Task.yield() }
+
+        #expect(await probe.callCount() == 1)
+        await probe.release()
+        let firstImage = await first.value
+        let secondImage = await second.value
+        #expect(firstImage == nil)
+        #expect(secondImage == nil)
+    }
+
+    @MainActor
+    @Test func imageCacheClearsCompletedDecode() async {
+        let probe = ThumbHashDecoderProbe(shouldSuspend: false)
+        let cache = ThumbHashImageCache { encoded in
+            await probe.decode(encoded)
+        }
+
+        let firstImage = await cache.image(for: "same")
+        let secondImage = await cache.image(for: "same")
+        #expect(firstImage == nil)
+        #expect(secondImage == nil)
+        #expect(await probe.callCount() == 2)
+    }
+}
+
+private actor ThumbHashDecoderProbe {
+    private let shouldSuspend: Bool
+    private var decodeCount = 0
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+    private var isReleased = false
+
+    init(shouldSuspend: Bool) {
+        self.shouldSuspend = shouldSuspend
+    }
+
+    func decode(_: String) async -> ThumbHash.DecodedImage? {
+        decodeCount += 1
+        for waiter in startedWaiters {
+            waiter.resume()
+        }
+        startedWaiters.removeAll()
+
+        if shouldSuspend, !isReleased {
+            await withCheckedContinuation { continuation in
+                releaseWaiters.append(continuation)
+            }
+        }
+        return nil
+    }
+
+    func waitUntilStarted() async {
+        guard decodeCount == 0 else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        isReleased = true
+        for waiter in releaseWaiters {
+            waiter.resume()
+        }
+        releaseWaiters.removeAll()
+    }
+
+    func callCount() -> Int {
+        decodeCount
     }
 }
 
