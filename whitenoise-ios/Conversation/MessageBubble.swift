@@ -1381,6 +1381,7 @@ private struct MessageMediaTile: View {
     @State private var loadedImageID: String?
     @State private var isLoading = false
     @State private var didFail = false
+    @State private var awaitingManualDownload = false
 
     private var thumbnailCacheKey: String {
         MessageMediaThumbnailPresentation.cacheKey(for: item)
@@ -1417,14 +1418,37 @@ private struct MessageMediaTile: View {
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.white)
             }
+
+            if awaitingManualDownload {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.title)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .accessibilityLabel(L10n.string("Tap to download"))
+            }
         }
         .frame(width: size.width, height: size.height)
         .clipped()
         .contentShape(Rectangle())
         .task(id: item.id) {
+            // The auto-download policy gates only the automatic fetch: a
+            // cached thumbnail always renders, and a tap always downloads.
+            let maxPixelSize = max(1, Int(ceil(max(size.width, size.height) * displayScale)))
+            if item.isImage,
+               MessageMediaThumbnailDecoder.cachedThumbnail(for: thumbnailCacheKey, maxPixelSize: maxPixelSize) == nil,
+               !MediaAutoDownloadStore.shared.shouldAutoDownload(.image) {
+                awaitingManualDownload = true
+                return
+            }
+            awaitingManualDownload = false
             _ = await loadImageIfNeeded(scale: displayScale)
         }
         .onTapGesture {
+            if awaitingManualDownload {
+                awaitingManualDownload = false
+                Task { _ = await loadImageIfNeeded(scale: displayScale, force: true) }
+                return
+            }
             guard item.isImage else { return }
             if didFail {
                 Task { await loadImageIfNeeded(scale: displayScale, force: true) }
