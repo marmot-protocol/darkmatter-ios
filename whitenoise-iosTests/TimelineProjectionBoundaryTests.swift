@@ -175,6 +175,21 @@ struct TimelineProjectionBoundaryTests {
         #expect(viewModel.mediaItemProjectionBuildCountForTesting == 2)
     }
 
+    @Test func authoritativeWindowSkipsDiscardedReactionTargetCollection() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let record = timelineRecord(messageIdHex: hexId(9), plaintext: "hello")
+        let page = TimelinePageFfi(messages: [record], hasMoreBefore: true, hasMoreAfter: false)
+
+        viewModel.applyTimelinePage(page, placement: .window)
+        #expect(viewModel.reactionTargetCollectionCountForTesting == 0)
+
+        viewModel.applyTimelinePage(page, placement: .window)
+        #expect(viewModel.reactionTargetCollectionCountForTesting == 1)
+    }
+
     @Test func mediaDownloaderProbesDecryptedCacheOnlyOnceBeforeDownload() async throws {
         let downloadedData = Data([0x09, 0x0a, 0x0b])
         let reference = mediaReference(sourceEpoch: 7, plaintext: downloadedData)

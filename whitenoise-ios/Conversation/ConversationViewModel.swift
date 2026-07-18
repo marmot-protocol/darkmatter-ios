@@ -201,6 +201,7 @@ final class ConversationViewModel {
 
     @ObservationIgnored private var timelineSubscription: TimelineMessagesSubscription?
     @ObservationIgnored private let mediaDownloader = ConversationMediaDownloader()
+    @ObservationIgnored private let daySectionProjections = ConversationDaySectionProjectionCache()
     @ObservationIgnored private let deleteMessageOperation: DeleteMessageOperation
     // Lazy so its `[weak self]` loaded-window closure can capture a fully
     // initialized self; first touched on the post-start apply/mark paths.
@@ -1295,6 +1296,22 @@ final class ConversationViewModel {
         return entries
     }
 
+    func timelineDaySections(
+        calendar: Calendar = .autoupdatingCurrent,
+        locale: Locale = .autoupdatingCurrent
+    ) -> [TimelineDaySection] {
+        daySectionProjections.sections(
+            for: timeline,
+            generation: timelineProjectionGeneration,
+            calendar: calendar,
+            locale: locale
+        )
+    }
+
+    func agentEventDisplay(for item: TimelineItem) -> AgentEventPresentation.Display? {
+        timelineStore.agentEventDisplay(for: item)
+    }
+
     /// Confirmed, previewable, non-deleted message rows flattened to plain text
     /// through the budgeted preview path (`MessagePreview.body` →
     /// `MarkdownPlainText.flatten`).
@@ -1326,6 +1343,14 @@ final class ConversationViewModel {
 
     var groupSystemProjectionBuildCountForTesting: Int {
         timelineStore.groupSystemProjectionBuildCountForTesting
+    }
+
+    var agentEventProjectionBuildCountForTesting: Int {
+        timelineStore.agentEventProjectionBuildCountForTesting
+    }
+
+    var reactionTargetCollectionCountForTesting: Int {
+        timelineStore.reactionTargetCollectionCountForTesting
     }
 
     @discardableResult

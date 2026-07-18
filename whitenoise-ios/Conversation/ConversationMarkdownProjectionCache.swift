@@ -114,9 +114,11 @@ final class ConversationMarkdownProjectionCache {
         if GroupSystemEventPresentation.isDisplayable(record) {
             return false
         }
-        if AgentEventPresentation.display(for: record) != nil {
+        switch MessageSemantics.classify(record) {
+        case .agentActivity, .agentOperation:
             return false
+        default:
+            return true
         }
-        return true
     }
 }

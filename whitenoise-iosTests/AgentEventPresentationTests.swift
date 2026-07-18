@@ -141,7 +141,7 @@ struct AgentEventPresentationTests {
         let operation = timelineRecord(
             messageIdHex: hex("aa"),
             sender: hex("11"),
-            plaintext: #"{"v":1,"event_type":"tool_call","status":"started","text":"Searching"}"#,
+            plaintext: #"{"v":1,"status":"started","text":"Searching"}"#,
             kind: MessageSemantics.kindAgentOperation,
             tags: [MessageTagFfi(values: ["operation", "tool_call"])],
             timelineAt: 1
@@ -158,6 +158,49 @@ struct AgentEventPresentationTests {
             return
         }
         #expect(record.kind == MessageSemantics.kindAgentOperation)
+        #expect(viewModel.agentEventProjectionBuildCountForTesting == 1)
+        let item = try #require(viewModel.timeline.first)
+        #expect(viewModel.agentEventDisplay(for: item)?.iconName == "wrench.and.screwdriver")
+        #expect(viewModel.agentEventProjectionBuildCountForTesting == 1)
+
+        let updated = timelineRecord(
+            messageIdHex: operation.messageIdHex,
+            sender: operation.sender,
+            plaintext: operation.plaintext,
+            kind: operation.kind,
+            tags: [MessageTagFfi(values: ["operation", "approval"])],
+            timelineAt: operation.timelineAt
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [updated], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        let updatedItem = try #require(viewModel.timeline.first)
+        #expect(viewModel.agentEventDisplay(for: updatedItem)?.iconName == "hand.raised")
+        #expect(viewModel.agentEventProjectionBuildCountForTesting == 2)
+    }
+
+    @MainActor
+    @Test func agentEventProjectionCacheReusesAndInvalidatesParsedDisplay() throws {
+        let cache = ConversationAgentEventProjectionCache()
+        let firstRecord = agentRecord(
+            kind: MessageSemantics.kindAgentOperation,
+            plaintext: #"{"v":1,"event_type":"tool_call","text":"Searching"}"#,
+            tags: [MessageTagFfi(values: ["operation", "tool_call"])]
+        )
+        let firstItem = TimelineItem.message(firstRecord)
+
+        #expect(cache.display(for: firstItem)?.primaryText == "Searching")
+        #expect(cache.display(for: firstItem)?.primaryText == "Searching")
+        #expect(cache.buildCountForTesting == 1)
+
+        let changedRecord = agentRecord(
+            kind: MessageSemantics.kindAgentOperation,
+            plaintext: #"{"v":1,"event_type":"tool_call","text":"Finished"}"#,
+            tags: [MessageTagFfi(values: ["operation", "tool_call"])]
+        )
+        #expect(cache.display(for: TimelineItem.message(changedRecord))?.primaryText == "Finished")
+        #expect(cache.buildCountForTesting == 2)
     }
 }
 
