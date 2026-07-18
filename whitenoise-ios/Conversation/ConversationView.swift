@@ -90,13 +90,6 @@ struct TimelineBottomViewport: Equatable {
     }
 }
 
-private struct TimelineDaySection: Identifiable {
-    let day: Date
-    var items: [TimelineItem]
-
-    var id: Date { day }
-}
-
 enum MessageActionsPlacement: Equatable {
     case below
     case above
@@ -1432,7 +1425,7 @@ struct ConversationView: View {
                             VStack(spacing: 0) {
                                 LazyVStack(alignment: .leading, spacing: 4, pinnedViews: [.sectionHeaders]) {
                                     olderTimelineTrigger(viewModel: viewModel)
-                                    ForEach(timelineDaySections(viewModel.timeline)) { section in
+                                    ForEach(viewModel.timelineDaySections()) { section in
                                         Section {
                                             ForEach(section.items) { item in
                                                 if TimelineUnreadDivider.shouldShow(
@@ -1620,19 +1613,6 @@ struct ConversationView: View {
         }
     }
 
-    private func timelineDaySections(_ items: [TimelineItem]) -> [TimelineDaySection] {
-        var sections: [TimelineDaySection] = []
-        for item in items {
-            let day = ConversationDateHeader.dayStart(timestamp: item.timestamp)
-            if sections.last?.day == day {
-                sections[sections.count - 1].items.append(item)
-            } else {
-                sections.append(TimelineDaySection(day: day, items: [item]))
-            }
-        }
-        return sections
-    }
-
     private func timelineDateHeader(_ section: TimelineDaySection) -> some View {
         Text(ConversationDateHeader.label(timestamp: UInt64(max(0, section.day.timeIntervalSince1970))))
             .font(.caption.weight(.semibold))
@@ -1655,7 +1635,7 @@ struct ConversationView: View {
             if let groupSystemText = viewModel.groupSystemDisplayText(for: record) {
                 GroupSystemEventRow(text: groupSystemText)
                     .id(item.id)
-            } else if let agentDisplay = AgentEventPresentation.display(for: record) {
+            } else if let agentDisplay = viewModel.agentEventDisplay(for: item) {
                 AgentEventRow(
                     senderName: appState.displayName(forAccountIdHex: record.sender),
                     display: agentDisplay,

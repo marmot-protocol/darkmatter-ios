@@ -99,13 +99,31 @@ final class ConversationReadMarker {
     }
 
     func pruneMarkedReadMessageIds(force: Bool = false) {
-        guard force || markedReadMessageIds.count > maxMarkedReadMessageIds else { return }
+        guard Self.shouldPruneMarkedReadMessageIds(
+            currentCount: markedReadMessageIds.count,
+            pendingCount: pendingReadMessageIdSet.count,
+            limit: maxMarkedReadMessageIds,
+            force: force
+        ) else { return }
         markedReadMessageIds = Self.retainedMarkedReadMessageIds(
             markedReadMessageIds,
             loadedMessageIdsInTimelineOrder: loadedMessageIds(),
             pendingMessageIds: pendingReadMessageIdSet,
             limit: maxMarkedReadMessageIds
         )
+    }
+
+    nonisolated static func shouldPruneMarkedReadMessageIds(
+        currentCount: Int,
+        pendingCount: Int,
+        limit: Int,
+        force: Bool
+    ) -> Bool {
+        guard !force else { return true }
+        let boundedLimit = max(0, limit)
+        let batchSize = max(1, boundedLimit / 4)
+        let threshold = max(boundedLimit + batchSize, max(0, pendingCount) + batchSize)
+        return currentCount > threshold
     }
 
     /// On re-receipt of a record the projection may have re-anchored it; drop it

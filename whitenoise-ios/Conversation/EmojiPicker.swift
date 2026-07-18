@@ -6,6 +6,8 @@ nonisolated struct EmojiCatalogEntry: Codable, Identifiable, Hashable {
     let name: String
     let group: Int
     let keywords: [String]
+    let nameLowercased: String
+    let keywordsLowercased: [String]
 
     var id: String { emoji }
 
@@ -15,6 +17,33 @@ nonisolated struct EmojiCatalogEntry: Codable, Identifiable, Hashable {
         case group = "g"
         case keywords = "k"
     }
+
+    init(emoji: String, name: String, group: Int, keywords: [String]) {
+        self.emoji = emoji
+        self.name = name
+        self.group = group
+        self.keywords = keywords
+        nameLowercased = name.lowercased()
+        keywordsLowercased = keywords.map { $0.lowercased() }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            emoji: try container.decode(String.self, forKey: .emoji),
+            name: try container.decode(String.self, forKey: .name),
+            group: try container.decode(Int.self, forKey: .group),
+            keywords: try container.decode([String].self, forKey: .keywords)
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(emoji, forKey: .emoji)
+        try container.encode(name, forKey: .name)
+        try container.encode(group, forKey: .group)
+        try container.encode(keywords, forKey: .keywords)
+    }
 }
 
 nonisolated enum EmojiCatalogSearch {
@@ -23,19 +52,17 @@ nonisolated enum EmojiCatalogSearch {
         guard !terms.isEmpty else { return entries }
 
         return entries.compactMap { entry -> (EmojiCatalogEntry, Int)? in
-            let name = entry.name.lowercased()
-            let keywords = entry.keywords.map { $0.lowercased() }
             var score = 0
             for term in terms {
-                if name == term {
+                if entry.nameLowercased == term {
                     score += 100
-                } else if name.hasPrefix(term) {
+                } else if entry.nameLowercased.hasPrefix(term) {
                     score += 60
-                } else if name.contains(term) {
+                } else if entry.nameLowercased.contains(term) {
                     score += 35
-                } else if keywords.contains(term) {
+                } else if entry.keywordsLowercased.contains(term) {
                     score += 25
-                } else if keywords.contains(where: { $0.hasPrefix(term) }) {
+                } else if entry.keywordsLowercased.contains(where: { $0.hasPrefix(term) }) {
                     score += 12
                 } else {
                     return nil

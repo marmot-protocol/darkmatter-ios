@@ -5587,6 +5587,39 @@ struct ConversationTimelineProjectionTests {
         #expect(retained == Set([hex("33"), hex("22")]))
     }
 
+    @Test func markedReadPruningUsesHysteresisAndAccountsForPendingFlushes() {
+        #expect(!ConversationReadMarker.shouldPruneMarkedReadMessageIds(
+            currentCount: 201,
+            pendingCount: 0,
+            limit: 200,
+            force: false
+        ))
+        #expect(!ConversationReadMarker.shouldPruneMarkedReadMessageIds(
+            currentCount: 250,
+            pendingCount: 0,
+            limit: 200,
+            force: false
+        ))
+        #expect(ConversationReadMarker.shouldPruneMarkedReadMessageIds(
+            currentCount: 251,
+            pendingCount: 0,
+            limit: 200,
+            force: false
+        ))
+        #expect(!ConversationReadMarker.shouldPruneMarkedReadMessageIds(
+            currentCount: 260,
+            pendingCount: 260,
+            limit: 200,
+            force: false
+        ))
+        #expect(ConversationReadMarker.shouldPruneMarkedReadMessageIds(
+            currentCount: 1,
+            pendingCount: 1,
+            limit: 200,
+            force: true
+        ))
+    }
+
     @Test func liveSubscriptionRetryDelayDoublesUntilCapped() {
         #expect(ConversationViewModel.nextLiveSubscriptionRetryDelay(after: 500_000_000) == 1_000_000_000)
         #expect(ConversationViewModel.nextLiveSubscriptionRetryDelay(after: 4_000_000_000) == 8_000_000_000)
