@@ -654,9 +654,13 @@ nonisolated enum MediaDraftProcessor {
         return try attachment(from: image, fileName: fileName)
     }
 
-    static func attachment(from image: UIImage, fileName: String?) throws -> MediaDraftAttachment {
-        let normalized = normalizedImage(image)
-        let encoded = try encodeJPEG(normalized)
+    static func attachment(
+        from image: UIImage,
+        fileName: String?,
+        quality: MediaQuality = MediaQualityStore.quality()
+    ) throws -> MediaDraftAttachment {
+        let normalized = normalizedImage(image, maxLongEdge: quality.imageMaxEdgePx)
+        let encoded = try encodeJPEG(normalized, qualityLadder: quality.imageJPEGQualityLadder)
         guard encoded.count <= maxImageAttachmentBytes else {
             throw Failure.attachmentTooLarge(encoded.count)
         }
@@ -672,10 +676,15 @@ nonisolated enum MediaDraftProcessor {
         )
     }
 
-    private static func normalizedImage(_ image: UIImage) -> UIImage {
+    private static func normalizedImage(
+        _ image: UIImage,
+        maxLongEdge: CGFloat = MediaDraftProcessor.maxLongEdge
+    ) -> UIImage {
         // Canvas must use the oriented size: cgImage dimensions are pre-EXIF-rotation
         // (camera portraits are landscape bitmaps tagged .right), while draw(in:)
         // renders rotation-applied content. Mixing the two squashes the photo.
+        // The re-render is also the metadata privacy floor: EXIF/GPS/maker
+        // notes never survive it, at any quality level.
         let pixelWidth = image.size.width * image.scale
         let pixelHeight = image.size.height * image.scale
         let longest = max(pixelWidth, pixelHeight)
@@ -695,13 +704,19 @@ nonisolated enum MediaDraftProcessor {
         }
     }
 
-    private static func encodeJPEG(_ image: UIImage) throws -> Data {
-        for quality in [0.86, 0.74, 0.62] as [CGFloat] {
-            if let data = image.jpegData(compressionQuality: quality), data.count <= maxImageAttachmentBytes {
+    private static func encodeJPEG(
+        _ image: UIImage,
+        qualityLadder: [CGFloat] = MediaQuality.standard.imageJPEGQualityLadder
+    ) throws -> Data {
+        var last: Data?
+        for quality in qualityLadder {
+            guard let data = image.jpegData(compressionQuality: quality) else { continue }
+            last = data
+            if data.count <= maxImageAttachmentBytes {
                 return data
             }
         }
-        guard let data = image.jpegData(compressionQuality: 0.52) else {
+        guard let data = last else {
             throw Failure.encodingFailed
         }
         return data
