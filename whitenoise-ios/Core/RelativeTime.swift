@@ -8,7 +8,6 @@ enum RelativeTime {
     private static var formatterCache: [String: DateFormatter] = [:]
     private static var durationFormatterCache: [String: DateComponentsFormatter] = [:]
     private static var formatterCacheLocaleIdentifier = Locale.autoupdatingCurrent.identifier
-    private static let shortTimeFormatterKey = "style:time:short"
 
     static func short(
         _ date: Date,
@@ -36,11 +35,10 @@ enum RelativeTime {
     }
 
     static func shortTime(_ date: Date, locale: Locale = AppLanguage.currentLocale) -> String {
-        let formatter = formatter(for: shortTimeFormatterKey, locale: locale) { formatter in
-            formatter.timeStyle = .short
-            formatter.dateStyle = .none
-        }
-        return formatter.string(from: date)
+        // Bubble times always carry the 12-hour day period ("9:41 PM"),
+        // regardless of the device's 24-hour setting; the localized template
+        // keeps element order and the period's spelling locale-correct.
+        formatted(date, "hmm a", locale: locale)
     }
 
     private static func formatted(_ date: Date, _ template: String, locale: Locale) -> String {

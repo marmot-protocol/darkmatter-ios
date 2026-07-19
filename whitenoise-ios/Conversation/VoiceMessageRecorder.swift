@@ -204,6 +204,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 44_100,
+            AVEncoderBitRateKey: MediaQualityStore.quality().audioBitrateBps,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
         ]

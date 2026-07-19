@@ -93,6 +93,9 @@ struct MessageBubble: View {
     /// Set when the message has viewable edit history; makes the inline "Edited"
     /// label tap to open the history sheet, the same sheet the actions menu opens.
     var onViewEditHistory: (() -> Void)? = nil
+    /// Set for a failed outgoing message; a tap on the bubble opens the
+    /// retry/discard sheet.
+    var onFailedTap: (() -> Void)? = nil
 
     @State private var mediaGallery: MessageMediaGallery?
     @State private var fullBodyPresentation: MessageFullBodyPresentation?
@@ -171,14 +174,35 @@ struct MessageBubble: View {
                 } else if !mediaItems.isEmpty, showsStandardBody {
                     mediaMessageContent
                 } else {
-                    textBubble
-                        .opacity(status == .sending ? 0.7 : 1)
+                    // The tap gesture exists only on failed rows — a
+                    // recognizer on every bubble steals touches from the
+                    // timeline's scroll/keyboard handling.
+                    if status == .failed {
+                        textBubble
+                            .contentShape(.rect)
+                            .onTapGesture { onFailedTap?() }
+                    } else {
+                        textBubble
+                            .opacity(status == .sending ? 0.7 : 1)
+                    }
 
                     if !reactions.isEmpty, showsStandardBody {
                         reactionChips
                     }
                 }
 
+                // Media rows have no bubble tap for the failed dialog, and the
+                // footer's red glyph alone is easy to miss — this caption is
+                // the one affordance every failed row shares.
+                if status == .failed, let onFailedTap {
+                    Button(action: onFailedTap) {
+                        Text("Not delivered. Tap for options.")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(isFromMe ? .trailing : .leading, 12)
+                }
             }
             .frame(maxWidth: bubbleMaxWidth, alignment: isFromMe ? .trailing : .leading)
 
@@ -1381,6 +1405,7 @@ private struct MessageMediaTile: View {
     @State private var loadedImageID: String?
     @State private var isLoading = false
     @State private var didFail = false
+    @State private var awaitingManualDownload = false
 
     private var thumbnailCacheKey: String {
         MessageMediaThumbnailPresentation.cacheKey(for: item)
@@ -1417,14 +1442,37 @@ private struct MessageMediaTile: View {
                     .font(.title2.weight(.bold))
                     .foregroundStyle(.white)
             }
+
+            if awaitingManualDownload {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.title)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .accessibilityLabel(L10n.string("Tap to download"))
+            }
         }
         .frame(width: size.width, height: size.height)
         .clipped()
         .contentShape(Rectangle())
         .task(id: item.id) {
+            // The auto-download policy gates only the automatic fetch: a
+            // cached thumbnail always renders, and a tap always downloads.
+            let maxPixelSize = max(1, Int(ceil(max(size.width, size.height) * displayScale)))
+            if item.isImage,
+               MessageMediaThumbnailDecoder.cachedThumbnail(for: thumbnailCacheKey, maxPixelSize: maxPixelSize) == nil,
+               !MediaAutoDownloadStore.shared.shouldAutoDownload(.image) {
+                awaitingManualDownload = true
+                return
+            }
+            awaitingManualDownload = false
             _ = await loadImageIfNeeded(scale: displayScale)
         }
         .onTapGesture {
+            if awaitingManualDownload {
+                awaitingManualDownload = false
+                Task { _ = await loadImageIfNeeded(scale: displayScale, force: true) }
+                return
+            }
             guard item.isImage else { return }
             if didFail {
                 Task { await loadImageIfNeeded(scale: displayScale, force: true) }
@@ -1788,6 +1836,21 @@ private struct MessageVideoAttachmentView: View {
         .onTapGesture {
             Task { await loadAndPlay(scale: displayScale) }
         }
+        .task(id: item.id) {
+            // Auto-download per the Videos matrix row: fetch, cache, and
+            // render the poster so the bubble shows the download happened;
+            // playback stays tap-driven.
+            guard player == nil, previewThumbnail == nil, !isLoading,
+                  MediaAutoDownloadStore.shared.shouldAutoDownload(.video),
+                  MediaPrefetchRegistry.claim(item.id)
+            else { return }
+            do {
+                let url = try await playbackFileURL()
+                await loadPreviewThumbnail(from: url, scale: displayScale)
+            } catch {
+                MediaPrefetchRegistry.release(item.id)
+            }
+        }
         .onChange(of: item.id) { _, _ in
             player?.pause()
             audioSession.stop()
@@ -2011,6 +2074,22 @@ nonisolated enum MessageAudioPlayerPreparer {
     }
 }
 
+/// Session-scoped memory of successful media prefetches, so a bubble that
+/// scrolls in and out doesn't re-read the decrypted cache on every
+/// appearance. Failed prefetches are released so a later appearance retries.
+@MainActor
+private enum MediaPrefetchRegistry {
+    private static var claimed: Set<String> = []
+
+    static func claim(_ key: String) -> Bool {
+        claimed.insert(key).inserted
+    }
+
+    static func release(_ key: String) {
+        claimed.remove(key)
+    }
+}
+
 private struct MessageAudioAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
@@ -2113,7 +2192,26 @@ private struct MessageAudioAttachmentView: View {
         }
         .task(id: metadataCacheKey) {
             await loadMetadataIfNeeded()
+            await prefetchIfNeeded()
         }
+    }
+
+    /// Downloads the payload ahead of the first play tap when policy allows —
+    /// voice messages always, other audio per the auto-download matrix.
+    private func prefetchIfNeeded() async {
+        guard player == nil, !isLoading else { return }
+        let isVoice = AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: item.durationSeconds)
+        guard AudioAutoDownloadPolicy.shouldPrefetch(
+            isVoiceMessage: isVoice,
+            matrixAllows: MediaAutoDownloadStore.shared.shouldAutoDownload(.audio)
+        ) else { return }
+        guard MediaPrefetchRegistry.claim(metadataCacheKey) else { return }
+        guard let data = try? await onLoadMedia.data(for: item) else {
+            MediaPrefetchRegistry.release(metadataCacheKey)
+            return
+        }
+        guard AudioPlaybackLoadOutcome.resolve(isCancelled: Task.isCancelled) == .proceed else { return }
+        applyMetadata(await audioMetadata(from: data))
     }
 
     private var speedLabel: String {
