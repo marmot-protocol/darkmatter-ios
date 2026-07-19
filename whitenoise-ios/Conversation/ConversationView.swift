@@ -615,6 +615,7 @@ struct ConversationView: View {
     private struct FailedSendDialogModifier: ViewModifier {
         @Binding var target: FailedSendTarget?
         let canRetry: (String) -> Bool
+        let canDiscard: (String) -> Bool
         let onRetry: (String) -> Void
         let onDiscard: (String) -> Void
 
@@ -631,7 +632,9 @@ struct ConversationView: View {
                 if canRetry(target.rowId) {
                     Button("Try Again") { onRetry(target.rowId) }
                 }
-                Button("Delete", role: .destructive) { onDiscard(target.rowId) }
+                if canDiscard(target.rowId) {
+                    Button("Delete", role: .destructive) { onDiscard(target.rowId) }
+                }
                 Button("Cancel", role: .cancel) {}
             }
         }
@@ -873,6 +876,7 @@ struct ConversationView: View {
             .modifier(FailedSendDialogModifier(
                 target: $failedSendTarget,
                 canRetry: { viewModel?.canRetryFailedSend(rowId: $0) ?? false },
+                canDiscard: { viewModel?.canDiscardFailedSend(rowId: $0) ?? false },
                 onRetry: { rowId in Task { await viewModel?.retryFailedSend(rowId: rowId) } },
                 onDiscard: { viewModel?.discardFailedSend(rowId: $0) }
             ))
@@ -1093,10 +1097,30 @@ struct ConversationView: View {
             anyHasText: bodies.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         )
 
-        return HStack(spacing: 18) {
+        return HStack(spacing: 0) {
+            Button(role: .destructive) {
+                guard canDelete else { return }
+                showBatchDeleteConfirmation = true
+            } label: {
+                if batchDeleteInFlight {
+                    ProgressView().frame(width: 44, height: 44)
+                } else {
+                    Image(systemName: "trash")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canDelete && !batchDeleteInFlight ? Color.red : Color.secondary.opacity(0.4))
+            .disabled(!canDelete || batchDeleteInFlight)
+            .accessibilityLabel(L10n.string("Delete selected messages"))
+
+            Spacer(minLength: 0)
+
             Text(L10n.plural("%lld selected", Int64(records.count)))
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.subheadline.weight(.semibold))
+
+            Spacer(minLength: 0)
 
             Button {
                 guard canCopy else { return }
@@ -1105,9 +1129,11 @@ struct ConversationView: View {
                 exitMessageSelection()
             } label: {
                 Image(systemName: "doc.on.doc")
-                    .frame(width: 38, height: 38)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .foregroundStyle(canCopy ? Color.accentColor : Color.secondary.opacity(0.4))
             .disabled(!canCopy)
             .accessibilityLabel(L10n.string("Copy selected messages"))
 
@@ -1117,29 +1143,20 @@ struct ConversationView: View {
                 exitMessageSelection()
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
-                    .frame(width: 38, height: 38)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .foregroundStyle(canForward ? Color.accentColor : Color.secondary.opacity(0.4))
             .disabled(!canForward)
             .accessibilityLabel(L10n.string("Forward selected messages"))
-
-            Button(role: .destructive) {
-                guard canDelete else { return }
-                showBatchDeleteConfirmation = true
-            } label: {
-                if batchDeleteInFlight {
-                    ProgressView().frame(width: 38, height: 38)
-                } else {
-                    Image(systemName: "trash").frame(width: 38, height: 38)
-                }
-            }
-            .buttonStyle(.bordered)
-            .disabled(!canDelete || batchDeleteInFlight)
-            .accessibilityLabel(L10n.string("Delete selected messages"))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
+        }
     }
 
     private func inviteResponseArea(viewModel: ConversationViewModel) -> some View {
@@ -1326,50 +1343,46 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var conversationTitle: some View {
-        if isSelectingMessages {
-            Text(L10n.plural("%lld selected", Int64(selectedMessageIds.count)))
-                .font(.headline)
-        } else {
-            let chrome = conversationChrome
-            Button {
-                // The destination renders only once the model exists; a tap in
-                // the load window would push an empty page.
-                guard viewModel != nil else { return }
-                // Resign the composer before pushing so the keyboard animates
-                // down first instead of flashing mid-screen during the push.
-                dismissKeyboard()
-                showDetails = true
-            } label: {
-                HStack(spacing: 10) {
-                    if let viewModel {
-                        let groupDisplay = viewModel.groupDisplay
-                        AvatarBubble(
-                            seed: GroupDisplay.avatarSeed(for: groupDisplay),
-                            title: chrome.title,
-                            pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
-                        )
-                        .frame(width: 34, height: 34)
-                    }
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 4) {
-                            Text(chrome.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                            if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
-                                Image(systemName: "timer")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityLabel(L10n.string("Disappearing messages on"))
-                            }
-                        }
-                        conversationHeaderSecondary(subtitle: chrome.subtitle)
-                    }
+        let chrome = conversationChrome
+        Button {
+            // The destination renders only once the model exists; a tap in
+            // the load window would push an empty page. Selection mode keeps
+            // the title visible but inert — the count lives in the action bar.
+            guard viewModel != nil, !isSelectingMessages else { return }
+            // Resign the composer before pushing so the keyboard animates
+            // down first instead of flashing mid-screen during the push.
+            dismissKeyboard()
+            showDetails = true
+        } label: {
+            HStack(spacing: 10) {
+                if let viewModel {
+                    let groupDisplay = viewModel.groupDisplay
+                    AvatarBubble(
+                        seed: GroupDisplay.avatarSeed(for: groupDisplay),
+                        title: chrome.title,
+                        pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+                    )
+                    .frame(width: 34, height: 34)
                 }
-                .contentShape(.rect)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 4) {
+                        Text(chrome.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
+                            Image(systemName: "timer")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(L10n.string("Disappearing messages on"))
+                        }
+                    }
+                    conversationHeaderSecondary(subtitle: chrome.subtitle)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(L10n.string("Shows conversation details"))
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint(L10n.string("Shows conversation details"))
     }
 
     @ViewBuilder
@@ -1765,15 +1778,16 @@ struct ConversationView: View {
         ) {
             beginReply(to: record, viewModel: viewModel)
         }
+        .padding(.leading, isSelectingMessages ? 36 : 0)
         .overlay {
             if isSelectingMessages {
                 let selected = selectedMessageIds.contains(record.messageIdHex)
                 ZStack(alignment: .leading) {
-                    Color.accentColor.opacity(selected ? 0.10 : 0.001)
+                    Color.clear
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                        .padding(.leading, 10)
+                        .font(.title2)
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.55))
+                        .padding(.leading, 8)
                 }
                 .contentShape(.rect)
                 .onTapGesture { toggleMessageSelection(record.messageIdHex) }
