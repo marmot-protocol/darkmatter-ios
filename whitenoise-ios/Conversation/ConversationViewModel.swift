@@ -165,6 +165,7 @@ final class ConversationViewModel {
     private(set) var group: AppGroupRecordFfi
     private(set) var members: [AppGroupMemberRecordFfi] = []
     private(set) var groupMemberDetails: [GroupMemberDetailsFfi] = []
+    private(set) var mentionRosterResolution: ComposerMentionRosterResolution = .unresolved
     private(set) var groupMlsRefreshGeneration: UInt64 = 0
     private(set) var managementState: GroupManagementStateFfi?
     private(set) var isLoadingOlder = false
@@ -478,6 +479,41 @@ final class ConversationViewModel {
 
     func displayBody(of record: AppMessageRecordFfi) -> String {
         timelineStore.displayBody(of: record)
+    }
+
+    func composerMentionDraftState(for draft: String) -> ComposerMentionDraftState {
+        mentionController.captureDraftState(for: draft)
+    }
+
+    func restoreComposerMentionDraftState(_ state: ComposerMentionDraftState) {
+        mentionController.restoreDraftState(state)
+    }
+
+    func editingText(for message: AppMessageRecordFfi) -> String {
+        mentionController.prepareEditingText(
+            message.plaintext,
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: groupMlsRefreshGeneration
+        )
+    }
+
+    func preparedComposerText(_ text: String) -> String? {
+        mentionController.outgoingText(
+            for: text,
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: groupMlsRefreshGeneration,
+            rosterResolution: mentionRosterResolution
+        )
+    }
+
+    func consumeComposerText(_ text: String) -> String? {
+        let outgoing = preparedComposerText(text)
+        mentionController.clearSelections()
+        return outgoing
     }
 
     func isDeleted(_ messageIdHex: String) -> Bool {
@@ -1050,6 +1086,7 @@ final class ConversationViewModel {
                 )
                 self.applyGroupMlsTrackedChanges {
                     self.members = next
+                    self.mentionRosterResolution = .resolved
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1786,6 +1823,7 @@ final class ConversationViewModel {
         groupMemberDetails = details.members
         managementState = state
         members = nextMembers
+        mentionRosterResolution = .resolved
         bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
         if adminsChanged || membersChanged {
             scheduleTimelineTailRefresh()
@@ -1844,6 +1882,7 @@ final class ConversationViewModel {
             }
             applyGroupMlsTrackedChanges {
                 members = next
+                mentionRosterResolution = .resolved
             }
         } catch {
             // Silent; the next subscription tick will retry.
@@ -1942,12 +1981,12 @@ final class ConversationViewModel {
         }
     }
 
-    func send(_ text: String) async {
-        await composer.send(canonicalizedMentionText(text))
+    func sendPreparedComposerText(_ text: String) async {
+        await composer.send(text)
     }
 
-    func sendMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
-        await composer.sendMedia(attachments, caption: canonicalizedMentionText(caption))
+    func sendPreparedMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
+        await composer.sendMedia(attachments, caption: caption)
     }
 
     func forwardDestinations() async throws -> [MessageForwardDestination] {
@@ -2016,17 +2055,16 @@ final class ConversationViewModel {
     }
 
     func editMessage(_ message: AppMessageRecordFfi, content: String) async -> Bool {
-        guard let normalized = MessageEditingPolicy.normalizedContent(content),
-              MessageEditingPolicy.canEdit(
+        guard MessageEditingPolicy.canEdit(
                 message,
                 isDeleted: isDeleted(message.messageIdHex),
                 canSendMessages: canSendMessages
               ),
+              let outgoing = preparedComposerText(content),
               let appState,
               let accountRef = appState.activeAccountRef
         else { return false }
 
-        let outgoing = Self.cappedOutgoingText(canonicalizedMentionText(normalized))
         guard outgoing != message.plaintext else { return true }
 
         let contentTokens = await appState.parseMarkdown(text: outgoing)
@@ -2051,20 +2089,6 @@ final class ConversationViewModel {
             appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
             return false
         }
-    }
-
-    private func canonicalizedMentionText(_ text: String) -> String {
-        let canonical = mentionController.canonicalizeMentions(
-            in: text,
-            appState: appState,
-            members: members,
-            groupMemberDetails: groupMemberDetails,
-            rosterGeneration: groupMlsRefreshGeneration
-        )
-        // Selections are draft-scoped; a stale map must not resolve a future
-        // draft's ambiguous name to an identity tapped for an older message.
-        mentionController.clearSelections()
-        return canonical
     }
 
 #if DEBUG
@@ -2152,7 +2176,11 @@ final class ConversationViewModel {
 
     /// Clamp outbound message text to the protocol's max length (#54).
     nonisolated static func cappedOutgoingText(_ text: String) -> String {
-        String(text.prefix(ContentSanitizer.maxMessageLength))
+        ComposerMentionCanonicalizer.canonicalize(
+            text,
+            candidates: [],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
     }
 
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {

@@ -114,6 +114,111 @@ nonisolated struct ComposerMentionSelection: Equatable, Sendable {
     let npub: String
 }
 
+nonisolated enum ComposerMentionRosterResolution: Equatable, Sendable {
+    case unresolved
+    case resolved
+}
+
+nonisolated struct ComposerMentionDraftState: Equatable, Sendable {
+    let draft: String
+    let selectedMentions: [ComposerMentionSelection]
+
+    init(draft: String, selectedMentions: [ComposerMentionSelection]) {
+        self.draft = draft
+        self.selectedMentions = selectedMentions
+    }
+
+    init(snapshot: ConversationDraftSnapshot) {
+        draft = snapshot.text
+        selectedMentions = snapshot.mentions.map {
+            ComposerMentionSelection(
+                utf16Location: $0.utf16Location,
+                utf16Length: $0.utf16Length,
+                displayName: $0.displayName,
+                npub: $0.npub
+            )
+        }
+    }
+
+    var snapshot: ConversationDraftSnapshot {
+        ConversationDraftSnapshot(
+            text: draft,
+            mentions: selectedMentions.map {
+                ConversationDraftMention(
+                    utf16Location: $0.utf16Location,
+                    utf16Length: $0.utf16Length,
+                    displayName: $0.displayName,
+                    npub: $0.npub
+                )
+            }
+        )
+    }
+}
+
+/// Converts canonical `@npub...` references back to display-name mentions
+/// without losing the identity bound to each rendered occurrence.
+nonisolated struct CanonicalMentionDisplayProjection: Equatable, Sendable {
+    private static let canonicalNpubLength = 63
+
+    let text: String
+    let selectedMentions: [ComposerMentionSelection]
+
+    static func project(
+        _ text: String,
+        displayName: (String) -> String?
+    ) -> CanonicalMentionDisplayProjection {
+        guard text.contains("@") else {
+            return CanonicalMentionDisplayProjection(text: text, selectedMentions: [])
+        }
+
+        var projected = ""
+        var selections: [ComposerMentionSelection] = []
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "@",
+               ComposerMentionCanonicalizer.leftBoundaryAllowsMention(at: index, in: text),
+               let match = canonicalNpub(in: text, at: index),
+               let name = ContentSanitizer.displayName(displayName(match.npub)) {
+                let location = projected.utf16.count
+                let rendered = "@\(name)"
+                projected += rendered
+                selections.append(ComposerMentionSelection(
+                    utf16Location: location,
+                    utf16Length: rendered.utf16.count,
+                    displayName: name,
+                    npub: match.npub
+                ))
+                index = match.endIndex
+                continue
+            }
+            projected.append(text[index])
+            index = text.index(after: index)
+        }
+
+        return CanonicalMentionDisplayProjection(text: projected, selectedMentions: selections)
+    }
+
+    fileprivate static func canonicalNpub(
+        in text: String,
+        at atIndex: String.Index
+    ) -> (npub: String, endIndex: String.Index)? {
+        var endIndex = text.index(after: atIndex)
+        var byteCount = 0
+        while endIndex < text.endIndex,
+              !ComposerMentionCanonicalizer.isNostrMentionBoundary(text[endIndex]) {
+            byteCount += text[endIndex].utf8.count
+            guard byteCount <= canonicalNpubLength else { return nil }
+            endIndex = text.index(after: endIndex)
+        }
+        let npub = String(text[text.index(after: atIndex)..<endIndex])
+        guard byteCount == canonicalNpubLength,
+              npub.hasPrefix("npub1"),
+              NostrProfileReference.pubkeyHex(fromBech32: npub) != nil
+        else { return nil }
+        return (npub, endIndex)
+    }
+}
+
 /// Keeps selected mention identities attached to the text occurrence the user
 /// tapped. Edits outside a token shift its UTF-16 range; edits touching a token
 /// discard the binding so ambiguous free text always fails closed.
@@ -203,9 +308,13 @@ nonisolated enum ComposerMentionCanonicalizer {
     static func canonicalize(
         _ text: String,
         candidates: [ComposerMentionCandidate],
-        selectedMentions: [ComposerMentionSelection] = []
+        selectedMentions: [ComposerMentionSelection] = [],
+        rosterResolution: ComposerMentionRosterResolution = .resolved,
+        maxLength: Int? = nil
     ) -> String {
-        guard text.contains("@") else { return text }
+        guard text.contains("@") else {
+            return maxLength.map { String(text.prefix($0)) } ?? text
+        }
         let replacements = candidates
             .filter { candidate in
                 !candidate.npub.isEmpty
@@ -214,24 +323,41 @@ nonisolated enum ComposerMentionCanonicalizer {
             .sorted { lhs, rhs in
                 lhs.displayName.count > rhs.displayName.count
             }
-        guard !replacements.isEmpty else { return text }
 
         var canonical = ""
+        var canonicalLength = 0
         var index = text.startIndex
         while index < text.endIndex {
-            if text[index] == "@",
-               leftBoundaryAllowsMention(at: index, in: text),
-               let match = matchCandidate(
-                   in: text,
-                   at: index,
-                   candidates: replacements,
-                   selectedMentions: selectedMentions
-               ) {
-                canonical += "@\(match.npub)"
-                index = match.endIndex
-                continue
+            if text[index] == "@", leftBoundaryAllowsMention(at: index, in: text) {
+                let token: String
+                let endIndex: String.Index
+                if let match = CanonicalMentionDisplayProjection.canonicalNpub(in: text, at: index) {
+                    token = "@\(match.npub)"
+                    endIndex = match.endIndex
+                } else if let match = matchCandidate(
+                    in: text,
+                    at: index,
+                    candidates: replacements,
+                    selectedMentions: selectedMentions,
+                    rosterResolution: rosterResolution
+                ) {
+                    token = "@\(match.npub)"
+                    endIndex = match.endIndex
+                } else {
+                    token = ""
+                    endIndex = index
+                }
+                if !token.isEmpty {
+                    guard maxLength.map({ canonicalLength + token.count <= $0 }) ?? true else { break }
+                    canonical += token
+                    canonicalLength += token.count
+                    index = endIndex
+                    continue
+                }
             }
+            guard maxLength.map({ canonicalLength < $0 }) ?? true else { break }
             canonical.append(text[index])
+            canonicalLength += 1
             index = text.index(after: index)
         }
         return canonical
@@ -241,39 +367,88 @@ nonisolated enum ComposerMentionCanonicalizer {
         in text: String,
         at atIndex: String.Index,
         candidates: [ComposerMentionCandidate],
-        selectedMentions: [ComposerMentionSelection]
+        selectedMentions: [ComposerMentionSelection],
+        rosterResolution: ComposerMentionRosterResolution
     ) -> (npub: String, endIndex: String.Index)? {
+        switch selectedMention(
+            in: text,
+            at: atIndex,
+            candidates: candidates,
+            selectedMentions: selectedMentions,
+            rosterResolution: rosterResolution
+        ) {
+        case .resolved(let npub, let endIndex):
+            return (npub, endIndex)
+        case .rejected:
+            return nil
+        case .none:
+            break
+        }
+
         let nameStart = text.index(after: atIndex)
         for candidate in candidates {
             guard text[nameStart...].hasPrefix(candidate.displayName) else { continue }
             let nameEnd = text.index(nameStart, offsetBy: candidate.displayName.count)
             guard rightBoundaryAllowsMention(at: nameEnd, in: text) else { continue }
-            // The identity comes from what the user actually tapped, never
-            // from a text race: with several members sharing this display
-            // name, only an explicit selection resolves it — a peer cloning
-            // a name cannot capture an unselected mention, it just stays
-            // literal text.
             let sharingName = candidates.filter { $0.displayName == candidate.displayName }
             let distinctNpubs = Set(sharingName.map(\.npub))
             if distinctNpubs.count == 1 {
                 return (candidate.npub, nameEnd)
-            }
-            let location = text[..<atIndex].utf16.count
-            let length = "@\(candidate.displayName)".utf16.count
-            if let selected = selectedMentions.first(where: {
-                $0.utf16Location == location
-                    && $0.utf16Length == length
-                    && $0.displayName == candidate.displayName
-                    && distinctNpubs.contains($0.npub)
-            }) {
-                return (selected.npub, nameEnd)
             }
             return nil
         }
         return nil
     }
 
-    private static func leftBoundaryAllowsMention(at atIndex: String.Index, in text: String) -> Bool {
+    private enum SelectedMentionResolution {
+        case none
+        case resolved(npub: String, endIndex: String.Index)
+        case rejected
+    }
+
+    private static func selectedMention(
+        in text: String,
+        at atIndex: String.Index,
+        candidates: [ComposerMentionCandidate],
+        selectedMentions: [ComposerMentionSelection],
+        rosterResolution: ComposerMentionRosterResolution
+    ) -> SelectedMentionResolution {
+        let location = text[..<atIndex].utf16.count
+        guard let selected = selectedMentions.first(where: { $0.utf16Location == location }) else {
+            return .none
+        }
+
+        let rendered = "@\(selected.displayName)"
+        guard selected.utf16Length == rendered.utf16.count,
+              text[atIndex...].hasPrefix(rendered),
+              let endIndex = text.index(
+                  atIndex,
+                  offsetBy: rendered.count,
+                  limitedBy: text.endIndex
+              ),
+              rightBoundaryAllowsMention(at: endIndex, in: text)
+        else { return .none }
+
+        switch rosterResolution {
+        case .unresolved:
+            // This binding was persisted when the user picked a concrete
+            // member. Preserve that identity while the asynchronous roster
+            // snapshot is unavailable; free-typed names never enter here.
+            guard NostrProfileReference.pubkeyHex(fromBech32: selected.npub) != nil else {
+                return .rejected
+            }
+            return .resolved(npub: selected.npub, endIndex: endIndex)
+        case .resolved:
+            // Match by stable identity rather than the member's current
+            // display name so a profile rename cannot detach a saved draft.
+            guard candidates.contains(where: { $0.npub == selected.npub }) else {
+                return .rejected
+            }
+            return .resolved(npub: selected.npub, endIndex: endIndex)
+        }
+    }
+
+    fileprivate static func leftBoundaryAllowsMention(at atIndex: String.Index, in text: String) -> Bool {
         if atIndex == text.startIndex { return true }
         let previous = text[text.index(before: atIndex)]
         return isNostrMentionBoundary(previous)
@@ -284,7 +459,7 @@ nonisolated enum ComposerMentionCanonicalizer {
         return isNostrMentionBoundary(text[index])
     }
 
-    private static func isNostrMentionBoundary(_ character: Character) -> Bool {
+    fileprivate static func isNostrMentionBoundary(_ character: Character) -> Bool {
         !character.unicodeScalars.contains(where: { scalar in
             CharacterSet.alphanumerics.contains(scalar)
                 || scalar == underscoreScalar
@@ -375,24 +550,76 @@ final class ComposerMentionController {
         observedDraft = nil
     }
 
-    func canonicalizeMentions(
-        in text: String,
+    func captureDraftState(for draft: String) -> ComposerMentionDraftState {
+        synchronizeSelections(with: draft)
+        return ComposerMentionDraftState(draft: draft, selectedMentions: selectedMentions)
+    }
+
+    func restoreDraftState(_ state: ComposerMentionDraftState) {
+        selectedMentions = state.selectedMentions
+        observedDraft = state.draft
+    }
+
+    func prepareEditingText(
+        _ canonicalText: String,
         appState: AppState?,
         members: [AppGroupMemberRecordFfi],
         groupMemberDetails: [GroupMemberDetailsFfi],
         rosterGeneration: UInt64
     ) -> String {
+        clearSelections()
+        guard let appState else {
+            observedDraft = canonicalText
+            return canonicalText
+        }
+        let candidates = allCandidates(
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: rosterGeneration
+        )
+        let namesByNpub = Dictionary(
+            candidates.map { ($0.npub, $0.displayName) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let projection = CanonicalMentionDisplayProjection.project(canonicalText) {
+            namesByNpub[$0]
+        }
+        selectedMentions = projection.selectedMentions
+        observedDraft = projection.text
+        return projection.text
+    }
+
+    func outgoingText(
+        for text: String,
+        appState: AppState?,
+        members: [AppGroupMemberRecordFfi],
+        groupMemberDetails: [GroupMemberDetailsFfi],
+        rosterGeneration: UInt64,
+        rosterResolution: ComposerMentionRosterResolution
+    ) -> String? {
         synchronizeSelections(with: text)
-        guard let appState else { return text }
-        return ComposerMentionCanonicalizer.canonicalize(
-            text,
-            candidates: allCandidates(
-                appState: appState,
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let normalizedSelections = ComposerMentionSelectionTracker.reconcile(
+            selectedMentions,
+            from: text,
+            to: trimmed
+        )
+        let candidates = appState.map {
+            allCandidates(
+                appState: $0,
                 members: members,
                 groupMemberDetails: groupMemberDetails,
                 rosterGeneration: rosterGeneration
-            ),
-            selectedMentions: selectedMentions
+            )
+        } ?? []
+        return ComposerMentionCanonicalizer.canonicalize(
+            trimmed,
+            candidates: candidates,
+            selectedMentions: normalizedSelections,
+            rosterResolution: rosterResolution,
+            maxLength: ContentSanitizer.maxMessageLength
         )
     }
 
