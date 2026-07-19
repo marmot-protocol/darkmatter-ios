@@ -1085,8 +1085,9 @@ struct ConversationView: View {
         let canDelete = MessageSelectionPolicy.canDelete(
             selectedCount: records.count,
             allDeletable: records.allSatisfy {
-                $0.direction == "sent"
-                    && viewModel.canSendMessages
+                // Same per-message rules as the single-message menu: admins
+                // can delete others' messages, members only their own.
+                viewModel.deleteCapability(for: $0).canDeleteForEveryone
                     && !viewModel.isDeleted($0.messageIdHex)
             }
         )

@@ -705,6 +705,7 @@ final class ConversationViewModel {
         if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil { return true }
         guard let record = timelineStore.failedTransientRecord(rowId: rowId) else { return false }
         return !record.plaintext.isEmpty
+            && !timelineStore.failedTransientRowHasStagedMedia(rowId: rowId)
             && record.tags.allSatisfy { $0.values.first != "_media_pending" }
     }
 

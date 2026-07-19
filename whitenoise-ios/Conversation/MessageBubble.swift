@@ -1460,7 +1460,7 @@ private struct MessageMediaTile: View {
             let maxPixelSize = max(1, Int(ceil(max(size.width, size.height) * displayScale)))
             if item.isImage,
                MessageMediaThumbnailDecoder.cachedThumbnail(for: thumbnailCacheKey, maxPixelSize: maxPixelSize) == nil,
-               !MediaAutoDownloadStore.shared.shouldAutoDownload(item.isImage ? .image : .video) {
+               !MediaAutoDownloadStore.shared.shouldAutoDownload(.image) {
                 awaitingManualDownload = true
                 return
             }
@@ -1836,6 +1836,17 @@ private struct MessageVideoAttachmentView: View {
         .onTapGesture {
             Task { await loadAndPlay(scale: displayScale) }
         }
+        .task(id: item.id) {
+            // Auto-download per the Videos matrix row: fetch and cache the
+            // payload so the first play is instant; playback stays tap-driven.
+            guard player == nil, !isLoading,
+                  MediaAutoDownloadStore.shared.shouldAutoDownload(.video),
+                  MediaPrefetchRegistry.claim(item.id)
+            else { return }
+            if (try? await onLoadMedia.data(for: item)) == nil {
+                MediaPrefetchRegistry.release(item.id)
+            }
+        }
         .onChange(of: item.id) { _, _ in
             player?.pause()
             audioSession.stop()
@@ -2059,11 +2070,11 @@ nonisolated enum MessageAudioPlayerPreparer {
     }
 }
 
-/// Session-scoped memory of successful audio prefetches, so a bubble that
+/// Session-scoped memory of successful media prefetches, so a bubble that
 /// scrolls in and out doesn't re-read the decrypted cache on every
 /// appearance. Failed prefetches are released so a later appearance retries.
 @MainActor
-private enum AudioPrefetchRegistry {
+private enum MediaPrefetchRegistry {
     private static var claimed: Set<String> = []
 
     static func claim(_ key: String) -> Bool {
@@ -2185,17 +2196,14 @@ private struct MessageAudioAttachmentView: View {
     /// voice messages always, other audio per the auto-download matrix.
     private func prefetchIfNeeded() async {
         guard player == nil, !isLoading else { return }
-        let isVoice = AudioAutoDownloadPolicy.isVoiceMessage(
-            durationSeconds: item.durationSeconds,
-            waveformSampleCount: item.waveformSamples.count
-        )
+        let isVoice = AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: item.durationSeconds)
         guard AudioAutoDownloadPolicy.shouldPrefetch(
             isVoiceMessage: isVoice,
             matrixAllows: MediaAutoDownloadStore.shared.shouldAutoDownload(.audio)
         ) else { return }
-        guard AudioPrefetchRegistry.claim(metadataCacheKey) else { return }
+        guard MediaPrefetchRegistry.claim(metadataCacheKey) else { return }
         guard let data = try? await onLoadMedia.data(for: item) else {
-            AudioPrefetchRegistry.release(metadataCacheKey)
+            MediaPrefetchRegistry.release(metadataCacheKey)
             return
         }
         guard AudioPlaybackLoadOutcome.resolve(isCancelled: Task.isCancelled) == .proceed else { return }

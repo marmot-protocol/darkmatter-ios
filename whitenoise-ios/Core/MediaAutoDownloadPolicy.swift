@@ -181,6 +181,23 @@ final class MediaAutoDownloadStore {
     private(set) var isOnline = true
     private let defaults: UserDefaults
     private let monitor = NWPathMonitor()
+    private var accountIdHex: String?
+
+    /// The matrix is an account-scoped preference; the bare key holds the
+    /// pre-account default and the no-account fallback.
+    static func storageKey(accountIdHex: String?) -> String {
+        guard let accountIdHex, !accountIdHex.isEmpty else { return storageKey }
+        return "\(storageKey):\(accountIdHex)"
+    }
+
+    /// Reloads the matrix for the account whose preference should govern.
+    func setActiveAccount(_ accountIdHex: String?) {
+        guard self.accountIdHex != accountIdHex else { return }
+        self.accountIdHex = accountIdHex
+        matrix = MediaAutoDownloadMatrix.fromPreference(
+            defaults.string(forKey: Self.storageKey(accountIdHex: accountIdHex))
+        ) ?? .defaultMatrix
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -208,12 +225,12 @@ final class MediaAutoDownloadStore {
 
     func setLevel(_ level: MediaAutoDownloadLevel, for type: MediaAutoDownloadType) {
         matrix = matrix.setting(type, to: level)
-        defaults.set(matrix.toPreference(), forKey: Self.storageKey)
+        defaults.set(matrix.toPreference(), forKey: Self.storageKey(accountIdHex: accountIdHex))
     }
 
     func resetToDefaults() {
         matrix = .defaultMatrix
-        defaults.removeObject(forKey: Self.storageKey)
+        defaults.removeObject(forKey: Self.storageKey(accountIdHex: accountIdHex))
     }
 
     func shouldAutoDownload(_ type: MediaAutoDownloadType) -> Bool {
@@ -225,17 +242,16 @@ final class MediaAutoDownloadStore {
 /// both major reference messengers exempt them from the matrix. Other audio
 /// attachments honor the audio row.
 nonisolated enum AudioAutoDownloadPolicy {
-    /// Voice-note metadata is peer-controlled, so the always-download bypass
-    /// carries a duration sanity bound; anything claiming to be longer falls
-    /// back to the audio matrix. Size-aware gating needs the attachment byte
-    /// size surfaced from the media reference — engine follow-up.
+    /// The media reference carries no duration, waveform, or byte size on
+    /// the wire today (engine follow-up), and audio attachments in this
+    /// product are voice notes — so received audio classifies as voice. A
+    /// locally-known duration above the sanity bound falls back to the audio
+    /// matrix instead of the always-download bypass.
     static let maxVoiceMessageSeconds: Double = 600
 
-    static func isVoiceMessage(durationSeconds: Double?, waveformSampleCount: Int) -> Bool {
-        if let durationSeconds {
-            return durationSeconds <= maxVoiceMessageSeconds
-        }
-        return waveformSampleCount > 0
+    static func isVoiceMessage(durationSeconds: Double?) -> Bool {
+        guard let durationSeconds else { return true }
+        return durationSeconds <= maxVoiceMessageSeconds
     }
 
     static func shouldPrefetch(isVoiceMessage: Bool, matrixAllows: Bool) -> Bool {

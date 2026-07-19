@@ -429,18 +429,11 @@ struct ChatsListView: View {
                     selectedChatIds = []
                 }
 
-                // Local delete is only legitimate for inactive memberships —
-                // active chats go through the explicit per-row leave flow —
-                // so the bulk action greys out unless every selected row
-                // qualifies, mirroring the single-row swipe policy.
-                selectionAction(
-                    "Delete",
-                    systemImage: "trash",
-                    role: .destructive,
-                    isEnabled: items.allSatisfy {
-                        !GroupManagementPresentation.isActiveChatListMember($0.selfMembership)
-                    }
-                ) {
+                // Strictly device-local removal — no leave or admin transfer
+                // — deliberately available even for still-member and
+                // sole-admin groups. Destructive and unpublished, so it
+                // confirms first.
+                selectionAction("Delete", systemImage: "trash", role: .destructive) {
                     showBulkDeleteConfirmation = true
                 }
                 .confirmationDialog(
@@ -468,7 +461,6 @@ struct ChatsListView: View {
         _ title: LocalizedStringKey,
         systemImage: String,
         role: ButtonRole? = nil,
-        isEnabled: Bool = true,
         perform: @escaping () async -> Void
     ) -> some View {
         Button(role: role) {
@@ -480,7 +472,7 @@ struct ChatsListView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .disabled(selectedChatIds.isEmpty || !isEnabled)
+        .disabled(selectedChatIds.isEmpty)
     }
 
     private func currentRows(_ viewModel: ChatsListViewModel) -> [ChatsListViewModel.Item] {

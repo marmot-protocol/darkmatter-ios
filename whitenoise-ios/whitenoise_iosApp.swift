@@ -1,3 +1,4 @@
+import MarmotKit
 import SwiftUI
 import UIKit
 
@@ -112,6 +113,9 @@ struct whitenoise_iosApp: App {
                     // Relay recovery is otherwise foreground-driven; a network
                     // return with the app already open needs the same pump.
                     Task { await appState.catchUpAfterForegroundActivation() }
+                }
+                .onChange(of: appState.activeAccount?.accountIdHex, initial: true) { _, accountIdHex in
+                    MediaAutoDownloadStore.shared.setActiveAccount(accountIdHex)
                 }
                 .onChange(of: appState.appLock.shield) { _, shield in
                     appLockOverlay.update(for: shield, controller: appState.appLock)

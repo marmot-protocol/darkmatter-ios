@@ -55,12 +55,32 @@ struct MediaAutoDownloadMatrixTests {
     }
 
     @Test func voiceMessagesBypassTheMatrix() {
-        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 12.5, waveformSampleCount: 0))
-        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil, waveformSampleCount: 40))
-        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil, waveformSampleCount: 0))
+        // No duration on the wire = received voice note; an absurd claimed
+        // duration falls back to the matrix.
+        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 12.5))
+        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil))
+        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 3_600))
         #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: true, matrixAllows: false))
         #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: true))
         #expect(!AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: false))
+    }
+
+    @Test @MainActor func matrixPreferenceIsScopedPerAccount() {
+        let suiteName = "media-matrix-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = MediaAutoDownloadStore(defaults: defaults)
+        store.setActiveAccount("aaaa")
+        store.setLevel(.never, for: .image)
+        #expect(store.matrix.level(for: .image) == .never)
+
+        // A different account starts from defaults; switching back restores
+        // the first account's choice.
+        store.setActiveAccount("bbbb")
+        #expect(store.matrix.level(for: .image) == .wifiAndCellular)
+        store.setActiveAccount("aaaa")
+        #expect(store.matrix.level(for: .image) == .never)
     }
 
     @Test func preferenceRoundTripsAndIgnoresUnknownCells() {
