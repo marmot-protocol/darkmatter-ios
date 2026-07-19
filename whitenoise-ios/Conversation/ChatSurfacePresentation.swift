@@ -42,6 +42,20 @@ nonisolated enum MessageSelectionPolicy {
     static func canDelete(selectedCount: Int, allDeletable: Bool) -> Bool {
         selectedCount > 0 && allDeletable
     }
+
+    static func canCopy(selectedCount: Int, anyHasText: Bool) -> Bool {
+        selectedCount > 0 && anyHasText
+    }
+
+    /// Joins the copyable bodies of the selected messages with blank lines,
+    /// in the order given (callers pass them chronologically). Empty bodies
+    /// (media-only rows) are dropped so the clipboard holds only real text.
+    static func combinedCopyText(_ bodies: [String]) -> String {
+        bodies
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+    }
 }
 
 nonisolated enum ChatBubbleMetrics {

@@ -9,6 +9,8 @@ struct ChatsListView: View {
     @State private var path: [ChatNavigationTarget] = []
     @State private var searchText = ""
     @State private var scope: ChatScope = .active
+    @State private var selectedChatIds = Set<String>()
+    @State private var showBulkDeleteConfirmation = false
     @FocusState private var searchFocused: Bool
 
     enum ChatScope: CaseIterable, Hashable {
@@ -64,7 +66,15 @@ struct ChatsListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .trueBlackScaffoldBackground()
-            .navigationTitle("Chats")
+            .safeAreaInset(edge: .bottom) {
+                if selectionMode, let viewModel {
+                    chatSelectionBar(viewModel: viewModel)
+                }
+            }
+            .onChange(of: rowIdsKey) { _, _ in
+                selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
+            }
+            .navigationTitle(selectionMode ? "" : "Chats")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -294,24 +304,43 @@ struct ChatsListView: View {
             let rows = currentRows(viewModel)
             List {
                 ForEach(rows) { item in
-                    // A plain button keeps the trailing slot available for the
-                    // message timestamp (no disclosure chevron). Its tap target
-                    // is only the label's opaque content, so the explicit
+                    // A plain row (not a Button) keeps tap and long-press
+                    // mutually exclusive — a Button's action would also fire
+                    // on the release of the long press that just entered
+                    // selection mode, instantly clearing it. The explicit
                     // content shape is required: without it the transparent
                     // Spacer gap between a short title/preview and the
                     // timestamp swallows taps.
-                    Button {
-                        navigate(to: item)
-                    } label: {
+                    HStack(spacing: 12) {
+                        if selectionMode {
+                            Image(systemName: selectedChatIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedChatIds.contains(item.id) ? Color.accentColor : .secondary)
+                                .imageScale(.large)
+                                .accessibilityLabel(
+                                    selectedChatIds.contains(item.id)
+                                        ? L10n.string("Deselect chat")
+                                        : L10n.string("Select chat")
+                                )
+                        }
                         ChatRow(item: item)
-                            .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
+                    .contentShape(.rect)
+                    .onTapGesture {
+                        if selectionMode {
+                            selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
+                        } else {
+                            navigate(to: item)
+                        }
+                    }
+                    .onLongPressGesture {
+                        if !selectionMode { selectedChatIds = [item.id] }
+                    }
+                    .accessibilityAddTraits(.isButton)
                     .swipeActions(edge: .leading) {
-                        leadingSwipeActions(for: item)
+                        if !selectionMode { leadingSwipeActions(for: item) }
                     }
                     .swipeActions(edge: .trailing) {
-                        swipeActions(for: item)
+                        if !selectionMode { swipeActions(for: item) }
                     }
                     // Drop the separator above the very first row.
                     .listRowSeparator(
@@ -346,6 +375,104 @@ struct ChatsListView: View {
         } else {
             EmptyChatsState(action: { showNewChat = true })
         }
+    }
+
+    private var selectionMode: Bool { !selectedChatIds.isEmpty }
+
+    private var visibleRows: [ChatsListViewModel.Item] {
+        guard let viewModel else { return [] }
+        return currentRows(viewModel)
+    }
+
+    private var visibleRowIds: Set<String> { Set(visibleRows.map(\.id)) }
+
+    /// Order-stable key so `onChange` fires when the visible set changes
+    /// (scope switch, search, row add/remove) and stale selections drop.
+    private var rowIdsKey: String { visibleRows.map(\.id).joined(separator: ",") }
+
+    private var selectedItems: [ChatsListViewModel.Item] {
+        visibleRows.filter { selectedChatIds.contains($0.id) }
+    }
+
+    private func chatSelectionBar(viewModel: ChatsListViewModel) -> some View {
+        let items = selectedItems
+        let archiveAction = ChatListSelection.bulkArchiveAction(archivedFlags: items.map(\.isArchived))
+        let willMute = ChatListSelection.bulkMuteMutes(mutedFlags: items.map(\.isMuted))
+
+        return VStack(spacing: 8) {
+            HStack {
+                Button("Cancel") { selectedChatIds = [] }
+                Spacer()
+                Text(L10n.plural("%lld selected", Int64(items.count)))
+                    .font(.headline)
+                Spacer()
+                Button("Select All") { selectedChatIds = ChatListSelection.selectAll(visibleRows.map(\.id)) }
+            }
+
+            HStack(spacing: 24) {
+                selectionAction(
+                    archiveAction == .unarchive ? "Unarchive" : "Archive",
+                    systemImage: archiveAction == .unarchive ? "tray.and.arrow.up" : "archivebox"
+                ) {
+                    let archived = archiveAction == .archive
+                    for id in items.map(\.id) {
+                        await setArchived(groupIdHex: id, archived: archived)
+                    }
+                    selectedChatIds = []
+                }
+
+                selectionAction(
+                    willMute ? "Mute" : "Unmute",
+                    systemImage: willMute ? "bell.slash" : "bell"
+                ) {
+                    for id in items.map(\.id) { setMuted(groupIdHex: id, muted: willMute) }
+                    selectedChatIds = []
+                }
+
+                // Strictly device-local removal — no leave or admin transfer
+                // — deliberately available even for still-member and
+                // sole-admin groups. Destructive and unpublished, so it
+                // confirms first.
+                selectionAction("Delete", systemImage: "trash", role: .destructive) {
+                    showBulkDeleteConfirmation = true
+                }
+                .confirmationDialog(
+                    "Remove from this device?",
+                    isPresented: $showBulkDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        Task {
+                            for id in items.map(\.id) { await deleteLocal(groupIdHex: id) }
+                            selectedChatIds = []
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(.regularMaterial)
+    }
+
+    private func selectionAction(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        role: ButtonRole? = nil,
+        perform: @escaping () async -> Void
+    ) -> some View {
+        Button(role: role) {
+            Task { await perform() }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage).imageScale(.large)
+                Text(title).font(.caption2)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .disabled(selectedChatIds.isEmpty)
     }
 
     private func currentRows(_ viewModel: ChatsListViewModel) -> [ChatsListViewModel.Item] {

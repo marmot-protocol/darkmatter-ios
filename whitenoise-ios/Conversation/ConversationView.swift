@@ -551,6 +551,7 @@ struct ConversationView: View {
     @State private var editSaveInFlight = false
     @State private var editHistoryTarget: ActionsTarget?
     @State private var deleteTarget: ActionsTarget?
+    @State private var failedSendTarget: FailedSendTarget?
     /// When the long-pressed bubble sits too low for the actions popover to fit
     /// below it, flip the popover above the bubble instead.
     @State private var actionsAbove = false
@@ -602,6 +603,41 @@ struct ConversationView: View {
         let record: AppMessageRecordFfi
         let status: MessageStatus
         let id = UUID()
+    }
+
+    private struct FailedSendTarget: Identifiable {
+        let rowId: String
+        var id: String { rowId }
+    }
+
+    /// Extracted so the conversation body's modifier chain stays within the
+    /// Swift type-checker's budget.
+    private struct FailedSendDialogModifier: ViewModifier {
+        @Binding var target: FailedSendTarget?
+        let canRetry: (String) -> Bool
+        let canDiscard: (String) -> Bool
+        let onRetry: (String) -> Void
+        let onDiscard: (String) -> Void
+
+        func body(content: Content) -> some View {
+            content.confirmationDialog(
+                "Message not sent",
+                isPresented: Binding(
+                    get: { target != nil },
+                    set: { if !$0 { target = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: target
+            ) { target in
+                if canRetry(target.rowId) {
+                    Button("Try Again") { onRetry(target.rowId) }
+                }
+                if canDiscard(target.rowId) {
+                    Button("Delete", role: .destructive) { onDiscard(target.rowId) }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+        }
     }
 
     private struct ReactionDetailsTarget: Identifiable {
@@ -837,6 +873,13 @@ struct ConversationView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             }
+            .modifier(FailedSendDialogModifier(
+                target: $failedSendTarget,
+                canRetry: { viewModel?.canRetryFailedSend(rowId: $0) ?? false },
+                canDiscard: { viewModel?.canDiscardFailedSend(rowId: $0) ?? false },
+                onRetry: { rowId in Task { await viewModel?.retryFailedSend(rowId: rowId) } },
+                onDiscard: { viewModel?.discardFailedSend(rowId: $0) }
+            ))
             .sheet(isPresented: $showCameraCapture) {
                 CameraCaptureView(
                     onImage: { image in
@@ -1042,16 +1085,58 @@ struct ConversationView: View {
         let canDelete = MessageSelectionPolicy.canDelete(
             selectedCount: records.count,
             allDeletable: records.allSatisfy {
-                $0.direction == "sent"
-                    && viewModel.canSendMessages
+                // Same per-message rules as the single-message menu: admins
+                // can delete others' messages, members only their own.
+                viewModel.deleteCapability(for: $0).canDeleteForEveryone
                     && !viewModel.isDeleted($0.messageIdHex)
             }
         )
 
-        return HStack(spacing: 18) {
+        let bodies = records.map { viewModel.displayBody(of: $0) }
+        let canCopy = MessageSelectionPolicy.canCopy(
+            selectedCount: records.count,
+            anyHasText: bodies.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        )
+
+        return HStack(spacing: 0) {
+            Button(role: .destructive) {
+                guard canDelete else { return }
+                showBatchDeleteConfirmation = true
+            } label: {
+                if batchDeleteInFlight {
+                    ProgressView().frame(width: 44, height: 44)
+                } else {
+                    Image(systemName: "trash")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canDelete && !batchDeleteInFlight ? Color.red : Color.secondary.opacity(0.4))
+            .disabled(!canDelete || batchDeleteInFlight)
+            .accessibilityLabel(L10n.string("Delete selected messages"))
+
+            Spacer(minLength: 0)
+
             Text(L10n.plural("%lld selected", Int64(records.count)))
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.subheadline.weight(.semibold))
+
+            Spacer(minLength: 0)
+
+            Button {
+                guard canCopy else { return }
+                SensitiveClipboard.copyLocalOnly(MessageSelectionPolicy.combinedCopyText(bodies))
+                Haptics.tap()
+                exitMessageSelection()
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canCopy ? Color.accentColor : Color.secondary.opacity(0.4))
+            .disabled(!canCopy)
+            .accessibilityLabel(L10n.string("Copy selected messages"))
 
             Button {
                 guard canForward else { return }
@@ -1059,29 +1144,20 @@ struct ConversationView: View {
                 exitMessageSelection()
             } label: {
                 Image(systemName: "arrowshape.turn.up.right")
-                    .frame(width: 38, height: 38)
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .foregroundStyle(canForward ? Color.accentColor : Color.secondary.opacity(0.4))
             .disabled(!canForward)
             .accessibilityLabel(L10n.string("Forward selected messages"))
-
-            Button(role: .destructive) {
-                guard canDelete else { return }
-                showBatchDeleteConfirmation = true
-            } label: {
-                if batchDeleteInFlight {
-                    ProgressView().frame(width: 38, height: 38)
-                } else {
-                    Image(systemName: "trash").frame(width: 38, height: 38)
-                }
-            }
-            .buttonStyle(.bordered)
-            .disabled(!canDelete || batchDeleteInFlight)
-            .accessibilityLabel(L10n.string("Delete selected messages"))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.regularMaterial)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 2)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
+        }
     }
 
     private func inviteResponseArea(viewModel: ConversationViewModel) -> some View {
@@ -1268,50 +1344,46 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var conversationTitle: some View {
-        if isSelectingMessages {
-            Text(L10n.plural("%lld selected", Int64(selectedMessageIds.count)))
-                .font(.headline)
-        } else {
-            let chrome = conversationChrome
-            Button {
-                // The destination renders only once the model exists; a tap in
-                // the load window would push an empty page.
-                guard viewModel != nil else { return }
-                // Resign the composer before pushing so the keyboard animates
-                // down first instead of flashing mid-screen during the push.
-                dismissKeyboard()
-                showDetails = true
-            } label: {
-                HStack(spacing: 10) {
-                    if let viewModel {
-                        let groupDisplay = viewModel.groupDisplay
-                        AvatarBubble(
-                            seed: GroupDisplay.avatarSeed(for: groupDisplay),
-                            title: chrome.title,
-                            pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
-                        )
-                        .frame(width: 34, height: 34)
-                    }
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack(spacing: 4) {
-                            Text(chrome.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                            if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
-                                Image(systemName: "timer")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityLabel(L10n.string("Disappearing messages on"))
-                            }
-                        }
-                        conversationHeaderSecondary(subtitle: chrome.subtitle)
-                    }
+        let chrome = conversationChrome
+        Button {
+            // The destination renders only once the model exists; a tap in
+            // the load window would push an empty page. Selection mode keeps
+            // the title visible but inert — the count lives in the action bar.
+            guard viewModel != nil, !isSelectingMessages else { return }
+            // Resign the composer before pushing so the keyboard animates
+            // down first instead of flashing mid-screen during the push.
+            dismissKeyboard()
+            showDetails = true
+        } label: {
+            HStack(spacing: 10) {
+                if let viewModel {
+                    let groupDisplay = viewModel.groupDisplay
+                    AvatarBubble(
+                        seed: GroupDisplay.avatarSeed(for: groupDisplay),
+                        title: chrome.title,
+                        pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+                    )
+                    .frame(width: 34, height: 34)
                 }
-                .contentShape(.rect)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 4) {
+                        Text(chrome.title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
+                            Image(systemName: "timer")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(L10n.string("Disappearing messages on"))
+                        }
+                    }
+                    conversationHeaderSecondary(subtitle: chrome.subtitle)
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(L10n.string("Shows conversation details"))
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityHint(isSelectingMessages ? "" : L10n.string("Shows conversation details"))
     }
 
     @ViewBuilder
@@ -1697,6 +1769,9 @@ struct ConversationView: View {
             },
             onViewEditHistory: viewModel.hasEditHistory(record.messageIdHex)
                 ? { editHistoryTarget = ActionsTarget(record: record, status: status) }
+                : nil,
+            onFailedTap: status == .failed
+                ? { failedSendTarget = FailedSendTarget(rowId: item.id) }
                 : nil
         )
         .replySwipeToReply(
@@ -1704,15 +1779,16 @@ struct ConversationView: View {
         ) {
             beginReply(to: record, viewModel: viewModel)
         }
+        .padding(.leading, isSelectingMessages ? 36 : 0)
         .overlay {
             if isSelectingMessages {
                 let selected = selectedMessageIds.contains(record.messageIdHex)
                 ZStack(alignment: .leading) {
-                    Color.accentColor.opacity(selected ? 0.10 : 0.001)
+                    Color.clear
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                        .padding(.leading, 10)
+                        .font(.title2)
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary.opacity(0.55))
+                        .padding(.leading, 8)
                 }
                 .contentShape(.rect)
                 .onTapGesture { toggleMessageSelection(record.messageIdHex) }
@@ -2775,8 +2851,9 @@ struct ConversationView: View {
         guard MessageSelectionPolicy.canDelete(
             selectedCount: records.count,
             allDeletable: records.allSatisfy {
-                $0.direction == "sent"
-                    && viewModel.canSendMessages
+                // Must stay in lockstep with the selection bar's gate — a
+                // divergence turns an enabled Delete into a silent no-op.
+                viewModel.deleteCapability(for: $0).canDeleteForEveryone
                     && !viewModel.isDeleted($0.messageIdHex)
             }
         ) else { return }

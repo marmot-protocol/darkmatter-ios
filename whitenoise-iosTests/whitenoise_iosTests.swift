@@ -2116,8 +2116,7 @@ struct RelativeTimeTests {
 
             let expectedFormatter = DateFormatter()
             expectedFormatter.locale = AppLanguage.currentLocale
-            expectedFormatter.timeStyle = .short
-            expectedFormatter.dateStyle = .none
+            expectedFormatter.setLocalizedDateFormatFromTemplate("hmm a")
 
             #expect(RelativeTime.shortTime(date) == expectedFormatter.string(from: date))
             #expect(RelativeTime.formatterCacheLocaleIdentifierForTesting == AppLanguage.currentLocale.identifier)
@@ -6022,6 +6021,115 @@ struct ConversationTimelineProjectionTests {
         #expect(messages.first?.0 == projected.messageIdHex)
         #expect(messages.first?.1 == .sent)
         #expect(messages.first?.2 == projected.timelineAt)
+    }
+
+    @Test func undeliveredOwnRowRendersFailedUntilDeliveredUpsert() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let undelivered = timelineRecord(
+            messageIdHex: hex("b7"),
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "stuck offline",
+            timelineAt: 20
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [undelivered], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        let rowId = "msg:\(undelivered.messageIdHex)"
+        func status() -> MessageStatus? {
+            viewModel.timeline.compactMap { item -> MessageStatus? in
+                guard item.id == rowId, case .message(_, let status) = item.kind else { return nil }
+                return status
+            }.first
+        }
+
+        // Committed but never delivered: renders failed, retries via
+        // convergence, and Delete is offered as a local hide.
+        #expect(status() == .failed)
+        #expect(viewModel.canRetryFailedSend(rowId: rowId))
+        #expect(viewModel.canDiscardFailedSend(rowId: rowId))
+
+        // Delivery upsert (same row, source id now present) flips it to sent.
+        let delivered = timelineRecord(
+            messageIdHex: undelivered.messageIdHex,
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: undelivered.plaintext,
+            timelineAt: 20
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [delivered], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(status() == .sent)
+        #expect(!viewModel.canRetryFailedSend(rowId: rowId))
+    }
+
+    @Test func failedSendRowSupportsRetryGatingAndDiscard() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let tempId = "retry-1"
+        let rowId = "msg:\(tempId)"
+        let text = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "retry me",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+        viewModel.applyPendingOutgoingMessage(tempId: tempId, record: text)
+        viewModel.markFailedForTesting(tempId: tempId)
+
+        // A failed text row is retryable and discardable.
+        #expect(viewModel.canRetryFailedSend(rowId: rowId))
+
+        // A failed media row (carrying the pending-media marker) is NOT
+        // retryable here — its compressed bytes aren't retained — but can
+        // still be discarded.
+        let mediaTempId = "retry-media"
+        let mediaRowId = "msg:\(mediaTempId)"
+        let media = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "",
+            kind: MessageSemantics.kindChat,
+            tags: [MessageTagFfi(values: ["_media_pending"])],
+            recordedAt: 11,
+            receivedAt: 11
+        )
+        viewModel.applyPendingOutgoingMessage(tempId: mediaTempId, record: media)
+        viewModel.markFailedForTesting(tempId: mediaTempId)
+        #expect(!viewModel.canRetryFailedSend(rowId: mediaRowId))
+
+        // Discard removes the failed row from the timeline.
+        viewModel.discardFailedSend(rowId: rowId)
+        let remaining = viewModel.timeline.compactMap { item -> String? in
+            guard case .message = item.kind else { return nil }
+            return item.id
+        }
+        #expect(!remaining.contains(rowId))
+        #expect(remaining.contains(mediaRowId))
     }
 
     @Test func projectedOutgoingMessageReplacesMatchingFailedPendingBubble() throws {
@@ -10525,6 +10633,10 @@ private func unsignedEventRecord(
 
 private func timelineRecord(
     messageIdHex: String,
+    // Delivered by default, mirroring the engine (received rows always carry
+    // a source id; own rows carry one once delivered). Pass `.some(nil)` to
+    // build a committed-but-undelivered own row.
+    sourceMessageIdHex: String?? = nil,
     direction: String = "received",
     groupIdHex: String = hex("aa"),
     sender: String = hex("11"),
@@ -10544,7 +10656,7 @@ private func timelineRecord(
 ) -> TimelineMessageRecordFfi {
     TimelineMessageRecordFfi(
         messageIdHex: messageIdHex,
-        sourceMessageIdHex: nil,
+        sourceMessageIdHex: sourceMessageIdHex ?? messageIdHex,
         direction: direction,
         groupIdHex: groupIdHex,
         sender: sender,

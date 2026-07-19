@@ -96,6 +96,12 @@ struct SettingsView: View {
                 }
 
                 NavigationLink {
+                    DataAndStorageView()
+                } label: {
+                    Label("Data and storage", systemImage: "arrow.up.arrow.down.circle.fill")
+                }
+
+                NavigationLink {
                     NotificationSettingsView()
                 } label: {
                     Label("Notifications", systemImage: "bell.badge.fill")
