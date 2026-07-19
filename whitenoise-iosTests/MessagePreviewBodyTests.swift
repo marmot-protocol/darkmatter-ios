@@ -98,6 +98,44 @@ struct MessagePreviewBodyTests {
         #expect(body == "updated @Alex")
     }
 
+    @Test func tokenlessEditedMediaCaptionRendersCanonicalMentionAsDisplayName() throws {
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let record = previewRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "updated @\(npub)",
+            tags: [encryptedMediaTag()]
+        )
+
+        guard case .media = MessageSemantics.classify(record) else {
+            Issue.record("Expected a media record")
+            return
+        }
+        let body = MessageBubble.bodyText(
+            for: record,
+            hasMediaItems: true,
+            mentionDisplayName: { entity in
+                entity.bech32 == npub ? "Alex" : nil
+            }
+        )
+        #expect(body == "updated @Alex")
+    }
+
+    @Test func mediaBubbleWithEmptyCaptionDoesNotRenderAttachmentFallback() {
+        let record = previewRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "",
+            tags: [encryptedMediaTag()]
+        )
+
+        guard case .media = MessageSemantics.classify(record) else {
+            Issue.record("Expected a media record")
+            return
+        }
+        #expect(MessageBubble.bodyText(for: record, hasMediaItems: true) == "")
+    }
+
     @Test func timelineReplyMediaFallbackCapsPeerControlledFileNames() {
         let imeta = (0..<(MessagePreview.timelineMediaPreviewMaxFileNames + 3)).map {
             [MessageSemantics.imetaTag, "filename file\($0).png"]
@@ -186,6 +224,19 @@ private func previewRecord(
         recordedAt: 1,
         receivedAt: 1
     )
+}
+
+private func encryptedMediaTag() -> MessageTagFfi {
+    MessageTagFfi(values: [
+        MessageSemantics.imetaTag,
+        "v \(MessageSemantics.encryptedMediaVersion)",
+        "locator blossom-v1 https://media.example/a.jpg",
+        "ciphertext_sha256 \(hex("44"))",
+        "plaintext_sha256 \(hex("33"))",
+        "nonce \(String(repeating: "22", count: 12))",
+        "m image/jpeg",
+        "filename a.jpg",
+    ])
 }
 
 private func hex(_ byte: String) -> String {

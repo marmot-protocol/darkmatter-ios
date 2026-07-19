@@ -131,8 +131,10 @@ struct MessageBubble: View {
         hasMediaItems: Bool,
         mentionDisplayName: MarkdownMentionResolver? = nil
     ) -> String {
-        if hasMediaItems {
-            return record.plaintext
+        if hasMediaItems, record.plaintext.isEmpty {
+            // The attachments render separately; do not replace an empty
+            // caption with MessagePreview's filename fallback inside the bubble.
+            return ""
         }
         return MessagePreview.body(record, mentionDisplayName: mentionDisplayName)
     }

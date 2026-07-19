@@ -316,6 +316,73 @@ struct ComposerMentionQueryTests {
         #expect(outgoing == "ping @Jeff ")
     }
 
+    @Test func selectedMentionSurvivesProfileRename() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [
+                mentionCandidate(name: "Jeffrey", npub: jeffNpub, hex: "111"),
+            ],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: jeffNpub
+            )]
+        )
+
+        #expect(outgoing == "ping @\(jeffNpub) ")
+    }
+
+    @Test func restoredSelectedMentionSurvivesUnresolvedRoster() throws {
+        let selectedNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: selectedNpub
+            )],
+            rosterResolution: .unresolved
+        )
+
+        #expect(outgoing == "ping @\(selectedNpub) ")
+    }
+
+    @Test func unresolvedRosterRejectsMalformedPersistedIdentity() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: "npub1invalid"
+            )],
+            rosterResolution: .unresolved
+        )
+
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func restoredSelectedMentionFailsClosedAgainstResolvedEmptyRoster() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: jeffNpub
+            )]
+        )
+
+        #expect(outgoing == "ping @Jeff ")
+    }
+
     @Test func canonicalizeDisplayNameMentionWithSpacesAndPunctuation() {
         let candidates = [
             mentionCandidate(name: "Jeff Smith", npub: jeffNpub, hex: "111")

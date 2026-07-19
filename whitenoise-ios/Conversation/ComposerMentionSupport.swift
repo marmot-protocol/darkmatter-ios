@@ -114,6 +114,11 @@ nonisolated struct ComposerMentionSelection: Equatable, Sendable {
     let npub: String
 }
 
+nonisolated enum ComposerMentionRosterResolution: Equatable, Sendable {
+    case unresolved
+    case resolved
+}
+
 nonisolated struct ComposerMentionDraftState: Equatable, Sendable {
     let draft: String
     let selectedMentions: [ComposerMentionSelection]
@@ -304,6 +309,7 @@ nonisolated enum ComposerMentionCanonicalizer {
         _ text: String,
         candidates: [ComposerMentionCandidate],
         selectedMentions: [ComposerMentionSelection] = [],
+        rosterResolution: ComposerMentionRosterResolution = .resolved,
         maxLength: Int? = nil
     ) -> String {
         guard text.contains("@") else {
@@ -332,7 +338,8 @@ nonisolated enum ComposerMentionCanonicalizer {
                     in: text,
                     at: index,
                     candidates: replacements,
-                    selectedMentions: selectedMentions
+                    selectedMentions: selectedMentions,
+                    rosterResolution: rosterResolution
                 ) {
                     token = "@\(match.npub)"
                     endIndex = match.endIndex
@@ -360,35 +367,85 @@ nonisolated enum ComposerMentionCanonicalizer {
         in text: String,
         at atIndex: String.Index,
         candidates: [ComposerMentionCandidate],
-        selectedMentions: [ComposerMentionSelection]
+        selectedMentions: [ComposerMentionSelection],
+        rosterResolution: ComposerMentionRosterResolution
     ) -> (npub: String, endIndex: String.Index)? {
+        switch selectedMention(
+            in: text,
+            at: atIndex,
+            candidates: candidates,
+            selectedMentions: selectedMentions,
+            rosterResolution: rosterResolution
+        ) {
+        case .resolved(let npub, let endIndex):
+            return (npub, endIndex)
+        case .rejected:
+            return nil
+        case .none:
+            break
+        }
+
         let nameStart = text.index(after: atIndex)
         for candidate in candidates {
             guard text[nameStart...].hasPrefix(candidate.displayName) else { continue }
             let nameEnd = text.index(nameStart, offsetBy: candidate.displayName.count)
             guard rightBoundaryAllowsMention(at: nameEnd, in: text) else { continue }
-            // The identity comes from what the user actually tapped, never
-            // from a text race: with several members sharing this display
-            // name, only an explicit selection resolves it — a peer cloning
-            // a name cannot capture an unselected mention, it just stays
-            // literal text.
             let sharingName = candidates.filter { $0.displayName == candidate.displayName }
             let distinctNpubs = Set(sharingName.map(\.npub))
-            let location = text[..<atIndex].utf16.count
-            let length = "@\(candidate.displayName)".utf16.count
-            if let selected = selectedMentions.first(where: {
-                $0.utf16Location == location
-                    && $0.utf16Length == length
-                    && $0.displayName == candidate.displayName
-            }) {
-                return distinctNpubs.contains(selected.npub) ? (selected.npub, nameEnd) : nil
-            }
             if distinctNpubs.count == 1 {
                 return (candidate.npub, nameEnd)
             }
             return nil
         }
         return nil
+    }
+
+    private enum SelectedMentionResolution {
+        case none
+        case resolved(npub: String, endIndex: String.Index)
+        case rejected
+    }
+
+    private static func selectedMention(
+        in text: String,
+        at atIndex: String.Index,
+        candidates: [ComposerMentionCandidate],
+        selectedMentions: [ComposerMentionSelection],
+        rosterResolution: ComposerMentionRosterResolution
+    ) -> SelectedMentionResolution {
+        let location = text[..<atIndex].utf16.count
+        guard let selected = selectedMentions.first(where: { $0.utf16Location == location }) else {
+            return .none
+        }
+
+        let rendered = "@\(selected.displayName)"
+        guard selected.utf16Length == rendered.utf16.count,
+              text[atIndex...].hasPrefix(rendered),
+              let endIndex = text.index(
+                  atIndex,
+                  offsetBy: rendered.count,
+                  limitedBy: text.endIndex
+              ),
+              rightBoundaryAllowsMention(at: endIndex, in: text)
+        else { return .none }
+
+        switch rosterResolution {
+        case .unresolved:
+            // This binding was persisted when the user picked a concrete
+            // member. Preserve that identity while the asynchronous roster
+            // snapshot is unavailable; free-typed names never enter here.
+            guard NostrProfileReference.pubkeyHex(fromBech32: selected.npub) != nil else {
+                return .rejected
+            }
+            return .resolved(npub: selected.npub, endIndex: endIndex)
+        case .resolved:
+            // Match by stable identity rather than the member's current
+            // display name so a profile rename cannot detach a saved draft.
+            guard candidates.contains(where: { $0.npub == selected.npub }) else {
+                return .rejected
+            }
+            return .resolved(npub: selected.npub, endIndex: endIndex)
+        }
     }
 
     fileprivate static func leftBoundaryAllowsMention(at atIndex: String.Index, in text: String) -> Bool {
@@ -538,7 +595,8 @@ final class ComposerMentionController {
         appState: AppState?,
         members: [AppGroupMemberRecordFfi],
         groupMemberDetails: [GroupMemberDetailsFfi],
-        rosterGeneration: UInt64
+        rosterGeneration: UInt64,
+        rosterResolution: ComposerMentionRosterResolution
     ) -> String? {
         synchronizeSelections(with: text)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -560,6 +618,7 @@ final class ComposerMentionController {
             trimmed,
             candidates: candidates,
             selectedMentions: normalizedSelections,
+            rosterResolution: rosterResolution,
             maxLength: ContentSanitizer.maxMessageLength
         )
     }

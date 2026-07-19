@@ -165,6 +165,7 @@ final class ConversationViewModel {
     private(set) var group: AppGroupRecordFfi
     private(set) var members: [AppGroupMemberRecordFfi] = []
     private(set) var groupMemberDetails: [GroupMemberDetailsFfi] = []
+    private(set) var mentionRosterResolution: ComposerMentionRosterResolution = .unresolved
     private(set) var groupMlsRefreshGeneration: UInt64 = 0
     private(set) var managementState: GroupManagementStateFfi?
     private(set) var isLoadingOlder = false
@@ -504,7 +505,8 @@ final class ConversationViewModel {
             appState: appState,
             members: members,
             groupMemberDetails: groupMemberDetails,
-            rosterGeneration: groupMlsRefreshGeneration
+            rosterGeneration: groupMlsRefreshGeneration,
+            rosterResolution: mentionRosterResolution
         )
     }
 
@@ -1084,6 +1086,7 @@ final class ConversationViewModel {
                 )
                 self.applyGroupMlsTrackedChanges {
                     self.members = next
+                    self.mentionRosterResolution = .resolved
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1820,6 +1823,7 @@ final class ConversationViewModel {
         groupMemberDetails = details.members
         managementState = state
         members = nextMembers
+        mentionRosterResolution = .resolved
         bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
         if adminsChanged || membersChanged {
             scheduleTimelineTailRefresh()
@@ -1878,6 +1882,7 @@ final class ConversationViewModel {
             }
             applyGroupMlsTrackedChanges {
                 members = next
+                mentionRosterResolution = .resolved
             }
         } catch {
             // Silent; the next subscription tick will retry.
