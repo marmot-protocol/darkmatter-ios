@@ -112,6 +112,86 @@ struct ComposerMentionQueryTests {
         #expect(outgoing == "ping @\(aliceNpub) ")
     }
 
+    @Test func editProjectionRendersNamesAndPreservesAmbiguousIdentities() throws {
+        let firstNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let secondNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "22", count: 32)
+        ))
+        let canonical = "ask @\(firstNpub) then @\(secondNpub)"
+        let projection = CanonicalMentionDisplayProjection.project(canonical) { npub in
+            [firstNpub, secondNpub].contains(npub) ? "Alex" : nil
+        }
+
+        #expect(projection.text == "ask @Alex then @Alex")
+        #expect(projection.selectedMentions.map(\.npub) == [firstNpub, secondNpub])
+        #expect(projection.selectedMentions.map(\.utf16Location) == [
+            "ask ".utf16.count,
+            "ask @Alex then ".utf16.count,
+        ])
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            projection.text,
+            candidates: [
+                mentionCandidate(name: "Alex", npub: firstNpub, hex: "111"),
+                mentionCandidate(name: "Alex", npub: secondNpub, hex: "222"),
+            ],
+            selectedMentions: projection.selectedMentions
+        )
+        #expect(outgoing == canonical)
+    }
+
+    @Test func editProjectionLeavesNonMentionsAndUnknownProfilesCanonical() throws {
+        let knownNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let unknownNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "22", count: 32)
+        ))
+        let overlongNpub = "npub1\(String(repeating: "q", count: 59))"
+        let text = "mail me@\(knownNpub), ping @\(unknownNpub), reject @\(overlongNpub)"
+        let projection = CanonicalMentionDisplayProjection.project(text) { npub in
+            npub == knownNpub ? "Alex" : nil
+        }
+
+        #expect(projection.text == text)
+        #expect(projection.selectedMentions.isEmpty)
+    }
+
+    @Test func boundedCanonicalizationNeverSplitsExpandedMention() {
+        let candidate = mentionCandidate(name: "Alex", npub: aliceNpub, hex: "111")
+        let prefix = String(repeating: "x", count: ContentSanitizer.maxMessageLength - 6)
+        let text = "\(prefix) @Alex"
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            text,
+            candidates: [candidate],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
+
+        #expect(outgoing == "\(prefix) ")
+        #expect(!outgoing.contains("@npub"))
+    }
+
+    @Test func boundedCanonicalizationKeepsMentionWholeWhenItFitsExactly() {
+        let candidate = mentionCandidate(name: "Alex", npub: aliceNpub, hex: "111")
+        let canonicalMention = "@\(aliceNpub)"
+        let prefix = String(
+            repeating: "x",
+            count: ContentSanitizer.maxMessageLength - canonicalMention.count - 1
+        )
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "\(prefix) @Alex",
+            candidates: [candidate],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
+
+        #expect(outgoing.count == ContentSanitizer.maxMessageLength)
+        #expect(outgoing.hasSuffix(canonicalMention))
+    }
+
     @Test func ambiguousSelectionsStayBoundToTheirOwnOccurrences() {
         let candidates = [
             mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
@@ -216,6 +296,90 @@ struct ComposerMentionQueryTests {
                 npub: "npub1notinroster"
             )]
         )
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func selectedMentionDoesNotRetargetToAReplacementNamesake() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [
+                mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            ],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: aliceNpub
+            )]
+        )
+
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func selectedMentionSurvivesProfileRename() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [
+                mentionCandidate(name: "Jeffrey", npub: jeffNpub, hex: "111"),
+            ],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: jeffNpub
+            )]
+        )
+
+        #expect(outgoing == "ping @\(jeffNpub) ")
+    }
+
+    @Test func restoredSelectedMentionSurvivesUnresolvedRoster() throws {
+        let selectedNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: selectedNpub
+            )],
+            rosterResolution: .unresolved
+        )
+
+        #expect(outgoing == "ping @\(selectedNpub) ")
+    }
+
+    @Test func unresolvedRosterRejectsMalformedPersistedIdentity() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: "npub1invalid"
+            )],
+            rosterResolution: .unresolved
+        )
+
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func restoredSelectedMentionFailsClosedAgainstResolvedEmptyRoster() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: jeffNpub
+            )]
+        )
+
         #expect(outgoing == "ping @Jeff ")
     }
 

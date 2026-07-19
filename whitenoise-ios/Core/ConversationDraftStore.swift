@@ -6,10 +6,50 @@ nonisolated struct ConversationDraftKey: Hashable, Codable, Sendable {
     let groupIdHex: String
 }
 
+nonisolated struct ConversationDraftMention: Codable, Equatable, Sendable {
+    let utf16Location: Int
+    let utf16Length: Int
+    let displayName: String
+    let npub: String
+}
+
+nonisolated struct ConversationDraftSnapshot: Equatable, Sendable {
+    let text: String
+    let mentions: [ConversationDraftMention]
+}
+
 nonisolated struct ConversationDraftEntry: Codable, Equatable, Sendable {
     let key: ConversationDraftKey
     let text: String
+    let mentions: [ConversationDraftMention]
     let updatedAt: UInt64
+
+    init(
+        key: ConversationDraftKey,
+        text: String,
+        mentions: [ConversationDraftMention] = [],
+        updatedAt: UInt64
+    ) {
+        self.key = key
+        self.text = text
+        self.mentions = mentions
+        self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case text
+        case mentions
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(ConversationDraftKey.self, forKey: .key)
+        text = try container.decode(String.self, forKey: .text)
+        mentions = try container.decodeIfPresent([ConversationDraftMention].self, forKey: .mentions) ?? []
+        updatedAt = try container.decode(UInt64.self, forKey: .updatedAt)
+    }
 }
 
 nonisolated enum ConversationDraftPreview {
@@ -75,6 +115,7 @@ private actor ConversationDraftFile {
 @Observable
 final class ConversationDraftStore {
     static let maximumDraftCount = 200
+    nonisolated static let maximumMentionsPerDraft = ContentSanitizer.maxMessageLength / 2
     static let saveDebounceNanoseconds: UInt64 = 250_000_000
 
     private var entries: [ConversationDraftKey: ConversationDraftEntry] = [:]
@@ -114,14 +155,30 @@ final class ConversationDraftStore {
         entries[ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)]?.text
     }
 
+    func snapshot(accountRef: String, groupIdHex: String) -> ConversationDraftSnapshot? {
+        guard let entry = entries[ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)]
+        else { return nil }
+        return ConversationDraftSnapshot(text: entry.text, mentions: entry.mentions)
+    }
+
     func setDraft(_ text: String, accountRef: String, groupIdHex: String) {
+        setDraft(
+            ConversationDraftSnapshot(text: text, mentions: []),
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        )
+    }
+
+    func setDraft(_ snapshot: ConversationDraftSnapshot, accountRef: String, groupIdHex: String) {
         let key = ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)
-        let nextText = Self.normalizedStoredText(text)
-        if let nextText {
-            guard entries[key]?.text != nextText else { return }
+        if let nextSnapshot = Self.normalizedStoredSnapshot(snapshot) {
+            guard entries[key]?.text != nextSnapshot.text
+                    || entries[key]?.mentions != nextSnapshot.mentions
+            else { return }
             entries[key] = ConversationDraftEntry(
                 key: key,
-                text: nextText,
+                text: nextSnapshot.text,
+                mentions: nextSnapshot.mentions,
                 updatedAt: UInt64(Date().timeIntervalSince1970)
             )
             pruneIfNeeded()
@@ -165,6 +222,34 @@ final class ConversationDraftStore {
         return capped
     }
 
+    nonisolated static func normalizedStoredSnapshot(
+        _ snapshot: ConversationDraftSnapshot
+    ) -> ConversationDraftSnapshot? {
+        guard let text = normalizedStoredText(snapshot.text) else { return nil }
+        let units = Array(text.utf16)
+        var previousEnd = 0
+        let mentions = snapshot.mentions
+            .sorted { lhs, rhs in lhs.utf16Location < rhs.utf16Location }
+            .prefix(maximumMentionsPerDraft)
+            .compactMap { mention -> ConversationDraftMention? in
+                let (end, overflow) = mention.utf16Location.addingReportingOverflow(mention.utf16Length)
+                guard mention.utf16Location >= previousEnd,
+                      !overflow,
+                      mention.utf16Length > 1,
+                      end <= units.count,
+                      ContentSanitizer.displayName(mention.displayName) == mention.displayName,
+                      mention.npub.utf8.count == 63,
+                      mention.npub.hasPrefix("npub1"),
+                      NostrProfileReference.pubkeyHex(fromBech32: mention.npub) != nil
+                else { return nil }
+                let token = String(decoding: units[mention.utf16Location..<end], as: UTF16.self)
+                guard token == "@\(mention.displayName)" else { return nil }
+                previousEnd = end
+                return mention
+            }
+        return ConversationDraftSnapshot(text: text, mentions: mentions)
+    }
+
     private func applyLoadedEntries(_ loaded: [ConversationDraftEntry]) {
         guard !didLoad else { return }
         loadTask = nil
@@ -175,6 +260,10 @@ final class ConversationDraftStore {
             entries[entry.key] = ConversationDraftEntry(
                 key: entry.key,
                 text: text,
+                mentions: Self.normalizedStoredSnapshot(ConversationDraftSnapshot(
+                    text: text,
+                    mentions: entry.mentions
+                ))?.mentions ?? [],
                 updatedAt: entry.updatedAt
             )
         }

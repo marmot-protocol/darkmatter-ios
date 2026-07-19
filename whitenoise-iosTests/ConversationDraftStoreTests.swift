@@ -24,6 +24,86 @@ struct ConversationDraftStoreTests {
         #expect(restored.draft(accountRef: "account-b", groupIdHex: "group-b") == nil)
     }
 
+    @Test func mentionIdentityPersistsWithItsDraftOccurrence() async throws {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let snapshot = ConversationDraftSnapshot(
+            text: "ask @Alex",
+            mentions: [
+                ConversationDraftMention(
+                    utf16Location: "ask ".utf16.count,
+                    utf16Length: "@Alex".utf16.count,
+                    displayName: "Alex",
+                    npub: npub
+                ),
+            ]
+        )
+
+        let first = ConversationDraftStore(fileURL: fixture.file)
+        await first.loadIfNeeded()
+        first.setDraft(snapshot, accountRef: "account", groupIdHex: "group")
+        await first.flush()
+
+        let restored = ConversationDraftStore(fileURL: fixture.file)
+        await restored.loadIfNeeded()
+        #expect(restored.snapshot(accountRef: "account", groupIdHex: "group") == snapshot)
+    }
+
+    @Test func legacyDraftDocumentWithoutMentionMetadataStillLoads() async throws {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try FileManager.default.createDirectory(at: fixture.root, withIntermediateDirectories: true)
+        let legacyDocument = """
+        {
+          "version": 1,
+          "entries": [
+            {
+              "key": { "accountRef": "account", "groupIdHex": "group" },
+              "text": "legacy draft",
+              "updatedAt": 1
+            }
+          ]
+        }
+        """
+        try #require(legacyDocument.data(using: .utf8)).write(to: fixture.file)
+
+        let store = ConversationDraftStore(fileURL: fixture.file)
+        await store.loadIfNeeded()
+
+        #expect(store.snapshot(accountRef: "account", groupIdHex: "group") == ConversationDraftSnapshot(
+            text: "legacy draft",
+            mentions: []
+        ))
+    }
+
+    @Test func invalidPersistedMentionRangesAreDiscardedWithoutLosingText() async {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let store = ConversationDraftStore(fileURL: fixture.file)
+        await store.loadIfNeeded()
+        let snapshot = ConversationDraftSnapshot(
+            text: "ask @Alex",
+            mentions: [
+                ConversationDraftMention(
+                    utf16Location: Int.max,
+                    utf16Length: Int.max,
+                    displayName: "Alex",
+                    npub: "invalid"
+                ),
+            ]
+        )
+
+        store.setDraft(snapshot, accountRef: "account", groupIdHex: "group")
+
+        #expect(store.snapshot(accountRef: "account", groupIdHex: "group") == ConversationDraftSnapshot(
+            text: snapshot.text,
+            mentions: []
+        ))
+    }
+
     @Test func blankDraftsAreRemovedAndStoredTextIsBoundedWithoutRewritingContent() async {
         let fixture = makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

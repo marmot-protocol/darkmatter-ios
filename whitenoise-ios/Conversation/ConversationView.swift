@@ -208,6 +208,7 @@ private struct ConversationRuntimeStartToken: Equatable {
 private struct ConversationDraftLoadToken: Equatable {
     let accountRef: String?
     let groupIdHex: String
+    let isViewModelReady: Bool
 }
 
 struct ConversationSendPayload {
@@ -223,9 +224,9 @@ enum ConversationSendPreparation {
         viewModel: ConversationViewModel?
     ) -> ConversationSendPayload? {
         guard let viewModel else { return nil }
-        let text = draft
+        let text = viewModel.consumeComposerText(draft) ?? ""
         let attachments = mediaDrafts
-        guard !attachments.isEmpty || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !attachments.isEmpty || !text.isEmpty else {
             return nil
         }
         draft = ""
@@ -657,6 +658,7 @@ struct ConversationView: View {
         let message: AppMessageRecordFfi
         let preservedDraft: String
         let preservedMediaDrafts: [MediaDraftAttachment]
+        let preservedMentionState: ComposerMentionDraftState
     }
 
     init(
@@ -966,7 +968,8 @@ struct ConversationView: View {
             }
             .task(id: ConversationDraftLoadToken(
                 accountRef: draftAccountRef,
-                groupIdHex: chat.groupIdHex
+                groupIdHex: chat.groupIdHex,
+                isViewModelReady: viewModel != nil
             )) {
                 await restorePersistedDraft()
             }
@@ -1002,7 +1005,11 @@ struct ConversationView: View {
                 viewModel?.search.end()
                 cancelPendingTimelineFollowUpWork()
                 dismissKeyboard()
-                persistDraft(editSession?.preservedDraft ?? draft)
+                if let editSession {
+                    persistDraft(editSession.preservedMentionState)
+                } else {
+                    persistDraft(draft)
+                }
                 onDraftChanged?()
                 exitMessageSelection()
                 Task { await appState.conversationDraftStore.flush() }
@@ -2245,23 +2252,26 @@ struct ConversationView: View {
         ) else { return }
         let preservedDraft = editSession?.preservedDraft ?? draft
         let preservedMediaDrafts = editSession?.preservedMediaDrafts ?? mediaDrafts
+        let preservedMentionState = editSession?.preservedMentionState
+            ?? viewModel.composerMentionDraftState(for: preservedDraft)
         viewModel.replyingTo = nil
         mediaDrafts.removeAll()
         cancelVoiceRecording()
         editSession = ComposerEditSession(
             message: message,
             preservedDraft: preservedDraft,
-            preservedMediaDrafts: preservedMediaDrafts
+            preservedMediaDrafts: preservedMediaDrafts,
+            preservedMentionState: preservedMentionState
         )
-        draft = message.plaintext
+        draft = viewModel.editingText(for: message)
         composerFocusRequest += 1
     }
 
     private var editSubmissionEnabled: Bool {
-        guard let editSession,
-              let normalized = MessageEditingPolicy.normalizedContent(draft)
+        guard let editSession, let viewModel,
+              let outgoing = viewModel.preparedComposerText(draft)
         else { return editSession == nil }
-        return normalized != editSession.message.plaintext
+        return outgoing != editSession.message.plaintext
     }
 
     private var batchDeleteInFlight: Bool {
@@ -2271,6 +2281,7 @@ struct ConversationView: View {
     private func cancelEdit() {
         guard let editSession else { return }
         self.editSession = nil
+        viewModel?.restoreComposerMentionDraftState(editSession.preservedMentionState)
         draft = editSession.preservedDraft
         mediaDrafts = editSession.preservedMediaDrafts
     }
@@ -2300,6 +2311,7 @@ struct ConversationView: View {
                 guard await viewModel.editMessage(editSession.message, content: editedContent) else { return }
                 guard self.editSession?.id == editSession.id else { return }
                 self.editSession = nil
+                viewModel.restoreComposerMentionDraftState(editSession.preservedMentionState)
                 draft = editSession.preservedDraft
                 mediaDrafts = editSession.preservedMediaDrafts
             }
@@ -2312,9 +2324,9 @@ struct ConversationView: View {
         ) else { return }
         Task {
             if payload.attachments.isEmpty {
-                await payload.viewModel.send(payload.text)
+                await payload.viewModel.sendPreparedComposerText(payload.text)
             } else {
-                await payload.viewModel.sendMedia(payload.attachments, caption: payload.text)
+                await payload.viewModel.sendPreparedMedia(payload.attachments, caption: payload.text)
             }
         }
     }
@@ -2337,20 +2349,33 @@ struct ConversationView: View {
     }
 
     private func restorePersistedDraft() async {
-        guard let draftAccountRef else { return }
+        guard let draftAccountRef, let viewModel else { return }
         let draftBeforeLoad = draft
         await appState.conversationDraftStore.loadIfNeeded()
         guard !Task.isCancelled, draft == draftBeforeLoad else { return }
-        draft = appState.conversationDraftStore.draft(
+        guard let snapshot = appState.conversationDraftStore.snapshot(
             accountRef: draftAccountRef,
             groupIdHex: chat.groupIdHex
-        ) ?? ""
+        ) else {
+            draft = ""
+            return
+        }
+        viewModel.restoreComposerMentionDraftState(ComposerMentionDraftState(snapshot: snapshot))
+        draft = snapshot.text
     }
 
     private func persistDraft(_ draft: String) {
+        guard let viewModel else {
+            persistDraft(ComposerMentionDraftState(draft: draft, selectedMentions: []))
+            return
+        }
+        persistDraft(viewModel.composerMentionDraftState(for: draft))
+    }
+
+    private func persistDraft(_ mentionState: ComposerMentionDraftState) {
         guard let draftAccountRef else { return }
         appState.conversationDraftStore.setDraft(
-            draft,
+            mentionState.snapshot,
             accountRef: draftAccountRef,
             groupIdHex: chat.groupIdHex
         )
@@ -2399,7 +2424,7 @@ struct ConversationView: View {
     private func sendSharedLocation(latitude: Double, longitude: Double) {
         guard let viewModel, viewModel.canSendMessages else { return }
         let text = SharedLocationText.value(latitude: latitude, longitude: longitude)
-        Task { await viewModel.send(text) }
+        Task { await viewModel.sendPreparedComposerText(ConversationViewModel.cappedOutgoingText(text)) }
     }
 
     private func addContactCard(_ contact: CNContact) {
@@ -2521,11 +2546,11 @@ struct ConversationView: View {
               !mediaApprovalDrafts.isEmpty
         else { return }
         let attachments = mediaApprovalDrafts
-        let caption = mediaApprovalCaption
+        let caption = viewModel.consumeComposerText(mediaApprovalCaption) ?? ""
         draft = ""
         dismissMediaApproval()
         Task {
-            await viewModel.sendMedia(attachments, caption: caption)
+            await viewModel.sendPreparedMedia(attachments, caption: caption)
         }
     }
 

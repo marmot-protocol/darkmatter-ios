@@ -721,6 +721,7 @@ private struct ChatDestination: View {
                 onGroupDeleted: onGroupDeleted,
                 onDraftChanged: { viewModel.refreshDisplayProjections() }
             )
+            .id(target.groupIdHex)
         } else if timedOut {
             // A slow network can take longer than the spin-wait to deliver the
             // chat-list row. Offer Retry instead of a dead end so the user can
