@@ -112,6 +112,53 @@ struct ComposerMentionQueryTests {
         #expect(outgoing == "ping @\(aliceNpub) ")
     }
 
+    @Test func editProjectionRendersNamesAndPreservesAmbiguousIdentities() throws {
+        let firstNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let secondNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "22", count: 32)
+        ))
+        let canonical = "ask @\(firstNpub) then @\(secondNpub)"
+        let projection = CanonicalMentionDisplayProjection.project(canonical) { npub in
+            [firstNpub, secondNpub].contains(npub) ? "Alex" : nil
+        }
+
+        #expect(projection.text == "ask @Alex then @Alex")
+        #expect(projection.selectedMentions.map(\.npub) == [firstNpub, secondNpub])
+        #expect(projection.selectedMentions.map(\.utf16Location) == [
+            "ask ".utf16.count,
+            "ask @Alex then ".utf16.count,
+        ])
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            projection.text,
+            candidates: [
+                mentionCandidate(name: "Alex", npub: firstNpub, hex: "111"),
+                mentionCandidate(name: "Alex", npub: secondNpub, hex: "222"),
+            ],
+            selectedMentions: projection.selectedMentions
+        )
+        #expect(outgoing == canonical)
+    }
+
+    @Test func editProjectionLeavesNonMentionsAndUnknownProfilesCanonical() throws {
+        let knownNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let unknownNpub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "22", count: 32)
+        ))
+        let overlongNpub = "npub1\(String(repeating: "q", count: 59))"
+        let text = "mail me@\(knownNpub), ping @\(unknownNpub), reject @\(overlongNpub)"
+        let projection = CanonicalMentionDisplayProjection.project(text) { npub in
+            npub == knownNpub ? "Alex" : nil
+        }
+
+        #expect(projection.text == text)
+        #expect(projection.selectedMentions.isEmpty)
+    }
+
     @Test func ambiguousSelectionsStayBoundToTheirOwnOccurrences() {
         let candidates = [
             mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),

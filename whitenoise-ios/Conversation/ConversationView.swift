@@ -657,6 +657,7 @@ struct ConversationView: View {
         let message: AppMessageRecordFfi
         let preservedDraft: String
         let preservedMediaDrafts: [MediaDraftAttachment]
+        let preservedMentionState: ComposerMentionDraftState
     }
 
     init(
@@ -2245,21 +2246,26 @@ struct ConversationView: View {
         ) else { return }
         let preservedDraft = editSession?.preservedDraft ?? draft
         let preservedMediaDrafts = editSession?.preservedMediaDrafts ?? mediaDrafts
+        let preservedMentionState = editSession?.preservedMentionState
+            ?? viewModel.composerMentionDraftState(for: preservedDraft)
         viewModel.replyingTo = nil
         mediaDrafts.removeAll()
         cancelVoiceRecording()
         editSession = ComposerEditSession(
             message: message,
             preservedDraft: preservedDraft,
-            preservedMediaDrafts: preservedMediaDrafts
+            preservedMediaDrafts: preservedMediaDrafts,
+            preservedMentionState: preservedMentionState
         )
-        draft = message.plaintext
+        draft = viewModel.editingText(for: message)
         composerFocusRequest += 1
     }
 
     private var editSubmissionEnabled: Bool {
-        guard let editSession,
-              let normalized = MessageEditingPolicy.normalizedContent(draft)
+        guard let editSession, let viewModel,
+              let normalized = MessageEditingPolicy.normalizedContent(
+                  viewModel.canonicalizedComposerText(draft)
+              )
         else { return editSession == nil }
         return normalized != editSession.message.plaintext
     }
@@ -2271,6 +2277,7 @@ struct ConversationView: View {
     private func cancelEdit() {
         guard let editSession else { return }
         self.editSession = nil
+        viewModel?.restoreComposerMentionDraftState(editSession.preservedMentionState)
         draft = editSession.preservedDraft
         mediaDrafts = editSession.preservedMediaDrafts
     }
@@ -2300,6 +2307,7 @@ struct ConversationView: View {
                 guard await viewModel.editMessage(editSession.message, content: editedContent) else { return }
                 guard self.editSession?.id == editSession.id else { return }
                 self.editSession = nil
+                viewModel.restoreComposerMentionDraftState(editSession.preservedMentionState)
                 draft = editSession.preservedDraft
                 mediaDrafts = editSession.preservedMediaDrafts
             }

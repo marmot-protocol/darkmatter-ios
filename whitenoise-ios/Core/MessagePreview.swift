@@ -116,14 +116,18 @@ enum MessagePreview {
     }
 
     /// Previews show markdown stripped of syntax when parsed tokens exist.
-    /// Records without tokens (non-chat kinds, pre-markdown history) keep
-    /// returning the exact plaintext so existing fallbacks are unchanged.
+    /// Tokenless records preserve plaintext except for known canonical mentions,
+    /// which still render with the profile name used by normal chat messages.
     private static func flattenedBody(
         plaintext: String,
         tokens: MarkdownDocumentFfi,
         mentionDisplayName: MarkdownMentionResolver?
     ) -> String {
-        guard !tokens.blocks.isEmpty else { return plaintext }
+        guard !tokens.blocks.isEmpty else {
+            return CanonicalMentionDisplayProjection.project(plaintext) { npub in
+                mentionDisplayName?(MarkdownNostrEntityFfi(hrp: .npub, bech32: npub))
+            }.text
+        }
         return MarkdownPlainText.flatten(tokens, mentionDisplayName: mentionDisplayName) ?? plaintext
     }
 

@@ -78,10 +78,17 @@ nonisolated enum EditHistoryPresentation {
         of record: AppMessageRecordFfi,
         mentionDisplayName: MarkdownMentionResolver?
     ) -> String {
-        let flattened = record.contentTokens.blocks.isEmpty
-            ? record.plaintext
-            : MarkdownPlainText.flatten(record.contentTokens, mentionDisplayName: mentionDisplayName)
-                ?? record.plaintext
+        let flattened: String
+        if record.contentTokens.blocks.isEmpty {
+            flattened = CanonicalMentionDisplayProjection.project(record.plaintext) { npub in
+                mentionDisplayName?(MarkdownNostrEntityFfi(hrp: .npub, bech32: npub))
+            }.text
+        } else {
+            flattened = MarkdownPlainText.flatten(
+                record.contentTokens,
+                mentionDisplayName: mentionDisplayName
+            ) ?? record.plaintext
+        }
         return ContentSanitizer.singleLine(flattened, maxLength: maxRowBodyLength) ?? ""
     }
 }

@@ -80,6 +80,24 @@ struct MessagePreviewBodyTests {
         #expect(MessagePreview.body(record) == "hello world")
     }
 
+    @Test func tokenlessEditedBodyRendersCanonicalMentionAsDisplayName() throws {
+        // MDK emits empty markdown tokens for kind-1009 edits. Once projected
+        // onto the original chat row, the body must still render the mention.
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let record = previewRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "updated @\(npub)",
+            tags: []
+        )
+
+        let body = MessagePreview.body(record) { entity in
+            entity.bech32 == npub ? "Alex" : nil
+        }
+        #expect(body == "updated @Alex")
+    }
+
     @Test func timelineReplyMediaFallbackCapsPeerControlledFileNames() {
         let imeta = (0..<(MessagePreview.timelineMediaPreviewMaxFileNames + 3)).map {
             [MessageSemantics.imetaTag, "filename file\($0).png"]

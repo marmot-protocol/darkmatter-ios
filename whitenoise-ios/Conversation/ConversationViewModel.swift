@@ -480,6 +480,34 @@ final class ConversationViewModel {
         timelineStore.displayBody(of: record)
     }
 
+    func composerMentionDraftState(for draft: String) -> ComposerMentionDraftState {
+        mentionController.captureDraftState(for: draft)
+    }
+
+    func restoreComposerMentionDraftState(_ state: ComposerMentionDraftState) {
+        mentionController.restoreDraftState(state)
+    }
+
+    func editingText(for message: AppMessageRecordFfi) -> String {
+        mentionController.prepareEditingText(
+            message.plaintext,
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: groupMlsRefreshGeneration
+        )
+    }
+
+    func canonicalizedComposerText(_ text: String) -> String {
+        mentionController.canonicalizeMentions(
+            in: text,
+            appState: appState,
+            members: members,
+            groupMemberDetails: groupMemberDetails,
+            rosterGeneration: groupMlsRefreshGeneration
+        )
+    }
+
     func isDeleted(_ messageIdHex: String) -> Bool {
         timelineStore.isDeleted(messageIdHex)
     }
@@ -2026,7 +2054,7 @@ final class ConversationViewModel {
               let accountRef = appState.activeAccountRef
         else { return false }
 
-        let outgoing = Self.cappedOutgoingText(canonicalizedMentionText(normalized))
+        let outgoing = Self.cappedOutgoingText(canonicalizedComposerText(normalized))
         guard outgoing != message.plaintext else { return true }
 
         let contentTokens = await appState.parseMarkdown(text: outgoing)
@@ -2043,6 +2071,7 @@ final class ConversationViewModel {
                 targetMessageId: message.messageIdHex,
                 content: outgoing
             )
+            mentionController.clearSelections()
             Haptics.tap()
             return true
         } catch {
@@ -2054,13 +2083,7 @@ final class ConversationViewModel {
     }
 
     private func canonicalizedMentionText(_ text: String) -> String {
-        let canonical = mentionController.canonicalizeMentions(
-            in: text,
-            appState: appState,
-            members: members,
-            groupMemberDetails: groupMemberDetails,
-            rosterGeneration: groupMlsRefreshGeneration
-        )
+        let canonical = canonicalizedComposerText(text)
         // Selections are draft-scoped; a stale map must not resolve a future
         // draft's ambiguous name to an identity tapped for an older message.
         mentionController.clearSelections()

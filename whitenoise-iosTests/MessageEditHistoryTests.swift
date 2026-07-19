@@ -80,6 +80,22 @@ struct EditHistoryPresentationTests {
         #expect(rows.map(\.body) == ["line one line two", "bold it"])
     }
 
+    @Test func tokenlessEditHistoryRendersCanonicalMentionAsDisplayName() throws {
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let original = record(id: hex("30"), text: "original", at: 100)
+        let edit = record(id: hex("31"), text: "updated @\(npub)", at: 200)
+
+        let rows = EditHistoryPresentation.rows(
+            original: original,
+            edits: [edit],
+            mentionDisplayName: { entity in entity.bech32 == npub ? "Alex" : nil }
+        )
+
+        #expect(rows.first?.body == "updated @Alex")
+    }
+
     @Test func gatingRequiresAtLeastOneEditAndUndeletedMessage() {
         #expect(!EditHistoryPresentation.shouldOffer(editCount: 0, isDeleted: false))
         #expect(EditHistoryPresentation.shouldOffer(editCount: 1, isDeleted: false))
