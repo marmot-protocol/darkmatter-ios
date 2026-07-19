@@ -242,16 +242,16 @@ final class MediaAutoDownloadStore {
 /// both major reference messengers exempt them from the matrix. Other audio
 /// attachments honor the audio row.
 nonisolated enum AudioAutoDownloadPolicy {
-    /// The media reference carries no duration, waveform, or byte size on
-    /// the wire today (engine follow-up), and audio attachments in this
-    /// product are voice notes — so received audio classifies as voice. A
-    /// locally-known duration above the sanity bound falls back to the audio
-    /// matrix instead of the always-download bypass.
+    /// The wire carries no trustworthy voice marker yet, so the
+    /// always-download bypass requires a locally-known, plausible duration —
+    /// unknown audio honors the matrix (an explicit Never must win over an
+    /// unverifiable guess). Becomes exact for received notes once the media
+    /// reference carries bounded metadata (engine follow-up).
     static let maxVoiceMessageSeconds: Double = 600
 
     static func isVoiceMessage(durationSeconds: Double?) -> Bool {
-        guard let durationSeconds else { return true }
-        return durationSeconds <= maxVoiceMessageSeconds
+        guard let durationSeconds, durationSeconds.isFinite else { return false }
+        return durationSeconds > 0 && durationSeconds <= maxVoiceMessageSeconds
     }
 
     static func shouldPrefetch(isVoiceMessage: Bool, matrixAllows: Bool) -> Bool {

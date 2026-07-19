@@ -54,12 +54,14 @@ struct MediaAutoDownloadMatrixTests {
         #expect(legacy?.level(for: .document) == .never)
     }
 
-    @Test func voiceMessagesBypassTheMatrix() {
-        // No duration on the wire = received voice note; an absurd claimed
-        // duration falls back to the matrix.
+    @Test func voiceBypassRequiresAPlausibleKnownDuration() {
+        // Unknown or implausible metadata honors the matrix — an explicit
+        // Never must win over an unverifiable voice guess.
         #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 12.5))
-        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil))
+        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil))
+        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 0))
         #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 3_600))
+        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: .infinity))
         #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: true, matrixAllows: false))
         #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: true))
         #expect(!AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: false))

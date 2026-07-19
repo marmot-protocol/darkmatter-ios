@@ -1837,13 +1837,17 @@ private struct MessageVideoAttachmentView: View {
             Task { await loadAndPlay(scale: displayScale) }
         }
         .task(id: item.id) {
-            // Auto-download per the Videos matrix row: fetch and cache the
-            // payload so the first play is instant; playback stays tap-driven.
-            guard player == nil, !isLoading,
+            // Auto-download per the Videos matrix row: fetch, cache, and
+            // render the poster so the bubble shows the download happened;
+            // playback stays tap-driven.
+            guard player == nil, previewThumbnail == nil, !isLoading,
                   MediaAutoDownloadStore.shared.shouldAutoDownload(.video),
                   MediaPrefetchRegistry.claim(item.id)
             else { return }
-            if (try? await onLoadMedia.data(for: item)) == nil {
+            do {
+                let url = try await playbackFileURL()
+                await loadPreviewThumbnail(from: url, scale: displayScale)
+            } catch {
                 MediaPrefetchRegistry.release(item.id)
             }
         }

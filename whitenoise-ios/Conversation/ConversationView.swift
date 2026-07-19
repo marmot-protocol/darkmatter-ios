@@ -2851,8 +2851,9 @@ struct ConversationView: View {
         guard MessageSelectionPolicy.canDelete(
             selectedCount: records.count,
             allDeletable: records.allSatisfy {
-                $0.direction == "sent"
-                    && viewModel.canSendMessages
+                // Must stay in lockstep with the selection bar's gate — a
+                // divergence turns an enabled Delete into a silent no-op.
+                viewModel.deleteCapability(for: $0).canDeleteForEveryone
                     && !viewModel.isDeleted($0.messageIdHex)
             }
         ) else { return }
