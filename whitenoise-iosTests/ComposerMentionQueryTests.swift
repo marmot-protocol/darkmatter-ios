@@ -159,6 +159,39 @@ struct ComposerMentionQueryTests {
         #expect(projection.selectedMentions.isEmpty)
     }
 
+    @Test func boundedCanonicalizationNeverSplitsExpandedMention() {
+        let candidate = mentionCandidate(name: "Alex", npub: aliceNpub, hex: "111")
+        let prefix = String(repeating: "x", count: ContentSanitizer.maxMessageLength - 6)
+        let text = "\(prefix) @Alex"
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            text,
+            candidates: [candidate],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
+
+        #expect(outgoing == "\(prefix) ")
+        #expect(!outgoing.contains("@npub"))
+    }
+
+    @Test func boundedCanonicalizationKeepsMentionWholeWhenItFitsExactly() {
+        let candidate = mentionCandidate(name: "Alex", npub: aliceNpub, hex: "111")
+        let canonicalMention = "@\(aliceNpub)"
+        let prefix = String(
+            repeating: "x",
+            count: ContentSanitizer.maxMessageLength - canonicalMention.count - 1
+        )
+
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "\(prefix) @Alex",
+            candidates: [candidate],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
+
+        #expect(outgoing.count == ContentSanitizer.maxMessageLength)
+        #expect(outgoing.hasSuffix(canonicalMention))
+    }
+
     @Test func ambiguousSelectionsStayBoundToTheirOwnOccurrences() {
         let candidates = [
             mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
@@ -263,6 +296,23 @@ struct ComposerMentionQueryTests {
                 npub: "npub1notinroster"
             )]
         )
+        #expect(outgoing == "ping @Jeff ")
+    }
+
+    @Test func selectedMentionDoesNotRetargetToAReplacementNamesake() {
+        let outgoing = ComposerMentionCanonicalizer.canonicalize(
+            "ping @Jeff ",
+            candidates: [
+                mentionCandidate(name: "Jeff", npub: jeffNpub, hex: "111"),
+            ],
+            selectedMentions: [ComposerMentionSelection(
+                utf16Location: "ping ".utf16.count,
+                utf16Length: "@Jeff".utf16.count,
+                displayName: "Jeff",
+                npub: aliceNpub
+            )]
+        )
+
         #expect(outgoing == "ping @Jeff ")
     }
 

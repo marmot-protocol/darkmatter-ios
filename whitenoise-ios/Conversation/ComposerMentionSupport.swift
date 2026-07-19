@@ -117,6 +117,37 @@ nonisolated struct ComposerMentionSelection: Equatable, Sendable {
 nonisolated struct ComposerMentionDraftState: Equatable, Sendable {
     let draft: String
     let selectedMentions: [ComposerMentionSelection]
+
+    init(draft: String, selectedMentions: [ComposerMentionSelection]) {
+        self.draft = draft
+        self.selectedMentions = selectedMentions
+    }
+
+    init(snapshot: ConversationDraftSnapshot) {
+        draft = snapshot.text
+        selectedMentions = snapshot.mentions.map {
+            ComposerMentionSelection(
+                utf16Location: $0.utf16Location,
+                utf16Length: $0.utf16Length,
+                displayName: $0.displayName,
+                npub: $0.npub
+            )
+        }
+    }
+
+    var snapshot: ConversationDraftSnapshot {
+        ConversationDraftSnapshot(
+            text: draft,
+            mentions: selectedMentions.map {
+                ConversationDraftMention(
+                    utf16Location: $0.utf16Location,
+                    utf16Length: $0.utf16Length,
+                    displayName: $0.displayName,
+                    npub: $0.npub
+                )
+            }
+        )
+    }
 }
 
 /// Converts canonical `@npub...` references back to display-name mentions
@@ -162,7 +193,7 @@ nonisolated struct CanonicalMentionDisplayProjection: Equatable, Sendable {
         return CanonicalMentionDisplayProjection(text: projected, selectedMentions: selections)
     }
 
-    private static func canonicalNpub(
+    fileprivate static func canonicalNpub(
         in text: String,
         at atIndex: String.Index
     ) -> (npub: String, endIndex: String.Index)? {
@@ -272,9 +303,12 @@ nonisolated enum ComposerMentionCanonicalizer {
     static func canonicalize(
         _ text: String,
         candidates: [ComposerMentionCandidate],
-        selectedMentions: [ComposerMentionSelection] = []
+        selectedMentions: [ComposerMentionSelection] = [],
+        maxLength: Int? = nil
     ) -> String {
-        guard text.contains("@") else { return text }
+        guard text.contains("@") else {
+            return maxLength.map { String(text.prefix($0)) } ?? text
+        }
         let replacements = candidates
             .filter { candidate in
                 !candidate.npub.isEmpty
@@ -283,24 +317,40 @@ nonisolated enum ComposerMentionCanonicalizer {
             .sorted { lhs, rhs in
                 lhs.displayName.count > rhs.displayName.count
             }
-        guard !replacements.isEmpty else { return text }
 
         var canonical = ""
+        var canonicalLength = 0
         var index = text.startIndex
         while index < text.endIndex {
-            if text[index] == "@",
-               leftBoundaryAllowsMention(at: index, in: text),
-               let match = matchCandidate(
-                   in: text,
-                   at: index,
-                   candidates: replacements,
-                   selectedMentions: selectedMentions
-               ) {
-                canonical += "@\(match.npub)"
-                index = match.endIndex
-                continue
+            if text[index] == "@", leftBoundaryAllowsMention(at: index, in: text) {
+                let token: String
+                let endIndex: String.Index
+                if let match = CanonicalMentionDisplayProjection.canonicalNpub(in: text, at: index) {
+                    token = "@\(match.npub)"
+                    endIndex = match.endIndex
+                } else if let match = matchCandidate(
+                    in: text,
+                    at: index,
+                    candidates: replacements,
+                    selectedMentions: selectedMentions
+                ) {
+                    token = "@\(match.npub)"
+                    endIndex = match.endIndex
+                } else {
+                    token = ""
+                    endIndex = index
+                }
+                if !token.isEmpty {
+                    guard maxLength.map({ canonicalLength + token.count <= $0 }) ?? true else { break }
+                    canonical += token
+                    canonicalLength += token.count
+                    index = endIndex
+                    continue
+                }
             }
+            guard maxLength.map({ canonicalLength < $0 }) ?? true else { break }
             canonical.append(text[index])
+            canonicalLength += 1
             index = text.index(after: index)
         }
         return canonical
@@ -324,18 +374,17 @@ nonisolated enum ComposerMentionCanonicalizer {
             // literal text.
             let sharingName = candidates.filter { $0.displayName == candidate.displayName }
             let distinctNpubs = Set(sharingName.map(\.npub))
-            if distinctNpubs.count == 1 {
-                return (candidate.npub, nameEnd)
-            }
             let location = text[..<atIndex].utf16.count
             let length = "@\(candidate.displayName)".utf16.count
             if let selected = selectedMentions.first(where: {
                 $0.utf16Location == location
                     && $0.utf16Length == length
                     && $0.displayName == candidate.displayName
-                    && distinctNpubs.contains($0.npub)
             }) {
-                return (selected.npub, nameEnd)
+                return distinctNpubs.contains(selected.npub) ? (selected.npub, nameEnd) : nil
+            }
+            if distinctNpubs.count == 1 {
+                return (candidate.npub, nameEnd)
             }
             return nil
         }
@@ -484,24 +533,34 @@ final class ComposerMentionController {
         return projection.text
     }
 
-    func canonicalizeMentions(
-        in text: String,
+    func outgoingText(
+        for text: String,
         appState: AppState?,
         members: [AppGroupMemberRecordFfi],
         groupMemberDetails: [GroupMemberDetailsFfi],
         rosterGeneration: UInt64
-    ) -> String {
+    ) -> String? {
         synchronizeSelections(with: text)
-        guard let appState else { return text }
-        return ComposerMentionCanonicalizer.canonicalize(
-            text,
-            candidates: allCandidates(
-                appState: appState,
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let normalizedSelections = ComposerMentionSelectionTracker.reconcile(
+            selectedMentions,
+            from: text,
+            to: trimmed
+        )
+        let candidates = appState.map {
+            allCandidates(
+                appState: $0,
                 members: members,
                 groupMemberDetails: groupMemberDetails,
                 rosterGeneration: rosterGeneration
-            ),
-            selectedMentions: selectedMentions
+            )
+        } ?? []
+        return ComposerMentionCanonicalizer.canonicalize(
+            trimmed,
+            candidates: candidates,
+            selectedMentions: normalizedSelections,
+            maxLength: ContentSanitizer.maxMessageLength
         )
     }
 

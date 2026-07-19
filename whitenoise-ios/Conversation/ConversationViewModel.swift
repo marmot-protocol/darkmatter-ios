@@ -498,14 +498,20 @@ final class ConversationViewModel {
         )
     }
 
-    func canonicalizedComposerText(_ text: String) -> String {
-        mentionController.canonicalizeMentions(
-            in: text,
+    func preparedComposerText(_ text: String) -> String? {
+        mentionController.outgoingText(
+            for: text,
             appState: appState,
             members: members,
             groupMemberDetails: groupMemberDetails,
             rosterGeneration: groupMlsRefreshGeneration
         )
+    }
+
+    func consumeComposerText(_ text: String) -> String? {
+        let outgoing = preparedComposerText(text)
+        mentionController.clearSelections()
+        return outgoing
     }
 
     func isDeleted(_ messageIdHex: String) -> Bool {
@@ -1970,12 +1976,12 @@ final class ConversationViewModel {
         }
     }
 
-    func send(_ text: String) async {
-        await composer.send(canonicalizedMentionText(text))
+    func sendPreparedComposerText(_ text: String) async {
+        await composer.send(text)
     }
 
-    func sendMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
-        await composer.sendMedia(attachments, caption: canonicalizedMentionText(caption))
+    func sendPreparedMedia(_ attachments: [MediaDraftAttachment], caption: String) async {
+        await composer.sendMedia(attachments, caption: caption)
     }
 
     func forwardDestinations() async throws -> [MessageForwardDestination] {
@@ -2044,17 +2050,16 @@ final class ConversationViewModel {
     }
 
     func editMessage(_ message: AppMessageRecordFfi, content: String) async -> Bool {
-        guard let normalized = MessageEditingPolicy.normalizedContent(content),
-              MessageEditingPolicy.canEdit(
+        guard MessageEditingPolicy.canEdit(
                 message,
                 isDeleted: isDeleted(message.messageIdHex),
                 canSendMessages: canSendMessages
               ),
+              let outgoing = preparedComposerText(content),
               let appState,
               let accountRef = appState.activeAccountRef
         else { return false }
 
-        let outgoing = Self.cappedOutgoingText(canonicalizedComposerText(normalized))
         guard outgoing != message.plaintext else { return true }
 
         let contentTokens = await appState.parseMarkdown(text: outgoing)
@@ -2071,7 +2076,6 @@ final class ConversationViewModel {
                 targetMessageId: message.messageIdHex,
                 content: outgoing
             )
-            mentionController.clearSelections()
             Haptics.tap()
             return true
         } catch {
@@ -2080,14 +2084,6 @@ final class ConversationViewModel {
             appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
             return false
         }
-    }
-
-    private func canonicalizedMentionText(_ text: String) -> String {
-        let canonical = canonicalizedComposerText(text)
-        // Selections are draft-scoped; a stale map must not resolve a future
-        // draft's ambiguous name to an identity tapped for an older message.
-        mentionController.clearSelections()
-        return canonical
     }
 
 #if DEBUG
@@ -2175,7 +2171,11 @@ final class ConversationViewModel {
 
     /// Clamp outbound message text to the protocol's max length (#54).
     nonisolated static func cappedOutgoingText(_ text: String) -> String {
-        String(text.prefix(ContentSanitizer.maxMessageLength))
+        ComposerMentionCanonicalizer.canonicalize(
+            text,
+            candidates: [],
+            maxLength: ContentSanitizer.maxMessageLength
+        )
     }
 
     func toggleReaction(_ emoji: String, on message: AppMessageRecordFfi) async {

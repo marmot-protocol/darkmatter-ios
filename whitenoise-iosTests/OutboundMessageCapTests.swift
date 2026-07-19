@@ -15,4 +15,15 @@ struct OutboundMessageCapTests {
         let exact = String(repeating: "y", count: ContentSanitizer.maxMessageLength)
         #expect(ConversationViewModel.cappedOutgoingText(exact) == exact)
     }
+
+    @Test func dropsWholeCanonicalMentionInsteadOfEmittingPartialNpub() throws {
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: String(repeating: "11", count: 32)
+        ))
+        let prefix = String(repeating: "x", count: ContentSanitizer.maxMessageLength - 6)
+
+        let outgoing = ConversationViewModel.cappedOutgoingText("\(prefix) @\(npub)")
+
+        #expect(outgoing == "\(prefix) ")
+    }
 }
