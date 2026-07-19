@@ -60,7 +60,7 @@ struct DataAndStorageView: View {
             } header: {
                 Text("Media auto-download")
             } footer: {
-                Text("Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead.")
+                Text("Media that isn't downloaded automatically shows a download button instead.")
             }
         }
         .navigationTitle("Data and storage")

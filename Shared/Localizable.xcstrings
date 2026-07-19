@@ -1936,71 +1936,6 @@
           }
         }
       },
-      "Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead.": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Sprachnachrichten werden immer automatisch heruntergeladen. Medien, die nicht automatisch heruntergeladen werden, zeigen stattdessen eine Download-Schaltfläche."
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead."
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Los mensajes de voz siempre se descargan automáticamente. El contenido multimedia que no se descarga automáticamente muestra un botón de descarga."
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Les messages vocaux sont toujours téléchargés automatiquement. Les médias non téléchargés automatiquement affichent un bouton de téléchargement."
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "I messaggi vocali vengono sempre scaricati automaticamente. I media non scaricati automaticamente mostrano un pulsante di download."
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "As mensagens de voz são sempre baixadas automaticamente. Mídias que não são baixadas automaticamente mostram um botão de download."
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Голосовые сообщения всегда загружаются автоматически. Медиафайлы, которые не загружаются автоматически, отображают кнопку загрузки."
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Sesli mesajlar her zaman otomatik olarak indirilir. Otomatik indirilmeyen medya bunun yerine bir indirme düğmesi gösterir."
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "语音消息始终自动下载。未自动下载的媒体会显示下载按钮。"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "語音訊息一律會自動下載。未自動下載的媒體會顯示下載按鈕。"
-            }
-          }
-        }
-      },
       "Not delivered. Tap for options.": {
         "extractionState": "manual",
         "localizations": {
@@ -2322,6 +2257,71 @@
             "stringUnit": {
               "state": "translated",
               "value": "從此裝置移除？"
+            }
+          }
+        }
+      },
+      "Media that isn't downloaded automatically shows a download button instead.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Medien, die nicht automatisch heruntergeladen werden, zeigen stattdessen eine Download-Schaltfläche."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Media that isn't downloaded automatically shows a download button instead."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "El contenido multimedia que no se descarga automáticamente muestra un botón de descarga."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Les médias non téléchargés automatiquement affichent un bouton de téléchargement."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "I media non scaricati automaticamente mostrano un pulsante di download."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Mídias que não são baixadas automaticamente mostram um botão de download."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Медиафайлы, которые не загружаются автоматически, отображают кнопку загрузки."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Otomatik indirilmeyen medya bunun yerine bir indirme düğmesi gösterir."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "未自动下载的媒体会显示下载按钮。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "未自動下載的媒體會顯示下載按鈕。"
             }
           }
         }
