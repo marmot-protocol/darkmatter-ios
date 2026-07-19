@@ -75,6 +75,10 @@ struct whitenoise_iosApp: App {
                 .environment(appState.navigation)
                 .appAppearance()
                 .task {
+                    // The path monitor lives in this lazy singleton; touch it
+                    // at launch so connectivity-restored events fire even in
+                    // sessions that never read a media setting.
+                    _ = MediaAutoDownloadStore.shared
                     appState.setAppSceneActive(scenePhase == .active)
                     appLockOverlay.update(for: appState.appLock.shield, controller: appState.appLock)
                     syncCaptureProtection()

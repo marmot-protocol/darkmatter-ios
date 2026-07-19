@@ -1382,7 +1382,7 @@ struct ConversationView: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityHint(L10n.string("Shows conversation details"))
+        .accessibilityHint(isSelectingMessages ? "" : L10n.string("Shows conversation details"))
     }
 
     @ViewBuilder

@@ -10,6 +10,7 @@ struct ChatsListView: View {
     @State private var searchText = ""
     @State private var scope: ChatScope = .active
     @State private var selectedChatIds = Set<String>()
+    @State private var showBulkDeleteConfirmation = false
     @FocusState private var searchFocused: Bool
 
     enum ChatScope: CaseIterable, Hashable {
@@ -303,33 +304,38 @@ struct ChatsListView: View {
             let rows = currentRows(viewModel)
             List {
                 ForEach(rows) { item in
-                    // A plain button keeps the trailing slot available for the
-                    // message timestamp (no disclosure chevron). Its tap target
-                    // is only the label's opaque content, so the explicit
+                    // A plain row (not a Button) keeps tap and long-press
+                    // mutually exclusive — a Button's action would also fire
+                    // on the release of the long press that just entered
+                    // selection mode, instantly clearing it. The explicit
                     // content shape is required: without it the transparent
                     // Spacer gap between a short title/preview and the
                     // timestamp swallows taps.
-                    Button {
+                    HStack(spacing: 12) {
+                        if selectionMode {
+                            Image(systemName: selectedChatIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedChatIds.contains(item.id) ? Color.accentColor : .secondary)
+                                .imageScale(.large)
+                                .accessibilityLabel(
+                                    selectedChatIds.contains(item.id)
+                                        ? L10n.string("Deselect chat")
+                                        : L10n.string("Select chat")
+                                )
+                        }
+                        ChatRow(item: item)
+                    }
+                    .contentShape(.rect)
+                    .onTapGesture {
                         if selectionMode {
                             selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
                         } else {
                             navigate(to: item)
                         }
-                    } label: {
-                        HStack(spacing: 12) {
-                            if selectionMode {
-                                Image(systemName: selectedChatIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selectedChatIds.contains(item.id) ? Color.accentColor : .secondary)
-                                    .imageScale(.large)
-                            }
-                            ChatRow(item: item)
-                        }
-                        .contentShape(.rect)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(LongPressGesture().onEnded { _ in
+                    .onLongPressGesture {
                         if !selectionMode { selectedChatIds = [item.id] }
-                    })
+                    }
+                    .accessibilityAddTraits(.isButton)
                     .swipeActions(edge: .leading) {
                         if !selectionMode { leadingSwipeActions(for: item) }
                     }
@@ -423,9 +429,32 @@ struct ChatsListView: View {
                     selectedChatIds = []
                 }
 
-                selectionAction("Delete", systemImage: "trash", role: .destructive) {
-                    for id in items.map(\.id) { await deleteLocal(groupIdHex: id) }
-                    selectedChatIds = []
+                // Local delete is only legitimate for inactive memberships —
+                // active chats go through the explicit per-row leave flow —
+                // so the bulk action greys out unless every selected row
+                // qualifies, mirroring the single-row swipe policy.
+                selectionAction(
+                    "Delete",
+                    systemImage: "trash",
+                    role: .destructive,
+                    isEnabled: items.allSatisfy {
+                        !GroupManagementPresentation.isActiveChatListMember($0.selfMembership)
+                    }
+                ) {
+                    showBulkDeleteConfirmation = true
+                }
+                .confirmationDialog(
+                    "Remove from this device?",
+                    isPresented: $showBulkDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive) {
+                        Task {
+                            for id in items.map(\.id) { await deleteLocal(groupIdHex: id) }
+                            selectedChatIds = []
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
                 }
             }
         }
@@ -439,6 +468,7 @@ struct ChatsListView: View {
         _ title: LocalizedStringKey,
         systemImage: String,
         role: ButtonRole? = nil,
+        isEnabled: Bool = true,
         perform: @escaping () async -> Void
     ) -> some View {
         Button(role: role) {
@@ -450,7 +480,7 @@ struct ChatsListView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .disabled(selectedChatIds.isEmpty)
+        .disabled(selectedChatIds.isEmpty || !isEnabled)
     }
 
     private func currentRows(_ viewModel: ChatsListViewModel) -> [ChatsListViewModel.Item] {

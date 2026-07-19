@@ -1460,7 +1460,7 @@ private struct MessageMediaTile: View {
             let maxPixelSize = max(1, Int(ceil(max(size.width, size.height) * displayScale)))
             if item.isImage,
                MessageMediaThumbnailDecoder.cachedThumbnail(for: thumbnailCacheKey, maxPixelSize: maxPixelSize) == nil,
-               !MediaAutoDownloadStore.shared.shouldAutoDownload(.image) {
+               !MediaAutoDownloadStore.shared.shouldAutoDownload(item.isImage ? .image : .video) {
                 awaitingManualDownload = true
                 return
             }

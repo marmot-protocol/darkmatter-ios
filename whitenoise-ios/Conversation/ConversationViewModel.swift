@@ -763,8 +763,12 @@ final class ConversationViewModel {
             // bubble flips without leaving the chat.
             await refreshTimelineTail()
             if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil {
-                timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
-                if !delivered {
+                if delivered {
+                    // The engine acked the publish but the healed row sits
+                    // outside the refreshed tail page — trust the ack.
+                    timelineStore.markDurableRowDelivered(messageIdHex: messageIdHex)
+                } else {
+                    timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
                     composer.onError(lastFailure ?? L10n.string("Send failed"))
                 }
             }

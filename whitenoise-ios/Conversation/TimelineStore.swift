@@ -676,6 +676,7 @@ final class TimelineStore {
         let affectedEditTargets = editProjections.removeRecord(messageIdHex: messageIdHex)
         messageById[messageIdHex] = nil
         messageStatusById[messageIdHex] = nil
+        undeliveredOwnMessageIds.remove(messageIdHex)
         confirmedPendingTimelineRecordIds.remove(messageIdHex)
         replyProjectionKnownMessageIds.remove(messageIdHex)
         replyTargetByMessageId[messageIdHex] = nil
@@ -1047,6 +1048,14 @@ final class TimelineStore {
         messageById[messageIdHex]
     }
 
+    /// Marks a durable row delivered on the engine's publish ack when the
+    /// healed row sits outside the refreshed window; the next mirrored
+    /// record remains authoritative either way.
+    func markDurableRowDelivered(messageIdHex: String) {
+        undeliveredOwnMessageIds.remove(messageIdHex)
+        setDurableRowStatus(.sent, messageIdHex: messageIdHex)
+    }
+
     /// Temporary UI status for a durable row during a user-driven retry —
     /// delivery truth still comes from the next mirrored timeline record.
     func setDurableRowStatus(_ status: MessageStatus, messageIdHex: String) {
@@ -1065,6 +1074,13 @@ final class TimelineStore {
         guard rowId.hasPrefix("msg:") else { return nil }
         let messageIdHex = String(rowId.dropFirst("msg:".count))
         return undeliveredOwnMessageIds.contains(messageIdHex) ? messageIdHex : nil
+    }
+
+    /// Whether a failed optimistic row still has staged local media — a media
+    /// send's optimistic record carries no imeta tags, so this projection is
+    /// the reliable media discriminator for retry gating.
+    func failedTransientRowHasStagedMedia(rowId: String) -> Bool {
+        mediaProjections.pending(forRowId: rowId)?.isEmpty == false
     }
 
     /// The optimistic record still held for a failed outgoing row, if that

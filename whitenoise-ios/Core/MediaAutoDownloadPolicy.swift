@@ -225,8 +225,17 @@ final class MediaAutoDownloadStore {
 /// both major reference messengers exempt them from the matrix. Other audio
 /// attachments honor the audio row.
 nonisolated enum AudioAutoDownloadPolicy {
+    /// Voice-note metadata is peer-controlled, so the always-download bypass
+    /// carries a duration sanity bound; anything claiming to be longer falls
+    /// back to the audio matrix. Size-aware gating needs the attachment byte
+    /// size surfaced from the media reference — engine follow-up.
+    static let maxVoiceMessageSeconds: Double = 600
+
     static func isVoiceMessage(durationSeconds: Double?, waveformSampleCount: Int) -> Bool {
-        durationSeconds != nil || waveformSampleCount > 0
+        if let durationSeconds {
+            return durationSeconds <= maxVoiceMessageSeconds
+        }
+        return waveformSampleCount > 0
     }
 
     static func shouldPrefetch(isVoiceMessage: Bool, matrixAllows: Bool) -> Bool {

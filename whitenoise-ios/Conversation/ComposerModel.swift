@@ -60,6 +60,7 @@ final class ComposerModel {
     @discardableResult
     func retryFailedTextSend(rowId: String) async -> Bool {
         guard let record = timelineStore.failedTransientRecord(rowId: rowId),
+              !timelineStore.failedTransientRowHasStagedMedia(rowId: rowId),
               record.tags.allSatisfy({ $0.values.first != "_media_pending" }),
               !record.plaintext.isEmpty
         else { return false }
@@ -81,6 +82,15 @@ final class ComposerModel {
         while let appState, appState.isRuntimeWarmingUp, waited < 10 {
             try? await Task.sleep(nanoseconds: 500_000_000)
             waited += 1
+        }
+        // The row is the only copy of the user's message — never discard it
+        // unless the send below is actually going to run, and re-check the
+        // row itself: the awaits above are wide enough for a second retry or
+        // a Delete to have consumed it already.
+        guard timelineStore.failedTransientRecord(rowId: rowId) != nil else { return false }
+        guard !sendInFlight, canSendMessages() else {
+            onError(L10n.string("Send failed"))
+            return false
         }
         let replyTargetId = ConversationViewModel.replyTargetMessageId(in: record)
         timelineStore.discardTransientRow(rowId: rowId)
