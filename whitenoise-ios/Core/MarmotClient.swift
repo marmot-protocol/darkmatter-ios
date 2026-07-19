@@ -418,6 +418,18 @@ final class MarmotClient {
         try await marmot.sendText(accountRef: accountRef, groupIdHex: groupIdHex, text: text)
     }
 
+    /// Re-drives a group's committed-but-undelivered messages to the relays
+    /// without minting new events.
+    func retryGroupConvergence(accountRef: String, groupIdHex: String) async throws -> SendSummaryFfi {
+        try await marmot.retryGroupConvergence(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    /// Pumps every account worker's relay catch-up — the same recovery the
+    /// app runs on foreground activation.
+    func catchUpAccounts() async throws {
+        try await marmot.catchUpAccounts()
+    }
+
     func replyToMessage(accountRef: String, groupIdHex: String, targetMessageId: String, text: String) async throws -> SendSummaryFfi {
         try await marmot.replyToMessage(accountRef: accountRef, groupIdHex: groupIdHex, targetMessageId: targetMessageId, text: text)
     }

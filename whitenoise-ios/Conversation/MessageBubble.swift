@@ -174,18 +174,35 @@ struct MessageBubble: View {
                 } else if !mediaItems.isEmpty, showsStandardBody {
                     mediaMessageContent
                 } else {
-                    textBubble
-                        .opacity(status == .sending ? 0.7 : 1)
-                        .contentShape(.rect)
-                        .onTapGesture {
-                            if status == .failed { onFailedTap?() }
-                        }
+                    // The tap gesture exists only on failed rows — a
+                    // recognizer on every bubble steals touches from the
+                    // timeline's scroll/keyboard handling.
+                    if status == .failed {
+                        textBubble
+                            .contentShape(.rect)
+                            .onTapGesture { onFailedTap?() }
+                    } else {
+                        textBubble
+                            .opacity(status == .sending ? 0.7 : 1)
+                    }
 
                     if !reactions.isEmpty, showsStandardBody {
                         reactionChips
                     }
                 }
 
+                // Media rows have no bubble tap for the failed dialog, and the
+                // footer's red glyph alone is easy to miss — this caption is
+                // the one affordance every failed row shares.
+                if status == .failed, let onFailedTap {
+                    Button(action: onFailedTap) {
+                        Text("Not delivered. Tap for options.")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(isFromMe ? .trailing : .leading, 12)
+                }
             }
             .frame(maxWidth: bubbleMaxWidth, alignment: isFromMe ? .trailing : .leading)
 
@@ -2042,6 +2059,22 @@ nonisolated enum MessageAudioPlayerPreparer {
     }
 }
 
+/// Session-scoped memory of successful audio prefetches, so a bubble that
+/// scrolls in and out doesn't re-read the decrypted cache on every
+/// appearance. Failed prefetches are released so a later appearance retries.
+@MainActor
+private enum AudioPrefetchRegistry {
+    private static var claimed: Set<String> = []
+
+    static func claim(_ key: String) -> Bool {
+        claimed.insert(key).inserted
+    }
+
+    static func release(_ key: String) {
+        claimed.remove(key)
+    }
+}
+
 private struct MessageAudioAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
@@ -2144,7 +2177,29 @@ private struct MessageAudioAttachmentView: View {
         }
         .task(id: metadataCacheKey) {
             await loadMetadataIfNeeded()
+            await prefetchIfNeeded()
         }
+    }
+
+    /// Downloads the payload ahead of the first play tap when policy allows —
+    /// voice messages always, other audio per the auto-download matrix.
+    private func prefetchIfNeeded() async {
+        guard player == nil, !isLoading else { return }
+        let isVoice = AudioAutoDownloadPolicy.isVoiceMessage(
+            durationSeconds: item.durationSeconds,
+            waveformSampleCount: item.waveformSamples.count
+        )
+        guard AudioAutoDownloadPolicy.shouldPrefetch(
+            isVoiceMessage: isVoice,
+            matrixAllows: MediaAutoDownloadStore.shared.shouldAutoDownload(.audio)
+        ) else { return }
+        guard AudioPrefetchRegistry.claim(metadataCacheKey) else { return }
+        guard let data = try? await onLoadMedia.data(for: item) else {
+            AudioPrefetchRegistry.release(metadataCacheKey)
+            return
+        }
+        guard AudioPlaybackLoadOutcome.resolve(isCancelled: Task.isCancelled) == .proceed else { return }
+        applyMetadata(await audioMetadata(from: data))
     }
 
     private var speedLabel: String {

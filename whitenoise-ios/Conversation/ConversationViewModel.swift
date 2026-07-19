@@ -698,19 +698,87 @@ final class ConversationViewModel {
         return canonical
     }
 
-    /// A failed row can be retried only when it's a text send (media bytes
-    /// aren't retained for re-upload); everything failed can be discarded.
+    /// Committed-but-undelivered rows retry via group convergence (any
+    /// content). A failed transient row (nothing committed) retries only when
+    /// it's a text send — media bytes aren't retained for re-upload.
     func canRetryFailedSend(rowId: String) -> Bool {
+        if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil { return true }
         guard let record = timelineStore.failedTransientRecord(rowId: rowId) else { return false }
         return !record.plaintext.isEmpty
             && record.tags.allSatisfy { $0.values.first != "_media_pending" }
     }
 
+    /// Failed transient rows are dropped outright; a committed undelivered
+    /// row is part of group history, so its Delete hides it locally instead.
+    func canDiscardFailedSend(rowId: String) -> Bool {
+        timelineStore.failedTransientRecord(rowId: rowId) != nil
+            || timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil
+    }
+
     func retryFailedSend(rowId: String) async {
+        if let messageIdHex = timelineStore.undeliveredDurableMessageId(rowId: rowId) {
+            guard MediaAutoDownloadStore.shared.isOnline else {
+                composer.onError(L10n.string("You're offline. Try again once you're connected."))
+                return
+            }
+            guard let appState, let accountRef = appState.activeAccountRef else { return }
+            // Immediate feedback: the retry can legitimately take several
+            // seconds while relays finish reconnecting after the network
+            // change that stranded the message in the first place.
+            timelineStore.setDurableRowStatus(.sending, messageIdHex: messageIdHex)
+            guard let client = try? appState.currentMarmotClient() else {
+                timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
+                return
+            }
+            // Relay recovery is otherwise tied to app-foreground activation,
+            // and a retry after a network change is exactly when the pool is
+            // still down — pump the account workers first, like foregrounding
+            // does.
+            try? await client.catchUpAccounts()
+            // Re-drives the already-committed message to the relays —
+            // re-sending the text would mint a duplicate bubble. A publish
+            // into a still-reconnecting relay pool THROWS, so each attempt
+            // catches and the window keeps retrying past those errors.
+            var delivered = false
+            var lastFailure: String?
+            for attempt in 0..<6 {
+                if attempt > 0 {
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                }
+                do {
+                    let summary = try await client.retryGroupConvergence(
+                        accountRef: accountRef,
+                        groupIdHex: group.groupIdHex
+                    )
+                    if summary.published > 0 {
+                        delivered = true
+                        break
+                    }
+                    lastFailure = nil
+                } catch {
+                    lastFailure = error.localizedDescription
+                }
+            }
+            // The subscription may not push the healed row; pull it so the
+            // bubble flips without leaving the chat.
+            await refreshTimelineTail()
+            if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil {
+                timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
+                if !delivered {
+                    composer.onError(lastFailure ?? L10n.string("Send failed"))
+                }
+            }
+            return
+        }
         await composer.retryFailedTextSend(rowId: rowId)
     }
 
     func discardFailedSend(rowId: String) {
+        if let messageIdHex = timelineStore.undeliveredDurableMessageId(rowId: rowId),
+           let record = timelineStore.durableRecord(messageIdHex: messageIdHex) {
+            Task { await deleteMessageForMe(record) }
+            return
+        }
         timelineStore.discardTransientRow(rowId: rowId)
     }
 

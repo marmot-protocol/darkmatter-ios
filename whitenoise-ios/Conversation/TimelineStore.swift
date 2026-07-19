@@ -56,6 +56,9 @@ final class TimelineStore {
     /// Renderable timeline messages we've loaded by id.
     @ObservationIgnored private var messageById: [String: AppMessageRecordFfi] = [:]
     @ObservationIgnored private var messageStatusById: [String: MessageStatus] = [:]
+    /// Own durable rows whose `sourceMessageIdHex` is still nil — committed
+    /// to the group locally but never delivered to any relay.
+    @ObservationIgnored private var undeliveredOwnMessageIds: Set<String> = []
     /// Message ids for which Rust's `replyToMessageIdHex` projection has been
     /// mirrored. Presence with no entry in `replyTargetByMessageId` means the row
     /// authoritatively has no reply target, so do not recover one from tags.
@@ -598,7 +601,14 @@ final class TimelineStore {
         replyPreviewDisplayCache[appRecord.messageIdHex] = nil
         groupSystemDisplayCache[appRecord.messageIdHex] = nil
         messageById[appRecord.messageIdHex] = appRecord
-        messageStatusById[appRecord.messageIdHex] = appRecord.direction == "sent" ? .sent : .received
+        // `sourceMessageIdHex` is the delivery marker: an own send commits and
+        // projects locally before it publishes, so nil means committed but
+        // never delivered (sent offline / relays unreachable).
+        if appRecord.direction == "sent", record.sourceMessageIdHex == nil {
+            undeliveredOwnMessageIds.insert(appRecord.messageIdHex)
+        } else {
+            undeliveredOwnMessageIds.remove(appRecord.messageIdHex)
+        }
         let replacedConfirmedPendingRow = confirmedPendingTimelineRecordIds.remove(appRecord.messageIdHex) != nil
         replyProjectionKnownMessageIds.insert(appRecord.messageIdHex)
         if let projectedReplyTarget = record.replyToMessageIdHex, !projectedReplyTarget.isEmpty {
@@ -627,10 +637,15 @@ final class TimelineStore {
             me: myAccountId ?? ""
         )
         deletedProjections.setProjected(deleted: record.deleted, forMessageId: record.messageIdHex)
-        projectionChanged = reconcilePendingOutgoingMessage(
+        let reconciledStatus = reconcilePendingOutgoingMessage(
             with: appRecord,
             replyTargetId: record.replyToMessageIdHex
-        ) || projectionChanged
+        )
+        projectionChanged = (reconciledStatus != nil) || projectionChanged
+        messageStatusById[appRecord.messageIdHex] = durableRowStatus(
+            for: appRecord,
+            matchedInFlightSend: reconciledStatus == .sending
+        )
 
         if let streamId = StreamWatcher.finalizedStreamId(from: record, appRecord: appRecord) {
             projectionChanged = (streamWatcher?.resolveFinalizedStream(streamId: streamId) ?? false) || projectionChanged
@@ -969,10 +984,14 @@ final class TimelineStore {
                 messageById[realId] = confirmed
                 projectionChanged = true
             }
-            if messageStatusById[realId] != .sent {
+            // A non-throwing send can still be undelivered (committed while
+            // offline); the timeline row's nil source id recorded it. Keep
+            // the failure visible instead of stamping a checkmark over it.
+            let confirmedStatus: MessageStatus = undeliveredOwnMessageIds.contains(realId) ? .failed : .sent
+            if messageStatusById[realId] != confirmedStatus {
                 projectionChanged = true
             }
-            messageStatusById[realId] = .sent
+            messageStatusById[realId] = confirmedStatus
         }
         let rowId = "msg:\(realId.isEmpty ? tempId : realId)"
         projectionChanged = (transientTimelineItems.removeValue(forKey: "msg:\(tempId)") != nil) || projectionChanged
@@ -1001,11 +1020,51 @@ final class TimelineStore {
                 projectionChanged = upsertTimelineItem(item) || projectionChanged
             }
         } else {
-            projectionChanged = upsertTimelineItem(TimelineItem.message(confirmed, status: .sent)) || projectionChanged
+            projectionChanged = upsertTimelineItem(
+                TimelineItem.message(confirmed, status: messageStatusById[realId] ?? .sent)
+            ) || projectionChanged
         }
         if projectionChanged {
             noteProjectionChanged()
         }
+    }
+
+    /// Delivery-aware status for a durable row. An undelivered own row still
+    /// renders as sending while the composer's send is in flight (the FFI
+    /// settles it); outside that window it is a settled failure, retryable
+    /// via group convergence.
+    private func durableRowStatus(
+        for record: AppMessageRecordFfi,
+        matchedInFlightSend: Bool
+    ) -> MessageStatus {
+        guard record.direction == "sent" else { return .received }
+        guard undeliveredOwnMessageIds.contains(record.messageIdHex) else { return .sent }
+        return matchedInFlightSend ? .sending : .failed
+    }
+
+    /// The mirrored record for a durable timeline row, if loaded.
+    func durableRecord(messageIdHex: String) -> AppMessageRecordFfi? {
+        messageById[messageIdHex]
+    }
+
+    /// Temporary UI status for a durable row during a user-driven retry —
+    /// delivery truth still comes from the next mirrored timeline record.
+    func setDurableRowStatus(_ status: MessageStatus, messageIdHex: String) {
+        guard messageById[messageIdHex] != nil, messageStatusById[messageIdHex] != status else { return }
+        messageStatusById[messageIdHex] = status
+        if let item = visibleTimelineItem(forMessageId: messageIdHex) {
+            _ = upsertTimelineItem(item)
+        }
+        noteProjectionChanged()
+    }
+
+    /// The message id of a durable own row that was committed but never
+    /// delivered, if `rowId` names one. These retry through group
+    /// convergence — re-sending the text would mint a duplicate message.
+    func undeliveredDurableMessageId(rowId: String) -> String? {
+        guard rowId.hasPrefix("msg:") else { return nil }
+        let messageIdHex = String(rowId.dropFirst("msg:".count))
+        return undeliveredOwnMessageIds.contains(messageIdHex) ? messageIdHex : nil
     }
 
     /// The optimistic record still held for a failed outgoing row, if that
@@ -1046,9 +1105,13 @@ final class TimelineStore {
         }
     }
 
+    /// Consumes the optimistic transient row the durable `record` confirms,
+    /// returning the consumed row's status (nil when nothing matched) — the
+    /// caller needs to know whether it swallowed an in-flight send or an
+    /// already-settled failure.
     @discardableResult
-    private func reconcilePendingOutgoingMessage(with record: AppMessageRecordFfi, replyTargetId: String?) -> Bool {
-        guard record.direction == "sent" else { return false }
+    private func reconcilePendingOutgoingMessage(with record: AppMessageRecordFfi, replyTargetId: String?) -> MessageStatus? {
+        guard record.direction == "sent" else { return nil }
         let projectedReplyTarget = replyTargetId ?? ConversationViewModel.replyTargetMessageId(in: record)
         let matchingPendingMessages = transientTimelineItems.filter { key, item in
             ConversationViewModel.pendingOutgoingMessage(
@@ -1060,11 +1123,12 @@ final class TimelineStore {
         }
         guard let match = matchingPendingMessages.min(by: { lhs, rhs in
             ConversationViewModel.pendingOutgoingMessage(lhs.value, isCloserTo: record, than: rhs.value)
-        }) else { return false }
+        }) else { return nil }
         transientTimelineItems[match.key] = nil
         mediaProjections.removePending(forRowId: match.key)
         _ = removeTimelineItem(id: match.value.id)
-        return true
+        guard case .message(_, let status) = match.value.kind else { return .sent }
+        return status
     }
 
     /// Mirrors the resolved references for one message (from the timeline row, or

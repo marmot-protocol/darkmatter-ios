@@ -63,6 +63,25 @@ final class ComposerModel {
               record.tags.allSatisfy({ $0.values.first != "_media_pending" }),
               !record.plaintext.isEmpty
         else { return false }
+        // Keep the failed row when the device is offline — a retry would fail
+        // straight back into the same state and read as the button doing
+        // nothing. Say why instead.
+        guard MediaAutoDownloadStore.shared.isOnline else {
+            onError(L10n.string("You're offline. Try again once you're connected."))
+            return false
+        }
+        // A retry usually follows a connectivity change, and relay recovery
+        // is otherwise tied to app-foreground activation — pump the account
+        // workers first (what foregrounding does), then wait out any runtime
+        // warm-up before re-sending into the same failure it just left.
+        if let appState, let client = try? appState.currentMarmotClient() {
+            try? await client.catchUpAccounts()
+        }
+        var waited = 0
+        while let appState, appState.isRuntimeWarmingUp, waited < 10 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            waited += 1
+        }
         let replyTargetId = ConversationViewModel.replyTargetMessageId(in: record)
         timelineStore.discardTransientRow(rowId: rowId)
         await send(record.plaintext, replyTargetId: replyTargetId)
@@ -138,7 +157,14 @@ final class ComposerModel {
                     text: outgoing
                 )
             }
-            timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: summary.messageIds.first)
+            // A summary with zero publish reports means the engine sent
+            // nothing at all — defense-in-depth; delivery truth for committed
+            // sends is the timeline row's source id.
+            if summary.published == 0 {
+                timelineStore.markFailed(tempId: tempId)
+            } else {
+                timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: summary.messageIds.first)
+            }
         } catch {
             timelineStore.markFailed(tempId: tempId)
             onError(error.localizedDescription)
@@ -228,13 +254,20 @@ final class ComposerModel {
                 recordedAt: now,
                 receivedAt: now
             )
-            let messageId = result.sent?.messageIds.first
-            timelineStore.confirmSent(tempId: tempId, record: confirmed, messageId: messageId)
-            if let messageId, !messageId.isEmpty {
-                // Render the just-sent attachments immediately from the upload's
-                // resolved references; the subscription row will mirror the same.
-                if timelineStore.replaceMediaReferences(references, forMessageId: messageId) {
-                    timelineStore.noteProjectionChanged()
+            if let sent = result.sent, sent.published == 0 {
+                // Zero publish reports — the upload may have succeeded but
+                // the engine sent no message. Show the failure, not a
+                // checkmark.
+                timelineStore.markFailed(tempId: tempId)
+            } else {
+                let messageId = result.sent?.messageIds.first
+                timelineStore.confirmSent(tempId: tempId, record: confirmed, messageId: messageId)
+                if let messageId, !messageId.isEmpty {
+                    // Render the just-sent attachments immediately from the upload's
+                    // resolved references; the subscription row will mirror the same.
+                    if timelineStore.replaceMediaReferences(references, forMessageId: messageId) {
+                        timelineStore.noteProjectionChanged()
+                    }
                 }
             }
         } catch {

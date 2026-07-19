@@ -104,6 +104,11 @@ struct whitenoise_iosApp: App {
                         appState.setAppSceneActive(false)
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: MediaAutoDownloadStore.connectivityRestored)) { _ in
+                    // Relay recovery is otherwise foreground-driven; a network
+                    // return with the app already open needs the same pump.
+                    Task { await appState.catchUpAfterForegroundActivation() }
+                }
                 .onChange(of: appState.appLock.shield) { _, shield in
                     appLockOverlay.update(for: shield, controller: appState.appLock)
                 }
