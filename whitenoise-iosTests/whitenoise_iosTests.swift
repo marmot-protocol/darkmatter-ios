@@ -6054,10 +6054,10 @@ struct ConversationTimelineProjectionTests {
         }
 
         // Committed but never delivered: renders failed, retries via
-        // convergence (not discard — the message is part of group history).
+        // convergence, and Delete is offered as a local hide.
         #expect(status() == .failed)
         #expect(viewModel.canRetryFailedSend(rowId: rowId))
-        #expect(!viewModel.canDiscardFailedSend(rowId: rowId))
+        #expect(viewModel.canDiscardFailedSend(rowId: rowId))
 
         // Delivery upsert (same row, source id now present) flips it to sent.
         let delivered = timelineRecord(
