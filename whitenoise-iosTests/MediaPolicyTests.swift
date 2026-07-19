@@ -19,20 +19,48 @@ struct MediaAutoDownloadMatrixTests {
         #expect(!matrix.shouldAutoDownload(.image, activeNetworks: []))
     }
 
-    @Test func defaultsMirrorTheSharedMatrix() {
+    @Test func defaultsMatchTheReferenceLevels() {
         let matrix = MediaAutoDownloadMatrix.defaultMatrix
-        // Wi-Fi: everything except documents.
-        #expect(matrix.isEnabled(.image, on: .wifi))
-        #expect(matrix.isEnabled(.audio, on: .wifi))
+        #expect(matrix.level(for: .image) == .wifiAndCellular)
+        #expect(matrix.level(for: .audio) == .wifiAndCellular)
+        #expect(matrix.level(for: .video) == .wifiOnly)
+        #expect(matrix.level(for: .document) == .wifiOnly)
+    }
+
+    @Test func levelsProjectOntoCanonicalNetworkSets() {
+        var matrix = MediaAutoDownloadMatrix(enabled: [])
+        matrix = matrix.setting(.video, to: .wifiAndCellular)
         #expect(matrix.isEnabled(.video, on: .wifi))
-        #expect(!matrix.isEnabled(.document, on: .wifi))
-        // Mobile: images and audio.
-        #expect(matrix.isEnabled(.image, on: .mobile))
-        #expect(matrix.isEnabled(.audio, on: .mobile))
+        #expect(matrix.isEnabled(.video, on: .mobile))
+        #expect(matrix.isEnabled(.video, on: .metered))
+        matrix = matrix.setting(.video, to: .wifiOnly)
+        #expect(matrix.isEnabled(.video, on: .wifi))
         #expect(!matrix.isEnabled(.video, on: .mobile))
-        // Metered: images only.
-        #expect(matrix.isEnabled(.image, on: .metered))
-        #expect(!matrix.isEnabled(.audio, on: .metered))
+        #expect(!matrix.isEnabled(.video, on: .metered))
+        matrix = matrix.setting(.video, to: .never)
+        #expect(matrix.level(for: .video) == .never)
+        // Setting one type never disturbs another's cells.
+        #expect(matrix.setting(.image, to: .wifiAndCellular).level(for: .video) == .never)
+    }
+
+    @Test func legacyPerCellMatricesSnapToASensibleLevel() {
+        // A matrix written by the earlier per-cell surface: mobile enabled
+        // without metered still reads as everywhere; wifi-only cells read as
+        // Wi-Fi; a stray metered-only cell reads as never.
+        let legacy = MediaAutoDownloadMatrix.fromPreference("image:wifi,image:mobile,audio:wifi,video:metered")
+        #expect(legacy?.level(for: .image) == .wifiAndCellular)
+        #expect(legacy?.level(for: .audio) == .wifiOnly)
+        #expect(legacy?.level(for: .video) == .never)
+        #expect(legacy?.level(for: .document) == .never)
+    }
+
+    @Test func voiceMessagesBypassTheMatrix() {
+        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: 12.5, waveformSampleCount: 0))
+        #expect(AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil, waveformSampleCount: 40))
+        #expect(!AudioAutoDownloadPolicy.isVoiceMessage(durationSeconds: nil, waveformSampleCount: 0))
+        #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: true, matrixAllows: false))
+        #expect(AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: true))
+        #expect(!AudioAutoDownloadPolicy.shouldPrefetch(isVoiceMessage: false, matrixAllows: false))
     }
 
     @Test func preferenceRoundTripsAndIgnoresUnknownCells() {

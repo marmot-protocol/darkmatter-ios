@@ -48,6 +48,25 @@ nonisolated enum MediaAutoDownloadNetwork: String, CaseIterable {
     }
 }
 
+/// The user-facing choice for one media type. The settings surface offers a
+/// per-type level rather than raw matrix cells; each level projects onto a
+/// canonical set of enabled networks. Wi-Fi-only deliberately excludes
+/// metered connections (hotspots, Low Data Mode) — the level in between
+/// exists to save data, and those are exactly the connections asking for it.
+nonisolated enum MediaAutoDownloadLevel: CaseIterable, Equatable {
+    case never
+    case wifiOnly
+    case wifiAndCellular
+
+    var enabledNetworks: Set<MediaAutoDownloadNetwork> {
+        switch self {
+        case .never: return []
+        case .wifiOnly: return [.wifi]
+        case .wifiAndCellular: return [.wifi, .mobile, .metered]
+        }
+    }
+}
+
 /// Pure, immutable per-type × per-network auto-download matrix. Holds only
 /// the set of enabled `(type, network)` cells; everything else is derived.
 /// Decision semantics and serialization mirror the Android client so the
@@ -74,6 +93,24 @@ nonisolated struct MediaAutoDownloadMatrix: Equatable {
             next.insert(Cell(type: type, network: network))
         } else {
             next.remove(Cell(type: type, network: network))
+        }
+        return Self(enabled: next)
+    }
+
+    /// Snaps a type's cells to its user-facing level. Mobile-enabled means
+    /// everywhere; otherwise Wi-Fi-enabled means Wi-Fi-only — so matrices
+    /// written by an older per-cell surface still read as a sensible level.
+    func level(for type: MediaAutoDownloadType) -> MediaAutoDownloadLevel {
+        if isEnabled(type, on: .mobile) { return .wifiAndCellular }
+        if isEnabled(type, on: .wifi) { return .wifiOnly }
+        return .never
+    }
+
+    /// Replaces every cell for `type` with the level's canonical networks.
+    func setting(_ type: MediaAutoDownloadType, to level: MediaAutoDownloadLevel) -> Self {
+        var next = enabled.filter { $0.type != type }
+        for network in level.enabledNetworks {
+            next.insert(Cell(type: type, network: network))
         }
         return Self(enabled: next)
     }
@@ -116,17 +153,13 @@ nonisolated struct MediaAutoDownloadMatrix: Equatable {
         return Self(enabled: cells)
     }
 
-    /// Defaults shared with the Android client:
-    /// Wi-Fi → images, audio, video (documents stay manual);
-    /// Mobile → images, audio; Metered → images only.
-    static let defaultMatrix = Self(enabled: [
-        Cell(type: .image, network: .wifi),
-        Cell(type: .audio, network: .wifi),
-        Cell(type: .video, network: .wifi),
-        Cell(type: .image, network: .mobile),
-        Cell(type: .audio, network: .mobile),
-        Cell(type: .image, network: .metered),
-    ])
+    /// Reference-messenger defaults: photos and audio download everywhere,
+    /// video and files only on unmetered Wi-Fi.
+    static let defaultMatrix = Self(enabled: [])
+        .setting(.image, to: .wifiAndCellular)
+        .setting(.audio, to: .wifiAndCellular)
+        .setting(.video, to: .wifiOnly)
+        .setting(.document, to: .wifiOnly)
 }
 
 /// Persistence + live-network resolution for the matrix. Device-scoped like
@@ -137,9 +170,15 @@ nonisolated struct MediaAutoDownloadMatrix: Equatable {
 final class MediaAutoDownloadStore {
     static let shared = MediaAutoDownloadStore()
     static let storageKey = "media.autoDownloadMatrix"
+    /// Posted on the offline→online transition — the app's cue to run the
+    /// same relay catch-up it runs on foreground activation.
+    static let connectivityRestored = Notification.Name("MediaAutoDownloadStore.connectivityRestored")
 
     private(set) var matrix: MediaAutoDownloadMatrix
     private(set) var activeNetworks: Set<MediaAutoDownloadNetwork> = []
+    /// Raw path satisfaction — distinct from `activeNetworks`, which is empty
+    /// both when offline and on interface types the matrix doesn't model.
+    private(set) var isOnline = true
     private let defaults: UserDefaults
     private let monitor = NWPathMonitor()
 
@@ -155,18 +194,42 @@ final class MediaAutoDownloadStore {
                 isConstrained: path.isConstrained
             )
             Task { @MainActor [weak self] in
-                self?.activeNetworks = path.status == .satisfied ? networks : []
+                guard let self else { return }
+                let satisfied = path.status == .satisfied
+                self.activeNetworks = satisfied ? networks : []
+                if satisfied, !self.isOnline {
+                    NotificationCenter.default.post(name: Self.connectivityRestored, object: nil)
+                }
+                self.isOnline = satisfied
             }
         }
         monitor.start(queue: DispatchQueue(label: "media.autodownload.path"))
     }
 
-    func setEnabled(_ type: MediaAutoDownloadType, on network: MediaAutoDownloadNetwork, to on: Bool) {
-        matrix = matrix.toggling(type, on: network, to: on)
+    func setLevel(_ level: MediaAutoDownloadLevel, for type: MediaAutoDownloadType) {
+        matrix = matrix.setting(type, to: level)
         defaults.set(matrix.toPreference(), forKey: Self.storageKey)
+    }
+
+    func resetToDefaults() {
+        matrix = .defaultMatrix
+        defaults.removeObject(forKey: Self.storageKey)
     }
 
     func shouldAutoDownload(_ type: MediaAutoDownloadType) -> Bool {
         matrix.shouldAutoDownload(type, activeNetworks: activeNetworks)
+    }
+}
+
+/// Voice messages always auto-download — they are small, conversational, and
+/// both major reference messengers exempt them from the matrix. Other audio
+/// attachments honor the audio row.
+nonisolated enum AudioAutoDownloadPolicy {
+    static func isVoiceMessage(durationSeconds: Double?, waveformSampleCount: Int) -> Bool {
+        durationSeconds != nil || waveformSampleCount > 0
+    }
+
+    static func shouldPrefetch(isVoiceMessage: Bool, matrixAllows: Bool) -> Bool {
+        isVoiceMessage || matrixAllows
     }
 }

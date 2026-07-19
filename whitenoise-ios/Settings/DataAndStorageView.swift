@@ -39,29 +39,40 @@ struct DataAndStorageView: View {
                 Text("Quality is a ceiling — smaller media is never upscaled. Identifying photo metadata, like location, is always removed before sending at every quality level.")
             }
 
-            ForEach(MediaAutoDownloadNetwork.allCases, id: \.self) { network in
-                Section {
-                    ForEach(MediaAutoDownloadType.allCases, id: \.self) { type in
-                        Toggle(isOn: Binding(
-                            get: { store.matrix.isEnabled(type, on: network) },
-                            set: { store.setEnabled(type, on: network, to: $0) }
-                        )) {
+            Section {
+                ForEach(MediaAutoDownloadType.allCases, id: \.self) { type in
+                    NavigationLink {
+                        AutoDownloadLevelView(type: type, title: typeTitle(type), store: store)
+                    } label: {
+                        HStack {
                             Text(typeTitle(type))
+                            Spacer()
+                            Text(Self.levelTitle(store.matrix.level(for: type)))
+                                .foregroundStyle(.secondary)
                         }
                     }
-                } header: {
-                    networkHeader(network)
                 }
-            }
-
-            Section {
-                EmptyView()
+                Button(role: .destructive) {
+                    store.resetToDefaults()
+                } label: {
+                    Text("Reset auto-download settings")
+                }
+            } header: {
+                Text("Media auto-download")
             } footer: {
-                Text("When a connection matches several conditions at once, the most restrictive one wins. Media that isn't downloaded automatically shows a download button instead.")
+                Text("Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead.")
             }
         }
         .navigationTitle("Data and storage")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    static func levelTitle(_ level: MediaAutoDownloadLevel) -> String {
+        switch level {
+        case .never: return L10n.string("Never")
+        case .wifiOnly: return L10n.string("Wi-Fi")
+        case .wifiAndCellular: return L10n.string("Wi-Fi and Cellular")
+        }
     }
 
     private func qualityTitle(_ level: MediaQuality) -> String {
@@ -85,17 +96,43 @@ struct DataAndStorageView: View {
     private func typeTitle(_ type: MediaAutoDownloadType) -> String {
         switch type {
         case .image: return L10n.string("Photos")
-        case .audio: return L10n.string("Voice messages")
+        case .audio: return L10n.string("Audio")
         case .video: return L10n.string("Videos")
         case .document: return L10n.string("Files")
         }
     }
+}
 
-    private func networkHeader(_ network: MediaAutoDownloadNetwork) -> Text {
-        switch network {
-        case .wifi: return Text("Auto-download on Wi-Fi")
-        case .mobile: return Text("Auto-download on cellular")
-        case .metered: return Text("Auto-download on limited data")
+/// Radio-style level picker for one media type: Never / Wi-Fi /
+/// Wi-Fi and Cellular, checkmark on the current choice.
+private struct AutoDownloadLevelView: View {
+    let type: MediaAutoDownloadType
+    let title: String
+    let store: MediaAutoDownloadStore
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(MediaAutoDownloadLevel.allCases, id: \.self) { level in
+                    Button {
+                        store.setLevel(level, for: type)
+                    } label: {
+                        HStack {
+                            Text(DataAndStorageView.levelTitle(level))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if store.matrix.level(for: type) == level {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

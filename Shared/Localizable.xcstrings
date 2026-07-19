@@ -1546,6 +1546,591 @@
           }
         }
       },
+      "Audio": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Audio"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Audio"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Audio"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Audio"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Audio"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Áudio"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Аудио"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Ses"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "音频"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "音訊"
+            }
+          }
+        }
+      },
+      "Never": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Nie"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Never"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Nunca"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Jamais"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Mai"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Nunca"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Никогда"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Hiçbir zaman"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "从不"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "永不"
+            }
+          }
+        }
+      },
+      "Wi-Fi": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "WLAN"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi"
+            }
+          }
+        }
+      },
+      "Wi-Fi and Cellular": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "WLAN und Mobilfunk"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi and Cellular"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi y datos móviles"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi et données cellulaires"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi e cellulare"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi e dados móveis"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi и сотовая связь"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi ve hücresel"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi 和蜂窝网络"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Wi-Fi 與行動網路"
+            }
+          }
+        }
+      },
+      "Media auto-download": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Automatischer Medien-Download"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Media auto-download"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Descarga automática de multimedia"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Téléchargement automatique des médias"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Download automatico dei media"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Download automático de mídia"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Автозагрузка медиа"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Otomatik medya indirme"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "媒体自动下载"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "媒體自動下載"
+            }
+          }
+        }
+      },
+      "Reset auto-download settings": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Auto-Download-Einstellungen zurücksetzen"
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Reset auto-download settings"
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Restablecer ajustes de descarga automática"
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Réinitialiser les réglages de téléchargement automatique"
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Ripristina le impostazioni di download automatico"
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Redefinir configurações de download automático"
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Сбросить настройки автозагрузки"
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Otomatik indirme ayarlarını sıfırla"
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "重置自动下载设置"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "重設自動下載設定"
+            }
+          }
+        }
+      },
+      "Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Sprachnachrichten werden immer automatisch heruntergeladen. Medien, die nicht automatisch heruntergeladen werden, zeigen stattdessen eine Download-Schaltfläche."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Voice messages are always automatically downloaded. Media that isn't downloaded automatically shows a download button instead."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Los mensajes de voz siempre se descargan automáticamente. El contenido multimedia que no se descarga automáticamente muestra un botón de descarga."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Les messages vocaux sont toujours téléchargés automatiquement. Les médias non téléchargés automatiquement affichent un bouton de téléchargement."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "I messaggi vocali vengono sempre scaricati automaticamente. I media non scaricati automaticamente mostrano un pulsante di download."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "As mensagens de voz são sempre baixadas automaticamente. Mídias que não são baixadas automaticamente mostram um botão de download."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Голосовые сообщения всегда загружаются автоматически. Медиафайлы, которые не загружаются автоматически, отображают кнопку загрузки."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Sesli mesajlar her zaman otomatik olarak indirilir. Otomatik indirilmeyen medya bunun yerine bir indirme düğmesi gösterir."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "语音消息始终自动下载。未自动下载的媒体会显示下载按钮。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "語音訊息一律會自動下載。未自動下載的媒體會顯示下載按鈕。"
+            }
+          }
+        }
+      },
+      "Not delivered. Tap for options.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Nicht zugestellt. Für Optionen tippen."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Not delivered. Tap for options."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "No entregado. Toca para ver opciones."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Non distribué. Touchez pour plus d'options."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Non recapitato. Tocca per le opzioni."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Não entregue. Toque para ver opções."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Не доставлено. Нажмите, чтобы открыть параметры."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "İletilemedi. Seçenekler için dokunun."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "未送达。点按查看选项。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "未送達。點按以查看選項。"
+            }
+          }
+        }
+      },
+      "You're offline. Try again once you're connected.": {
+        "extractionState": "manual",
+        "localizations": {
+          "de": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Du bist offline. Versuche es erneut, sobald du verbunden bist."
+            }
+          },
+          "en": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "You're offline. Try again once you're connected."
+            }
+          },
+          "es": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Sin conexión. Inténtalo de nuevo cuando estés conectado."
+            }
+          },
+          "fr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Vous êtes hors ligne. Réessayez une fois connecté."
+            }
+          },
+          "it": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Sei offline. Riprova quando sei connesso."
+            }
+          },
+          "pt": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Você está offline. Tente novamente quando estiver conectado."
+            }
+          },
+          "ru": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Вы не в сети. Повторите попытку после подключения."
+            }
+          },
+          "tr": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "Çevrimdışısınız. Bağlandığınızda tekrar deneyin."
+            }
+          },
+          "zh-Hans": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "您处于离线状态。联网后再试。"
+            }
+          },
+          "zh-Hant": {
+            "stringUnit": {
+              "state": "translated",
+              "value": "您目前離線。連線後再試一次。"
+            }
+          }
+        }
+      },
       "Data and storage": {
         "extractionState": "manual",
         "localizations": {
@@ -2326,71 +2911,6 @@
           }
         }
       },
-      "Voice messages": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Sprachnachrichten"
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Voice messages"
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Mensajes de voz"
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Messages vocaux"
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Messaggi vocali"
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Mensagens de voz"
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Голосовые сообщения"
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Sesli mesajlar"
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "语音消息"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "語音訊息"
-            }
-          }
-        }
-      },
       "Videos": {
         "extractionState": "manual",
         "localizations": {
@@ -2517,266 +3037,6 @@
             "stringUnit": {
               "state": "translated",
               "value": "檔案"
-            }
-          }
-        }
-      },
-      "Auto-download on Wi-Fi": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Automatisch über WLAN laden"
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Auto-download on Wi-Fi"
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Descarga automática con Wi-Fi"
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Téléchargement auto en Wi-Fi"
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automatico su Wi-Fi"
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automático no Wi-Fi"
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Автозагрузка по Wi-Fi"
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Wi-Fi'da otomatik indir"
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Wi-Fi 下自动下载"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Wi-Fi 下自動下載"
-            }
-          }
-        }
-      },
-      "Auto-download on cellular": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Automatisch über Mobilfunk laden"
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Auto-download on cellular"
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Descarga automática con datos móviles"
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Téléchargement auto en cellulaire"
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automatico su rete mobile"
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automático em dados móveis"
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Автозагрузка по мобильной сети"
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Hücresel veride otomatik indir"
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "移动网络下自动下载"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "行動網路下自動下載"
-            }
-          }
-        }
-      },
-      "Auto-download on limited data": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Automatisch bei begrenztem Datenvolumen laden"
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Auto-download on limited data"
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Descarga automática con datos limitados"
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Téléchargement auto en données limitées"
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automatico con dati limitati"
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Download automático com dados limitados"
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Автозагрузка при ограниченном трафике"
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Sınırlı veride otomatik indir"
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "受限流量下自动下载"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "受限流量下自動下載"
-            }
-          }
-        }
-      },
-      "When a connection matches several conditions at once, the most restrictive one wins. Media that isn't downloaded automatically shows a download button instead.": {
-        "extractionState": "manual",
-        "localizations": {
-          "de": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Wenn eine Verbindung mehrere Bedingungen gleichzeitig erfüllt, gilt die restriktivste. Nicht automatisch geladene Medien zeigen stattdessen eine Download-Schaltfläche."
-            }
-          },
-          "en": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "When a connection matches several conditions at once, the most restrictive one wins. Media that isn't downloaded automatically shows a download button instead."
-            }
-          },
-          "es": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Cuando una conexión cumple varias condiciones a la vez, gana la más restrictiva. Los archivos que no se descargan automáticamente muestran un botón de descarga."
-            }
-          },
-          "fr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Quand une connexion correspond à plusieurs conditions à la fois, la plus restrictive l'emporte. Les médias non téléchargés automatiquement affichent un bouton de téléchargement."
-            }
-          },
-          "it": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Quando una connessione soddisfa più condizioni contemporaneamente, vince la più restrittiva. I media non scaricati automaticamente mostrano un pulsante di download."
-            }
-          },
-          "pt": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Quando uma conexão corresponde a várias condições ao mesmo tempo, a mais restritiva prevalece. Mídias não baixadas automaticamente mostram um botão de download."
-            }
-          },
-          "ru": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Если подключение подходит под несколько условий сразу, действует самое строгое. Медиафайлы, не загруженные автоматически, показывают кнопку загрузки."
-            }
-          },
-          "tr": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "Bir bağlantı aynı anda birden çok koşula uyduğunda en kısıtlayıcı olan geçerlidir. Otomatik indirilmeyen medya bunun yerine bir indirme düğmesi gösterir."
-            }
-          },
-          "zh-Hans": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "当连接同时符合多个条件时，以最严格的为准。未自动下载的媒体会显示下载按钮。"
-            }
-          },
-          "zh-Hant": {
-            "stringUnit": {
-              "state": "translated",
-              "value": "當連線同時符合多個條件時，以最嚴格的為準。未自動下載的媒體會顯示下載按鈕。"
             }
           }
         }
