@@ -127,17 +127,18 @@ final class AppState {
     /// Recently-used reaction emojis, most-recent first. Drives the quick row
     /// in the message actions overlay.
     private(set) var recentReactions: [String]
+    private(set) var customizedQuickReactions: [String]?
 
-    static let defaultReactions = ["❤️", "👍", "👎", "😂", "😮", "😢"]
+    nonisolated static let defaultReactions = ["❤️", "👍", "👎", "😂", "😮", "😢"]
 
-    /// The six emojis to show in the quick-reaction row: recents first,
-    /// topped up with defaults.
+    /// The six emojis to show in the quick-reaction row. Before the user
+    /// customizes it, recents are topped up with defaults; a saved selection is
+    /// stable until explicitly changed or reset.
     var quickReactions: [String] {
-        var result = recentReactions
-        for emoji in Self.defaultReactions where result.count < 6 {
-            if !result.contains(emoji) { result.append(emoji) }
-        }
-        return Array(result.prefix(6))
+        QuickReactionChoices.resolved(
+            customized: customizedQuickReactions,
+            recent: recentReactions
+        )
     }
 
     func addRecentReaction(_ emoji: String) {
@@ -145,6 +146,15 @@ final class AppState {
         list.insert(emoji, at: 0)
         recentReactions = Array(list.prefix(12))
         UserDefaults.standard.set(recentReactions, forKey: Self.recentReactionsKey)
+    }
+
+    func setQuickReactions(_ choices: [String]) {
+        let normalized = QuickReactionPreferences.save(choices, to: .standard)
+        customizedQuickReactions = normalized
+    }
+
+    func resetQuickReactions() {
+        setQuickReactions(Self.defaultReactions)
     }
 
     /// Runtime-lifecycle ownership: the live `MarmotClient`, the
@@ -272,6 +282,7 @@ final class AppState {
         self.blockScreenshots = UserDefaults.standard.bool(forKey: Self.blockScreenshotsKey)
         self.recentReactions = UserDefaults.standard.stringArray(forKey: Self.recentReactionsKey)
             ?? Self.defaultReactions
+        self.customizedQuickReactions = QuickReactionPreferences.load(from: .standard)
         self.profileStore.appState = self
         self.runtimeLifecycle.configure(appState: self)
     }

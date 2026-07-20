@@ -135,7 +135,10 @@ final class NewChatFlowViewModel {
         // The in-flight guard is taken synchronously before the first await
         // so a fast double-tap can't start two concurrent creates.
         guard !isCreatingGroup else { return }
-        guard let accountRef = appState.activeAccountRef, !groupSelection.isEmpty else { return }
+        let normalizedName = NewGroupPresentation.normalizedName(name)
+        guard let accountRef = appState.activeAccountRef,
+              !groupSelection.isEmpty || !normalizedName.isEmpty
+        else { return }
         isCreatingGroup = true
         defer { isCreatingGroup = false }
         groupCreateError = nil
@@ -143,7 +146,7 @@ final class NewChatFlowViewModel {
             let client = try appState.currentMarmotClient()
             let groupIdHex = try await client.createGroup(
                 accountRef: accountRef,
-                name: NewGroupPresentation.normalizedName(name),
+                name: normalizedName,
                 memberRefs: groupSelection.memberRefs,
                 description: NewGroupPresentation.normalizedDescription(description)
             )

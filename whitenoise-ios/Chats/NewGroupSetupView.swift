@@ -25,12 +25,21 @@ struct NewGroupSetupView: View {
                     }
                     .frame(width: 52, height: 52)
                     .accessibilityHidden(true)
-                    TextField("Group name (optional)", text: $name)
+                    TextField(
+                        model.groupSelection.isEmpty
+                            ? L10n.string("Group name")
+                            : L10n.string("Group name (optional)"),
+                        text: $name
+                    )
                         .disabled(model.isCreatingGroup)
                 }
                 .padding(.vertical, 4)
             } footer: {
-                Text("Groups without a name show their members instead.")
+                if model.groupSelection.isEmpty {
+                    Text("A group name is required when creating it without members.")
+                } else {
+                    Text("Groups without a name show their members instead.")
+                }
             }
 
             Section {
@@ -52,12 +61,20 @@ struct NewGroupSetupView: View {
             }
 
             Section {
-                SelectedRecipientRail(members: model.groupSelection.members) { member in
-                    model.groupSelection.remove(accountIdHex: member.accountIdHex)
+                Group {
+                    if model.groupSelection.isEmpty {
+                        Label("You can add members after creating the group.", systemImage: "person.badge.plus")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        SelectedRecipientRail(members: model.groupSelection.members) { member in
+                            model.groupSelection.remove(accountIdHex: member.accountIdHex)
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                    }
                 }
                 .disabled(model.isCreatingGroup)
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
             } header: {
                 Text(L10n.plural("%lld members", Int64(model.groupSelection.count)))
             }
@@ -98,6 +115,7 @@ struct NewGroupSetupView: View {
     private var canCreate: Bool {
         AddMembersPresentation.canCreate(
             stagedCount: model.groupSelection.count,
+            hasUsableName: !NewGroupPresentation.normalizedName(name).isEmpty,
             isCreating: model.isCreatingGroup,
             hasActiveAccount: appState.activeAccountRef != nil
         )

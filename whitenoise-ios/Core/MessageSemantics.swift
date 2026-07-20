@@ -216,6 +216,8 @@ nonisolated enum MessageSemantics {
         sourceEpoch: UInt64
     ) -> MediaAttachmentReferenceFfi? {
         guard tag.values.first == imetaTag else { return nil }
+        let fields = tag.values.dropFirst()
+        guard fields.count <= maxImetaFieldsPerTag else { return nil }
         var locators: [MediaLocatorFfi] = []
         var ciphertextSha256 = ""
         var plaintextSha256 = ""
@@ -226,9 +228,10 @@ nonisolated enum MessageSemantics {
         var dim: String?
         var thumbhash: String?
 
-        for field in tag.values.dropFirst() {
+        for field in fields {
             if let value = field.dropPrefix("locator ") {
                 guard let locator = mediaLocator(from: value) else { return nil }
+                guard locators.count < maxImetaLocatorsPerTag else { return nil }
                 locators.append(locator)
             } else if let value = field.dropPrefix("ciphertext_sha256 ") {
                 ciphertextSha256 = value
@@ -289,7 +292,9 @@ nonisolated enum MessageSemantics {
         let kind = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
         let locatorValue = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !kind.isEmpty, !locatorValue.isEmpty else { return nil }
-        return MediaLocatorFfi(kind: kind, value: locatorValue)
+        let locator = MediaLocatorFfi(kind: kind, value: locatorValue)
+        guard EncryptedMediaLocatorValidation.validatedURL(for: locator) != nil else { return nil }
+        return locator
     }
 
     static func canonicalMediaType(_ raw: String) -> String? {
@@ -350,6 +355,9 @@ nonisolated enum MessageSemantics {
     static let maxImetaFileNameBytes = 255
     static let maxImetaMediaTypeBytes = 127
     static let maxImetaTags = MediaDraftProcessor.maxAttachmentCount + 2
+    // Keep optimistic parsing on the same per-tag budget as reply previews.
+    static let maxImetaFieldsPerTag = 16
+    static let maxImetaLocatorsPerTag = 16
 
     private static func isWithinByteLimit(_ value: String, _ max: Int) -> Bool {
         value.utf8.count <= max

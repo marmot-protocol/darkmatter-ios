@@ -65,7 +65,7 @@ struct NewGroupPickerView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Next", action: onNext)
-                    .disabled(model.groupSelection.isEmpty || model.isBusy)
+                    .disabled(model.isBusy || appState.activeAccountRef == nil)
             }
         }
         .task { await model.directory.load(using: appState) }
