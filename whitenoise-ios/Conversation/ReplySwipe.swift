@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum ReplySwipe {
     static let minimumDistance: CGFloat = 24
@@ -11,13 +12,20 @@ enum ReplySwipe {
 
     private static let horizontalDominance: CGFloat = 1.2
 
+    static func shouldBegin(velocity: CGPoint) -> Bool {
+        velocity.x > 0
+            && velocity.x > abs(velocity.y) * horizontalDominance
+    }
+
     static func shouldActivate(translation: CGSize) -> Bool {
         translation.width > activationThreshold
             && isRightwardHorizontal(translation)
     }
 
     static func feedbackOffset(translation: CGSize) -> CGFloat {
-        guard isRightwardHorizontal(translation) else { return 0 }
+        guard translation.width >= minimumDistance,
+              isRightwardHorizontal(translation)
+        else { return 0 }
         return min(maximumFeedbackOffset, translation.width * 0.42)
     }
 
@@ -43,29 +51,34 @@ private struct ReplySwipeModifier: ViewModifier {
     func body(content: Content) -> some View {
         if isEnabled {
             content
+                .contentShape(.rect)
                 .offset(x: offset)
-                .simultaneousGesture(swipeGesture)
+                .gesture(
+                    ReplySwipePanGesture(
+                        onChanged: handleSwipeChange,
+                        onEnded: handleSwipeEnd,
+                        onCancelled: resetReplySwipe
+                    )
+                )
                 .onDisappear { resetTask?.cancel() }
         } else {
             content
         }
     }
 
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: ReplySwipe.minimumDistance, coordinateSpace: .local)
-            .onChanged { value in
-                let nextOffset = ReplySwipe.feedbackOffset(translation: value.translation)
-                guard nextOffset > 0 || offset > 0 else { return }
-                resetTask?.cancel()
-                offset = nextOffset
-            }
-            .onEnded { value in
-                if ReplySwipe.shouldActivate(translation: value.translation) {
-                    completeReplySwipe()
-                } else {
-                    resetReplySwipe()
-                }
-            }
+    private func handleSwipeChange(_ translation: CGSize) {
+        let nextOffset = ReplySwipe.feedbackOffset(translation: translation)
+        guard nextOffset > 0 || offset > 0 else { return }
+        resetTask?.cancel()
+        offset = nextOffset
+    }
+
+    private func handleSwipeEnd(_ translation: CGSize) {
+        if ReplySwipe.shouldActivate(translation: translation) {
+            completeReplySwipe()
+        } else {
+            resetReplySwipe()
+        }
     }
 
     private func completeReplySwipe() {
@@ -94,5 +107,64 @@ private struct ReplySwipeModifier: ViewModifier {
             offset = 0
         }
         resetTask = nil
+    }
+}
+
+private struct ReplySwipePanGesture: UIGestureRecognizerRepresentable {
+    let onChanged: (CGSize) -> Void
+    let onEnded: (CGSize) -> Void
+    let onCancelled: () -> Void
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var gesture: ReplySwipePanGesture
+
+        init(gesture: ReplySwipePanGesture) {
+            self.gesture = gesture
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let panGesture = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            return ReplySwipe.shouldBegin(velocity: panGesture.velocity(in: panGesture.view))
+        }
+
+        func gestureRecognizer(
+            _: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+    }
+
+    func makeCoordinator(converter _: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator(gesture: self)
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let gesture = UIPanGestureRecognizer()
+        gesture.cancelsTouchesInView = false
+        gesture.maximumNumberOfTouches = 1
+        gesture.delegate = context.coordinator
+        return gesture
+    }
+
+    func updateUIGestureRecognizer(_: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.gesture = self
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        let translation = recognizer.translation(in: recognizer.view)
+        let size = CGSize(width: translation.x, height: translation.y)
+        switch recognizer.state {
+        case .began, .changed:
+            context.coordinator.gesture.onChanged(size)
+        case .ended:
+            context.coordinator.gesture.onEnded(size)
+        case .cancelled, .failed:
+            context.coordinator.gesture.onCancelled()
+        case .possible:
+            break
+        @unknown default:
+            context.coordinator.gesture.onCancelled()
+        }
     }
 }
