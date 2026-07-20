@@ -145,3 +145,43 @@ final class MessageRetentionSweeper {
         appState.noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
     }
 }
+
+extension AppState {
+    /// Runs one expiration pass from a BGAppRefresh launch. The runtime lease is
+    /// always released, including cancellation and per-pass failure, so the
+    /// shared store is closed again before iOS suspends the process.
+    @MainActor
+    func performBackgroundRetentionSweep() async -> Bool {
+        if phase == .bootstrapping {
+            await bootstrap()
+        }
+        // `.onboarding` also owns the runtime started by bootstrap. Acquiring
+        // and releasing an empty lease in that state is intentional: on a cold
+        // background launch it guarantees the shared SQLite store is closed
+        // again even when no signed-in accounts remain to sweep.
+        guard phaseOwnsLiveRuntime else { return true }
+
+        var lease: NotificationActionRuntimeLease?
+        do {
+            let acquired = try await runtimeLifecycle.startRuntimeForNotificationAction()
+            lease = acquired
+            let accounts = try await acquired.client.listAccounts()
+            let accountRefs = MessageRetentionSweepPolicy.sweepAccountRefs(from: accounts)
+            let outcome = await MessageRetentionSweep.run(
+                client: acquired.client,
+                accountRefs: accountRefs
+            )
+            await runtimeLifecycle.suspendRuntimeAfterNotificationAction(acquired)
+            lease = nil
+            if !outcome.prunedGroupIds.isEmpty {
+                noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
+            }
+            return !Task.isCancelled
+        } catch {
+            if let lease {
+                await runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+            }
+            return false
+        }
+    }
+}

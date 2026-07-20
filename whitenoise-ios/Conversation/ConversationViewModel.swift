@@ -360,6 +360,18 @@ final class ConversationViewModel {
         return L10n.plural("%lld members", Int64(memberCount))
     }
 
+    /// Mirrors Android's empty-group affordance: only a confirmed sole-member
+    /// admin sees the invite CTA, never a roster that simply has not loaded yet.
+    var canInviteFromEmptyGroup: Bool {
+        EmptyGroupConversationPresentation.canInvite(
+            isSelfMember: group.selfMembership == .member,
+            isSelfAdmin: isSelfAdmin,
+            membersLoaded: !groupMemberDetails.isEmpty,
+            memberCount: groupMemberDetails.count,
+            onlyMemberIsSelf: groupMemberDetails.first?.isSelf == true
+        )
+    }
+
     /// The other participant's npub in a DM, so the conversation header can open
     /// their profile. `nil` for groups or before member details have loaded.
     var directMessageCounterpartNpub: String? {

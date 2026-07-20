@@ -136,6 +136,9 @@ private enum EmojiRecents {
 
 struct EmojiPickerSheet: View {
     var title: LocalizedStringKey? = "React"
+    var quickReactions: [String]?
+    var onQuickReactionsSave: (([String]) -> Void)?
+    var onQuickReactionsReset: (() -> Void)?
     let onPick: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -149,6 +152,17 @@ struct EmojiPickerSheet: View {
             .navigationTitle(title ?? "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if let quickReactions, let onQuickReactionsSave, let onQuickReactionsReset {
+                    ToolbarItem(placement: .topBarLeading) {
+                        NavigationLink("Customize") {
+                            QuickReactionEditorView(
+                                quickReactions: quickReactions,
+                                onSave: onQuickReactionsSave,
+                                onReset: onQuickReactionsReset
+                            )
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L10n.string("Done")) { dismiss() }
                 }
@@ -156,6 +170,84 @@ struct EmojiPickerSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+private struct QuickReactionEditorView: View {
+    let onSave: ([String]) -> Void
+    let onReset: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft: [String]
+    @State private var editingIndex: Int?
+
+    init(
+        quickReactions: [String],
+        onSave: @escaping ([String]) -> Void,
+        onReset: @escaping () -> Void
+    ) {
+        self.onSave = onSave
+        self.onReset = onReset
+        _draft = State(initialValue: QuickReactionChoices.normalize(quickReactions))
+    }
+
+    var body: some View {
+        VStack(spacing: 28) {
+            HStack(spacing: 8) {
+                ForEach(Array(draft.enumerated()), id: \.offset) { index, emoji in
+                    Button {
+                        editingIndex = index
+                    } label: {
+                        Text(emoji)
+                            .font(.title2)
+                            .frame(width: 42, height: 42)
+                            .background(Color(.tertiarySystemFill), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.formatted("Change quick reaction %lld", Int64(index + 1)))
+                }
+            }
+
+            Text("Tap a reaction to replace it. These six reactions appear first when you open message actions.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Spacer()
+
+            HStack {
+                Button("Reset") {
+                    draft = AppState.defaultReactions
+                    onReset()
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                Button("Save") {
+                    onSave(draft)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+        .padding(24)
+        .navigationTitle("Customize reactions")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(
+            isPresented: Binding(
+                get: { editingIndex != nil },
+                set: { if !$0 { editingIndex = nil } }
+            )
+        ) {
+            EmojiPickerContent(showsSearchField: true) { emoji in
+                guard let editingIndex, draft.indices.contains(editingIndex) else { return }
+                draft = QuickReactionChoices.replacing(draft, at: editingIndex, with: emoji)
+                self.editingIndex = nil
+            }
+            .navigationTitle("Choose reaction")
+            .navigationBarTitleDisplayMode(.inline)
+        }
     }
 }
 

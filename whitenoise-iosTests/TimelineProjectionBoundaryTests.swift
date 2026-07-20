@@ -205,6 +205,7 @@ struct TimelineProjectionBoundaryTests {
         let downloaded = DownloadMediaSpy(data: downloadedData)
         let downloader = ConversationMediaDownloader(
             cache: cached,
+            locatorResolver: { _ in ["93.184.216.34"] },
             downloadMedia: { client, accountRef, groupIdHex, reference in
                 try await downloaded.download(
                     client: client,
@@ -244,6 +245,7 @@ struct TimelineProjectionBoundaryTests {
         let downloaded = DownloadMediaSpy(data: Data([0xff]))
         let downloader = ConversationMediaDownloader(
             cache: cached,
+            locatorResolver: { _ in ["93.184.216.34"] },
             downloadMedia: { client, accountRef, groupIdHex, reference in
                 try await downloaded.download(
                     client: client,
@@ -260,6 +262,77 @@ struct TimelineProjectionBoundaryTests {
             _ = try await downloader.data(for: media, groupIdHex: testGroupId, appState: appState)
         }
         #expect(cached.storedPayloads.isEmpty)
+    }
+
+    @Test func mediaDownloaderRejectsUnsafeStaticLocatorBeforeCacheOrNativeDownload() async throws {
+        let reference = mediaReference(
+            sourceEpoch: 7,
+            locatorValue: "http://media.example/a.png"
+        )
+        let media = MessageMediaAttachment(
+            id: "message-a:\(reference.plaintextSha256):0:0",
+            reference: reference,
+            fileName: reference.fileName,
+            mediaType: reference.mediaType,
+            dim: nil,
+            localData: nil
+        )
+        let cached = CountingConversationMediaCache()
+        let downloaded = DownloadMediaSpy(data: Data([0x01]))
+        let downloader = ConversationMediaDownloader(
+            cache: cached,
+            locatorResolver: { _ in ["93.184.216.34"] },
+            downloadMedia: { client, accountRef, groupIdHex, reference in
+                try await downloaded.download(
+                    client: client,
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex,
+                    reference: reference
+                )
+            }
+        )
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-a"
+
+        await #expect(throws: ConversationMediaDownloader.MediaDataError.unsafeLocator) {
+            _ = try await downloader.data(for: media, groupIdHex: testGroupId, appState: appState)
+        }
+        #expect(cached.cachedDataCalls == 0)
+        #expect(downloaded.referenceHashes.isEmpty)
+    }
+
+    @Test func mediaDownloaderRejectsPrivateDnsBeforeNativeDownload() async throws {
+        let reference = mediaReference(sourceEpoch: 7)
+        let media = MessageMediaAttachment(
+            id: "message-a:\(reference.plaintextSha256):0:0",
+            reference: reference,
+            fileName: reference.fileName,
+            mediaType: reference.mediaType,
+            dim: nil,
+            localData: nil
+        )
+        let cached = CountingConversationMediaCache()
+        let downloaded = DownloadMediaSpy(data: Data([0x01]))
+        let downloader = ConversationMediaDownloader(
+            cache: cached,
+            locatorResolver: { _ in ["10.0.0.5"] },
+            downloadMedia: { client, accountRef, groupIdHex, reference in
+                try await downloaded.download(
+                    client: client,
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex,
+                    reference: reference
+                )
+            }
+        )
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-a"
+
+        await #expect(throws: ConversationMediaDownloader.MediaDataError.unsafeLocator) {
+            _ = try await downloader.data(for: media, groupIdHex: testGroupId, appState: appState)
+        }
+        #expect(cached.cachedDataCalls == 1)
+        #expect(downloaded.referenceHashes.isEmpty)
     }
 
     @Test func mediaUploadIntegrityDropsMismatchedReferences() async {
@@ -293,6 +366,7 @@ struct TimelineProjectionBoundaryTests {
         let downloaded = DownloadMediaSpy(data: downloadedData)
         let downloader = ConversationMediaDownloader(
             cache: cached,
+            locatorResolver: { _ in ["93.184.216.34"] },
             downloadMedia: { client, accountRef, groupIdHex, reference in
                 try await downloaded.download(
                     client: client,
@@ -406,9 +480,13 @@ struct TimelineProjectionBoundaryTests {
         )
     }
 
-    private func mediaReference(sourceEpoch: UInt64, plaintext: Data? = nil) -> MediaAttachmentReferenceFfi {
+    private func mediaReference(
+        sourceEpoch: UInt64,
+        plaintext: Data? = nil,
+        locatorValue: String = "https://media.example/a.png"
+    ) -> MediaAttachmentReferenceFfi {
         MediaAttachmentReferenceFfi(
-            locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/a.png")],
+            locators: [MediaLocatorFfi(kind: "blossom-v1", value: locatorValue)],
             ciphertextSha256: hex32("44"),
             plaintextSha256: plaintext.map(sha256Hex(of:)) ?? hex32("33"),
             nonceHex: String(repeating: "22", count: 12),
