@@ -108,6 +108,13 @@ struct MessageFooterPresentation: Equatable {
     }
 }
 
+enum MessageMediaUploadPresentation {
+    static func showsIndicator(status: MessageStatus, items: [MessageMediaAttachment]) -> Bool {
+        guard status == .sending else { return false }
+        return items.contains { $0.reference == nil && $0.localData != nil }
+    }
+}
+
 nonisolated struct ReactionSummaryPresentation: Equatable {
     let emojis: [String]
     let totalCount: Int

@@ -12,6 +12,31 @@ struct ChatSurfacePresentationTests {
         #expect(MessageFooterPresentation.value(for: .received, isFromMe: false).systemImage == nil)
     }
 
+    @Test func mediaUploadIndicatorOnlyAppearsForPendingLocalMedia() {
+        let pending = MessageMediaAttachment(
+            id: "pending-image",
+            reference: nil,
+            fileName: "photo.jpg",
+            mediaType: "image/jpeg",
+            dim: "640x480",
+            localData: Data([1])
+        )
+        let unresolvedRemote = MessageMediaAttachment(
+            id: "remote-image",
+            reference: nil,
+            fileName: "photo.jpg",
+            mediaType: "image/jpeg",
+            dim: "640x480",
+            localData: nil
+        )
+
+        #expect(MessageMediaUploadPresentation.showsIndicator(status: .sending, items: [pending]))
+        #expect(!MessageMediaUploadPresentation.showsIndicator(status: .sent, items: [pending]))
+        #expect(!MessageMediaUploadPresentation.showsIndicator(status: .failed, items: [pending]))
+        #expect(!MessageMediaUploadPresentation.showsIndicator(status: .sending, items: [unresolvedRemote]))
+        #expect(!MessageMediaUploadPresentation.showsIndicator(status: .sending, items: []))
+    }
+
     @Test func reactionSummaryCombinesEmojisAndTotalCount() throws {
         let summary = try #require(ReactionSummaryPresentation.value(from: [
             .init(emoji: "👍", count: 4, mine: false),
