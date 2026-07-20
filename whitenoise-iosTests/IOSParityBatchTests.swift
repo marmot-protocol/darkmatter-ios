@@ -27,6 +27,38 @@ struct IOSParityBatchTests {
         #expect(!AddMembersPresentation.canInvite(stagedCount: 0, isInviting: false))
     }
 
+    @Test func namedEmptyGroupCreationSendsSanitizedRequestWithoutMemberRefs() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "active-account"
+        let model = NewChatFlowViewModel()
+        var capturedAccountRef: String?
+        var capturedName: String?
+        var capturedMemberRefs: [String]?
+        var capturedDescription: String?
+        var openedGroupId: String?
+        model.createGroupForTesting = { accountRef, name, memberRefs, description in
+            capturedAccountRef = accountRef
+            capturedName = name
+            capturedMemberRefs = memberRefs
+            capturedDescription = description
+            return "empty-group"
+        }
+
+        await model.createGroup(
+            name: "  Project North  ",
+            description: "  Planning room  ",
+            retentionSeconds: 0,
+            using: appState,
+            onOpen: { openedGroupId = $0 }
+        )
+
+        #expect(capturedAccountRef == "active-account")
+        #expect(capturedName == "Project North")
+        #expect(capturedMemberRefs == [])
+        #expect(capturedDescription == "Planning room")
+        #expect(openedGroupId == "empty-group")
+    }
+
     @Test func emptyGroupInviteRequiresConfirmedSoleMemberAdmin() {
         #expect(EmptyGroupConversationPresentation.canInvite(
             isSelfMember: true,
@@ -56,6 +88,17 @@ struct IOSParityBatchTests {
             "🔥", "👍", "❤️", "👎", "😂", "😮",
         ])
         #expect(QuickReactionChoices.normalize(["❤", "❤️"]).filter { $0 == "❤" || $0 == "❤️" }.count == 1)
+    }
+
+    @Test func choosingAnExistingQuickReactionSwapsOnlyTheTwoSlots() {
+        let choices = ["❤️", "👍", "👎", "😂", "😮", "😢"]
+
+        #expect(QuickReactionChoices.replacing(choices, at: 0, with: "😂") == [
+            "😂", "👍", "👎", "❤️", "😮", "😢",
+        ])
+        #expect(QuickReactionChoices.replacing(choices, at: 1, with: "🔥") == [
+            "❤️", "🔥", "👎", "😂", "😮", "😢",
+        ])
     }
 
     @Test func customizedQuickReactionsPersistAndOverrideRecents() throws {
@@ -170,6 +213,25 @@ struct IOSParityBatchTests {
         #expect(MessageSemantics.mediaAttachments(from: [MessageTagFfi(values: values)]) == nil)
     }
 
+    @Test func optimisticImetaParserRetainsUnsupportedLocatorWithSafeBlossomFallback() throws {
+        let values = [
+            MessageSemantics.imetaTag,
+            "v \(MessageSemantics.encryptedMediaVersion)",
+            "locator ipfs-v1 ipfs://bafy-test",
+            "locator blossom-v1 https://media.example/blob",
+            "ciphertext_sha256 \(String(repeating: "a", count: 64))",
+            "plaintext_sha256 \(String(repeating: "b", count: 64))",
+            "nonce \(String(repeating: "c", count: 24))",
+            "m image/jpeg",
+            "filename photo.jpg",
+        ]
+
+        let attachment = try #require(MessageSemantics.mediaAttachments(
+            from: [MessageTagFfi(values: values)]
+        )?.first)
+        #expect(attachment.locators.map(\.kind) == ["ipfs-v1", "blossom-v1"])
+    }
+
     @Test func optimisticImetaParserRejectsOversizedFieldAndLocatorCollections() {
         let requiredFields = [
             "v \(MessageSemantics.encryptedMediaVersion)",
@@ -189,6 +251,8 @@ struct IOSParityBatchTests {
             + (0...MessageSemantics.maxImetaLocatorsPerTag).map {
                 "locator blossom-v1 https://media.example/blob-\($0)"
             }
+
+        #expect(tooManyLocators.dropFirst().count <= MessageSemantics.maxImetaFieldsPerTag)
 
         #expect(MessageSemantics.mediaAttachments(
             from: [MessageTagFfi(values: tooManyFields)]

@@ -293,7 +293,9 @@ nonisolated enum MessageSemantics {
         let locatorValue = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !kind.isEmpty, !locatorValue.isEmpty else { return nil }
         let locator = MediaLocatorFfi(kind: kind, value: locatorValue)
-        guard EncryptedMediaLocatorValidation.validatedURL(for: locator) != nil else { return nil }
+        guard kind != EncryptedMediaLocatorValidation.blossomKind
+            || EncryptedMediaLocatorValidation.validatedURL(for: locator) != nil
+        else { return nil }
         return locator
     }
 
@@ -357,7 +359,7 @@ nonisolated enum MessageSemantics {
     static let maxImetaTags = MediaDraftProcessor.maxAttachmentCount + 2
     // Keep optimistic parsing on the same per-tag budget as reply previews.
     static let maxImetaFieldsPerTag = 16
-    static let maxImetaLocatorsPerTag = 16
+    static let maxImetaLocatorsPerTag = 8
 
     private static func isWithinByteLimit(_ value: String, _ max: Int) -> Bool {
         value.utf8.count <= max

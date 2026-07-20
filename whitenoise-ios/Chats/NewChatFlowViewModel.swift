@@ -19,6 +19,12 @@ final class NewChatFlowViewModel {
     private(set) var isCreatingGroup = false
     var groupCreateError: String?
 
+#if DEBUG
+    @ObservationIgnored var createGroupForTesting: (
+        @MainActor (String, String, [String], String?) async throws -> String
+    )?
+#endif
+
     var isBusy: Bool { starter.isCreating || isCreatingGroup }
 
     /// Excludes the active account from every people list in this flow.
@@ -143,14 +149,36 @@ final class NewChatFlowViewModel {
         defer { isCreatingGroup = false }
         groupCreateError = nil
         do {
+            let normalizedDescription = NewGroupPresentation.normalizedDescription(description)
+            let groupIdHex: String
+#if DEBUG
+            if let createGroupForTesting {
+                groupIdHex = try await createGroupForTesting(
+                    accountRef,
+                    normalizedName,
+                    groupSelection.memberRefs,
+                    normalizedDescription
+                )
+            } else {
+                let client = try appState.currentMarmotClient()
+                groupIdHex = try await client.createGroup(
+                    accountRef: accountRef,
+                    name: normalizedName,
+                    memberRefs: groupSelection.memberRefs,
+                    description: normalizedDescription
+                )
+            }
+#else
             let client = try appState.currentMarmotClient()
-            let groupIdHex = try await client.createGroup(
+            groupIdHex = try await client.createGroup(
                 accountRef: accountRef,
                 name: normalizedName,
                 memberRefs: groupSelection.memberRefs,
-                description: NewGroupPresentation.normalizedDescription(description)
+                description: normalizedDescription
             )
+#endif
             if retentionSeconds > 0 {
+                let client = try appState.currentMarmotClient()
                 await applyRetention(
                     seconds: retentionSeconds,
                     accountRef: accountRef,

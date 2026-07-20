@@ -242,8 +242,7 @@ private struct QuickReactionEditorView: View {
         ) {
             EmojiPickerContent(showsSearchField: true) { emoji in
                 guard let editingIndex, draft.indices.contains(editingIndex) else { return }
-                draft[editingIndex] = emoji
-                draft = QuickReactionChoices.normalize(draft)
+                draft = QuickReactionChoices.replacing(draft, at: editingIndex, with: emoji)
                 self.editingIndex = nil
             }
             .navigationTitle("Choose reaction")

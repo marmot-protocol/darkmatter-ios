@@ -1935,6 +1935,7 @@ struct ConversationView: View {
                         Text("Add members to start the conversation.")
                     } actions: {
                         Button {
+                            dismissKeyboard()
                             openAddMembersOnDetails = true
                             showDetails = true
                         } label: {
