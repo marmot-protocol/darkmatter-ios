@@ -9953,6 +9953,12 @@ struct MessageMediaThumbnailDecoderTests {
 @MainActor
 struct ReplySwipeTests {
 
+    @Test func recognizerBeginsOnlyForRightwardHorizontalIntent() {
+        #expect(ReplySwipe.shouldBegin(velocity: CGPoint(x: 180, y: 30)))
+        #expect(!ReplySwipe.shouldBegin(velocity: CGPoint(x: 30, y: 180)))
+        #expect(!ReplySwipe.shouldBegin(velocity: CGPoint(x: -180, y: 20)))
+    }
+
     @Test func horizontalDragPastThresholdActivatesReply() {
         #expect(ReplySwipe.shouldActivate(translation: CGSize(width: 72, height: 10)))
     }
@@ -9970,6 +9976,7 @@ struct ReplySwipeTests {
         #expect(partialOffset < ReplySwipe.maximumFeedbackOffset)
         #expect(ReplySwipe.feedbackOffset(translation: CGSize(width: 160, height: 3)) == ReplySwipe.maximumFeedbackOffset)
         #expect(ReplySwipe.feedbackOffset(translation: CGSize(width: 40, height: 80)) == 0)
+        #expect(ReplySwipe.feedbackOffset(translation: CGSize(width: 20, height: 1)) == 0)
     }
 
     @Test func completionNudgeStaysBelowMaximumFeedback() {
@@ -9977,6 +9984,65 @@ struct ReplySwipeTests {
         #expect(ReplySwipe.completionOffset < ReplySwipe.maximumFeedbackOffset)
         #expect(ReplySwipe.completionOffset <= 12)
         #expect(ReplySwipe.completionPauseNanoseconds <= 20_000_000)
+    }
+}
+
+@MainActor
+struct TimelineKeyboardDismissControllerTests {
+
+    @Test func installsNonCancellingTapDirectlyOnScrollView() {
+        var tapCount = 0
+        let controller = TimelineKeyboardDismissController { tapCount += 1 }
+        let scrollView = UIScrollView()
+
+        controller.install(on: scrollView)
+
+        #expect(controller.installedScrollView === scrollView)
+        #expect(controller.recognizer.view === scrollView)
+        #expect(!controller.recognizer.cancelsTouchesInView)
+        #expect(!controller.recognizer.delaysTouchesBegan)
+        #expect(!controller.recognizer.delaysTouchesEnded)
+        #expect(!controller.gestureRecognizer(
+            controller.recognizer,
+            shouldRecognizeSimultaneouslyWith: scrollView.panGestureRecognizer
+        ))
+        #expect(controller.gestureRecognizer(
+            controller.recognizer,
+            shouldRequireFailureOf: scrollView.panGestureRecognizer
+        ))
+        let otherTap = UITapGestureRecognizer()
+        #expect(controller.gestureRecognizer(
+            controller.recognizer,
+            shouldRecognizeSimultaneouslyWith: otherTap
+        ))
+        #expect(!controller.gestureRecognizer(
+            controller.recognizer,
+            shouldRequireFailureOf: otherTap
+        ))
+
+        controller.handleRecognizedTap()
+        #expect(tapCount == 1)
+
+        controller.uninstall()
+        #expect(controller.installedScrollView == nil)
+        #expect(controller.recognizer.view == nil)
+    }
+
+    @Test func attachmentResolvesTheEnclosingTimelineScrollView() {
+        let controller = TimelineKeyboardDismissController {}
+        let scrollView = UIScrollView()
+        let contentView = UIView()
+        let attachmentView = TimelineKeyboardDismissAttachmentView()
+        attachmentView.controller = controller
+
+        scrollView.addSubview(contentView)
+        contentView.addSubview(attachmentView)
+        attachmentView.resolveScrollView()
+
+        #expect(controller.installedScrollView === scrollView)
+        #expect(controller.recognizer.view === scrollView)
+
+        controller.uninstall()
     }
 }
 
@@ -10112,19 +10178,22 @@ struct TimelineBottomTests {
         ))
     }
 
-    @Test func viewportVisibilityIncludesPartialRowsButNotOffscreenRows() {
-        let viewport = CGRect(x: 0, y: 0, width: 320, height: 100)
-        let visible = TimelineViewportVisibility.visibleRowKeys(
-            frames: [
-                "above": CGRect(x: 0, y: -40, width: 320, height: 30),
-                "partial": CGRect(x: 0, y: -10, width: 320, height: 20),
-                "inside": CGRect(x: 0, y: 20, width: 320, height: 40),
-                "below": CGRect(x: 0, y: 101, width: 320, height: 20),
-            ],
-            viewport: viewport
-        )
+    @Test func timelineVisibilityStorePublishesOnlyVisibilityEdges() {
+        let visibility = TimelineVisibilityStore()
 
-        #expect(visible == Set(["partial", "inside"]))
+        #expect(visibility.set("message-a", isVisible: true))
+        #expect(!visibility.set("message-a", isVisible: true))
+        #expect(visibility.visibleRowKeys == Set(["message-a"]))
+        #expect(visibility.set("message-a", isVisible: false))
+        #expect(!visibility.set("message-a", isVisible: false))
+        #expect(visibility.visibleRowKeys.isEmpty)
+    }
+
+    @Test func timelineVisibilityThresholdIncludesPartiallyVisibleTallRows() {
+        let onePointOfTallRow = 1.0 / 400.0
+
+        #expect(TimelineViewportVisibility.minimumVisibleFraction <= onePointOfTallRow)
+        #expect(TimelineViewportVisibility.minimumVisibleFraction < 0.5)
     }
 
     @Test func unreadDividerAppearsOnlyBeforePersistedFirstUnreadMessage() {
@@ -10235,9 +10304,57 @@ struct TimelineBottomTests {
         #expect(!TimelineBottom.shouldPreservePinAfterContentGrowth(previous: previous, current: current))
     }
 
-    @Test func viewportChangesFollowOnlyWhenAlreadyPinned() {
-        #expect(TimelineBottom.shouldFollowViewportChange(wasPinned: true))
-        #expect(!TimelineBottom.shouldFollowViewportChange(wasPinned: false))
+    @Test func keyboardTransitionFollowsOnlyPinnedIdleTimeline() {
+        #expect(TimelineKeyboardBottomFollow.shouldBegin(
+            distanceToBottom: 0,
+            isFollowEnabled: true,
+            isTracking: false,
+            isDragging: false,
+            isDecelerating: false
+        ))
+        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
+            distanceToBottom: TimelineBottom.pinnedThreshold + 1,
+            isFollowEnabled: true,
+            isTracking: false,
+            isDragging: false,
+            isDecelerating: false
+        ))
+        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
+            distanceToBottom: 0,
+            isFollowEnabled: true,
+            isTracking: false,
+            isDragging: true,
+            isDecelerating: false
+        ))
+        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
+            distanceToBottom: 0,
+            isFollowEnabled: false,
+            isTracking: false,
+            isDragging: false,
+            isDecelerating: false
+        ))
+    }
+
+    @Test func keyboardFollowStartsClampingWhenTallContentExceedsShrinkingViewport() {
+        #expect(!TimelineKeyboardBottomFollow.shouldClamp(
+            contentHeight: 620,
+            boundsHeight: 700,
+            adjustedTopInset: 0,
+            adjustedBottomInset: 0
+        ))
+        #expect(TimelineKeyboardBottomFollow.shouldClamp(
+            contentHeight: 620,
+            boundsHeight: 390,
+            adjustedTopInset: 0,
+            adjustedBottomInset: 0
+        ))
+        #expect(TimelineKeyboardBottomFollow.distanceToBottom(
+            contentHeight: 620,
+            boundsHeight: 390,
+            adjustedTopInset: 0,
+            adjustedBottomInset: 0,
+            contentOffsetY: 0
+        ) == 230)
     }
 
     @Test func projectionChangesFollowPinnedOrInitialBottomPlacementOnly() {
@@ -10392,6 +10509,18 @@ struct TimelineBottomTests {
 
 @MainActor
 struct KeyboardFrameChangeTests {
+
+    @Test func animationParametersPreserveKeyboardTiming() {
+        let parameters = KeyboardFrameChange.animationParameters(duration: 0.42, rawCurve: 1)
+        #expect(parameters.duration == 0.42)
+        #expect(parameters.curve == .easeIn)
+    }
+
+    @Test func animationParametersUseStableDefaultsForUnknownCurve() {
+        let parameters = KeyboardFrameChange.animationParameters(duration: nil, rawCurve: 7)
+        #expect(parameters.duration == 0.25)
+        #expect(parameters.curve == .easeInOut)
+    }
 
     @Test func bottomGapUpdatesOnlyForMaterialChanges() {
         #expect(!KeyboardFrameChange.shouldUpdateBottomGap(current: 16, next: 16.25))

@@ -141,6 +141,7 @@ struct ComposerBar: View {
     let disabledMessage: String?
     let voiceRecordingActive: Bool
     let focusRequest: Int
+    let dismissRequest: Int
     let mentionCandidates: [ComposerMentionCandidate]
     var submissionEnabled = true
     var submissionAccessibilityLabel = L10n.string("Send")
@@ -244,13 +245,13 @@ struct ComposerBar: View {
         .onChange(of: focusRequest) { _, _ in
             showSystemKeyboard()
         }
+        .onChange(of: dismissRequest) { _, _ in
+            dismissInputChrome()
+        }
         .onChange(of: inputEnabled) { _, enabled in
             guard !enabled else { return }
             showAttachmentUnavailableTooltip = false
-            activeAccessoryPanel = nil
-            isRestoringKeyboard = false
-            isTextInputFocused = false
-            reservedPaneHeight = 0
+            dismissInputChrome(animated: false)
         }
     }
 
@@ -637,6 +638,19 @@ struct ComposerBar: View {
     private func handleKeyboardDidHide(_: Notification) {
         guard activeAccessoryPanel == nil, !isRestoringKeyboard else { return }
         reservedPaneHeight = 0
+    }
+
+    private func dismissInputChrome(animated: Bool = true) {
+        activeAccessoryPanel = nil
+        isRestoringKeyboard = false
+        isTextInputFocused = false
+        if animated {
+            withAnimation(.easeOut(duration: 0.2)) {
+                reservedPaneHeight = 0
+            }
+        } else {
+            reservedPaneHeight = 0
+        }
     }
 
     private func showSystemKeyboard() {
