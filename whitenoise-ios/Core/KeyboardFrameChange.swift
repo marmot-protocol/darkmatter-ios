@@ -3,6 +3,35 @@ import UIKit
 
 @MainActor
 enum KeyboardFrameChange {
+    enum Curve: Int, Equatable {
+        case easeInOut
+        case easeIn
+        case easeOut
+        case linear
+
+        func animation(duration: TimeInterval) -> Animation {
+            switch self {
+            case .easeInOut:
+                .easeInOut(duration: duration)
+            case .easeIn:
+                .easeIn(duration: duration)
+            case .easeOut:
+                .easeOut(duration: duration)
+            case .linear:
+                .linear(duration: duration)
+            }
+        }
+    }
+
+    struct AnimationParameters: Equatable {
+        let duration: TimeInterval
+        let curve: Curve
+
+        var animation: Animation {
+            curve.animation(duration: duration)
+        }
+    }
+
     static func isVisible(from notification: Notification) -> Bool {
         guard
             let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
@@ -36,10 +65,23 @@ enum KeyboardFrameChange {
     }
 
     static func animation(from notification: Notification) -> Animation {
-        guard
-            let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
-        else { return .easeOut(duration: 0.25) }
-        return .easeOut(duration: duration)
+        animationParameters(from: notification).animation
+    }
+
+    static func animationParameters(from notification: Notification) -> AnimationParameters {
+        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double
+        let rawCurve = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int
+        return animationParameters(duration: duration, rawCurve: rawCurve)
+    }
+
+    static func animationParameters(
+        duration: TimeInterval?,
+        rawCurve: Int?
+    ) -> AnimationParameters {
+        AnimationParameters(
+            duration: duration ?? 0.25,
+            curve: rawCurve.flatMap(Curve.init(rawValue:)) ?? .easeInOut
+        )
     }
 
     private static var screenBounds: CGRect? {

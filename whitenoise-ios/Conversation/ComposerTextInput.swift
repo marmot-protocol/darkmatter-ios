@@ -54,12 +54,18 @@ struct ComposerTextInput: UIViewRepresentable {
         }
 
         if isFocused, !uiView.isFirstResponder {
-            Task { @MainActor in
-                uiView.becomeFirstResponder()
+            context.coordinator.scheduleFocus(for: uiView)
+        } else {
+            context.coordinator.cancelPendingFocus()
+            if !isFocused, uiView.isFirstResponder {
+                uiView.resignFirstResponder()
             }
-        } else if !isFocused, uiView.isFirstResponder {
-            uiView.resignFirstResponder()
         }
+    }
+
+    static func dismantleUIView(_ uiView: ImagePasteTextView, coordinator: Coordinator) {
+        coordinator.cancelPendingFocus()
+        uiView.resignFirstResponder()
     }
 
     func sizeThatFits(
@@ -77,10 +83,30 @@ struct ComposerTextInput: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: ComposerTextInput
         var lastFocusRequest: Int
+        private var pendingFocusTask: Task<Void, Never>?
 
         init(parent: ComposerTextInput) {
             self.parent = parent
             self.lastFocusRequest = 0
+        }
+
+        func scheduleFocus(for textView: ImagePasteTextView) {
+            guard pendingFocusTask == nil else { return }
+            pendingFocusTask = Task { @MainActor [weak self, weak textView] in
+                guard let self else { return }
+                defer { pendingFocusTask = nil }
+                guard !Task.isCancelled,
+                      parent.isFocused,
+                      let textView,
+                      !textView.isFirstResponder
+                else { return }
+                textView.becomeFirstResponder()
+            }
+        }
+
+        func cancelPendingFocus() {
+            pendingFocusTask?.cancel()
+            pendingFocusTask = nil
         }
 
         func textViewDidChange(_ textView: UITextView) {
