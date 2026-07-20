@@ -154,6 +154,10 @@ struct MessageBubble: View {
         debugStyle?.isUserVisibleBubble ?? true
     }
 
+    private var showsMediaUploadProgress: Bool {
+        MessageMediaUploadPresentation.showsIndicator(status: status, items: mediaItems)
+    }
+
     /// White-on-gradient text is only appropriate for our own user-visible bubbles.
     private var usesSentBubbleForeground: Bool {
         isFromMe && showsStandardBody
@@ -396,6 +400,17 @@ struct MessageBubble: View {
                     )
                 }
             )
+            .overlay {
+                if showsMediaUploadProgress {
+                    ProgressView()
+                        .controlSize(.regular)
+                        .tint(.white)
+                        .frame(width: 48, height: 48)
+                        .background(.black.opacity(0.55), in: Circle())
+                        .accessibilityLabel(L10n.string("Sending…"))
+                        .allowsHitTesting(false)
+                }
+            }
             .overlay(alignment: .bottomTrailing) {
                 if !hasVisibleBodyText && replyPreview == nil {
                     mediaOverlayMetadataFooter
