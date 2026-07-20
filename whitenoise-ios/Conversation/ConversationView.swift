@@ -419,10 +419,17 @@ nonisolated struct ConversationChromePresentation: Equatable {
 /// static member subtitle rather than letting the screen look frozen.
 enum ConversationHeaderSecondary: Equatable {
     case connecting
+    case retention(UInt64)
     case subtitle(String?)
 
-    static func resolve(isRuntimeWarmingUp: Bool, subtitle: String?) -> ConversationHeaderSecondary {
-        isRuntimeWarmingUp ? .connecting : .subtitle(subtitle)
+    static func resolve(
+        isRuntimeWarmingUp: Bool,
+        subtitle: String?,
+        retentionSeconds: UInt64 = 0
+    ) -> ConversationHeaderSecondary {
+        if isRuntimeWarmingUp { return .connecting }
+        if retentionSeconds > 0 { return .retention(retentionSeconds) }
+        return .subtitle(subtitle)
     }
 }
 
@@ -440,6 +447,18 @@ enum ConversationEmptyState: Equatable {
         if hasError { return .error }
         if isLoading { return isRuntimeWarmingUp ? .connecting : .loading }
         return .empty
+    }
+}
+
+nonisolated enum EmptyGroupConversationPresentation {
+    static func canInvite(
+        isSelfMember: Bool,
+        isSelfAdmin: Bool,
+        membersLoaded: Bool,
+        memberCount: Int,
+        onlyMemberIsSelf: Bool
+    ) -> Bool {
+        isSelfMember && isSelfAdmin && membersLoaded && memberCount == 1 && onlyMemberIsSelf
     }
 }
 
@@ -745,6 +764,7 @@ struct ConversationView: View {
     @State private var showLocationPicker = false
     @State private var showContactPicker = false
     @State private var showDetails = false
+    @State private var openAddMembersOnDetails = false
     @State private var actionsTarget: ActionsTarget?
     @State private var emojiPickerTarget: ActionsTarget?
     @State private var messageInfoTarget: ActionsTarget?
@@ -964,6 +984,7 @@ struct ConversationView: View {
                 if let viewModel {
                     GroupDetailsView(
                         viewModel: viewModel,
+                        openAddMembersOnAppear: openAddMembersOnDetails,
                         onGroupChanged: { group in
                             onGroupChanged?(group)
                         },
@@ -976,14 +997,20 @@ struct ConversationView: View {
                             onGroupDeleted?(groupIdHex)
                         }
                     )
+                    .onDisappear { openAddMembersOnDetails = false }
                 }
             }
             .sheet(item: $emojiPickerTarget) { target in
                 if let viewModel {
-                    EmojiPickerSheet(onPick: { emoji in
-                        Task { await viewModel.toggleReaction(emoji, on: target.record) }
-                        appState.addRecentReaction(emoji)
-                    })
+                    EmojiPickerSheet(
+                        quickReactions: appState.quickReactions,
+                        onQuickReactionsSave: appState.setQuickReactions,
+                        onQuickReactionsReset: appState.resetQuickReactions,
+                        onPick: { emoji in
+                            Task { await viewModel.toggleReaction(emoji, on: target.record) }
+                            appState.addRecentReaction(emoji)
+                        }
+                    )
                     .appAppearance()
                 }
             }
@@ -1520,8 +1547,8 @@ struct ConversationView: View {
     }
 
     /// Leading identity cluster: avatar beside the back chevron, then the
-    /// name (with a timer glyph while disappearing messages are on) over the
-    /// member count. Tapping it is the single way into the details page for
+    /// name over the member count or disappearing-message duration. Tapping it
+    /// is the single way into the details page for
     /// both direct messages and groups.
     private var conversationHeaderBar: some View {
         HStack(spacing: 8) {
@@ -1580,18 +1607,13 @@ struct ConversationView: View {
                     .frame(width: 34, height: 34)
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 4) {
-                        Text(chrome.title)
-                            .font(.headline)
-                            .lineLimit(1)
-                        if (viewModel?.group.disappearingMessageSecs ?? 0) > 0 {
-                            Image(systemName: "timer")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel(L10n.string("Disappearing messages on"))
-                        }
-                    }
-                    conversationHeaderSecondary(subtitle: chrome.subtitle)
+                    Text(chrome.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    conversationHeaderSecondary(
+                        subtitle: chrome.subtitle,
+                        retentionSeconds: viewModel?.group.disappearingMessageSecs ?? chat.disappearingMessageSecs
+                    )
                 }
             }
             .contentShape(.rect)
@@ -1601,10 +1623,11 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
-    private func conversationHeaderSecondary(subtitle: String?) -> some View {
+    private func conversationHeaderSecondary(subtitle: String?, retentionSeconds: UInt64) -> some View {
         switch ConversationHeaderSecondary.resolve(
             isRuntimeWarmingUp: appState.isRuntimeWarmingUp,
-            subtitle: subtitle
+            subtitle: subtitle,
+            retentionSeconds: retentionSeconds
         ) {
         case .connecting:
             HStack(spacing: 4) {
@@ -1615,6 +1638,19 @@ struct ConversationView: View {
                     .foregroundStyle(.secondary)
             }
             .lineLimit(1)
+        case .retention(let seconds):
+            HStack(spacing: 4) {
+                Image(systemName: "timer")
+                Text(GroupRetentionPresentation.label(seconds: seconds))
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(L10n.formatted(
+                "Disappearing messages: %@",
+                GroupRetentionPresentation.label(seconds: seconds)
+            ))
         case .subtitle(let value):
             // No placeholder line when there is no subtitle (direct messages):
             // reserving the space pushes the name off vertical center.
@@ -1892,11 +1928,28 @@ struct ConversationView: View {
             case .loading:
                 ProgressView()
             case .empty:
-                ContentUnavailableView(
-                    "No messages yet",
-                    systemImage: "bubble.middle.bottom",
-                    description: Text("Send the first message to get started.")
-                )
+                if viewModel.canInviteFromEmptyGroup {
+                    ContentUnavailableView {
+                        Label("Only you are here", systemImage: "person.2")
+                    } description: {
+                        Text("Add members to start the conversation.")
+                    } actions: {
+                        Button {
+                            dismissKeyboard()
+                            openAddMembersOnDetails = true
+                            showDetails = true
+                        } label: {
+                            Label("Add members", systemImage: "person.badge.plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "No messages yet",
+                        systemImage: "bubble.middle.bottom",
+                        description: Text("Send the first message to get started.")
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

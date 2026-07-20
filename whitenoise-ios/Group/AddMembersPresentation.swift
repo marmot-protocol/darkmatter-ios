@@ -85,10 +85,16 @@ nonisolated enum AddMembersPresentation {
         return accountIds
     }
 
-    /// "Create" is enabled once at least one member is staged, no create is
-    /// in flight, and there is an active account to create the group under.
-    static func canCreate(stagedCount: Int, isCreating: Bool, hasActiveAccount: Bool) -> Bool {
-        stagedCount > 0 && !isCreating && hasActiveAccount
+    /// A group may start empty when it has a usable name. Unnamed groups still
+    /// need at least one staged peer because an empty unnamed group has no useful
+    /// identity in the chat list.
+    static func canCreate(
+        stagedCount: Int,
+        hasUsableName: Bool,
+        isCreating: Bool,
+        hasActiveAccount: Bool
+    ) -> Bool {
+        (stagedCount > 0 || hasUsableName) && !isCreating && hasActiveAccount
     }
 
     /// "Invite" is enabled when no invite is in flight and at least one

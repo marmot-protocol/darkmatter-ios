@@ -440,6 +440,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         AppNotifications.shared.installDelegate()
+        MessageRetentionBackgroundRefresh.shared.register()
         return true
     }
 

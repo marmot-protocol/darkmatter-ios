@@ -64,9 +64,15 @@ final class BackgroundRuntimeSuspensionTask {
 struct whitenoise_iosApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
-    @State private var appState = AppState()
+    @State private var appState: AppState
     @State private var appLockOverlay = AppLockOverlayPresenter()
     @State private var captureProtection = WindowCaptureProtection()
+
+    init() {
+        let appState = AppState()
+        _appState = State(initialValue: appState)
+        MessageRetentionBackgroundRefresh.shared.configure(appState: appState)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -128,6 +134,7 @@ struct whitenoise_iosApp: App {
 
     @MainActor
     private func beginBackgroundRuntimeSuspension() {
+        MessageRetentionBackgroundRefresh.shared.schedule()
         let backgroundTask = BackgroundRuntimeSuspensionTask(name: "Suspend Marmot runtime")
         let suspensionTask = appState.startRuntimeSuspension()
         backgroundTask.endWhenSuspensionCompletes(suspensionTask)

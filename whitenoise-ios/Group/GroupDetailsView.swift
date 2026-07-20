@@ -31,6 +31,7 @@ struct GroupDetailsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @Bindable var viewModel: ConversationViewModel
+    var openAddMembersOnAppear = false
     var onGroupChanged: (AppGroupRecordFfi) -> Void = { _ in }
     var onGroupLeft: (String) -> Void = { _ in }
     var onGroupDeleted: (String) -> Void = { _ in }
@@ -50,6 +51,7 @@ struct GroupDetailsView: View {
     @State private var nicknameDraft = ""
     @State private var showStartGroupWithContact = false
     @State private var showAddContactToGroup = false
+    @State private var didOpenRequestedAddMembers = false
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var isDirectMessage: Bool { viewModel.groupDisplay.isDirectMessage }
@@ -289,6 +291,10 @@ struct GroupDetailsView: View {
             await model.refreshVisibleDebugState(using: appState)
         }
         .task(id: viewModel.group.groupIdHex) {
+            if openAddMembersOnAppear, !didOpenRequestedAddMembers, isAdmin, !isDirectMessage {
+                didOpenRequestedAddMembers = true
+                model.showAddMembers = true
+            }
             model.loadMuteState(using: appState)
             await model.loadSharedMedia(using: appState)
             await model.loadSharedGroups(using: appState)

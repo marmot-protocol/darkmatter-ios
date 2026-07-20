@@ -100,9 +100,11 @@ final class ConversationMediaDownloader {
     private let inFlight = MediaDownloadInFlightStore()
     private let cache: ConversationMediaCacheAccessing
     private let downloadMedia: DownloadMedia
+    private let locatorResolver: HostResolutionGuard.Resolver
 
     init(
         cache: ConversationMediaCacheAccessing? = nil,
+        locatorResolver: @escaping HostResolutionGuard.Resolver = HostResolutionGuard.systemResolver,
         downloadMedia: @escaping DownloadMedia = { client, accountRef, groupIdHex, reference in
             try await client.downloadMedia(
                 accountRef: accountRef,
@@ -112,6 +114,7 @@ final class ConversationMediaDownloader {
         }
     ) {
         self.cache = cache ?? DefaultConversationMediaCache()
+        self.locatorResolver = locatorResolver
         self.downloadMedia = downloadMedia
     }
 
@@ -121,6 +124,9 @@ final class ConversationMediaDownloader {
         }
         guard let reference = media.reference else {
             throw MediaDataError.missingReference
+        }
+        guard EncryptedMediaLocatorValidation.isStaticallySafe(reference.locators) else {
+            throw MediaDataError.unsafeLocator
         }
         return try await inFlight.data(
             for: MediaDownloadInFlightKey(reference: reference)
@@ -135,6 +141,16 @@ final class ConversationMediaDownloader {
             }
             guard let appState, let accountRef = appState.activeAccountRef else {
                 throw MediaDataError.missingAccount
+            }
+            let locatorResolver = self.locatorResolver
+            let locatorResolutionIsSafe = await Task.detached(priority: .utility) {
+                EncryptedMediaLocatorValidation.resolvesOnlyToPublicAddresses(
+                    reference.locators,
+                    resolver: locatorResolver
+                )
+            }.value
+            guard locatorResolutionIsSafe else {
+                throw MediaDataError.unsafeLocator
             }
             let client = try appState.currentMarmotClient()
             // Row references already carry the real source_epoch, so the reference
@@ -154,6 +170,7 @@ final class ConversationMediaDownloader {
     enum MediaDataError: LocalizedError, Equatable {
         case missingReference
         case missingAccount
+        case unsafeLocator
         case plaintextHashMismatch
 
         var errorDescription: String? {
@@ -162,6 +179,8 @@ final class ConversationMediaDownloader {
                 return L10n.string("This attachment is not ready yet.")
             case .missingAccount:
                 return L10n.string("No active account.")
+            case .unsafeLocator:
+                return L10n.string("This attachment uses an unsafe download location.")
             case .plaintextHashMismatch:
                 return L10n.string("Attachment verification failed.")
             }
