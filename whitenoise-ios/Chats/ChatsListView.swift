@@ -315,7 +315,7 @@ struct ChatsListView: View {
                 }
             }
         } label: {
-            Image(systemName: "slider.horizontal.3")
+            Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(scope == .active ? Color.primary : Color.accentColor)
                 .frame(width: 40, height: 44)
