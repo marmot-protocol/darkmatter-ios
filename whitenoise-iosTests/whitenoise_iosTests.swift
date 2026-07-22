@@ -7720,6 +7720,14 @@ struct ChatListSwipeActionsPresentationTests {
         #expect(!actions.contains(.leave))
         #expect(!actions.contains(.archive))
     }
+
+    @Test func bulkLocalDeleteRequiresEverySelectedMembershipToBeInactive() {
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: []))
+        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false]))
+        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false, false]))
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [true]))
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [false, true]))
+    }
 }
 
 @MainActor
