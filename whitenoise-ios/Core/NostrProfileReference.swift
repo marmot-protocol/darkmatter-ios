@@ -93,17 +93,25 @@ nonisolated enum NostrProfileReference {
     }
 
     /// NIP-19 nprofile encoder used when a caller needs to preserve relay hints.
-    /// Resolution still routes the result back through `referenceForResolution`,
-    /// which applies the network-destination allowlist before use.
+    /// Apply the same destination policy as the decoder so values are safe even
+    /// before an optional later resolution pass.
     static func nprofile(fromAccountIdHex accountIdHex: String, relayHints: [String]) -> String? {
         guard let pubkey = pubkeyBytes(fromHex: accountIdHex) else { return nil }
         var tlv: [UInt8] = [0, UInt8(pubkey.count)] + pubkey
-        for relay in relayHints {
+        var seenRelays = Set<String>()
+        var acceptedRelayCount = 0
+        for rawRelay in relayHints {
+            guard acceptedRelayCount < maxRelayHints else { break }
+            guard rawRelay.utf8.count <= Int(UInt8.max),
+                  let relay = RelayURL.normalized(rawRelay),
+                  relay.utf8.count <= Int(UInt8.max),
+                  seenRelays.insert(relay).inserted
+            else { continue }
             let bytes = Array(relay.utf8)
-            guard bytes.count <= Int(UInt8.max) else { return nil }
             tlv.append(1)
             tlv.append(UInt8(bytes.count))
             tlv.append(contentsOf: bytes)
+            acceptedRelayCount += 1
         }
         guard let data = convertBits(tlv, from: 8, to: 5, pad: true) else { return nil }
         return bech32Encode(hrp: "nprofile", data: data)

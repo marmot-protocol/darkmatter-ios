@@ -72,11 +72,12 @@ struct GroupMemberOrderingTests {
             profileGeneration: 3,
             resolveName: resolve
         )
-        _ = GroupMemberOrdering.filtered(
+        let filtered = GroupMemberOrdering.filtered(
             first.orderedMembers,
             query: "ann",
             namesByMemberId: first.namesByMemberId
         )
+        #expect(filtered.map(\.memberIdHex) == ["11"])
         let second = cache.projection(
             members: members,
             profileGeneration: 3,

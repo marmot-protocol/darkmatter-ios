@@ -6920,6 +6920,25 @@ struct NetworkTrustRegressionTests {
         ))
     }
 
+    @Test func nprofileEncodingNormalizesDeduplicatesAndCapsRelayHints() throws {
+        let accountIdHex = hex("43")
+        let normalizedRelays = (0..<8).map { "wss://relay\($0).example/path" }
+        let encoded = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: [
+                "ws://insecure.example",
+                "WSS://RELAY0.EXAMPLE/path",
+                normalizedRelays[0],
+            ] + Array(normalizedRelays.dropFirst()) + ["wss://relay8.example/path"]
+        ))
+        let expected = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: normalizedRelays
+        ))
+
+        #expect(encoded == expected)
+    }
+
     @Test func malformedPunycodeHostIsStillFlaggedAsInternationalized() throws {
         let url = try #require(URL(string: "https://xn--.example/path"))
         let display = MessageExternalLinkConfirmation.displayText(for: url)
@@ -6937,6 +6956,18 @@ struct NetworkTrustRegressionTests {
         #expect(!NotificationCommunicationDecorator.isAllowedAvatarData(Data(
             "<svg xmlns='http://www.w3.org/2000/svg'></svg>".utf8
         )))
+        #expect(NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 1_024, height: 1_024)]
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 4_097, height: 1)]
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: Array(repeating: (width: 1, height: 1), count: 9)
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 4_096, height: 4_096), (width: 1, height: 1)]
+        ))
     }
 }
 

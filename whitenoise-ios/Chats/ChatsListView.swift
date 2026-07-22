@@ -368,6 +368,7 @@ struct ChatsListView: View {
                     }
                     .contentShape(.rect)
                     .onTapGesture {
+                        guard !deletingChatIds.contains(item.id) else { return }
                         if selectionMode {
                             selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
                         } else {
@@ -375,7 +376,9 @@ struct ChatsListView: View {
                         }
                     }
                     .onLongPressGesture {
-                        if !selectionMode { selectedChatIds = [item.id] }
+                        if !selectionMode, !deletingChatIds.contains(item.id) {
+                            selectedChatIds = [item.id]
+                        }
                     }
                     .accessibilityAddTraits(.isButton)
                     .swipeActions(edge: .leading) {
@@ -446,11 +449,13 @@ struct ChatsListView: View {
         return VStack(spacing: 8) {
             HStack {
                 Button("Cancel") { selectedChatIds = [] }
+                    .disabled(bulkDeleteInProgress)
                 Spacer()
                 Text(L10n.plural("%lld selected", Int64(items.count)))
                     .font(.headline)
                 Spacer()
                 Button("Select All") { selectedChatIds = ChatListSelection.selectAll(visibleRows.map(\.id)) }
+                    .disabled(bulkDeleteInProgress)
             }
 
             HStack(spacing: 24) {

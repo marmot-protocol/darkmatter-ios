@@ -647,9 +647,10 @@ final class NotificationCoordinator {
         let id = UUID()
         connectivityCatchUpTaskID = id
         connectivityCatchUpTask = Task { [weak self, weak host] in
-            guard let self, let host else { return }
+            guard let self else { return }
+            defer { self.clearCompletedConnectivityCatchUp(id: id) }
+            guard let host else { return }
             await self.catchUpAfterForegroundActivation(host: host)
-            self.clearCompletedConnectivityCatchUp(id: id)
         }
     }
 

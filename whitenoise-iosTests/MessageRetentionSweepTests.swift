@@ -92,7 +92,7 @@ struct MessageRetentionSweepTests {
         try Data("pruned playback".utf8).write(to: prunedPlaybackURL)
         try Data("kept playback".utf8).write(to: keptPlaybackURL)
 
-        MessageMediaCache.removeCachedData(
+        let removed = MessageMediaCache.removeCachedData(
             forPlaintextHashes: [prunedReference.plaintextSha256.uppercased()],
             cachesDirectory: cachesDirectory
         )
@@ -103,6 +103,24 @@ struct MessageRetentionSweepTests {
         #expect(FileManager.default.fileExists(atPath: keptURL.path))
         #expect(!FileManager.default.fileExists(atPath: prunedPlaybackURL.path))
         #expect(FileManager.default.fileExists(atPath: keptPlaybackURL.path))
+        #expect(removed)
+    }
+
+    @Test func cacheEvictionReportsDirectoryReadFailures() throws {
+        let cachesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("retention-sweep-failure-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cachesDirectory) }
+        try FileManager.default.createDirectory(at: cachesDirectory, withIntermediateDirectories: true)
+        try Data("not a directory".utf8).write(
+            to: cachesDirectory.appendingPathComponent("EncryptedMedia")
+        )
+
+        let removed = MessageMediaCache.removeCachedData(
+            forPlaintextHashes: [String(repeating: "a", count: 64)],
+            cachesDirectory: cachesDirectory
+        )
+
+        #expect(!removed)
     }
 }
 

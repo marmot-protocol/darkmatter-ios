@@ -21,6 +21,35 @@ struct RecipientSearchTests {
         ))
     }
 
+    @Test func directoryResetsAndRejectsCommitsAcrossAccountSwitches() {
+        let task = UUID()
+
+        #expect(RecipientDirectory.shouldResetForAccountChange(
+            loadedAccountRef: "account-a",
+            loadingAccountRef: nil,
+            requestedAccountRef: "account-b"
+        ))
+        #expect(!RecipientDirectory.shouldResetForAccountChange(
+            loadedAccountRef: "account-a",
+            loadingAccountRef: "account-a",
+            requestedAccountRef: "account-a"
+        ))
+        #expect(!RecipientDirectory.loadRequestIsCurrent(
+            currentTaskID: task,
+            currentAccountRef: "account-a",
+            activeAccountRef: "account-b",
+            completingTaskID: task,
+            completingAccountRef: "account-a"
+        ))
+        #expect(RecipientDirectory.loadRequestIsCurrent(
+            currentTaskID: task,
+            currentAccountRef: "account-b",
+            activeAccountRef: "account-b",
+            completingTaskID: task,
+            completingAccountRef: "account-b"
+        ))
+    }
+
     @Test func blankQueryReturnsAllCandidatesInInputOrder() {
         let candidates = [candidate(alice), candidate(bob)]
 

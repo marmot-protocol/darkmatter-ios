@@ -21,6 +21,9 @@ nonisolated enum NotificationCommunicationDecorator {
     /// one wake; each fetch's deadline is clamped to what remains.
     static let avatarAggregateBudget: Duration = .seconds(6)
     static let maxCachedAvatars = 32
+    static let maxAvatarPixelDimension = 4_096
+    static let maxAvatarPixelCount = 16_777_216
+    static let maxAvatarFrames = 8
 
     /// Per-fetch deadline under an aggregate budget, `nil` once the budget is
     /// exhausted. Clamping to the remainder is what makes the budget a hard
@@ -244,12 +247,45 @@ nonisolated enum NotificationCommunicationDecorator {
         guard !data.isEmpty,
               data.count <= maxAvatarBytes,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetCount(source) > 0,
               let typeIdentifier = CGImageSourceGetType(source),
               let type = UTType(typeIdentifier as String),
               type.conforms(to: .image),
               !type.conforms(to: .svg)
         else { return false }
+
+        let frameCount = CGImageSourceGetCount(source)
+        guard frameCount > 0, frameCount <= maxAvatarFrames else { return false }
+        var frameDimensions: [(width: Int, height: Int)] = []
+        frameDimensions.reserveCapacity(frameCount)
+        for index in 0..<frameCount {
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+                  let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                  let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue
+            else { return false }
+            frameDimensions.append((width, height))
+        }
+        return avatarMetadataIsAllowed(frameDimensions: frameDimensions)
+    }
+
+    static func avatarMetadataIsAllowed(
+        frameDimensions: [(width: Int, height: Int)],
+        maxDimension: Int = maxAvatarPixelDimension,
+        maxTotalPixels: Int = maxAvatarPixelCount,
+        maxFrames: Int = maxAvatarFrames
+    ) -> Bool {
+        guard !frameDimensions.isEmpty, frameDimensions.count <= maxFrames else { return false }
+        var totalPixels = 0
+        for frame in frameDimensions {
+            guard frame.width > 0,
+                  frame.height > 0,
+                  frame.width <= maxDimension,
+                  frame.height <= maxDimension
+            else { return false }
+            let (framePixels, multiplicationOverflow) = frame.width.multipliedReportingOverflow(by: frame.height)
+            let (nextTotal, additionOverflow) = totalPixels.addingReportingOverflow(framePixels)
+            guard !multiplicationOverflow, !additionOverflow, nextTotal <= maxTotalPixels else { return false }
+            totalPixels = nextTotal
+        }
         return true
     }
 

@@ -17,33 +17,57 @@ final class RecipientDirectory {
     private var loadedAccountRef: String?
     private var loadTask: Task<Void, Never>?
     private var loadTaskID: UUID?
+    private var loadAccountRef: String?
 
     private static let profileWarmupLimit = 24
 
     /// Callers that need the directory before deciding (e.g. DM reuse) can
     /// await this mid-flight: a concurrent load is joined, not skipped.
     func load(using appState: AppState, force: Bool = false) async {
+        guard let accountRef = appState.activeAccountRef else {
+            resetForAccountChange()
+            return
+        }
+        if Self.shouldResetForAccountChange(
+            loadedAccountRef: loadedAccountRef,
+            loadingAccountRef: loadAccountRef,
+            requestedAccountRef: accountRef
+        ) {
+            resetForAccountChange()
+        }
         if let loadTask {
             await loadTask.value
         }
-        guard let accountRef = appState.activeAccountRef else {
-            snapshots = []
-            candidates = []
-            searchFieldsByAccountId = [:]
-            loadedAccountRef = nil
-            return
-        }
+        guard appState.activeAccountRef == accountRef else { return }
         if loadedAccountRef == accountRef, !force, !snapshots.isEmpty { return }
         guard !isLoading else { return }
         let taskID = UUID()
-        let task = Task { await performLoad(accountRef: accountRef, using: appState) }
-        loadTask = task
         loadTaskID = taskID
+        loadAccountRef = accountRef
+        let task = Task {
+            await performLoad(
+                accountRef: accountRef,
+                taskID: taskID,
+                using: appState
+            )
+        }
+        loadTask = task
         await task.value
         if Self.shouldClearLoadTask(currentTaskID: loadTaskID, completingTaskID: taskID) {
             loadTask = nil
             loadTaskID = nil
+            loadAccountRef = nil
         }
+    }
+
+    nonisolated static func shouldResetForAccountChange(
+        loadedAccountRef: String?,
+        loadingAccountRef: String?,
+        requestedAccountRef: String
+    ) -> Bool {
+        if let loadingAccountRef, loadingAccountRef != requestedAccountRef { return true }
+        if let loadedAccountRef, loadedAccountRef != requestedAccountRef { return true }
+        return false
     }
 
     nonisolated static func shouldClearLoadTask(
@@ -53,17 +77,50 @@ final class RecipientDirectory {
         currentTaskID == completingTaskID
     }
 
-    private func performLoad(accountRef: String, using appState: AppState) async {
+    nonisolated static func loadRequestIsCurrent(
+        currentTaskID: UUID?,
+        currentAccountRef: String?,
+        activeAccountRef: String?,
+        completingTaskID: UUID,
+        completingAccountRef: String
+    ) -> Bool {
+        currentTaskID == completingTaskID
+            && currentAccountRef == completingAccountRef
+            && activeAccountRef == completingAccountRef
+    }
+
+    private func performLoad(
+        accountRef: String,
+        taskID: UUID,
+        using appState: AppState
+    ) async {
+        guard Self.loadRequestIsCurrent(
+            currentTaskID: loadTaskID,
+            currentAccountRef: loadAccountRef,
+            activeAccountRef: appState.activeAccountRef,
+            completingTaskID: taskID,
+            completingAccountRef: accountRef
+        ) else { return }
         isLoading = true
         loadError = nil
-        defer { isLoading = false }
+        defer {
+            if loadTaskID == taskID {
+                isLoading = false
+            }
+        }
         do {
             let client = try appState.currentMarmotClient()
             let myAccountIdHex = appState.activeAccount?.accountIdHex
             let loaded = try await Self.loadSnapshots(client: client, accountRef: accountRef)
             let derived = await Self.deriveCandidates(from: loaded, myAccountIdHex: myAccountIdHex)
             try Task.checkCancellation()
-            guard appState.activeAccountRef == accountRef else { return }
+            guard Self.loadRequestIsCurrent(
+                currentTaskID: loadTaskID,
+                currentAccountRef: loadAccountRef,
+                activeAccountRef: appState.activeAccountRef,
+                completingTaskID: taskID,
+                completingAccountRef: accountRef
+            ) else { return }
             snapshots = loaded
             candidates = derived
             loadedAccountRef = accountRef
@@ -74,9 +131,28 @@ final class RecipientDirectory {
         } catch is CancellationError {
             return
         } catch {
-            guard appState.activeAccountRef == accountRef else { return }
+            guard Self.loadRequestIsCurrent(
+                currentTaskID: loadTaskID,
+                currentAccountRef: loadAccountRef,
+                activeAccountRef: appState.activeAccountRef,
+                completingTaskID: taskID,
+                completingAccountRef: accountRef
+            ) else { return }
             loadError = error.localizedDescription
         }
+    }
+
+    private func resetForAccountChange() {
+        loadTask?.cancel()
+        loadTask = nil
+        loadTaskID = nil
+        loadAccountRef = nil
+        isLoading = false
+        snapshots = []
+        candidates = []
+        searchFieldsByAccountId = [:]
+        loadedAccountRef = nil
+        loadError = nil
     }
 
     /// Snapshot side-effecting profile lookups outside SwiftUI's search hot
@@ -87,10 +163,10 @@ final class RecipientDirectory {
             (
                 candidate.accountIdHex,
                 RecipientSearch.MatchFields(
-                    displayName: appState.knownDisplayName(forAccountIdHex: candidate.accountIdHex),
+                    displayName: appState.cachedKnownDisplayName(forAccountIdHex: candidate.accountIdHex),
                     nickname: appState.contactNickname(forAccountIdHex: candidate.accountIdHex),
                     nip05: ContentSanitizer.profileAddress(
-                        appState.profile(forAccountIdHex: candidate.accountIdHex)?.nip05
+                        appState.cachedProfile(forAccountIdHex: candidate.accountIdHex)?.nip05
                     )
                 )
             )

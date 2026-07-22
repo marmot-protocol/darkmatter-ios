@@ -1394,9 +1394,11 @@ nonisolated enum MessageMediaCache {
 
     /// Directly evicts content-addressed plaintext files reported by Marmot's
     /// secure-prune result, avoiding a pre-prune `listMedia` scan.
-    static func removeCachedData(forPlaintextHashes hashes: Set<String>) async {
-        guard !hashes.isEmpty, let cachesDirectory = defaultCachesDirectory else { return }
-        await Task.detached(priority: .utility) {
+    @discardableResult
+    static func removeCachedData(forPlaintextHashes hashes: Set<String>) async -> Bool {
+        guard !hashes.isEmpty else { return true }
+        guard let cachesDirectory = defaultCachesDirectory else { return false }
+        return await Task.detached(priority: .utility) {
             removeCachedData(forPlaintextHashes: hashes, cachesDirectory: cachesDirectory)
         }.value
     }
@@ -1466,30 +1468,55 @@ nonisolated enum MessageMediaCache {
         }
     }
 
+    @discardableResult
     static func removeCachedData(
         forPlaintextHashes hashes: Set<String>,
         cachesDirectory: URL
-    ) {
+    ) -> Bool {
         let validHashes = Set(hashes.lazy.map { $0.lowercased() }.filter {
             $0.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
         })
-        guard !validHashes.isEmpty else { return }
-        purgeGeneration.withLock { generation in
+        guard !validHashes.isEmpty else { return true }
+        return purgeGeneration.withLock { generation in
             generation += 1
+            var allRemoved = true
             for directoryName in decryptedMediaDirectoryNames {
                 let directory = cachesDirectory.appendingPathComponent(directoryName, isDirectory: true)
-                let existing = (try? FileManager.default.contentsOfDirectory(
-                    at: directory,
-                    includingPropertiesForKeys: nil
-                )) ?? []
+                let existing: [URL]
+                do {
+                    existing = try FileManager.default.contentsOfDirectory(
+                        at: directory,
+                        includingPropertiesForKeys: nil
+                    )
+                } catch {
+                    if !isNoSuchFileError(error) {
+                        allRemoved = false
+                    }
+                    continue
+                }
                 for file in existing {
                     let stem = file.deletingPathExtension().lastPathComponent.lowercased()
                     if validHashes.contains(stem) {
-                        try? FileManager.default.removeItem(at: file)
+                        do {
+                            try FileManager.default.removeItem(at: file)
+                        } catch {
+                            if !isNoSuchFileError(error) {
+                                allRemoved = false
+                            }
+                        }
+                        if FileManager.default.fileExists(atPath: file.path) {
+                            allRemoved = false
+                        }
                     }
                 }
             }
+            return allRemoved
         }
+    }
+
+    private static func isNoSuchFileError(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError
     }
 
     private static func removeCachedDataUnlocked(

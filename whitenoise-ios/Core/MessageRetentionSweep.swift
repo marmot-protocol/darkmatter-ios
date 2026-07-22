@@ -32,6 +32,7 @@ nonisolated enum MessageRetentionSweep {
     struct Outcome {
         var prunedGroupIds: Set<String> = []
         var prunedMessageCount: UInt64 = 0
+        var failedMediaPlaintextHashes: Set<String> = []
     }
 
     /// One sweep pass: for every retention-enabled group, secure-delete
@@ -52,9 +53,10 @@ nonisolated enum MessageRetentionSweep {
                     groupIdHex: groupIdHex
                 ) else { continue }
                 if !result.mediaPlaintextSha256.isEmpty {
-                    await MessageMediaCache.removeCachedData(
-                        forPlaintextHashes: Set(result.mediaPlaintextSha256)
-                    )
+                    let hashes = Set(result.mediaPlaintextSha256)
+                    if !(await MessageMediaCache.removeCachedData(forPlaintextHashes: hashes)) {
+                        outcome.failedMediaPlaintextHashes.formUnion(hashes)
+                    }
                 }
                 if result.prunedMessages > 0
                     || !result.mediaCiphertextSha256.isEmpty
@@ -130,6 +132,7 @@ private final class MessageRetentionGroupSubscription {
 final class MessageRetentionSweeper {
     private var sweepTask: Task<Void, Never>?
     private var groupSubscriptionsByAccountRef: [String: MessageRetentionGroupSubscription] = [:]
+    private var pendingMediaPlaintextHashes: Set<String> = []
     private weak var appState: AppState?
 
     deinit {
@@ -165,7 +168,9 @@ final class MessageRetentionSweeper {
         task?.cancel()
         cancelGroupSubscriptions()
         await task?.value
-        cancelGroupSubscriptions()
+        if sweepTask == nil {
+            cancelGroupSubscriptions()
+        }
     }
 
     private func runSweepLoop() async {
@@ -187,6 +192,10 @@ final class MessageRetentionSweeper {
               ),
               let client = try? appState.currentMarmotClient()
         else { return }
+        if !pendingMediaPlaintextHashes.isEmpty,
+           await MessageMediaCache.removeCachedData(forPlaintextHashes: pendingMediaPlaintextHashes) {
+            pendingMediaPlaintextHashes.removeAll()
+        }
         let accountRefs = MessageRetentionSweepPolicy.sweepAccountRefs(from: appState.accounts)
         guard !accountRefs.isEmpty else { return }
         let groupsByAccountRef = await groupSnapshots(client: client, accountRefs: accountRefs)
@@ -194,6 +203,7 @@ final class MessageRetentionSweeper {
             client: client,
             groupsByAccountRef: groupsByAccountRef
         )
+        pendingMediaPlaintextHashes.formUnion(outcome.failedMediaPlaintextHashes)
         guard !Task.isCancelled, !outcome.prunedGroupIds.isEmpty else { return }
         appState.noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
     }
@@ -277,7 +287,15 @@ extension AppState {
             if !outcome.prunedGroupIds.isEmpty {
                 noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
             }
-            return !Task.isCancelled
+            let cacheEvictionSucceeded: Bool
+            if outcome.failedMediaPlaintextHashes.isEmpty {
+                cacheEvictionSucceeded = true
+            } else {
+                cacheEvictionSucceeded = await MessageMediaCache.removeCachedData(
+                    forPlaintextHashes: outcome.failedMediaPlaintextHashes
+                )
+            }
+            return !Task.isCancelled && cacheEvictionSucceeded
         } catch {
             if let lease {
                 await runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)

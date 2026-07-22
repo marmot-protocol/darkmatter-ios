@@ -16,6 +16,13 @@ extension AppState {
         profileStore.profile(forAccountIdHex: id)
     }
 
+    /// Cache-only profile read for batch projections that must not enqueue
+    /// unbounded hydration work.
+    @MainActor
+    func cachedProfile(forAccountIdHex id: String) -> UserProfileMetadataFfi? {
+        profileStore.cachedProfile(forAccountIdHex: id)
+    }
+
     /// A display name we actually *know* for an account: the user's private
     /// contact nickname first, then projected kind:0 display_name/name, then a
     /// local account's label. `nil` when nothing better than the raw id is
@@ -24,6 +31,13 @@ extension AppState {
     @MainActor
     func knownDisplayName(forAccountIdHex id: String) -> String? {
         profileStore.knownDisplayName(forAccountIdHex: id)
+    }
+
+    /// Cache-only display-name read for batch projections that must not enqueue
+    /// unbounded hydration work.
+    @MainActor
+    func cachedKnownDisplayName(forAccountIdHex id: String) -> String? {
+        profileStore.cachedKnownDisplayName(forAccountIdHex: id)
     }
 
     /// The resolved profile-directory name with any local nickname ignored —
