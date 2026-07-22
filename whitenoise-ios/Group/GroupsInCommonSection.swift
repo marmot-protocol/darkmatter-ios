@@ -108,6 +108,7 @@ struct AddToGroupSheet: View {
     let contactNpub: String
     let contactName: String
     let groups: [SharedGroupsProjection.SharedGroup]
+    var onAdded: @MainActor () async -> Void = {}
 
     @State private var busyGroupIdHex: String?
     @State private var error: String?
@@ -179,6 +180,7 @@ struct AddToGroupSheet: View {
                 groupIdHex: group.groupIdHex,
                 memberRefs: [contactNpub]
             )
+            await onAdded()
             Haptics.success()
             appState.present(.success(L10n.string("Added to group"), message: group.title))
             dismiss()

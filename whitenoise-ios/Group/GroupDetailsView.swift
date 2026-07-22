@@ -52,6 +52,7 @@ struct GroupDetailsView: View {
     @State private var showStartGroupWithContact = false
     @State private var showAddContactToGroup = false
     @State private var didOpenRequestedAddMembers = false
+    @State private var memberProjectionCache = GroupMemberListProjectionCache()
 
     private var isAdmin: Bool { viewModel.isSelfAdmin }
     private var isDirectMessage: Bool { viewModel.groupDisplay.isDirectMessage }
@@ -144,7 +145,10 @@ struct GroupDetailsView: View {
                 AddToGroupSheet(
                     contactNpub: contactNpub,
                     contactName: contactTitle,
-                    groups: model.addableGroups
+                    groups: model.addableGroups,
+                    onAdded: {
+                        await model.loadSharedGroups(using: appState, force: true)
+                    }
                 )
                 .appAppearance()
             }
@@ -301,6 +305,7 @@ struct GroupDetailsView: View {
         }
         .refreshable {
             await model.loadSharedMedia(using: appState, force: true)
+            await model.loadSharedGroups(using: appState, force: true)
         }
     }
 
@@ -709,12 +714,17 @@ struct GroupDetailsView: View {
 
     private var membersSection: some View {
         let details = viewModel.groupMemberDetails
-        let namesByMemberId = memberNamesById(details)
-        let ordered = GroupMemberOrdering.ordered(details, namesByMemberId: namesByMemberId)
+        let projection = memberProjectionCache.projection(
+            members: details,
+            profileGeneration: appState.profileRefreshGeneration,
+            resolveName: { member in
+                GroupMemberDetailsPresentation.displayName(for: member, appState: appState)
+            }
+        )
         let filtered = GroupMemberOrdering.filtered(
-            ordered,
+            projection.orderedMembers,
             query: memberSearchText,
-            namesByMemberId: namesByMemberId
+            namesByMemberId: projection.namesByMemberId
         )
         let isSearching = !memberSearchText.trimmingCharacters(in: .whitespaces).isEmpty
         let visible = GroupMemberOrdering.visible(
@@ -791,18 +801,6 @@ struct GroupDetailsView: View {
                 .accessibilityLabel("Clear member search")
             }
         }
-    }
-
-    private func memberNamesById(_ details: [GroupMemberDetailsFfi]) -> [String: String] {
-        var names: [String: String] = [:]
-        names.reserveCapacity(details.count)
-        for member in details {
-            names[member.memberIdHex] = GroupMemberDetailsPresentation.displayName(
-                for: member,
-                appState: appState
-            )
-        }
-        return names
     }
 
     // MARK: - Technical details

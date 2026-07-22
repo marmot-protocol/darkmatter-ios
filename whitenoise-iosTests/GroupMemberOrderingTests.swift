@@ -57,6 +57,45 @@ struct GroupMemberOrderingTests {
         #expect(small.count == 3)
     }
 
+    @MainActor
+    @Test func projectionCacheDoesNotResolveAndSortAgainForSearchTextChanges() {
+        let members = [member("22"), member("11")]
+        let cache = GroupMemberListProjectionCache()
+        var resolutionCount = 0
+        let resolve: (GroupMemberDetailsFfi) -> String = { member in
+            resolutionCount += 1
+            return member.memberIdHex == "11" ? "Anna" : "Zoe"
+        }
+
+        let first = cache.projection(
+            members: members,
+            profileGeneration: 3,
+            resolveName: resolve
+        )
+        _ = GroupMemberOrdering.filtered(
+            first.orderedMembers,
+            query: "ann",
+            namesByMemberId: first.namesByMemberId
+        )
+        let second = cache.projection(
+            members: members,
+            profileGeneration: 3,
+            resolveName: resolve
+        )
+
+        #expect(second.orderedMembers.map(\.memberIdHex) == ["11", "22"])
+        #expect(resolutionCount == members.count)
+        #expect(cache.buildCountForTesting == 1)
+
+        _ = cache.projection(
+            members: members,
+            profileGeneration: 4,
+            resolveName: resolve
+        )
+        #expect(resolutionCount == members.count * 2)
+        #expect(cache.buildCountForTesting == 2)
+    }
+
     private func member(
         _ id: String,
         isSelf: Bool = false,

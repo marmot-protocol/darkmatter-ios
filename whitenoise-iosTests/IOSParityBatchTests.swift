@@ -5,6 +5,33 @@ import Testing
 
 @MainActor
 struct IOSParityBatchTests {
+    @Test func resolvedGroupRecipientAutoSelectSkipsSelfDuplicatesAndBusyState() {
+        #expect(NewChatFlowViewModel.shouldAutoSelectResolved(
+            accountIdHex: "AA",
+            isBusy: false,
+            excludedAccountIds: [],
+            selectedAccountIds: []
+        ))
+        #expect(!NewChatFlowViewModel.shouldAutoSelectResolved(
+            accountIdHex: "AA",
+            isBusy: false,
+            excludedAccountIds: ["aa"],
+            selectedAccountIds: []
+        ))
+        #expect(!NewChatFlowViewModel.shouldAutoSelectResolved(
+            accountIdHex: "AA",
+            isBusy: false,
+            excludedAccountIds: [],
+            selectedAccountIds: ["aa"]
+        ))
+        #expect(!NewChatFlowViewModel.shouldAutoSelectResolved(
+            accountIdHex: "AA",
+            isBusy: true,
+            excludedAccountIds: [],
+            selectedAccountIds: []
+        ))
+    }
+
     @Test func namedGroupsCanBeCreatedWithoutInvitees() {
         #expect(AddMembersPresentation.canCreate(
             stagedCount: 0,

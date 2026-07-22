@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import whitenoise_ios
 
@@ -5,6 +6,20 @@ struct RecipientSearchTests {
     private let alice = String(repeating: "aa", count: 32)
     private let bob = String(repeating: "bb", count: 32)
     private let carol = String(repeating: "cc", count: 32)
+
+    @Test func completingOlderDirectoryLoadCannotClearNewerTaskSlot() {
+        let older = UUID()
+        let newer = UUID()
+
+        #expect(!RecipientDirectory.shouldClearLoadTask(
+            currentTaskID: newer,
+            completingTaskID: older
+        ))
+        #expect(RecipientDirectory.shouldClearLoadTask(
+            currentTaskID: newer,
+            completingTaskID: newer
+        ))
+    }
 
     @Test func blankQueryReturnsAllCandidatesInInputOrder() {
         let candidates = [candidate(alice), candidate(bob)]

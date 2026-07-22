@@ -72,6 +72,13 @@ struct NewGroupPickerView: View {
         .onChange(of: model.groupQuery.text) { _, _ in
             model.groupQuery.queryChanged(using: appState)
         }
+        .onChange(of: model.groupQuery.resolution) { _, resolution in
+            guard case .resolved(let resolved) = resolution else { return }
+            Task { await autoSelect(resolved) }
+        }
+        .onChange(of: appState.profileRefreshGeneration) { _, _ in
+            model.directory.refreshSearchFields(using: appState)
+        }
     }
 
     private var selectedAccountIds: Set<String> {
@@ -84,7 +91,7 @@ struct NewGroupPickerView: View {
             model.directory.candidates,
             query: model.groupQuery.text,
             excludedAccountIds: model.excludedAccountIds(using: appState),
-            fields: { RecipientDirectory.matchFields(for: $0, appState: appState) }
+            fields: { model.directory.matchFields(for: $0) }
         )
         if model.directory.isLoading && model.directory.candidates.isEmpty {
             Section {
@@ -139,5 +146,15 @@ struct NewGroupPickerView: View {
         .buttonStyle(.plain)
         .disabled(model.isBusy)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func autoSelect(_ resolved: ResolvedRecipient) async {
+        guard NewChatFlowViewModel.shouldAutoSelectResolved(
+            accountIdHex: resolved.accountIdHex,
+            isBusy: model.isBusy,
+            excludedAccountIds: model.excludedAccountIds(using: appState),
+            selectedAccountIds: selectedAccountIds
+        ) else { return }
+        await model.selectResolved(resolved, using: appState)
     }
 }

@@ -13,8 +13,10 @@ final class RecipientDirectory {
     private(set) var candidates: [RecipientCandidate] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
+    private(set) var searchFieldsByAccountId: [String: RecipientSearch.MatchFields] = [:]
     private var loadedAccountRef: String?
     private var loadTask: Task<Void, Never>?
+    private var loadTaskID: UUID?
 
     private static let profileWarmupLimit = 24
 
@@ -27,15 +29,28 @@ final class RecipientDirectory {
         guard let accountRef = appState.activeAccountRef else {
             snapshots = []
             candidates = []
+            searchFieldsByAccountId = [:]
             loadedAccountRef = nil
             return
         }
         if loadedAccountRef == accountRef, !force, !snapshots.isEmpty { return }
         guard !isLoading else { return }
+        let taskID = UUID()
         let task = Task { await performLoad(accountRef: accountRef, using: appState) }
         loadTask = task
+        loadTaskID = taskID
         await task.value
-        loadTask = nil
+        if Self.shouldClearLoadTask(currentTaskID: loadTaskID, completingTaskID: taskID) {
+            loadTask = nil
+            loadTaskID = nil
+        }
+    }
+
+    nonisolated static func shouldClearLoadTask(
+        currentTaskID: UUID?,
+        completingTaskID: UUID
+    ) -> Bool {
+        currentTaskID == completingTaskID
     }
 
     private func performLoad(accountRef: String, using appState: AppState) async {
@@ -52,6 +67,7 @@ final class RecipientDirectory {
             snapshots = loaded
             candidates = derived
             loadedAccountRef = accountRef
+            refreshSearchFields(using: appState)
             for candidate in derived.prefix(Self.profileWarmupLimit) {
                 _ = appState.profile(forAccountIdHex: candidate.accountIdHex)
             }
@@ -63,19 +79,26 @@ final class RecipientDirectory {
         }
     }
 
-    /// Search fields resolved at match time so nickname/profile updates that
-    /// land mid-screen are reflected without rebuilding the directory.
-    static func matchFields(
-        for candidate: RecipientCandidate,
-        appState: AppState
-    ) -> RecipientSearch.MatchFields {
-        RecipientSearch.MatchFields(
-            displayName: appState.knownDisplayName(forAccountIdHex: candidate.accountIdHex),
-            nickname: appState.contactNickname(forAccountIdHex: candidate.accountIdHex),
-            nip05: ContentSanitizer.profileAddress(
-                appState.profile(forAccountIdHex: candidate.accountIdHex)?.nip05
+    /// Snapshot side-effecting profile lookups outside SwiftUI's search hot
+    /// path. Screens refresh this once when the profile generation changes;
+    /// each keystroke then performs only pure dictionary reads.
+    func refreshSearchFields(using appState: AppState) {
+        searchFieldsByAccountId = Dictionary(uniqueKeysWithValues: candidates.map { candidate in
+            (
+                candidate.accountIdHex,
+                RecipientSearch.MatchFields(
+                    displayName: appState.knownDisplayName(forAccountIdHex: candidate.accountIdHex),
+                    nickname: appState.contactNickname(forAccountIdHex: candidate.accountIdHex),
+                    nip05: ContentSanitizer.profileAddress(
+                        appState.profile(forAccountIdHex: candidate.accountIdHex)?.nip05
+                    )
+                )
             )
-        )
+        })
+    }
+
+    func matchFields(for candidate: RecipientCandidate) -> RecipientSearch.MatchFields {
+        searchFieldsByAccountId[candidate.accountIdHex] ?? .init()
     }
 
     /// Rosters load per row with bounded concurrency; a row whose details
