@@ -11463,12 +11463,14 @@ public func FfiConverterTypeRuntimeProjectionUpdateFfi_lower(_ value: RuntimePro
 public struct SecureDeleteExpiredResultFfi {
     public var prunedMessages: UInt64
     public var mediaCiphertextSha256: [String]
+    public var mediaPlaintextSha256: [String]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(prunedMessages: UInt64, mediaCiphertextSha256: [String]) {
+    public init(prunedMessages: UInt64, mediaCiphertextSha256: [String], mediaPlaintextSha256: [String]) {
         self.prunedMessages = prunedMessages
         self.mediaCiphertextSha256 = mediaCiphertextSha256
+        self.mediaPlaintextSha256 = mediaPlaintextSha256
     }
 }
 
@@ -11482,12 +11484,16 @@ extension SecureDeleteExpiredResultFfi: Equatable, Hashable {
         if lhs.mediaCiphertextSha256 != rhs.mediaCiphertextSha256 {
             return false
         }
+        if lhs.mediaPlaintextSha256 != rhs.mediaPlaintextSha256 {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(prunedMessages)
         hasher.combine(mediaCiphertextSha256)
+        hasher.combine(mediaPlaintextSha256)
     }
 }
 
@@ -11500,13 +11506,15 @@ public struct FfiConverterTypeSecureDeleteExpiredResultFfi: FfiConverterRustBuff
         return
             try SecureDeleteExpiredResultFfi(
                 prunedMessages: FfiConverterUInt64.read(from: &buf),
-                mediaCiphertextSha256: FfiConverterSequenceString.read(from: &buf)
+                mediaCiphertextSha256: FfiConverterSequenceString.read(from: &buf),
+                mediaPlaintextSha256: FfiConverterSequenceString.read(from: &buf)
         )
     }
 
     public static func write(_ value: SecureDeleteExpiredResultFfi, into buf: inout [UInt8]) {
         FfiConverterUInt64.write(value.prunedMessages, into: &buf)
         FfiConverterSequenceString.write(value.mediaCiphertextSha256, into: &buf)
+        FfiConverterSequenceString.write(value.mediaPlaintextSha256, into: &buf)
     }
 }
 

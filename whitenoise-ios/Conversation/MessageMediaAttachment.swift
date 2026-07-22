@@ -1379,10 +1379,9 @@ nonisolated enum MessageMediaCache {
         )
     }
 
-    /// Removes cached decrypted plaintext for deleted attachments off the
-    /// MainActor. The engine's secure-delete result reports pruned media by
-    /// ciphertext hash while cache files are keyed by plaintext hash, so
-    /// callers pass the pre-prune reference snapshot to resolve the URLs.
+    /// Removes cached decrypted plaintext when a caller has ciphertext hashes
+    /// plus the corresponding media references. Cache files are keyed by the
+    /// references' plaintext hashes, so both inputs are needed for this path.
     static func removeCachedData(
         forCiphertextHashes hashes: Set<String>,
         in references: [MediaAttachmentReferenceFfi]
@@ -1390,6 +1389,15 @@ nonisolated enum MessageMediaCache {
         guard !hashes.isEmpty, let cachesDirectory = defaultCachesDirectory else { return }
         await Task.detached(priority: .utility) {
             removeCachedData(forCiphertextHashes: hashes, in: references, cachesDirectory: cachesDirectory)
+        }.value
+    }
+
+    /// Directly evicts content-addressed plaintext files reported by Marmot's
+    /// secure-prune result, avoiding a pre-prune `listMedia` scan.
+    static func removeCachedData(forPlaintextHashes hashes: Set<String>) async {
+        guard !hashes.isEmpty, let cachesDirectory = defaultCachesDirectory else { return }
+        await Task.detached(priority: .utility) {
+            removeCachedData(forPlaintextHashes: hashes, cachesDirectory: cachesDirectory)
         }.value
     }
 
@@ -1455,6 +1463,32 @@ nonisolated enum MessageMediaCache {
                 in: references,
                 cachesDirectory: cachesDirectory
             )
+        }
+    }
+
+    static func removeCachedData(
+        forPlaintextHashes hashes: Set<String>,
+        cachesDirectory: URL
+    ) {
+        let validHashes = Set(hashes.lazy.map { $0.lowercased() }.filter {
+            $0.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
+        })
+        guard !validHashes.isEmpty else { return }
+        purgeGeneration.withLock { generation in
+            generation += 1
+            for directoryName in decryptedMediaDirectoryNames {
+                let directory = cachesDirectory.appendingPathComponent(directoryName, isDirectory: true)
+                let existing = (try? FileManager.default.contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: nil
+                )) ?? []
+                for file in existing {
+                    let stem = file.deletingPathExtension().lastPathComponent.lowercased()
+                    if validHashes.contains(stem) {
+                        try? FileManager.default.removeItem(at: file)
+                    }
+                }
+            }
         }
     }
 
