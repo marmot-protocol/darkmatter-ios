@@ -129,6 +129,25 @@ struct Nip05ResolverTests {
         #expect(model.verifiedNip05 == nil)
     }
 
+    @MainActor
+    @Test func transportFailureAllowsTheSameDeclarationToRetry() async {
+        let model = ProfileViewModel()
+        model.applyResolvedAccount(hex)
+
+        await model.verifyDeclaredNip05(
+            "alice@example.com",
+            transport: { _, _ in throw URLError(.timedOut) }
+        )
+        #expect(model.verifiedNip05 == nil)
+
+        await model.verifyDeclaredNip05(
+            "alice@example.com",
+            transport: stub(returning: "{\"names\":{\"alice\":\"\(hex)\"}}")
+        )
+
+        #expect(model.verifiedNip05 == "alice@example.com")
+    }
+
     @Test func malformedDocumentsAndTransportFailuresFail() async {
         let malformed = await Nip05Resolver.resolve(
             name: "alice",
@@ -168,25 +187,35 @@ struct Nip05ResolverTests {
         let matching = "{\"names\":{\"alice\":\"\(hex)\"}}"
         let other = "{\"names\":{\"alice\":\"\(String(repeating: "cd", count: 32))\"}}"
 
-        let verified = await Nip05Resolver.verifies(
+        let verified = await Nip05Resolver.verification(
             declaredAddress: "alice@example.com",
             accountIdHex: hex.uppercased(),
             transport: stub(returning: matching)
         )
-        let mismatched = await Nip05Resolver.verifies(
+        let mismatched = await Nip05Resolver.verification(
             declaredAddress: "alice@example.com",
             accountIdHex: hex,
             transport: stub(returning: other)
         )
-        let invalidDeclaration = await Nip05Resolver.verifies(
+        let invalidDeclaration = await Nip05Resolver.verification(
             declaredAddress: "not-an-address",
             accountIdHex: hex,
             transport: stub(returning: matching)
         )
 
-        #expect(verified)
-        #expect(!mismatched)
-        #expect(!invalidDeclaration)
+        #expect(verified == .verified)
+        #expect(mismatched == .mismatch)
+        #expect(invalidDeclaration == .mismatch)
+    }
+
+    @Test func verificationDistinguishesRetryableLookupFailureFromMismatch() async {
+        let failed = await Nip05Resolver.verification(
+            declaredAddress: "alice@example.com",
+            accountIdHex: hex,
+            transport: { _, _ in throw URLError(.timedOut) }
+        )
+
+        #expect(failed == .lookupFailed)
     }
 
     private func stub(returning body: String) -> Nip05Resolver.Transport {

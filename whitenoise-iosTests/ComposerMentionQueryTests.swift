@@ -41,6 +41,42 @@ struct ComposerMentionQueryTests {
         #expect(ComposerMentionQuery.filter(candidates, matching: "").count == 2)
     }
 
+    @MainActor
+    @Test func detailedRosterCandidatePrefersLocalContactNickname() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let suiteName = "dev.ipf.WhiteNoise.mention-nickname.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        appState.profileStore.contactNicknameDefaults = defaults
+        let ownerHex = String(repeating: "aa", count: 32)
+        let peerHex = String(repeating: "bb", count: 32)
+        appState.accountStore.accounts = [
+            AccountSummaryFfi(
+                label: "me",
+                accountIdHex: ownerHex,
+                localSigning: true,
+                signedOut: false,
+                running: true
+            )
+        ]
+        appState.activeAccountRef = "me"
+        appState.setContactNickname("Bestie", forAccountIdHex: peerHex)
+        let details = GroupMemberDetailsFfi(
+            memberIdHex: peerHex,
+            account: peerHex,
+            local: false,
+            isAdmin: false,
+            isSelf: false,
+            npub: aliceNpub,
+            displayName: "Peer profile name"
+        )
+
+        let candidate = ComposerMentionCandidate(details: details, appState: appState)
+
+        #expect(candidate.displayName == "Bestie")
+        #expect(ComposerMentionQuery.filter([candidate], matching: "best").map(\.npub) == [aliceNpub])
+    }
+
     @Test func filterMatchesMemberIdHexCaseInsensitively() {
         // Regression for #300: filter matches against precomputed lowercased
         // fields. Verify the memberIdHex match path and case-insensitivity

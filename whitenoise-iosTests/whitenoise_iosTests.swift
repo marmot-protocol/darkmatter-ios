@@ -59,6 +59,8 @@ struct AppStateBootstrapTests {
 
     @Test func telemetryExportSettingPersistsThroughAppState() async throws {
         let appState = try testAppState()
+        await appState.bootstrap()
+        _ = try await appState.createIdentity()
 
         let saved = try await appState.setRelayTelemetryExportEnabled(false)
 
@@ -66,6 +68,8 @@ struct AppStateBootstrapTests {
         let maybeReloaded = try await appState.relayTelemetrySettings()
         let reloaded = try #require(maybeReloaded)
         #expect(!reloaded.exportEnabled)
+
+        await stopReadyRuntime(appState)
     }
 
     @Test func suspendedRuntimeTelemetryBuildConfigUsesCachedFallback() async throws {
@@ -436,12 +440,26 @@ struct AppStateBootstrapTests {
         #expect(appState.visibleChat == nil)
     }
 
-    @Test func backgroundSuspensionWaitsUntilRuntimeIsReady() async throws {
+    @Test func preBootstrapBackgroundSuspensionIsReleasedByForegroundReturn() async throws {
         let appState = try testAppState()
 
-        await appState.startRuntimeSuspension().value
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+        await Task.yield()
 
-        #expect(!appState.isAppSceneActive)
+        #expect(!suspensionCompleted)
+
+        let activation = appState.startForegroundActivation()
+        await suspension.value
+        await activation.value
+        await observer.value
+
+        #expect(suspensionCompleted)
+        #expect(appState.isAppSceneActive)
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.runtimeGeneration == 0)
     }
@@ -459,7 +477,8 @@ struct AppStateBootstrapTests {
         // The runtime handle is released on suspension so its SQLite storage in
         // the shared App Group container is closed and its file lock freed
         // (otherwise iOS kills the app at suspension with 0xdead10cc). Don't
-        // touch `marmot` here: the accessor would rebuild it on demand.
+        // touch `marmot` here: the raw accessor deliberately traps while the
+        // lifecycle-owned client is unavailable.
         #expect(appState.client == nil)
 
         await appState.startForegroundActivation().value
@@ -537,7 +556,8 @@ struct AppStateBootstrapTests {
 
         // The runtime handle is released even in onboarding so its SQLite
         // storage in the shared App Group container is closed and its file lock
-        // freed. Don't touch `marmot` here: the accessor would rebuild on demand.
+        // freed. Don't touch `marmot` here: the raw accessor deliberately traps
+        // until foreground lifecycle restoration completes.
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
         #expect(appState.client == nil)
@@ -738,10 +758,10 @@ struct AppStateBootstrapTests {
         resetPersistedActiveAccountRef()
     }
 
-    /// #473: iOS may fire the background-task expiration handler while Marmot
-    /// teardown is still closing the App Group store. Expiration should keep the
-    /// task tied to suspension completion instead of ending it immediately.
-    @Test func backgroundTaskExpirationWaitsForRuntimeSuspensionBeforeEnding() async throws {
+    /// #743: UIKit owns the expiration deadline. Its callback must release the
+    /// assertion immediately through the same idempotent helper as normal
+    /// completion, even if Marmot teardown is still waiting elsewhere.
+    @Test func backgroundTaskExpirationEndsAssertionExactlyOnce() async throws {
         let checkpoint = AsyncTestCheckpoint()
         let taskID = UIBackgroundTaskIdentifier(rawValue: 42)
         let suspensionTask = Task {
@@ -765,32 +785,37 @@ struct AppStateBootstrapTests {
         await checkpoint.waitUntilPaused()
 
         capturedExpirationHandler?()
-        await Task.yield()
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(endedTaskIDs.isEmpty)
-
-        await checkpoint.release()
-        await suspensionTask.value
         try await waitForExpectation {
             endedTaskIDs == [taskID]
         }
+
+        await checkpoint.release()
+        await suspensionTask.value
+        await Task.yield()
+
+        #expect(endedTaskIDs == [taskID])
     }
 
-    @Test func bootstrapWhileSceneInactiveReArmsSuspensionInOnboarding() async throws {
+    @Test func bootstrapRegistrationCompletesOriginalSuspensionInOnboarding() async throws {
         let appState = try testAppState()
 
-        // The real background entry point lands while the app is still in the
-        // initial `.bootstrapping` phase. It bails before bootstrap starts the
-        // runtime-owning phase, but records that bootstrap must re-arm it.
-        await appState.startRuntimeSuspension().value
-        await appState.bootstrap()
-        // Drain the suspension bootstrap re-armed.
-        await appState.drainRuntimeLifecycleTasksForTesting()
+        // The real background entry point lands before SwiftUI has registered
+        // bootstrap. The covered suspension owner must remain alive rather than
+        // bail and re-arm teardown outside its UIKit assertion (#592).
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+        await Task.yield()
+        #expect(!suspensionCompleted)
 
-        // `.onboarding` owns the live runtime, but with the scene inactive the
-        // runtime must be torn down (handle released, App Group lock freed)
-        // rather than left started in the background.
+        await appState.bootstrap()
+        await suspension.value
+        await observer.value
+
+        #expect(suspensionCompleted)
         #expect(appState.phase == .onboarding)
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
@@ -822,7 +847,7 @@ struct AppStateBootstrapTests {
     /// resolves to `.ready` (accounts on disk). Bootstrap must re-arm suspension
     /// instead of starting `.ready`-only foreground maintenance and leaving the
     /// started runtime alive in the background.
-    @Test func bootstrapWhileSceneInactiveReArmsSuspensionWhenReady() async throws {
+    @Test func bootstrapRegistrationCompletesOriginalSuspensionWhenReady() async throws {
         // Seed an account on disk, then build a fresh AppState so the next
         // bootstrap starts from `.bootstrapping` and resolves to `.ready`.
         let seeded = try await readyAppStateWithCreatedIdentities()
@@ -830,12 +855,20 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(seeded.appState)
         let appState = AppState(client: try seedClient.freshRuntime(), notifications: deniedNotifications())
 
-        // The first background-suspension attempt lands during `.bootstrapping`
-        // and bails; bootstrap must re-arm it after it promotes to `.ready`.
-        await appState.startRuntimeSuspension().value
-        await appState.bootstrap()
-        await appState.drainRuntimeLifecycleTasksForTesting()
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+        await Task.yield()
+        #expect(!suspensionCompleted)
 
+        await appState.bootstrap()
+        await suspension.value
+        await observer.value
+
+        #expect(suspensionCompleted)
         #expect(appState.phase == .ready)
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
@@ -894,8 +927,8 @@ struct AppStateBootstrapTests {
         #expect(appState.client == nil)
 
         // Notification actions refresh badges through the lease too. Calling
-        // the ordinary runtime accessor here would silently rebuild a durable
-        // client while the app is still suspended.
+        // the ordinary runtime accessor is deliberately unavailable while the
+        // app is still suspended.
         await appState.refreshAccountUnreadSummaries(using: lease.client)
         #expect(appState.client == nil)
         #expect(appState.runtimeGeneration == generation)
@@ -1054,11 +1087,104 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    @Test func suspensionWaitsForForegroundMutationLeaseBeforeShutdown() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let liveClient = try #require(appState.client)
+        let lease = try appState.runtimeLifecycle.beginForegroundRuntimeMutation()
+
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+
+        await Task.yield()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(!suspensionCompleted)
+        #expect(appState.client === liveClient)
+
+        appState.runtimeLifecycle.endForegroundRuntimeMutation(lease)
+        await suspension.value
+        await observer.value
+
+        #expect(suspensionCompleted)
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+
+        resetPersistedActiveAccountRef()
+    }
+
+    @Test func suspensionDrainsConnectivityCatchUpTaskBeforeShutdown() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let checkpoint = AsyncTestCheckpoint()
+        let liveClient = try #require(appState.client)
+
+        appState.notificationCoordinator.beforeForegroundCatchUpForTesting = {
+            await checkpoint.pause()
+        }
+        appState.scheduleConnectivityCatchUp()
+        await checkpoint.waitUntilPaused()
+
+        let suspension = appState.startRuntimeSuspension()
+        var suspensionCompleted = false
+        let observer = Task { @MainActor in
+            await suspension.value
+            suspensionCompleted = true
+        }
+        await Task.yield()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(!suspensionCompleted)
+        #expect(appState.client === liveClient)
+
+        await checkpoint.release()
+        await suspension.value
+        await observer.value
+        appState.notificationCoordinator.beforeForegroundCatchUpForTesting = nil
+
+        #expect(suspensionCompleted)
+        #expect(appState.client == nil)
+
+        resetPersistedActiveAccountRef()
+    }
+
+    @Test func suspendedRuntimeAccessAndForegroundMutationsFailWithoutRebuilding() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let generation = appState.runtimeGeneration
+
+        await appState.startRuntimeSuspension().value
+
+        #expect(!appState.canRefreshProfiles)
+        #expect(throws: ForegroundRuntimeMutationError.self) {
+            _ = try appState.currentMarmotClient()
+        }
+        await #expect(throws: ForegroundRuntimeMutationError.self) {
+            _ = try await appState.createIdentity()
+        }
+        await #expect(throws: ForegroundRuntimeMutationError.self) {
+            _ = try await appState.setAuditLogEnabled(true)
+        }
+        await #expect(throws: ForegroundRuntimeMutationError.self) {
+            _ = try await appState.setRelayTelemetryExportEnabled(false)
+        }
+
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.runtimeGeneration == generation)
+
+        resetPersistedActiveAccountRef()
+    }
+
     /// A badge refresh with no leased client must never resurrect the durable
     /// runtime while it is suspended — that would strand a background `.advance`
     /// runtime holding the App Group SQLite lock (the notification-action lease
-    /// exists precisely to avoid this). The refresh degrades to a no-op instead
-    /// of rebuilding the slot. This is the fleet-footed guard for the class of
+    /// exists precisely to avoid this). The refresh degrades to a no-op. This is
+    /// the fleet-footed guard for the class of
     /// bug where background code reaches the plain runtime accessor: it can be
     /// driven without a relay, which the notification-action content operations
     /// (send / mark-read) would require.
@@ -1697,6 +1823,40 @@ struct NotificationSubscriptionRetryTests {
         #expect(!driver.isRunning)
     }
 
+    @MainActor
+    @Test func stoppedDriverReturnsItsInFlightTaskForLifecycleDrain() async throws {
+        let driver = NotificationDriver()
+        let checkpoint = AsyncTestCheckpoint()
+        let runner = NotificationSubscriptionRunner(
+            initialRetryDelayNanoseconds: 1,
+            maximumRetryDelayNanoseconds: 8,
+            subscribe: {
+                await checkpoint.pause()
+                return AsyncStream { continuation in continuation.finish() }
+            },
+            present: { _ in },
+            reportError: { _ in }
+        )
+
+        driver.start(runner: runner)
+        await checkpoint.waitUntilPaused()
+
+        let taskToDrain = try #require(driver.stop())
+        var drained = false
+        let observer = Task { @MainActor in
+            await taskToDrain.value
+            drained = true
+        }
+        await Task.yield()
+        #expect(!drained)
+
+        await checkpoint.release()
+        await observer.value
+
+        #expect(drained)
+        #expect(!driver.isRunning)
+    }
+
     @Test func retriesAfterSubscribeErrorAndDeliversNextNotification() async throws {
         let probe = NotificationSubscriptionProbe(attempts: [
             .failure,
@@ -2171,9 +2331,13 @@ struct RelaySettingsTests {
         #expect(RelaySettings.bootstrapRelays(from: lists) == ["wss://source.example"])
     }
 
-    @Test func relayInputAllowsWebsocketSchemesOnly() {
-        #expect(RelaySettings.normalizedRelayURL("  ws://relay.example  ") == "ws://relay.example")
+    @Test func relayInputRequiresPublicSecureWebsocketDestinations() {
+        #expect(RelaySettings.normalizedRelayURL("  ws://relay.example  ") == nil)
         #expect(RelaySettings.normalizedRelayURL("wss://relay.example") == "wss://relay.example")
+        #expect(RelaySettings.normalizedRelayURL("wss://localhost") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://127.0.0.1") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://10.0.0.1") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://[::1]") == nil)
         #expect(RelaySettings.normalizedRelayURL("https://relay.example") == nil)
         #expect(RelaySettings.normalizedRelayURL("relay.example") == nil)
         #expect(RelaySettings.normalizedRelayURL("wss://") == nil)
@@ -3075,6 +3239,31 @@ struct NotificationPresentationTests {
         #expect(presentation?.route.groupIdHex == "group-a")
         #expect(presentation?.route.messageIdHex == "message-1")
         #expect(presentation?.userInfo[LocalNotificationProjection.accountRefKey] == "account-a")
+        #expect(presentation?.userInfo[LocalNotificationProjection.accountIdHexKey] == hex("11"))
+    }
+
+    @Test func notificationDeliveryDispositionMarkersAreExplicit() {
+        #expect(LocalNotificationProjection.isQuietOrFallback(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.quietDisposition,
+        ]))
+        #expect(LocalNotificationProjection.isQuietOrFallback(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.fallbackDisposition,
+        ]))
+        #expect(!LocalNotificationProjection.isQuietOrFallback(from: [:]))
+        #expect(LocalNotificationProjection.isActionFailure(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.actionFailureDisposition,
+        ]))
+    }
+
+    @Test func notificationActionsRemoveOnlyTheActedNotification() {
+        #expect(
+            NotificationActionDeliveredNotificationPolicy.identifiersToRemove(
+                actedNotificationIdentifier: "acted"
+            ) == ["acted"]
+        )
     }
 
     @Test func groupMessageUsesGroupTitleAndSenderBodyPrefix() {
@@ -4073,6 +4262,43 @@ struct NotificationServiceProjectionTests {
         #expect(readCount == 2)
     }
 
+    @Test func archivedLookupsRunOnlyForRecordsPassingCheapPolicyGates() {
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [
+                notificationUpdate(accountRef: "allowed", accountIdHex: hex("11")),
+                notificationUpdate(accountRef: "disabled", accountIdHex: hex("22")),
+                notificationUpdate(accountRef: "muted", accountIdHex: hex("33")),
+                notificationUpdate(
+                    accountRef: "mentions-only-plain",
+                    accountIdHex: hex("44"),
+                    isMention: false
+                ),
+                notificationUpdate(
+                    accountRef: "mentions-only-mention",
+                    accountIdHex: hex("44"),
+                    isMention: true
+                ),
+                notificationUpdate(accountRef: "self", accountIdHex: hex("55"), isFromSelf: true),
+            ],
+            error: nil
+        )
+
+        let accounts = NotificationPresentationPolicy.accountRefsRequiringArchivedLookup(
+            for: collection,
+            localNotificationsEnabled: { $0 != "disabled" },
+            notifyMode: { accountIdHex, _ in
+                switch accountIdHex {
+                case hex("33"): .nothing
+                case hex("44"): .mentionsOnly
+                default: .all
+                }
+            }
+        )
+
+        #expect(accounts == ["allowed", "mentions-only-mention"])
+    }
+
     @Test func settingsReadPolicySuppressesOnlyExplicitFalse() {
         #expect(NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
             true
@@ -4311,6 +4537,16 @@ struct ContentSanitizerTests {
 
     @Test func relayDisplayLineStripsInvisibleLetterScalars() {
         #expect(ContentSanitizer.relayDisplayLine("relay\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}.example", maxLength: 80) == "relay.example")
+    }
+
+    @Test func compactSingleLineStripsInvisibleFormatAndBlankScalars() {
+        #expect(
+            ContentSanitizer.compactSingleLine(
+                "before\u{200D}\u{2060}\u{3164}after",
+                maxLength: 80
+            ) == "beforeafter"
+        )
+        #expect(ContentSanitizer.compactSingleLine("\u{3164}", maxLength: 80) == nil)
     }
 
     @Test func imageURLAllowsHttps() {
@@ -5057,6 +5293,40 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.map(\.id) == [row.groupIdHex])
     }
 
+    @Test func staleSnapshotCannotOverwriteNewerPendingLiveRow() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let groupId = hex("a8")
+        let stale = chatListRow(
+            groupIdHex: groupId,
+            title: "Stale",
+            unreadCount: 1,
+            updatedAt: 10
+        )
+        let fresh = chatListRow(
+            groupIdHex: groupId,
+            title: "Fresh",
+            unreadCount: 4,
+            updatedAt: 20
+        )
+
+        viewModel.enqueueChatListRowUpdate(fresh)
+        viewModel.applyChatListSnapshot([stale])
+
+        #expect(viewModel.items.first?.title == "Fresh")
+        #expect(viewModel.items.first?.unreadCount == 4)
+    }
+
+    @Test func visibleRowsRevisionAdvancesOnlyForPublishedCollectionChanges() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: hex("a9"), title: "Stable", updatedAt: 10)
+
+        #expect(viewModel.visibleRowsRevision == 0)
+        viewModel.applyChatListSnapshot([row])
+        #expect(viewModel.visibleRowsRevision == 1)
+        viewModel.applyChatListSnapshot([row])
+        #expect(viewModel.visibleRowsRevision == 1)
+    }
+
     @Test func itemByGroupIdAccessorResolvesActiveAndArchivedRowsAndMissesUnknownId() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let active = chatListRow(groupIdHex: hex("a1"), title: "Active", updatedAt: 10)
@@ -5098,6 +5368,15 @@ struct ChatsListProjectionTests {
         )
 
         #expect(item.avatarURL?.absoluteString == "https://cdn.example.com/group.png")
+    }
+
+    @Test func chatRowsDoNotFetchAvatarsBeforeInviteConfirmation() throws {
+        let avatarURL = try #require(URL(string: "https://cdn.example.com/group.png"))
+
+        #expect(ChatRow.automaticAvatarURL(avatarURL, pendingConfirmation: true) == nil)
+        #expect(
+            ChatRow.automaticAvatarURL(avatarURL, pendingConfirmation: false) == avatarURL
+        )
     }
 
     @Test func itemSurfacesUnreadMentionProjection() throws {
@@ -6620,6 +6899,78 @@ struct ConversationTimelineProjectionTests {
     }
 }
 
+struct NetworkTrustRegressionTests {
+    @Test func nprofileResolutionStripsUnsafeRelayHintsBeforeMarmot() throws {
+        let accountIdHex = hex("42")
+        let raw = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: [
+                "wss://relay.example/path",
+                "ws://insecure.example",
+                "wss://127.0.0.1/private",
+                "wss://relay.example/path",
+            ]
+        ))
+
+        let sanitized = try #require(NostrProfileReference.referenceForResolution(from: raw))
+        #expect(NostrProfileReference.pubkeyHex(fromBech32: sanitized) == accountIdHex)
+        #expect(sanitized == NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: ["wss://relay.example/path"]
+        ))
+    }
+
+    @Test func nprofileEncodingNormalizesDeduplicatesAndCapsRelayHints() throws {
+        let accountIdHex = hex("43")
+        let normalizedRelays = (0..<8).map { "wss://relay\($0).example/path" }
+        let encoded = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: [
+                "ws://insecure.example",
+                "WSS://RELAY0.EXAMPLE/path",
+                normalizedRelays[0],
+            ] + Array(normalizedRelays.dropFirst()) + ["wss://relay8.example/path"]
+        ))
+        let expected = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: normalizedRelays
+        ))
+
+        #expect(encoded == expected)
+    }
+
+    @Test func malformedPunycodeHostIsStillFlaggedAsInternationalized() throws {
+        let url = try #require(URL(string: "https://xn--.example/path"))
+        let display = MessageExternalLinkConfirmation.displayText(for: url)
+
+        #expect(display.contains("IDN/punycode"))
+    }
+
+    @Test func notificationAvatarBytesRequireADecodableRasterImage() throws {
+        let png = try #require(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+
+        #expect(NotificationCommunicationDecorator.isAllowedAvatarData(png))
+        #expect(!NotificationCommunicationDecorator.isAllowedAvatarData(Data("not an image".utf8)))
+        #expect(!NotificationCommunicationDecorator.isAllowedAvatarData(Data(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>".utf8
+        )))
+        #expect(NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 1_024, height: 1_024)]
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 4_097, height: 1)]
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: Array(repeating: (width: 1, height: 1), count: 9)
+        ))
+        #expect(!NotificationCommunicationDecorator.avatarMetadataIsAllowed(
+            frameDimensions: [(width: 4_096, height: 4_096), (width: 1, height: 1)]
+        ))
+    }
+}
+
 @MainActor
 struct GroupManagementPresentationTests {
 
@@ -7719,6 +8070,14 @@ struct ChatListSwipeActionsPresentationTests {
         #expect(actions.contains(.delete))
         #expect(!actions.contains(.leave))
         #expect(!actions.contains(.archive))
+    }
+
+    @Test func bulkLocalDeleteRequiresEverySelectedMembershipToBeInactive() {
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: []))
+        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false]))
+        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false, false]))
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [true]))
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [false, true]))
     }
 }
 

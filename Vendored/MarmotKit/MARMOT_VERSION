@@ -1,7 +1,7 @@
-mdk-sha: 8faa6d2
-mdk-branch: master
+mdk-sha: 0d5ecbfc
+mdk-branch: codex/retention-plaintext-hashes
 mdk-tag:
-built-at: 2026-07-19T01:09:33Z
+built-at: 2026-07-22T11:30:17Z
 uniffi-version: 0.28.3
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim

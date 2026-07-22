@@ -1,6 +1,5 @@
 import Foundation
 import MarmotKit
-import UIKit
 
 enum TelemetrySettingsActionError: LocalizedError {
     case telemetryNotConfigured
@@ -24,7 +23,7 @@ enum AuditLogActionError: LocalizedError {
     }
 }
 
-struct TelemetryBuildConfig: Equatable {
+nonisolated struct TelemetryBuildConfig: Equatable, Sendable {
     static let defaultOtlpEndpoint = "https://otlp.ipf.dev/v1/metrics"
 
     let otlpEndpoint: String
@@ -47,7 +46,7 @@ struct TelemetryBuildConfig: Equatable {
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
         processInfo: ProcessInfo = .processInfo,
         environment: [String: String]? = nil,
-        osVersion: String = UIDevice.current.systemVersion,
+        osVersion: String? = nil,
         deviceModelIdentifier: String? = nil
     ) -> TelemetryBuildConfig {
         let info = infoDictionary ?? [:]
@@ -86,9 +85,17 @@ struct TelemetryBuildConfig: Equatable {
                 )
             ),
             serviceVersion: serviceVersion(from: info),
-            osVersion: osVersion,
+            osVersion: osVersion ?? currentOSVersion(processInfo: processInfo),
             deviceModelIdentifier: deviceModelIdentifier ?? Self.deviceModelIdentifier(environment: environment)
         )
+    }
+
+    nonisolated private static func currentOSVersion(processInfo: ProcessInfo) -> String {
+        let version = processInfo.operatingSystemVersion
+        if version.patchVersion == 0 {
+            return "\(version.majorVersion).\(version.minorVersion)"
+        }
+        return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
     }
 
     func runtimeConfig(installId: String) -> RelayTelemetryRuntimeConfigFfi {

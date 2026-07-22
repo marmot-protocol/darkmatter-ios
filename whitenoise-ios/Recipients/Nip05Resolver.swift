@@ -16,6 +16,12 @@ nonisolated enum Nip05Resolver {
         case invalidAddress
     }
 
+    enum Verification: Equatable {
+        case verified
+        case mismatch
+        case lookupFailed
+    }
+
     typealias Transport = @Sendable (URLRequest, Int) async throws -> (Data, URLResponse)
 
     static let maximumDocumentBytes = 32 * 1024
@@ -87,16 +93,22 @@ nonisolated enum Nip05Resolver {
 
     /// A declared NIP-05 address is verified only when it independently
     /// resolves back to the same pubkey it's displayed next to.
-    static func verifies(
+    static func verification(
         declaredAddress: String?,
         accountIdHex: String,
         transport: Transport = pinnedTransport
-    ) async -> Bool {
+    ) async -> Verification {
         guard let address = RecipientIdentifierQuery.nip05Address(declaredAddress ?? "") else {
-            return false
+            return .mismatch
         }
         let resolution = await resolve(name: address.name, domain: address.domain, transport: transport)
-        guard case .resolved(let resolvedHex) = resolution else { return false }
-        return resolvedHex == accountIdHex.lowercased()
+        switch resolution {
+        case .resolved(let resolvedHex):
+            return resolvedHex == accountIdHex.lowercased() ? .verified : .mismatch
+        case .noProfile, .invalidAddress:
+            return .mismatch
+        case .failed:
+            return .lookupFailed
+        }
     }
 }

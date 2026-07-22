@@ -1,7 +1,9 @@
 import CryptoKit
 import Foundation
+import ImageIO
 import Intents
 import Synchronization
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Decorates message notifications as communication notifications so the
@@ -19,6 +21,9 @@ nonisolated enum NotificationCommunicationDecorator {
     /// one wake; each fetch's deadline is clamped to what remains.
     static let avatarAggregateBudget: Duration = .seconds(6)
     static let maxCachedAvatars = 32
+    static let maxAvatarPixelDimension = 4_096
+    static let maxAvatarPixelCount = 16_777_216
+    static let maxAvatarFrames = 8
 
     /// Per-fetch deadline under an aggregate budget, `nil` once the budget is
     /// exhausted. Clamping to the remainder is what makes the budget a hard
@@ -41,11 +46,12 @@ nonisolated enum NotificationCommunicationDecorator {
     ) -> UNNotificationContent {
         guard let senderName = presentation.senderName, !senderName.isEmpty else { return content }
         let handle = personHandleValue(for: presentation)
+        let safeAvatarData = avatarData.flatMap { isAllowedAvatarData($0) ? $0 : nil }
         let sender = INPerson(
             personHandle: INPersonHandle(value: handle, type: .unknown),
             nameComponents: nil,
             displayName: senderName,
-            image: avatarData.map(INImage.init(imageData:)),
+            image: safeAvatarData.map(INImage.init(imageData:)),
             contactIdentifier: nil,
             customIdentifier: handle
         )
@@ -229,9 +235,58 @@ nonisolated enum NotificationCommunicationDecorator {
         ) else { return nil }
         guard let http = response as? HTTPURLResponse,
               http.statusCode == 200,
-              !data.isEmpty
+              isAllowedAvatarData(data)
         else { return nil }
         return data
+    }
+
+    /// `INImage(imageData:)` accepts arbitrary bytes and defers interpretation
+    /// to system services. Sniff the payload locally and allow only decodable
+    /// raster image sources before caching or crossing that boundary.
+    static func isAllowedAvatarData(_ data: Data) -> Bool {
+        guard !data.isEmpty,
+              data.count <= maxAvatarBytes,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let typeIdentifier = CGImageSourceGetType(source),
+              let type = UTType(typeIdentifier as String),
+              type.conforms(to: .image),
+              !type.conforms(to: .svg)
+        else { return false }
+
+        let frameCount = CGImageSourceGetCount(source)
+        guard frameCount > 0, frameCount <= maxAvatarFrames else { return false }
+        var frameDimensions: [(width: Int, height: Int)] = []
+        frameDimensions.reserveCapacity(frameCount)
+        for index in 0..<frameCount {
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+                  let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                  let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue
+            else { return false }
+            frameDimensions.append((width, height))
+        }
+        return avatarMetadataIsAllowed(frameDimensions: frameDimensions)
+    }
+
+    static func avatarMetadataIsAllowed(
+        frameDimensions: [(width: Int, height: Int)],
+        maxDimension: Int = maxAvatarPixelDimension,
+        maxTotalPixels: Int = maxAvatarPixelCount,
+        maxFrames: Int = maxAvatarFrames
+    ) -> Bool {
+        guard !frameDimensions.isEmpty, frameDimensions.count <= maxFrames else { return false }
+        var totalPixels = 0
+        for frame in frameDimensions {
+            guard frame.width > 0,
+                  frame.height > 0,
+                  frame.width <= maxDimension,
+                  frame.height <= maxDimension
+            else { return false }
+            let (framePixels, multiplicationOverflow) = frame.width.multipliedReportingOverflow(by: frame.height)
+            let (nextTotal, additionOverflow) = totalPixels.addingReportingOverflow(framePixels)
+            guard !multiplicationOverflow, !additionOverflow, nextTotal <= maxTotalPixels else { return false }
+            totalPixels = nextTotal
+        }
+        return true
     }
 
     private static var cacheDirectory: URL? {
@@ -256,7 +311,7 @@ nonisolated enum NotificationCommunicationDecorator {
               let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
               now.timeIntervalSince(modified) < avatarCacheLifetime,
               let data = try? Data(contentsOf: file),
-              !data.isEmpty, data.count <= maxAvatarBytes
+              isAllowedAvatarData(data)
         else { return nil }
         return data
     }

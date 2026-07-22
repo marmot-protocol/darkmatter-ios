@@ -31,7 +31,7 @@ final class BackgroundRuntimeSuspensionTask {
         taskID = beginBackgroundTask(name) { [weak self] in
             guard let owner = self else { return }
             Task { @MainActor in
-                owner.beginEndObserverIfPossible()
+                owner.endIfNeeded()
             }
         }
     }
@@ -118,7 +118,7 @@ struct whitenoise_iosApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: MediaAutoDownloadStore.connectivityRestored)) { _ in
                     // Relay recovery is otherwise foreground-driven; a network
                     // return with the app already open needs the same pump.
-                    Task { await appState.catchUpAfterForegroundActivation() }
+                    appState.scheduleConnectivityCatchUp()
                 }
                 .onChange(of: appState.activeAccount?.accountIdHex, initial: true) { _, accountIdHex in
                     MediaAutoDownloadStore.shared.setActiveAccount(accountIdHex)

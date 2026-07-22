@@ -55,6 +55,7 @@ final class TimelineStore {
 
     /// Renderable timeline messages we've loaded by id.
     @ObservationIgnored private var messageById: [String: AppMessageRecordFfi] = [:]
+    @ObservationIgnored private var messageByRowFrameKey: [String: AppMessageRecordFfi] = [:]
     @ObservationIgnored private var messageStatusById: [String: MessageStatus] = [:]
     /// Own durable rows whose `sourceMessageIdHex` is still nil — committed
     /// to the group locally but never delivered to any relay.
@@ -216,7 +217,7 @@ final class TimelineStore {
             mediaCount: Int,
             deleted: Bool
         )
-        case loadedTarget(MessageTimelineSignature)
+        case loadedTarget(record: MessageTimelineSignature, deleted: Bool)
     }
 
     private struct ReplyPreviewDisplayCacheKey: Equatable {
@@ -277,6 +278,11 @@ final class TimelineStore {
         return messageById[messageIdHex].map(editProjections.displayRecord(for:))
     }
 
+    func records(forRowFrameKeys rowFrameKeys: Set<String>) -> [AppMessageRecordFfi] {
+        _ = timelineProjectionGeneration
+        return rowFrameKeys.compactMap { messageByRowFrameKey[$0] }
+    }
+
     /// The quoted preview (sender name + text) for a reply bubble, if resolvable.
     func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
         _ = timelineProjectionGeneration
@@ -301,7 +307,7 @@ final class TimelineStore {
                 return cached.value
             }
             let name = appState?.displayName(forAccountIdHex: preview.sender) ?? L10n.string("Unknown")
-            let text = ContentSanitizer.singleLine(
+            let text = ContentSanitizer.compactSingleLine(
                 MessagePreview.body(preview, mentionDisplayName: mentionDisplayNameResolver),
                 maxLength: 120
             ) ?? ""
@@ -313,16 +319,22 @@ final class TimelineStore {
             return nil
         }
         let target = editProjections.displayRecord(for: storedTarget)
+        let targetDeleted = deletedProjections.contains(targetId)
         let key = ReplyPreviewDisplayCacheKey(
             messageIdHex: record.messageIdHex,
             targetId: targetId,
-            source: .loadedTarget(MessageTimelineSignature(target))
+            source: .loadedTarget(
+                record: MessageTimelineSignature(target),
+                deleted: targetDeleted
+            )
         )
         if let cached = replyPreviewDisplayCache[record.messageIdHex], cached.key == key {
             return cached.value
         }
         let name = appState?.displayName(forAccountIdHex: target.sender) ?? L10n.string("Unknown")
-        let text = ContentSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
+        let text = targetDeleted
+            ? L10n.string("This message was deleted")
+            : ContentSanitizer.compactSingleLine(displayBody(of: target), maxLength: 120) ?? ""
         let value = (name: name, text: text)
         replyPreviewDisplayCache[record.messageIdHex] = ReplyPreviewDisplayCacheEntry(key: key, value: value)
         return value
@@ -453,11 +465,10 @@ final class TimelineStore {
         // window per record; consolidate into a single rebuild for a batch.
         let consolidateTimelineRebuild = canUpdateTimelineIncrementally && page.messages.count > 1
         let perRecordTimelineUpdate = canUpdateTimelineIncrementally && !consolidateTimelineRebuild
-        let hasCompleteAuthoritativeWindow = !page.hasMoreBefore && !page.hasMoreAfter
         if shouldEvictAbsentRecords {
             let incomingMessageIds = Set(page.messages.map(\.messageIdHex).filter { !$0.isEmpty })
             for messageId in Array(messageById.keys) where !incomingMessageIds.contains(messageId) {
-                if confirmedPendingTimelineRecordIds.contains(messageId), !hasCompleteAuthoritativeWindow {
+                if confirmedPendingTimelineRecordIds.contains(messageId) {
                     continue
                 }
                 projectionChanged = removeTimelineRecord(
@@ -860,6 +871,7 @@ final class TimelineStore {
         defer { Self.performanceSignposter.endInterval("TimelineStore.assignTimeline", signpost) }
 
         let nextSignature = next.map(TimelineItemSignature.init)
+        messageByRowFrameKey = Self.messageRowsByFrameKey(next)
         guard timelineSignature != nextSignature else { return false }
         timeline = next
         timelineSignature = nextSignature
@@ -872,12 +884,29 @@ final class TimelineStore {
             return false
         }
         timeline[index] = item
+        if case .message(let record, _) = item.kind {
+            messageByRowFrameKey[item.rowFrameKey] = record
+        } else {
+            messageByRowFrameKey[item.rowFrameKey] = nil
+        }
         if timelineSignature.count == timeline.count {
             timelineSignature[index] = signature
         } else {
             timelineSignature = timeline.map(TimelineItemSignature.init)
         }
         return true
+    }
+
+    private static func messageRowsByFrameKey(
+        _ timeline: [TimelineItem]
+    ) -> [String: AppMessageRecordFfi] {
+        var records: [String: AppMessageRecordFfi] = [:]
+        records.reserveCapacity(timeline.count)
+        for item in timeline {
+            guard case .message(let record, _) = item.kind else { continue }
+            records[item.rowFrameKey] = record
+        }
+        return records
     }
 
     private func canReplaceTimelineItemInPlace(old: TimelineItem, next: TimelineItem) -> Bool {

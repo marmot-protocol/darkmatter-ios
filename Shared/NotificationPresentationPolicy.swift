@@ -81,6 +81,29 @@ nonisolated enum NotificationPresentationPolicy {
         }
     }
 
+    /// Accounts whose records survive every cheap policy gate and therefore
+    /// need the NSE's comparatively expensive full chat-list read to resolve
+    /// archived state.
+    static func accountRefsRequiringArchivedLookup(
+        for collection: BackgroundNotificationCollectionFfi,
+        localNotificationsEnabled: (String) -> Bool = { _ in true },
+        notifyMode: (String, String) -> ChatNotifyMode = { _, _ in .all }
+    ) -> Set<String> {
+        Set(collection.notifications.compactMap { update in
+            guard !update.isFromSelf,
+                  localNotificationsEnabled(update.accountRef)
+            else { return nil }
+            switch notifyMode(update.accountIdHex, update.groupIdHex) {
+            case .all:
+                return update.accountRef
+            case .mentionsOnly:
+                return update.isMention ? update.accountRef : nil
+            case .nothing:
+                return nil
+            }
+        })
+    }
+
     static func orderedPresentableUpdates(
         _ updates: [NotificationUpdateFfi],
         localNotificationsEnabled: (String) -> Bool = { _ in true },
@@ -207,7 +230,11 @@ nonisolated enum NotificationPresentationPolicy {
             route: route,
             timestamp: base.timestamp,
             userInfo: LocalNotificationProjection.userInfo(for: route).merging(
-                [LocalNotificationProjection.isMentionKey: containsMention ? "1" : "0"],
+                [
+                    LocalNotificationProjection.isMentionKey: containsMention ? "1" : "0",
+                    LocalNotificationProjection.accountIdHexKey:
+                        base.userInfo[LocalNotificationProjection.accountIdHexKey] ?? "",
+                ],
                 uniquingKeysWith: { _, new in new }
             )
         )

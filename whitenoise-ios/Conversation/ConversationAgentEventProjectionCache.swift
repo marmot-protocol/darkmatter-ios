@@ -31,26 +31,22 @@ final class ConversationAgentEventProjectionCache {
 #endif
 
     func display(for item: TimelineItem) -> AgentEventPresentation.Display? {
-        guard case .message(let record, _) = item.kind else {
-            entriesByRowId[item.id] = nil
-            return nil
-        }
-        switch MessageSemantics.classify(record) {
-        case .agentActivity, .agentOperation:
-            break
-        default:
-            entriesByRowId[item.id] = nil
-            return nil
-        }
-
+        guard case .message(let record, _) = item.kind else { return nil }
         let key = ProjectionKey(record: record)
         if let cached = entriesByRowId[item.id], cached.key == key {
             return cached.display
         }
+
+        let display: AgentEventPresentation.Display?
+        switch MessageSemantics.classify(record) {
+        case .agentActivity, .agentOperation:
+            display = AgentEventPresentation.display(for: record)
+        default:
+            display = nil
+        }
 #if DEBUG
         buildCountForTesting += 1
 #endif
-        let display = AgentEventPresentation.display(for: record)
         entriesByRowId[item.id] = Entry(key: key, display: display)
         return display
     }

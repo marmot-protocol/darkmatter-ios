@@ -40,7 +40,7 @@ final class ProfileViewModel {
         guard let resolvedHex else { return }
         // Trigger enrichment (cached read + background relay fetch).
         _ = appState.profile(forAccountIdHex: resolvedHex)
-        await directory.load(using: appState, force: true)
+        await directory.load(using: appState)
         guard !Task.isCancelled,
               generation == resolutionGeneration,
               hex == resolvedHex
@@ -81,7 +81,7 @@ final class ProfileViewModel {
         else { return }
         let verifyingHex = hex
         attemptedNip05Verification = declared
-        let verified = await Nip05Resolver.verifies(
+        let verification = await Nip05Resolver.verification(
             declaredAddress: declared,
             accountIdHex: verifyingHex,
             transport: transport
@@ -93,7 +93,15 @@ final class ProfileViewModel {
               hex == verifyingHex,
               attemptedNip05Verification == declared
         else { return }
-        verifiedNip05 = verified ? declared : nil
+        switch verification {
+        case .verified:
+            verifiedNip05 = declared
+        case .mismatch:
+            verifiedNip05 = nil
+        case .lookupFailed:
+            verifiedNip05 = nil
+            attemptedNip05Verification = nil
+        }
     }
 
     func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {

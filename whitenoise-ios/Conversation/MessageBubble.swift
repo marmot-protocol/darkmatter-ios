@@ -827,10 +827,13 @@ nonisolated enum MessageExternalLinkConfirmation {
 
         for label in labels {
             let labelString = String(label)
-            if labelString.lowercased().hasPrefix("xn--"),
-               let decoded = decodePunycodeLabel(String(labelString.dropFirst(4))) {
-                decodedLabels.append(decoded)
+            if labelString.lowercased().hasPrefix("xn--") {
                 isInternationalized = true
+                if let decoded = decodePunycodeLabel(String(labelString.dropFirst(4))) {
+                    decodedLabels.append(decoded)
+                } else {
+                    decodedLabels.append(labelString)
+                }
             } else {
                 decodedLabels.append(labelString)
             }

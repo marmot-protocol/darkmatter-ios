@@ -11,7 +11,21 @@ struct ChatsListView: View {
     @State private var scope: ChatScope = .active
     @State private var selectedChatIds = Set<String>()
     @State private var showBulkDeleteConfirmation = false
+    @State private var pendingSingleDelete: LocalDeleteTarget?
+    @State private var deletingChatIds = Set<String>()
+    @State private var bulkDeleteInProgress = false
     @FocusState private var searchFocused: Bool
+
+    private struct LocalDeleteTarget: Equatable {
+        let id: String
+        let title: String
+    }
+
+    private struct VisibleRowsKey: Equatable {
+        let scope: ChatScope
+        let searchText: String
+        let revision: Int
+    }
 
     enum ChatScope: CaseIterable, Hashable {
         case active, archived, unread
@@ -52,13 +66,20 @@ struct ChatsListView: View {
     }
 
     var body: some View {
+        let visibleRows = viewModel.map(currentRows) ?? []
+        let visibleRowIds = Set(visibleRows.map(\.id))
+        let visibleRowsKey = VisibleRowsKey(
+            scope: scope,
+            searchText: searchText,
+            revision: viewModel?.visibleRowsRevision ?? 0
+        )
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 chatListSearchBar
 
                 Group {
                     if let viewModel {
-                        content(viewModel: viewModel)
+                        content(viewModel: viewModel, rows: visibleRows)
                     } else {
                         ProgressView()
                     }
@@ -67,11 +88,11 @@ struct ChatsListView: View {
             }
             .trueBlackScaffoldBackground()
             .safeAreaInset(edge: .bottom) {
-                if selectionMode, let viewModel {
-                    chatSelectionBar(viewModel: viewModel)
+                if selectionMode, viewModel != nil {
+                    chatSelectionBar(visibleRows: visibleRows)
                 }
             }
-            .onChange(of: rowIdsKey) { _, _ in
+            .onChange(of: visibleRowsKey) { _, _ in
                 selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
             }
             .navigationTitle(selectionMode ? "" : "Chats")
@@ -153,6 +174,21 @@ struct ChatsListView: View {
                 if oldCount > 0 && count == 0 {
                     viewModel?.refreshDisplayProjections()
                 }
+            }
+            .confirmationDialog(
+                singleDeleteConfirmationTitle,
+                isPresented: singleDeleteConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                if let target = pendingSingleDelete {
+                    Button("Delete Chat", role: .destructive) {
+                        pendingSingleDelete = nil
+                        Task { _ = await deleteLocal(groupIdHex: target.id) }
+                    }
+                }
+                Button("Cancel", role: .cancel) { pendingSingleDelete = nil }
+            } message: {
+                Text("This permanently removes the chat and its messages from this device. Signing in again won’t restore them.")
             }
         }
         // Warm path: a chat created / deep-linked while the list is on screen.
@@ -279,7 +315,7 @@ struct ChatsListView: View {
                 }
             }
         } label: {
-            Image(systemName: "slider.horizontal.3")
+            Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(scope == .active ? Color.primary : Color.accentColor)
                 .frame(width: 40, height: 44)
@@ -291,7 +327,10 @@ struct ChatsListView: View {
     // MARK: - List
 
     @ViewBuilder
-    private func content(viewModel: ChatsListViewModel) -> some View {
+    private func content(
+        viewModel: ChatsListViewModel,
+        rows: [ChatsListViewModel.Item]
+    ) -> some View {
         if viewModel.isLoading && viewModel.items.isEmpty {
             ProgressView()
         } else if let error = viewModel.loadError {
@@ -301,7 +340,6 @@ struct ChatsListView: View {
                 description: Text(error)
             )
         } else {
-            let rows = currentRows(viewModel)
             List {
                 ForEach(rows) { item in
                     // A plain row (not a Button) keeps tap and long-press
@@ -323,9 +361,14 @@ struct ChatsListView: View {
                                 )
                         }
                         ChatRow(item: item)
+                        if deletingChatIds.contains(item.id) {
+                            ProgressView()
+                                .accessibilityLabel("Deleting…")
+                        }
                     }
                     .contentShape(.rect)
                     .onTapGesture {
+                        guard !deletingChatIds.contains(item.id) else { return }
                         if selectionMode {
                             selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
                         } else {
@@ -333,7 +376,9 @@ struct ChatsListView: View {
                         }
                     }
                     .onLongPressGesture {
-                        if !selectionMode { selectedChatIds = [item.id] }
+                        if !selectionMode, !deletingChatIds.contains(item.id) {
+                            selectedChatIds = [item.id]
+                        }
                     }
                     .accessibilityAddTraits(.isButton)
                     .swipeActions(edge: .leading) {
@@ -379,34 +424,38 @@ struct ChatsListView: View {
 
     private var selectionMode: Bool { !selectedChatIds.isEmpty }
 
-    private var visibleRows: [ChatsListViewModel.Item] {
-        guard let viewModel else { return [] }
-        return currentRows(viewModel)
+    private var singleDeleteConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { pendingSingleDelete != nil },
+            set: { presented in
+                if !presented { pendingSingleDelete = nil }
+            }
+        )
     }
 
-    private var visibleRowIds: Set<String> { Set(visibleRows.map(\.id)) }
-
-    /// Order-stable key so `onChange` fires when the visible set changes
-    /// (scope switch, search, row add/remove) and stale selections drop.
-    private var rowIdsKey: String { visibleRows.map(\.id).joined(separator: ",") }
-
-    private var selectedItems: [ChatsListViewModel.Item] {
-        visibleRows.filter { selectedChatIds.contains($0.id) }
+    private var singleDeleteConfirmationTitle: String {
+        guard let target = pendingSingleDelete else { return L10n.string("Delete chat from this device?") }
+        return L10n.formatted("Delete “%@” from this device?", target.title)
     }
 
-    private func chatSelectionBar(viewModel: ChatsListViewModel) -> some View {
-        let items = selectedItems
+    private func chatSelectionBar(visibleRows: [ChatsListViewModel.Item]) -> some View {
+        let items = visibleRows.filter { selectedChatIds.contains($0.id) }
         let archiveAction = ChatListSelection.bulkArchiveAction(archivedFlags: items.map(\.isArchived))
         let willMute = ChatListSelection.bulkMuteMutes(mutedFlags: items.map(\.isMuted))
+        let canDeleteLocally = ChatListSelection.canDeleteLocally(
+            activeMemberFlags: items.map(\.isActiveMember)
+        )
 
         return VStack(spacing: 8) {
             HStack {
                 Button("Cancel") { selectedChatIds = [] }
+                    .disabled(bulkDeleteInProgress)
                 Spacer()
                 Text(L10n.plural("%lld selected", Int64(items.count)))
                     .font(.headline)
                 Spacer()
                 Button("Select All") { selectedChatIds = ChatListSelection.selectAll(visibleRows.map(\.id)) }
+                    .disabled(bulkDeleteInProgress)
             }
 
             HStack(spacing: 24) {
@@ -420,6 +469,7 @@ struct ChatsListView: View {
                     }
                     selectedChatIds = []
                 }
+                .disabled(bulkDeleteInProgress)
 
                 selectionAction(
                     willMute ? "Mute" : "Unmute",
@@ -428,26 +478,30 @@ struct ChatsListView: View {
                     for id in items.map(\.id) { setMuted(groupIdHex: id, muted: willMute) }
                     selectedChatIds = []
                 }
+                .disabled(bulkDeleteInProgress)
 
-                // Strictly device-local removal — no leave or admin transfer
-                // — deliberately available even for still-member and
-                // sole-admin groups. Destructive and unpublished, so it
-                // confirms first.
-                selectionAction("Delete", systemImage: "trash", role: .destructive) {
-                    showBulkDeleteConfirmation = true
-                }
-                .confirmationDialog(
-                    "Remove from this device?",
-                    isPresented: $showBulkDeleteConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Delete", role: .destructive) {
-                        Task {
-                            for id in items.map(\.id) { await deleteLocal(groupIdHex: id) }
-                            selectedChatIds = []
-                        }
+                if bulkDeleteInProgress {
+                    VStack(spacing: 3) {
+                        ProgressView()
+                        Text("Deleting…").font(.caption2)
                     }
-                    Button("Cancel", role: .cancel) {}
+                    .frame(maxWidth: .infinity)
+                } else if canDeleteLocally {
+                    selectionAction("Delete", systemImage: "trash", role: .destructive) {
+                        showBulkDeleteConfirmation = true
+                    }
+                    .confirmationDialog(
+                        L10n.plural("Delete %lld chats from this device?", Int64(items.count)),
+                        isPresented: $showBulkDeleteConfirmation,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Delete Chats", role: .destructive) {
+                            startBulkDelete(items)
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This permanently removes these chats and their messages from this device. Signing in again won’t restore them.")
+                    }
                 }
             }
         }
@@ -540,7 +594,7 @@ struct ChatsListView: View {
         }
         if actions.contains(.delete) {
             Button(role: .destructive) {
-                Task { await deleteLocal(groupIdHex: item.id) }
+                pendingSingleDelete = LocalDeleteTarget(id: item.id, title: item.title)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
@@ -586,8 +640,34 @@ struct ChatsListView: View {
     }
 
     @MainActor
-    private func deleteLocal(groupIdHex: String) async {
-        guard let ref = appState.activeAccountRef else { return }
+    private func startBulkDelete(_ items: [ChatsListViewModel.Item]) {
+        guard !bulkDeleteInProgress else { return }
+        let targets = items.map { LocalDeleteTarget(id: $0.id, title: $0.title) }
+        bulkDeleteInProgress = true
+        Task { @MainActor in
+            defer { bulkDeleteInProgress = false }
+            var failedIds = Set<String>()
+            for target in targets {
+                let deleted = await deleteLocal(groupIdHex: target.id, presentsFailure: false)
+                if !deleted { failedIds.insert(target.id) }
+            }
+            selectedChatIds = failedIds
+            guard !failedIds.isEmpty else { return }
+            Haptics.error()
+            appState.present(.error(
+                L10n.string("Some chats couldn’t be deleted"),
+                message: L10n.plural("%lld chats remain. Try again.", Int64(failedIds.count))
+            ))
+        }
+    }
+
+    @MainActor
+    @discardableResult
+    private func deleteLocal(groupIdHex: String, presentsFailure: Bool = true) async -> Bool {
+        guard !deletingChatIds.contains(groupIdHex) else { return false }
+        guard let ref = appState.activeAccountRef else { return false }
+        deletingChatIds.insert(groupIdHex)
+        defer { deletingChatIds.remove(groupIdHex) }
         do {
             let client = try appState.currentMarmotClient()
             _ = try await client.deleteGroupLocal(
@@ -596,9 +676,16 @@ struct ChatsListView: View {
             )
             viewModel?.removeChatListRow(groupIdHex: groupIdHex)
             Haptics.warning()
+            return true
         } catch {
-            Haptics.error()
-            appState.present(.error(L10n.string("Couldn't delete chat"), message: error.localizedDescription))
+            if presentsFailure {
+                Haptics.error()
+                appState.present(.error(
+                    L10n.string("Couldn't delete chat"),
+                    message: L10n.string("Try again.")
+                ))
+            }
+            return false
         }
     }
 

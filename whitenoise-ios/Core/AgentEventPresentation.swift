@@ -111,7 +111,7 @@ nonisolated enum AgentEventPresentation {
         }
 
         private func sanitized(_ value: String?) -> String? {
-            ContentSanitizer.singleLine(value, maxLength: maxPrimaryTextLength)
+            ContentSanitizer.compactSingleLine(value, maxLength: maxPrimaryTextLength)
         }
     }
 
@@ -176,6 +176,6 @@ nonisolated enum AgentEventPresentation {
     /// Sanitize a short peer-derived secondary label: strip bidi/zero-width
     /// spoofing codepoints, collapse whitespace, and cap length.
     private static func sanitizedLabel(_ raw: String?) -> String? {
-        ContentSanitizer.singleLine(raw, maxLength: maxSecondaryTextLength)
+        ContentSanitizer.compactSingleLine(raw, maxLength: maxSecondaryTextLength)
     }
 }

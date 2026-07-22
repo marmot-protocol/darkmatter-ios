@@ -15,7 +15,10 @@ struct ChatRow: View {
             AvatarBubble(
                 seed: item.avatarSeed,
                 title: title,
-                pictureURL: item.avatarURL
+                pictureURL: Self.automaticAvatarURL(
+                    item.avatarURL,
+                    pendingConfirmation: item.row.pendingConfirmation
+                )
             )
             .frame(width: 52, height: 52)
 
@@ -91,6 +94,10 @@ struct ChatRow: View {
             return body.isEmpty ? L10n.string("You sent a message") : L10n.formatted("You: %@", body)
         }
         return body.isEmpty ? L10n.string("New message") : body
+    }
+
+    static func automaticAvatarURL(_ url: URL?, pendingConfirmation: Bool) -> URL? {
+        pendingConfirmation ? nil : url
     }
 
     private var timestamp: String? {

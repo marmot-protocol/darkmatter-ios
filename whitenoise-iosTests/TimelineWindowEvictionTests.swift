@@ -28,6 +28,28 @@ struct TimelineWindowEvictionTests {
     }
 
     @MainActor
+    @Test func visibleRowFrameLookupTouchesOnlyRequestedRecords() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let first = timelineRecord(messageIdHex: hexId(11), timelineAt: 1)
+        let second = timelineRecord(messageIdHex: hexId(12), timelineAt: 2)
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [first, second], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        let firstItem = try #require(viewModel.timeline.first { item in
+            guard case .message(let record, _) = item.kind else { return false }
+            return record.messageIdHex == first.messageIdHex
+        })
+
+        let records = viewModel.records(forRowFrameKeys: [firstItem.rowFrameKey, "missing-row"])
+
+        #expect(records.map(\.messageIdHex) == [first.messageIdHex])
+    }
+
+    @MainActor
     @Test func projectionRemoveEvictsOnlyAuthoritativelyRemovedRecord() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
@@ -58,7 +80,7 @@ struct TimelineWindowEvictionTests {
     }
 
     @MainActor
-    @Test func confirmedSentMessageSurvivesPartialWindowButNotCompleteAuthoritativeWindow() throws {
+    @Test func confirmedSentMessageSurvivesAnyAbsentWindowUntilMirrored() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: testGroup()
@@ -91,7 +113,7 @@ struct TimelineWindowEvictionTests {
 
         ids = timelineMessageIds(in: viewModel)
         #expect(ids.contains(retained.messageIdHex))
-        #expect(!ids.contains(confirmedId))
+        #expect(ids.contains(confirmedId))
 
         let mirrored = timelineRecord(
             messageIdHex: confirmedId,

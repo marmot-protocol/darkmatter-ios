@@ -45,7 +45,7 @@ final class NewChatFlowViewModel {
         startPrompt = nil
         // Join any in-flight directory load so the reuse decision can't run
         // against an empty candidate list and create a duplicate direct chat.
-        await directory.load(using: appState)
+        await directory.load(using: appState, force: true)
         let existing = existingDirectChatGroupIdHex(accountIdHex: accountIdHex)
         await runStart(
             accountIdHex: accountIdHex,
@@ -99,6 +99,18 @@ final class NewChatFlowViewModel {
     }
 
     // MARK: - Group selection
+
+    nonisolated static func shouldAutoSelectResolved(
+        accountIdHex: String,
+        isBusy: Bool,
+        excludedAccountIds: Set<String>,
+        selectedAccountIds: Set<String>
+    ) -> Bool {
+        let normalized = accountIdHex.lowercased()
+        return !isBusy
+            && !excludedAccountIds.contains(normalized)
+            && !selectedAccountIds.contains(normalized)
+    }
 
     func toggleSelection(of candidate: RecipientCandidate, using appState: AppState) {
         groupSelection.toggle(

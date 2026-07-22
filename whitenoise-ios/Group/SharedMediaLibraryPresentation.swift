@@ -105,7 +105,7 @@ nonisolated enum SharedMediaLibraryPresentation {
                 guard let urlString = normalizedLink(String(token)) else { continue }
                 let dedupeKey = "\(record.messageIdHex)#\(urlString.lowercased())"
                 guard seen.insert(dedupeKey).inserted else { continue }
-                let display = ContentSanitizer.singleLine(urlString, maxLength: 120) ?? urlString
+                let display = ContentSanitizer.compactSingleLine(urlString, maxLength: 120) ?? urlString
                 let host = URL(string: urlString)?.host?.lowercased() ?? ""
                 results.append(LinkItem(
                     id: dedupeKey,
