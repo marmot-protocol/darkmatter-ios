@@ -33,6 +33,11 @@ nonisolated enum LocalNotificationProjection {
     static let notificationKeyKey = "dm_notification_key"
     static let messageIdHexKey = "dm_message_id_hex"
     static let isMentionKey = "dm_is_mention"
+    static let accountIdHexKey = "dm_account_id_hex"
+    static let deliveryDispositionKey = "dm_delivery_disposition"
+    static let quietDisposition = "quiet"
+    static let fallbackDisposition = "fallback"
+    static let actionFailureDisposition = "action_failure"
 
     private static let maxPreviewLength = 240
 
@@ -75,7 +80,10 @@ nonisolated enum LocalNotificationProjection {
             route: route,
             timestamp: Date(timeIntervalSince1970: TimeInterval(update.timestampMs) / 1000),
             userInfo: userInfo(for: route).merging(
-                [isMentionKey: update.isMention ? "1" : "0"],
+                [
+                    isMentionKey: update.isMention ? "1" : "0",
+                    accountIdHexKey: update.accountIdHex,
+                ],
                 uniquingKeysWith: { _, new in new }
             ),
             categoryIdentifier: NotificationActionCategory.identifier(
@@ -96,6 +104,20 @@ nonisolated enum LocalNotificationProjection {
     static func isMention(from userInfo: [AnyHashable: Any]) -> Bool {
         guard let raw = stringValue(userInfo[isMentionKey]) else { return true }
         return raw != "0"
+    }
+
+    static func accountIdHex(from userInfo: [AnyHashable: Any]) -> String? {
+        guard let value = stringValue(userInfo[accountIdHexKey]), !value.isEmpty else { return nil }
+        return value
+    }
+
+    static func isQuietOrFallback(from userInfo: [AnyHashable: Any]) -> Bool {
+        guard let disposition = stringValue(userInfo[deliveryDispositionKey]) else { return false }
+        return disposition == quietDisposition || disposition == fallbackDisposition
+    }
+
+    static func isActionFailure(from userInfo: [AnyHashable: Any]) -> Bool {
+        stringValue(userInfo[deliveryDispositionKey]) == actionFailureDisposition
     }
 
     static func route(from userInfo: [AnyHashable: Any]) -> LocalNotificationRoute? {
@@ -174,7 +196,7 @@ nonisolated enum LocalNotificationProjection {
     }
 
     private static func sanitizedPreview(_ raw: String?) -> String? {
-        ContentSanitizer.singleLine(raw, maxLength: maxPreviewLength)
+        ContentSanitizer.compactSingleLine(raw, maxLength: maxPreviewLength)
     }
 
     private static func notificationIdentifier(for update: NotificationUpdateFfi) -> String {

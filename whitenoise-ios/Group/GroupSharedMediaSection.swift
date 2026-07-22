@@ -56,7 +56,7 @@ nonisolated enum GroupSharedMediaPresentation {
 
     @MainActor
     static func subtitle(for item: GroupSharedMediaItem) -> String {
-        let mediaType = ContentSanitizer.singleLine(item.attachment.mediaType, maxLength: 100)
+        let mediaType = ContentSanitizer.compactSingleLine(item.attachment.mediaType, maxLength: 100)
             ?? L10n.string("Attachment")
         guard item.timestamp > 0 else { return mediaType }
         let date = Date(timeIntervalSince1970: TimeInterval(item.timestamp))

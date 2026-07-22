@@ -55,3 +55,55 @@ nonisolated enum GroupMemberOrdering {
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 }
+
+/// Caches the expensive name resolution and ordering projection independently
+/// from the query text. Typing into member search should only filter the
+/// existing projection; profile or roster changes rebuild it.
+@MainActor
+final class GroupMemberListProjectionCache {
+    struct Projection {
+        let orderedMembers: [GroupMemberDetailsFfi]
+        let namesByMemberId: [String: String]
+    }
+
+    private var cachedMembers: [GroupMemberDetailsFfi]?
+    private var cachedProfileGeneration: Int?
+    private var cachedProjection: Projection?
+
+    #if DEBUG
+    private(set) var buildCountForTesting = 0
+    #endif
+
+    func projection(
+        members: [GroupMemberDetailsFfi],
+        profileGeneration: Int,
+        resolveName: (GroupMemberDetailsFfi) -> String
+    ) -> Projection {
+        if cachedMembers == members,
+           cachedProfileGeneration == profileGeneration,
+           let cachedProjection
+        {
+            return cachedProjection
+        }
+
+        var namesByMemberId: [String: String] = [:]
+        namesByMemberId.reserveCapacity(members.count)
+        for member in members {
+            namesByMemberId[member.memberIdHex] = resolveName(member)
+        }
+        let projection = Projection(
+            orderedMembers: GroupMemberOrdering.ordered(
+                members,
+                namesByMemberId: namesByMemberId
+            ),
+            namesByMemberId: namesByMemberId
+        )
+        cachedMembers = members
+        cachedProfileGeneration = profileGeneration
+        cachedProjection = projection
+        #if DEBUG
+        buildCountForTesting += 1
+        #endif
+        return projection
+    }
+}

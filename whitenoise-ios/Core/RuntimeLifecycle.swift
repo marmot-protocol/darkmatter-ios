@@ -18,6 +18,19 @@ enum NotificationActionError: Error {
     case markReadFailed
 }
 
+enum ForegroundRuntimeMutationError: LocalizedError {
+    case runtimeUnavailable
+
+    var errorDescription: String? {
+        "The secure runtime isn't ready yet. Try again in a moment."
+    }
+}
+
+struct ForegroundRuntimeMutationLease {
+    fileprivate let id: UUID
+    let client: MarmotClient
+}
+
 /// Owns the Marmot runtime's lifecycle: the live `MarmotClient` handle, the
 /// foreground/suspension gates, the runtime generation token, bootstrap, and the
 /// background suspend / foreground resume orchestration (including the
@@ -56,6 +69,9 @@ final class RuntimeLifecycle {
     @ObservationIgnored private var foregroundActivationTaskID = UUID()
     @ObservationIgnored private var runtimeSuspensionTask: Task<Void, Never>?
     @ObservationIgnored private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var bootstrapRegistrationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    @ObservationIgnored private var foregroundMutationLeaseIDs: Set<UUID> = []
+    @ObservationIgnored private var foregroundMutationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     /// Set when the real background-suspension entry point runs while bootstrap
     /// still has the phase at `.bootstrapping`. An `.inactive` scene transition
     /// only flips `isAppSceneActive`; it must not tear the runtime down until the
@@ -110,7 +126,10 @@ final class RuntimeLifecycle {
     private var sceneHasReportedPhase: Bool { appState?.sceneHasReportedPhase ?? false }
 
     var canRefreshProfiles: Bool {
-        isAppSceneActive && !runtimeSuspendedForBackground && !isRuntimeSuspending
+        isAppSceneActive
+            && !runtimeSuspendedForBackground
+            && !isRuntimeSuspending
+            && client != nil
     }
 
     var canUseRuntimeForLocalForegroundWork: Bool {
@@ -136,20 +155,34 @@ final class RuntimeLifecycle {
     // MARK: - Runtime ownership
 
     func runtimeClient() throws -> MarmotClient {
-        if let client { return client }
-        let restored = try makeRuntime()
-        client = restored
-        return restored
+        guard let client else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
+        return client
     }
 
     /// Build a fresh runtime from the captured on-disk root and relay set. Used
     /// to restore the runtime after a background suspension released it.
-    private func makeRuntime() throws -> MarmotClient {
-        try MarmotClient(rootPath: runtimeRootPath, relayUrls: runtimeRelayUrls)
+    private func makeRuntime(
+        cursorPersistence: CursorPersistenceFfi = .advance
+    ) async throws -> MarmotClient {
+        let rootPath = runtimeRootPath
+        let relayUrls = runtimeRelayUrls
+        let telemetryConfig = TelemetryBuildConfig.current()
+        return try await Task.detached(priority: .userInitiated) {
+            try MarmotClient(
+                rootPath: rootPath,
+                relayUrls: relayUrls,
+                cursorPersistence: cursorPersistence,
+                telemetryConfig: telemetryConfig
+            )
+        }.value
     }
 
     private func startCurrentRuntime() async throws {
-        try await runtimeClient().startRuntime()
+        if client == nil {
+            client = try await makeRuntime()
+        }
+        guard let client else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
+        try await client.startRuntime()
     }
 
     // MARK: - Bootstrap
@@ -169,6 +202,7 @@ final class RuntimeLifecycle {
             await self.performBootstrap()
         }
         bootstrapTask = task
+        resumeBootstrapRegistrationWaiters()
         await task.value
         clearCompletedBootstrapTask(id: id)
     }
@@ -221,11 +255,9 @@ final class RuntimeLifecycle {
     /// starts the runtime and only later promotes `phase` out of
     /// `.bootstrapping`; a real background transition that lands while bootstrap
     /// is awaiting reaches `prepareForBackgroundSuspension`. The suspension task
-    /// now waits for the in-flight bootstrap before re-evaluating the live-runtime
-    /// guards, so the UIKit background task that awaits it remains open until the
-    /// runtime is actually released. If the original suspension task had already
-    /// bailed (for example, it arrived before bootstrap created `bootstrapTask`),
-    /// this helper re-arms it after phase promotion.
+    /// waits for bootstrap to be registered and completed before re-evaluating
+    /// the live-runtime guards, so the UIKit background task remains attached to
+    /// one suspension task until the runtime is actually released.
     ///
     /// Call this *after* `setPhase(.onboarding/.ready)` so the pending/re-armed
     /// suspension passes `phaseOwnsLiveRuntime` and actually tears the runtime
@@ -244,15 +276,56 @@ final class RuntimeLifecycle {
         return true
     }
 
+    private func waitForBootstrapRegistrationIfNeeded() async {
+        guard bootstrapTask == nil,
+              appState?.phase == .bootstrapping,
+              bootstrapNeedsBackgroundSuspensionRecheck,
+              !isAppSceneActive
+        else { return }
+
+        let waiterID = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard bootstrapTask == nil,
+                      appState?.phase == .bootstrapping,
+                      bootstrapNeedsBackgroundSuspensionRecheck,
+                      !isAppSceneActive,
+                      !Task.isCancelled
+                else {
+                    continuation.resume()
+                    return
+                }
+                bootstrapRegistrationWaiters[waiterID] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.resumeBootstrapRegistrationWaiter(id: waiterID)
+            }
+        }
+    }
+
+    private func resumeBootstrapRegistrationWaiters() {
+        let waiters = Array(bootstrapRegistrationWaiters.values)
+        bootstrapRegistrationWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    private func resumeBootstrapRegistrationWaiter(id: UUID) {
+        bootstrapRegistrationWaiters.removeValue(forKey: id)?.resume()
+    }
+
     /// Tear down a partially-created runtime after a failed start so the next
     /// Retry rebuilds a fresh one. Shared by the bootstrap and foreground-resume
     /// failure paths: both set `client` to a new instance and then start it, so
     /// both must release that instance (shutdown + `client = nil`) on failure —
-    /// otherwise `runtimeClient()` returns the stale, broken client and Retry
-    /// re-invokes `startRuntime()` on a runtime whose `start()` already failed.
+    /// otherwise Retry can re-invoke `startRuntime()` on a stale client whose
+    /// prior `start()` already failed.
     private func releaseRuntimeAfterStartupFailure() async {
-        appState?.stopNotificationSubscription()
+        let notificationTask = appState?.stopNotificationSubscription()
         await appState?.cancelNativePushRegistrationTask()
+        await notificationTask?.value
         await shutdownAndReleaseCurrentClient()
     }
 
@@ -293,6 +366,7 @@ final class RuntimeLifecycle {
     func startForegroundActivation() -> Task<Void, Never> {
         appState?.isAppSceneActive = true
         appState?.sceneHasReportedPhase = true
+        resumeBootstrapRegistrationWaiters()
         if let foregroundActivationTask {
             return foregroundActivationTask
         }
@@ -349,13 +423,13 @@ final class RuntimeLifecycle {
             startForegroundActivation()
             return
         }
-        // Background suspension can arrive after bootstrap starts the runtime but
-        // before it promotes `phase` out of `.bootstrapping`. Keep this original
-        // suspension task alive so the UIKit background task that awaits it stays
-        // open until bootstrap finishes and the live-runtime guard can pass.
-        if appState?.phase == .bootstrapping,
-           let bootstrapTask {
-            await bootstrapTask.value
+        // A very fast launch-to-background transition can arrive before the
+        // SwiftUI bootstrap task has even registered. Park this same suspension
+        // owner until bootstrap exists, then chain through it; never re-arm the
+        // real teardown outside the UIKit assertion attached to this task.
+        if appState?.phase == .bootstrapping {
+            await waitForBootstrapRegistrationIfNeeded()
+            await bootstrapTask?.value
             guard !isAppSceneActive else {
                 startForegroundActivation()
                 return
@@ -367,7 +441,6 @@ final class RuntimeLifecycle {
 
         isRuntimeSuspending = true
         defer { finishRuntimeSuspensionWait() }
-        appState?.stopNotificationSubscription()
         await shutdownAndReleaseCurrentClient()
         // Release the FFI handle so Rust drops the runtime and closes its
         // SQLite storage in the shared App Group container. Holding the handle
@@ -395,7 +468,7 @@ final class RuntimeLifecycle {
 
         if isRestartingAfterSuspension {
             do {
-                let restored = try makeRuntime()
+                let restored = try await makeRuntime()
 #if DEBUG
                 if let afterForegroundRuntimeCreatedForTesting {
                     await afterForegroundRuntimeCreatedForTesting()
@@ -498,11 +571,7 @@ final class RuntimeLifecycle {
         }
         let ephemeral: MarmotClient
         do {
-            ephemeral = try MarmotClient(
-                rootPath: runtimeRootPath,
-                relayUrls: runtimeRelayUrls,
-                cursorPersistence: .frozen
-            )
+            ephemeral = try await makeRuntime(cursorPersistence: .frozen)
         } catch {
             finishRuntimeSuspensionWait()
             throw error
@@ -582,6 +651,52 @@ final class RuntimeLifecycle {
         runtimeSuspensionWaiters.removeValue(forKey: id)?.resume()
     }
 
+    func beginForegroundRuntimeMutation() throws -> ForegroundRuntimeMutationLease {
+        guard phaseOwnsLiveRuntime,
+              canUseRuntimeForLocalForegroundWork,
+              let client
+        else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
+
+        let id = UUID()
+        foregroundMutationLeaseIDs.insert(id)
+        return ForegroundRuntimeMutationLease(id: id, client: client)
+    }
+
+    func endForegroundRuntimeMutation(_ lease: ForegroundRuntimeMutationLease) {
+        guard foregroundMutationLeaseIDs.remove(lease.id) != nil,
+              foregroundMutationLeaseIDs.isEmpty
+        else { return }
+
+        let waiters = Array(foregroundMutationWaiters.values)
+        foregroundMutationWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    private func waitForForegroundRuntimeMutations() async {
+        while !foregroundMutationLeaseIDs.isEmpty {
+            let waiterID = UUID()
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    guard !foregroundMutationLeaseIDs.isEmpty, !Task.isCancelled else {
+                        continuation.resume()
+                        return
+                    }
+                    foregroundMutationWaiters[waiterID] = continuation
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in
+                    self?.resumeForegroundMutationWaiter(id: waiterID)
+                }
+            }
+        }
+    }
+
+    private func resumeForegroundMutationWaiter(id: UUID) {
+        foregroundMutationWaiters.removeValue(forKey: id)?.resume()
+    }
+
     private func cancelForegroundMaintenance() async {
         // Account teardown owns the live runtime until it finishes. Waiting
         // here prevents background suspension from releasing the shared store
@@ -597,13 +712,16 @@ final class RuntimeLifecycle {
         // (master #401). Cancel-without-awaiting first, cancel the profile queue,
         // then drain the foreground task, the coordinator push task, and the
         // profile task — mirroring AppState's pre-extraction ordering.
-        let profileTask = appState?.beginForegroundMaintenanceCancellation()
+        let maintenanceTasks = appState?.beginForegroundMaintenanceCancellation()
 
         await foregroundTask?.value
+        await maintenanceTasks?.notificationSubscription?.value
+        await maintenanceTasks?.connectivityCatchUp?.value
         await appState?.cancelNativePushRegistrationTask()
         await appState?.cancelRetentionSweeps()
         await appState?.drainUnreadSummaryRefresh()
-        await profileTask?.value
+        await maintenanceTasks?.profileRefresh?.value
+        await waitForForegroundRuntimeMutations()
     }
 
     private func clearCompletedForegroundActivationTask(id: UUID) {

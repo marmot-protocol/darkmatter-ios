@@ -60,8 +60,8 @@ final class NotificationService: UNNotificationServiceExtension {
                 await marmot.shutdown()
             }
             await additionalPresentationTask?.value
-            await shutdownTask.value
             await self?.finish(applyingFallbackForTimeout: true)
+            await shutdownTask.value
         }
     }
 
@@ -102,8 +102,21 @@ final class NotificationService: UNNotificationServiceExtension {
                             ).localNotificationsEnabled
                         }
                     }
+                let notifyMode: (String, String) -> ChatNotifyMode = { accountIdHex, groupIdHex in
+                    ChatMuteStore.notifyMode(
+                        accountIdHex: accountIdHex,
+                        groupIdHex: groupIdHex,
+                        snapshot: notifyModeSnapshot
+                    )
+                }
+                let accountsRequiringArchivedLookup =
+                    NotificationPresentationPolicy.accountRefsRequiringArchivedLookup(
+                        for: result,
+                        localNotificationsEnabled: localNotificationsEnabled,
+                        notifyMode: notifyMode
+                    )
                 var rowsByAccountRef: [String: [ChatListRowFfi]] = [:]
-                for accountRef in Set(result.notifications.map(\.accountRef)) {
+                for accountRef in accountsRequiringArchivedLookup {
                     rowsByAccountRef[accountRef] =
                         (try? marmot.chatList(accountRef: accountRef, includeArchived: true)) ?? []
                 }
@@ -121,13 +134,7 @@ final class NotificationService: UNNotificationServiceExtension {
                             )
                         )
                     },
-                    notifyMode: { accountIdHex, groupIdHex in
-                        ChatMuteStore.notifyMode(
-                            accountIdHex: accountIdHex,
-                            groupIdHex: groupIdHex,
-                            snapshot: notifyModeSnapshot
-                        )
-                    },
+                    notifyMode: notifyMode,
                     nickname: { ownerAccountIdHex, contactAccountIdHex in
                         ContactNicknameStore.nickname(
                             ownerAccountIdHex: ownerAccountIdHex,
@@ -273,11 +280,15 @@ final class NotificationService: UNNotificationServiceExtension {
     /// its banner and sound: the record lands silently in Notification Center.
     private func applyQuietDelivery(to content: UNMutableNotificationContent) {
         applyFallback(to: content)
+        content.userInfo[LocalNotificationProjection.deliveryDispositionKey] =
+            LocalNotificationProjection.quietDisposition
         content.sound = nil
         content.interruptionLevel = .passive
     }
 
     private func applyFallback(to content: UNMutableNotificationContent) {
+        content.userInfo[LocalNotificationProjection.deliveryDispositionKey] =
+            LocalNotificationProjection.fallbackDisposition
         if content.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             content.title = L10n.string("White Noise")
         }

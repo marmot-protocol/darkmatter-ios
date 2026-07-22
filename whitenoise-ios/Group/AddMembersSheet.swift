@@ -97,6 +97,9 @@ struct AddMembersSheet: View {
                 guard case .resolved(let resolved) = resolution else { return }
                 Task { await autoSelect(resolved) }
             }
+            .onChange(of: appState.profileRefreshGeneration) { _, _ in
+                model.directory.refreshSearchFields(using: appState)
+            }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerSheet { raw in
                     showScanner = false
@@ -126,7 +129,7 @@ struct AddMembersSheet: View {
             model.directory.candidates,
             query: model.query.text,
             excludedAccountIds: excludedAccountIds,
-            fields: { RecipientDirectory.matchFields(for: $0, appState: appState) }
+            fields: { model.directory.matchFields(for: $0) }
         )
         if model.directory.isLoading && model.directory.candidates.isEmpty {
             Section {

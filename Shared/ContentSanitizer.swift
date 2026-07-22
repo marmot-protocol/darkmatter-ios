@@ -30,6 +30,14 @@ nonisolated enum ContentSanitizer {
         return boundedPrefix(collapsed, maxGraphemes: maxLength)
     }
 
+    /// Compact peer-controlled text used in previews, filenames, and other
+    /// one-line chrome. Unlike full message bodies, these surfaces have no
+    /// reason to preserve invisible format/blank scalars that can make an
+    /// apparently empty or misleading row.
+    static func compactSingleLine(_ raw: String?, maxLength: Int) -> String? {
+        visibleSingleLine(raw, maxLength: maxLength)
+    }
+
     /// Relay / URL-like single-line display: everything `singleLine` does, plus
     /// removal of the remaining invisible Unicode characters that
     /// `stripUnsafe` deliberately leaves in place for general text — notably

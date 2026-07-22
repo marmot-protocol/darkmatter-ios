@@ -41,4 +41,11 @@ nonisolated enum ChatListSelection {
     static func selectAll(_ visibleIds: [String]) -> Set<String> {
         Set(visibleIds)
     }
+
+    /// Local deletion is only valid after membership is inactive. Keeping the
+    /// bulk rule here prevents a mixed selection from exposing a destructive
+    /// action that is invalid for some of its rows.
+    static func canDeleteLocally(activeMemberFlags: [Bool]) -> Bool {
+        !activeMemberFlags.isEmpty && activeMemberFlags.allSatisfy { !$0 }
+    }
 }

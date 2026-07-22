@@ -83,6 +83,14 @@ final class ProfileStore {
         cachedProfileProjection(forAccountIdHex: id, refreshAfterLoad: true)?.profile
     }
 
+    /// Cache-only profile read for bounded batch projections. Unlike
+    /// `profile(forAccountIdHex:)`, a miss never schedules hydration or relay
+    /// refresh work.
+    func cachedProfile(forAccountIdHex id: String) -> UserProfileMetadataFfi? {
+        _ = appState?.profileRefreshGeneration
+        return profileProjectionCache[id]?.profile
+    }
+
     /// A local nickname wins over the resolved profile projection; this is the
     /// resolution chokepoint every display-name consumer reads through, so the
     /// override applies everywhere at once. The projection is still resolved
@@ -91,6 +99,13 @@ final class ProfileStore {
     func knownDisplayName(forAccountIdHex id: String) -> String? {
         let resolved = cachedProfileProjection(forAccountIdHex: id, refreshAfterLoad: true)?.knownDisplayName
         return contactNickname(forAccountIdHex: id) ?? resolved
+    }
+
+    /// Cache-only display-name read for bounded batch projections. The
+    /// projection's name is already sanitized by `resolvedKnownDisplayName`.
+    func cachedKnownDisplayName(forAccountIdHex id: String) -> String? {
+        _ = appState?.profileRefreshGeneration
+        return contactNickname(forAccountIdHex: id) ?? profileProjectionCache[id]?.knownDisplayName
     }
 
     /// The resolved profile-directory name, ignoring any local nickname — the

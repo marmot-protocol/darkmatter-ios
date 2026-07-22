@@ -188,6 +188,9 @@ struct NewMessageScreen: View {
         .onChange(of: model.messageQuery.text) { _, _ in
             model.messageQuery.queryChanged(using: appState)
         }
+        .onChange(of: appState.profileRefreshGeneration) { _, _ in
+            model.directory.refreshSearchFields(using: appState)
+        }
     }
 
     @Environment(\.dismiss) private var dismissFlowAction
@@ -201,7 +204,7 @@ struct NewMessageScreen: View {
             model.directory.candidates,
             query: model.messageQuery.text,
             excludedAccountIds: model.excludedAccountIds(using: appState),
-            fields: { RecipientDirectory.matchFields(for: $0, appState: appState) }
+            fields: { model.directory.matchFields(for: $0) }
         )
     }
 

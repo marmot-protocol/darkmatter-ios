@@ -57,15 +57,13 @@ struct MessageRetentionSweepTests {
         #expect(MessageRetentionSweepPolicy.sweepIntervalNanoseconds > 0)
     }
 
-    /// The prune result reports ciphertext hashes while cache files are keyed
-    /// by plaintext hash; eviction must resolve through the pre-prune
-    /// reference snapshot and leave unrelated cache entries alone.
-    @Test func cacheEvictionRemovesOnlyPrunedCiphertextMatches() throws {
+    /// Marmot's prune result reports plaintext hashes directly, so eviction
+    /// needs no pre-prune media listing and must clear both cache stores.
+    @Test func cacheEvictionRemovesOnlyReportedPlaintextHashes() throws {
         let cachesDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("retention-sweep-tests-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: cachesDirectory) }
 
-        // Uppercased reference hash: eviction must match case-insensitively.
         let prunedReference = sweepTestReference(
             ciphertextSha256: String(repeating: "AB", count: 32),
             plaintextSha256: String(repeating: "a", count: 64)
@@ -83,10 +81,19 @@ struct MessageRetentionSweepTests {
             )
             try Data("plaintext".utf8).write(to: url)
         }
+        let playbackDirectory = cachesDirectory
+            .appendingPathComponent("EncryptedMediaPlayback", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: playbackDirectory,
+            withIntermediateDirectories: true
+        )
+        let prunedPlaybackURL = playbackDirectory.appendingPathComponent("\(prunedReference.plaintextSha256).mp4")
+        let keptPlaybackURL = playbackDirectory.appendingPathComponent("\(keptReference.plaintextSha256).mp4")
+        try Data("pruned playback".utf8).write(to: prunedPlaybackURL)
+        try Data("kept playback".utf8).write(to: keptPlaybackURL)
 
-        MessageMediaCache.removeCachedData(
-            forCiphertextHashes: [prunedReference.ciphertextSha256.lowercased()],
-            in: [prunedReference, keptReference],
+        let removed = MessageMediaCache.removeCachedData(
+            forPlaintextHashes: [prunedReference.plaintextSha256.uppercased()],
             cachesDirectory: cachesDirectory
         )
 
@@ -94,6 +101,26 @@ struct MessageRetentionSweepTests {
         let keptURL = try #require(MessageMediaCache.cacheURL(for: keptReference, cachesDirectory: cachesDirectory))
         #expect(!FileManager.default.fileExists(atPath: prunedURL.path))
         #expect(FileManager.default.fileExists(atPath: keptURL.path))
+        #expect(!FileManager.default.fileExists(atPath: prunedPlaybackURL.path))
+        #expect(FileManager.default.fileExists(atPath: keptPlaybackURL.path))
+        #expect(removed)
+    }
+
+    @Test func cacheEvictionReportsDirectoryReadFailures() throws {
+        let cachesDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("retention-sweep-failure-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cachesDirectory) }
+        try FileManager.default.createDirectory(at: cachesDirectory, withIntermediateDirectories: true)
+        try Data("not a directory".utf8).write(
+            to: cachesDirectory.appendingPathComponent("EncryptedMedia")
+        )
+
+        let removed = MessageMediaCache.removeCachedData(
+            forPlaintextHashes: [String(repeating: "a", count: 64)],
+            cachesDirectory: cachesDirectory
+        )
+
+        #expect(!removed)
     }
 }
 

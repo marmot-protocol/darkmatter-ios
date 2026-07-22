@@ -146,6 +146,10 @@ struct ConversationDraftStoreTests {
             notifications: .shared,
             conversationDraftStore: store
         )
+        // Runtime suspension deliberately waits for bootstrap registration
+        // during a real launch-to-background race. Enter the normal onboarding
+        // runtime state before exercising the draft flush boundary.
+        await appState.bootstrap()
 
         store.setDraft("last keystrokes", accountRef: "account", groupIdHex: "group")
         await appState.startRuntimeSuspension().value

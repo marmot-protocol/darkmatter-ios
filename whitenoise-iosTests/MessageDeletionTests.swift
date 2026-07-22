@@ -268,6 +268,27 @@ struct MessageDeletionTests {
         #expect(renderedMessageIds(in: store) == [visibleId, replyId])
     }
 
+    @Test func loadedReplyTargetFallbackDoesNotResurfaceDeletedPlaintext() throws {
+        let parentId = hex("71")
+        let replyId = hex("72")
+        let store = TimelineStore(appState: nil, groupIdHex: hex("aa"))
+        let parent = timelineRecord(id: parentId, at: 1, deleted: true)
+        let reply = timelineRecord(
+            id: replyId,
+            at: 2,
+            replyToMessageIdHex: parentId,
+            includeReplyPreview: false
+        )
+
+        store.applyTimelinePage(
+            TimelinePageFfi(messages: [parent, reply], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        let replyRecord = try #require(store.record(for: replyId))
+        #expect(store.replyPreview(for: replyRecord)?.text == "This message was deleted")
+    }
+
     @Test func deleteForMePublishesNothingAndSurvivesViewModelRecreation() async throws {
         let accountRef = "delete-local-\(UUID().uuidString)"
         let me = hex("11")
@@ -531,7 +552,9 @@ struct MessageDeletionTests {
         groupId: String = String(repeating: "aa", count: 32),
         sender: String = String(repeating: "22", count: 32),
         at: UInt64,
-        replyToMessageIdHex: String? = nil
+        replyToMessageIdHex: String? = nil,
+        includeReplyPreview: Bool = true,
+        deleted: Bool = false
     ) -> TimelineMessageRecordFfi {
         TimelineMessageRecordFfi(
             messageIdHex: id,
@@ -548,7 +571,7 @@ struct MessageDeletionTests {
             timelineAt: at,
             receivedAt: at,
             replyToMessageIdHex: replyToMessageIdHex,
-            replyPreview: replyToMessageIdHex.map {
+            replyPreview: includeReplyPreview ? replyToMessageIdHex.map {
                 TimelineReplyPreviewFfi(
                     messageIdHex: $0,
                     sender: hex("22"),
@@ -559,13 +582,13 @@ struct MessageDeletionTests {
                     agentTextStreamJson: nil,
                     deleted: false
                 )
-            },
+            } : nil,
             mediaJson: nil,
             media: [],
             agentTextStreamJson: nil,
             groupSystem: nil,
             reactions: TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
-            deleted: false,
+            deleted: deleted,
             deletedByMessageIdHex: nil,
             invalidationStatus: nil
         )

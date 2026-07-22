@@ -420,7 +420,7 @@ final class GroupDetailsViewModel {
 
     /// Direct-chat details show the named groups both people share, derived
     /// from the same on-demand snapshots the recipient directory loads.
-    func loadSharedGroups(using appState: AppState) async {
+    func loadSharedGroups(using appState: AppState, force: Bool = false) async {
         guard let conversation, conversation.groupDisplay.isDirectMessage,
               let otherMember = conversation.otherMember
         else {
@@ -428,7 +428,7 @@ final class GroupDetailsViewModel {
             addableGroups = []
             return
         }
-        await recipientDirectory.load(using: appState)
+        await recipientDirectory.load(using: appState, force: force)
         guard !Task.isCancelled else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
             snapshots: recipientDirectory.snapshots,

@@ -124,9 +124,10 @@ nonisolated enum RelayURL {
               trimmed.utf8.count <= maxRelayURLUTF8Bytes,
               var components = URLComponents(string: trimmed),
               let scheme = components.scheme?.lowercased(),
-              scheme == "wss" || scheme == "ws",
+              scheme == "wss",
               let host = components.host,
               !host.isEmpty,
+              !ContentSanitizer.isPrivateOrLoopbackAddressLiteral(host),
               components.user == nil,
               components.password == nil
         else { return nil }

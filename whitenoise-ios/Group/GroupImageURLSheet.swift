@@ -80,7 +80,7 @@ struct DuckDuckGoImageSearchClient {
             let thumbnailURL = sanitizedImageURL(raw.thumbnail)
             return GroupImageSearchResult(
                 id: imageURL.absoluteString,
-                title: ContentSanitizer.singleLine(raw.title, maxLength: maximumResultTitleLength) ?? "",
+                title: ContentSanitizer.compactSingleLine(raw.title, maxLength: maximumResultTitleLength) ?? "",
                 imageURL: imageURL,
                 thumbnailURL: thumbnailURL,
                 sourceHost: sourceHost(for: raw.sourceURL ?? raw.image),

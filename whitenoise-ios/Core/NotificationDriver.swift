@@ -72,6 +72,8 @@ nonisolated struct NotificationSubscriptionRunner {
 final class NotificationDriver {
     private var task: Task<Void, Never>?
     private var taskID = UUID()
+    private var drainTask: Task<Void, Never>?
+    private var drainTaskID = UUID()
 
     var isRunning: Bool { task != nil }
 
@@ -87,18 +89,40 @@ final class NotificationDriver {
         }
     }
 
-    func stop() {
-        task?.cancel()
+    @discardableResult
+    func stop() -> Task<Void, Never>? {
+        let taskToDrain = task
+        taskToDrain?.cancel()
         task = nil
         taskID = UUID()
+        guard let taskToDrain else { return drainTask }
+
+        let previousDrain = drainTask
+        let id = UUID()
+        drainTaskID = id
+        let combinedDrain = Task { [weak self] in
+            await previousDrain?.value
+            await taskToDrain.value
+            await MainActor.run {
+                self?.clearCompletedDrainTask(id: id)
+            }
+        }
+        drainTask = combinedDrain
+        return combinedDrain
     }
 
     deinit {
         task?.cancel()
+        drainTask?.cancel()
     }
 
     private func clearCompletedTask(id: UUID) {
         guard taskID == id else { return }
         task = nil
+    }
+
+    private func clearCompletedDrainTask(id: UUID) {
+        guard drainTaskID == id else { return }
+        drainTask = nil
     }
 }

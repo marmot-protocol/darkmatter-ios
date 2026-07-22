@@ -217,16 +217,21 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        if let route = LocalNotificationProjection.route(
-            from: notification.request.content.userInfo
-        ) {
+        let userInfo = notification.request.content.userInfo
+        if LocalNotificationProjection.isActionFailure(from: userInfo) {
+            return [.banner, .list, .sound]
+        }
+        if LocalNotificationProjection.isQuietOrFallback(from: userInfo) {
+            return []
+        }
+        if let route = LocalNotificationProjection.route(from: userInfo) {
             let localNotificationsEnabled = await appState?.client?
                 .localNotificationsEnabledForPresentation(accountRef: route.accountRef) ?? true
             let isArchived = await routeIsArchived(route)
             guard NotificationPresentationPolicy.shouldPresent(
                 localNotificationsEnabled: localNotificationsEnabled,
                 isArchived: isArchived,
-                notifyMode: routeNotifyMode(route),
+                notifyMode: routeNotifyMode(route, userInfo: userInfo),
                 isMention: LocalNotificationProjection.isMention(
                     from: notification.request.content.userInfo
                 ),
@@ -254,13 +259,16 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         return rows.contains { $0.groupIdHex == route.groupIdHex && $0.archived }
     }
 
-    /// Notification routes carry the account label, while the mode store keys
-    /// by account id; an unresolvable account fails open (presents).
-    private func routeNotifyMode(_ route: LocalNotificationRoute) -> ChatNotifyMode {
-        guard let accountIdHex = appState?.accounts
-            .first(where: { $0.label == route.accountRef })?
-            .accountIdHex
-        else { return .all }
+    /// Resolve the mute key from the account id persisted with the notification.
+    /// Missing pre-upgrade metadata fails safe so a signed-out/missing account
+    /// cannot become audibly unmuted.
+    private func routeNotifyMode(
+        _ route: LocalNotificationRoute,
+        userInfo: [AnyHashable: Any]
+    ) -> ChatNotifyMode {
+        guard let accountIdHex = LocalNotificationProjection.accountIdHex(from: userInfo) else {
+            return .nothing
+        }
         return ChatMuteStore.notifyMode(accountIdHex: accountIdHex, groupIdHex: route.groupIdHex)
     }
 
@@ -372,7 +380,13 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             body: body,
             route: route,
             timestamp: Date(),
-            userInfo: LocalNotificationProjection.userInfo(for: route)
+            userInfo: LocalNotificationProjection.userInfo(for: route).merging(
+                [
+                    LocalNotificationProjection.deliveryDispositionKey:
+                        LocalNotificationProjection.actionFailureDisposition,
+                ],
+                uniquingKeysWith: { _, new in new }
+            )
         )
         let request = UNNotificationRequest(
             identifier: presentation.identifier,
@@ -386,24 +400,20 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// Clears the conversation's remaining delivered notifications after its
-    /// read marker advanced, so already-read messages don't linger in
-    /// Notification Center.
-    func removeDeliveredConversationNotifications(
-        accountRef: String,
-        groupIdHex: String
-    ) async {
-        let delivered = await center.deliveredNotifications()
-        let identifiers = delivered
-            .filter { notification in
-                guard let route = LocalNotificationProjection.route(
-                    from: notification.request.content.userInfo
-                ) else { return false }
-                return route.accountRef == accountRef && route.groupIdHex == groupIdHex
-            }
-            .map(\.request.identifier)
-        guard !identifiers.isEmpty else { return }
-        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    /// Dismiss only the notification whose action succeeded. Sibling messages
+    /// in the same conversation may still represent unread content.
+    func removeDeliveredNotification(identifier: String) {
+        center.removeDeliveredNotifications(
+            withIdentifiers: NotificationActionDeliveredNotificationPolicy.identifiersToRemove(
+                actedNotificationIdentifier: identifier
+            )
+        )
+    }
+}
+
+nonisolated enum NotificationActionDeliveredNotificationPolicy {
+    static func identifiersToRemove(actedNotificationIdentifier: String) -> [String] {
+        [actedNotificationIdentifier]
     }
 }
 
