@@ -4,6 +4,46 @@ import Testing
 
 struct AccountUnreadSummaryProjectionTests {
 
+    @MainActor
+    @Test func staleFullRefreshPreservesIncrementalUpdateAfterItsBaseline() {
+        let account = AccountSummaryFfi(
+            label: "account-a",
+            accountIdHex: "account-a-id",
+            localSigning: true,
+            signedOut: false,
+            running: true
+        )
+        let store = AccountUnreadStore()
+        store.refreshed(
+            from: [AccountUnreadFfi(
+                accountIdHex: account.accountIdHex,
+                unreadCount: 1,
+                unreadConversations: 1,
+                hasUnread: true
+            )],
+            accounts: [account]
+        )
+        let staleRefreshBaseline = store.incrementalRevisionSnapshot()
+
+        store.update(
+            accountIdHex: account.accountIdHex,
+            chatListRows: [row(groupIdHex: "fresh", archived: false, unreadCount: 7)],
+            accounts: [account]
+        )
+        store.refreshed(
+            from: [AccountUnreadFfi(
+                accountIdHex: account.accountIdHex,
+                unreadCount: 2,
+                unreadConversations: 1,
+                hasUnread: true
+            )],
+            accounts: [account],
+            preservingUpdatesAfter: staleRefreshBaseline
+        )
+
+        #expect(store.summary(forAccountIdHex: account.accountIdHex)?.unreadCount == 7)
+    }
+
     @Test func summaryMatchesUnarchivedUnreadRows() {
         let summary = AccountUnreadSummaryProjection.summary(
             accountIdHex: "account-a",

@@ -9,9 +9,18 @@ private final class MockPrivacyDataSource: PrivacySecuritySettingsViewModelDataS
     var projection: PrivacySecuritySettingsProjection?
     var auditRows: [AuditFileRow]?
     var suspendProjection = false
+    var suspendAuditRows = false
     private var gate: CheckedContinuation<Void, Never>?
+    private var auditGate: CheckedContinuation<Void, Never>?
+    private var projectionStarted = false
+    private var auditRowsStarted = false
+    private var projectionStartedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var auditRowsStartedWaiters: [CheckedContinuation<Void, Never>] = []
 
     func privacySecuritySettingsProjection() async throws -> PrivacySecuritySettingsProjection? {
+        projectionStarted = true
+        projectionStartedWaiters.forEach { $0.resume() }
+        projectionStartedWaiters = []
         if suspendProjection {
             await withCheckedContinuation { gate = $0 }
         }
@@ -23,7 +32,30 @@ private final class MockPrivacyDataSource: PrivacySecuritySettingsViewModelDataS
         gate = nil
     }
 
-    func auditLogFileRows() async throws -> [AuditFileRow]? { auditRows }
+    func auditLogFileRows() async throws -> [AuditFileRow]? {
+        auditRowsStarted = true
+        auditRowsStartedWaiters.forEach { $0.resume() }
+        auditRowsStartedWaiters = []
+        if suspendAuditRows {
+            await withCheckedContinuation { auditGate = $0 }
+        }
+        return auditRows
+    }
+
+    func waitUntilProjectionStarted() async {
+        guard !projectionStarted else { return }
+        await withCheckedContinuation { projectionStartedWaiters.append($0) }
+    }
+
+    func waitUntilAuditRowsStarted() async {
+        guard !auditRowsStarted else { return }
+        await withCheckedContinuation { auditRowsStartedWaiters.append($0) }
+    }
+
+    func releaseSuspendedAuditRows() {
+        auditGate?.resume()
+        auditGate = nil
+    }
     func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi {
         throw CancellationError()
     }
@@ -35,6 +67,28 @@ private final class MockPrivacyDataSource: PrivacySecuritySettingsViewModelDataS
 
 @MainActor
 struct PrivacySecuritySettingsViewModelTests {
+    @Test func overlappingFileLoadsKeepSpinnerUntilBothComplete() async {
+        let model = PrivacySecuritySettingsViewModel()
+        let source = MockPrivacyDataSource()
+        source.activeAccountRef = "account-a"
+        source.suspendProjection = true
+        source.suspendAuditRows = true
+
+        let fullReload = Task { @MainActor in await model.reload(using: source) }
+        await source.waitUntilProjectionStarted()
+        let fileReload = Task { @MainActor in await model.reloadAuditFiles(using: source) }
+        await source.waitUntilAuditRowsStarted()
+        #expect(model.filesLoading)
+
+        source.releaseSuspendedAuditRows()
+        await fileReload.value
+        #expect(model.filesLoading)
+
+        source.releaseSuspendedProjection()
+        await fullReload.value
+        #expect(!model.filesLoading)
+    }
+
     /// Switching accounts must clear the previous account's toggles, audit rows,
     /// and save banner *before* the new account's projection read resolves, so a
     /// suspended read can't leave another account's privacy state on screen.

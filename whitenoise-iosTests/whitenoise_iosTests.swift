@@ -5293,6 +5293,40 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.map(\.id) == [row.groupIdHex])
     }
 
+    @Test func staleSnapshotCannotOverwriteNewerPendingLiveRow() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let groupId = hex("a8")
+        let stale = chatListRow(
+            groupIdHex: groupId,
+            title: "Stale",
+            unreadCount: 1,
+            updatedAt: 10
+        )
+        let fresh = chatListRow(
+            groupIdHex: groupId,
+            title: "Fresh",
+            unreadCount: 4,
+            updatedAt: 20
+        )
+
+        viewModel.enqueueChatListRowUpdate(fresh)
+        viewModel.applyChatListSnapshot([stale])
+
+        #expect(viewModel.items.first?.title == "Fresh")
+        #expect(viewModel.items.first?.unreadCount == 4)
+    }
+
+    @Test func visibleRowsRevisionAdvancesOnlyForPublishedCollectionChanges() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(groupIdHex: hex("a9"), title: "Stable", updatedAt: 10)
+
+        #expect(viewModel.visibleRowsRevision == 0)
+        viewModel.applyChatListSnapshot([row])
+        #expect(viewModel.visibleRowsRevision == 1)
+        viewModel.applyChatListSnapshot([row])
+        #expect(viewModel.visibleRowsRevision == 1)
+    }
+
     @Test func itemByGroupIdAccessorResolvesActiveAndArchivedRowsAndMissesUnknownId() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let active = chatListRow(groupIdHex: hex("a1"), title: "Active", updatedAt: 10)

@@ -38,6 +38,7 @@ final class PrivacySecuritySettingsViewModel {
     private var actionGate = AsyncActionGate()
     private var fullReloadRequestedAfterAction = false
     private var auditFilesReloadRequestedAfterAction = false
+    private var activeFileLoadIDs: Set<UUID> = []
     /// Account whose privacy state is currently shown. Used to clear
     /// account-scoped state before awaiting a *different* account's projection.
     private var loadedAccountRef: String?
@@ -112,6 +113,18 @@ final class PrivacySecuritySettingsViewModel {
         actionGate.canApplyReload(startedAt: ticket) && dataSource.activeAccountRef == accountRef
     }
 
+    private func beginFileLoad() -> UUID {
+        let id = UUID()
+        activeFileLoadIDs.insert(id)
+        filesLoading = true
+        return id
+    }
+
+    private func endFileLoad(_ id: UUID) {
+        activeFileLoadIDs.remove(id)
+        filesLoading = !activeFileLoadIDs.isEmpty
+    }
+
     func reload(using dataSource: any PrivacySecuritySettingsViewModelDataSource) async {
         guard let reloadTicket = actionGate.reloadTicket() else {
             requestFullReloadAfterAction()
@@ -131,11 +144,11 @@ final class PrivacySecuritySettingsViewModel {
             auditFileRows = []
             savedAt = nil
         }
-        filesLoading = true
+        let fileLoadID = beginFileLoad()
         errorMessage = nil
         telemetryErrorMessage = nil
         auditErrorMessage = nil
-        defer { filesLoading = false }
+        defer { endFileLoad(fileLoadID) }
 
         do {
             guard let projection = try await dataSource.privacySecuritySettingsProjection() else {
@@ -175,9 +188,9 @@ final class PrivacySecuritySettingsViewModel {
             return
         }
         let accountRef = dataSource.activeAccountRef
-        filesLoading = true
+        let fileLoadID = beginFileLoad()
         auditErrorMessage = nil
-        defer { filesLoading = false }
+        defer { endFileLoad(fileLoadID) }
 
         do {
             guard let rows = try await dataSource.auditLogFileRows() else {

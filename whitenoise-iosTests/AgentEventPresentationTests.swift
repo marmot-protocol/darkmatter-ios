@@ -202,6 +202,28 @@ struct AgentEventPresentationTests {
         #expect(cache.display(for: TimelineItem.message(changedRecord))?.primaryText == "Finished")
         #expect(cache.buildCountForTesting == 2)
     }
+
+    @MainActor
+    @Test func ordinaryMessageNegativeProjectionIsClassifiedOnlyOnce() {
+        let cache = ConversationAgentEventProjectionCache()
+        let ordinary = TimelineItem.message(agentRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "ordinary chat",
+            tags: []
+        ))
+
+        #expect(cache.display(for: ordinary) == nil)
+        #expect(cache.display(for: ordinary) == nil)
+        #expect(cache.buildCountForTesting == 1)
+
+        let changed = TimelineItem.message(agentRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "edited ordinary chat",
+            tags: []
+        ))
+        #expect(cache.display(for: changed) == nil)
+        #expect(cache.buildCountForTesting == 2)
+    }
 }
 
 private func agentRecord(

@@ -1052,10 +1052,15 @@ final class AppState {
         guard let summaryClient = leasedClient ?? client else { return }
         unreadSummaryRefreshGeneration += 1
         let generation = unreadSummaryRefreshGeneration
+        let incrementalBaseline = accountUnreadStore.incrementalRevisionSnapshot()
         do {
             let summaries = try await summaryClient.accountUnreadSummary()
             guard generation == unreadSummaryRefreshGeneration else { return }
-            accountUnreadStore.refreshed(from: summaries, accounts: accounts)
+            accountUnreadStore.refreshed(
+                from: summaries,
+                accounts: accounts,
+                preservingUpdatesAfter: incrementalBaseline
+            )
         } catch {
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.pruneToCurrentAccounts(accounts)

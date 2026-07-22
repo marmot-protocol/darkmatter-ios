@@ -123,6 +123,10 @@ final class ChatsListViewModel {
 
     private(set) var items: [Item] = []
     private(set) var archivedItems: [Item] = []
+    /// Advances only when the published row collections actually change.
+    /// Views can key derived projections from this instead of rebuilding them
+    /// repeatedly during a single SwiftUI body evaluation.
+    private(set) var visibleRowsRevision = 0
     private(set) var isLoading: Bool = false
     private(set) var loadError: String?
 
@@ -178,10 +182,14 @@ final class ChatsListViewModel {
         pendingChatListUpdateTask?.cancel()
         pendingChatListUpdateTask = nil
         if currentAccount != accountRef {
+            let hadPublishedRows = !items.isEmpty || !archivedItems.isEmpty
             rowByGroupId = [:]
             itemByGroupId = [:]
             items = []
             archivedItems = []
+            if hadPublishedRows {
+                visibleRowsRevision &+= 1
+            }
             pendingChatListRowsByGroupId = [:]
             avatarURLByGroupId = [:]
             avatarURLLoadedGroupIds = []
@@ -323,6 +331,12 @@ final class ChatsListViewModel {
 
     func applyChatListSnapshot(_ snapshot: [ChatListRowFfi]) {
         loadError = nil
+        pendingChatListUpdateTask?.cancel()
+        pendingChatListUpdateTask = nil
+        let mergedSnapshot = Self.mergingSnapshot(
+            snapshot,
+            withPendingRows: Array(pendingChatListRowsByGroupId.values)
+        )
         pendingChatListRowsByGroupId = [:]
         let previousRows = rowByGroupId
         let previousItems = itemByGroupId
@@ -330,7 +344,7 @@ final class ChatsListViewModel {
         var nextItems: [String: Item] = [:]
         var changed = false
         let muteLookup = currentMuteLookup()
-        for row in snapshot {
+        for row in mergedSnapshot {
             updateCachedGroupDetails(with: row)
             let item = makeItem(for: row, muteLookup: muteLookup)
             nextRows[row.groupIdHex] = row
@@ -348,7 +362,30 @@ final class ChatsListViewModel {
         if changed {
             publishItems()
         }
-        scheduleRowEnrichment(for: snapshot)
+        scheduleRowEnrichment(for: mergedSnapshot)
+    }
+
+    static func mergingSnapshot(
+        _ snapshot: [ChatListRowFfi],
+        withPendingRows pendingRows: [ChatListRowFfi]
+    ) -> [ChatListRowFfi] {
+        var rowsByGroupId: [String: ChatListRowFfi] = [:]
+        for row in snapshot {
+            rowsByGroupId[row.groupIdHex] = row
+        }
+        var appendedGroupIds: [String] = []
+        for pending in pendingRows {
+            if let snapshotRow = rowsByGroupId[pending.groupIdHex] {
+                if pending.updatedAt >= snapshotRow.updatedAt {
+                    rowsByGroupId[pending.groupIdHex] = pending
+                }
+            } else {
+                rowsByGroupId[pending.groupIdHex] = pending
+                appendedGroupIds.append(pending.groupIdHex)
+            }
+        }
+        return snapshot.compactMap { rowsByGroupId[$0.groupIdHex] }
+            + appendedGroupIds.compactMap { rowsByGroupId[$0] }
     }
 
     /// Intersect the parallel enrichment caches/sets down to the surviving
@@ -684,6 +721,7 @@ final class ChatsListViewModel {
         guard items != nextItems || archivedItems != nextArchivedItems else { return false }
         items = nextItems
         archivedItems = nextArchivedItems
+        visibleRowsRevision &+= 1
         #if DEBUG
         publishedItemsMutationCountForTesting += 1
         #endif

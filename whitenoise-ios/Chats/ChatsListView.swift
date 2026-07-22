@@ -21,6 +21,12 @@ struct ChatsListView: View {
         let title: String
     }
 
+    private struct VisibleRowsKey: Equatable {
+        let scope: ChatScope
+        let searchText: String
+        let revision: Int
+    }
+
     enum ChatScope: CaseIterable, Hashable {
         case active, archived, unread
 
@@ -60,13 +66,20 @@ struct ChatsListView: View {
     }
 
     var body: some View {
+        let visibleRows = viewModel.map(currentRows) ?? []
+        let visibleRowIds = Set(visibleRows.map(\.id))
+        let visibleRowsKey = VisibleRowsKey(
+            scope: scope,
+            searchText: searchText,
+            revision: viewModel?.visibleRowsRevision ?? 0
+        )
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 chatListSearchBar
 
                 Group {
                     if let viewModel {
-                        content(viewModel: viewModel)
+                        content(viewModel: viewModel, rows: visibleRows)
                     } else {
                         ProgressView()
                     }
@@ -75,11 +88,11 @@ struct ChatsListView: View {
             }
             .trueBlackScaffoldBackground()
             .safeAreaInset(edge: .bottom) {
-                if selectionMode, let viewModel {
-                    chatSelectionBar(viewModel: viewModel)
+                if selectionMode, viewModel != nil {
+                    chatSelectionBar(visibleRows: visibleRows)
                 }
             }
-            .onChange(of: rowIdsKey) { _, _ in
+            .onChange(of: visibleRowsKey) { _, _ in
                 selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
             }
             .navigationTitle(selectionMode ? "" : "Chats")
@@ -314,7 +327,10 @@ struct ChatsListView: View {
     // MARK: - List
 
     @ViewBuilder
-    private func content(viewModel: ChatsListViewModel) -> some View {
+    private func content(
+        viewModel: ChatsListViewModel,
+        rows: [ChatsListViewModel.Item]
+    ) -> some View {
         if viewModel.isLoading && viewModel.items.isEmpty {
             ProgressView()
         } else if let error = viewModel.loadError {
@@ -324,7 +340,6 @@ struct ChatsListView: View {
                 description: Text(error)
             )
         } else {
-            let rows = currentRows(viewModel)
             List {
                 ForEach(rows) { item in
                     // A plain row (not a Button) keeps tap and long-press
@@ -406,21 +421,6 @@ struct ChatsListView: View {
 
     private var selectionMode: Bool { !selectedChatIds.isEmpty }
 
-    private var visibleRows: [ChatsListViewModel.Item] {
-        guard let viewModel else { return [] }
-        return currentRows(viewModel)
-    }
-
-    private var visibleRowIds: Set<String> { Set(visibleRows.map(\.id)) }
-
-    /// Order-stable key so `onChange` fires when the visible set changes
-    /// (scope switch, search, row add/remove) and stale selections drop.
-    private var rowIdsKey: String { visibleRows.map(\.id).joined(separator: ",") }
-
-    private var selectedItems: [ChatsListViewModel.Item] {
-        visibleRows.filter { selectedChatIds.contains($0.id) }
-    }
-
     private var singleDeleteConfirmationPresented: Binding<Bool> {
         Binding(
             get: { pendingSingleDelete != nil },
@@ -435,8 +435,8 @@ struct ChatsListView: View {
         return L10n.formatted("Delete “%@” from this device?", target.title)
     }
 
-    private func chatSelectionBar(viewModel: ChatsListViewModel) -> some View {
-        let items = selectedItems
+    private func chatSelectionBar(visibleRows: [ChatsListViewModel.Item]) -> some View {
+        let items = visibleRows.filter { selectedChatIds.contains($0.id) }
         let archiveAction = ChatListSelection.bulkArchiveAction(archivedFlags: items.map(\.isArchived))
         let willMute = ChatListSelection.bulkMuteMutes(mutedFlags: items.map(\.isMuted))
         let canDeleteLocally = ChatListSelection.canDeleteLocally(

@@ -481,6 +481,10 @@ final class ConversationViewModel {
         timelineStore.record(for: messageIdHex)
     }
 
+    func records(forRowFrameKeys rowFrameKeys: Set<String>) -> [AppMessageRecordFfi] {
+        timelineStore.records(forRowFrameKeys: rowFrameKeys)
+    }
+
     func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
         timelineStore.replyPreview(for: record)
     }

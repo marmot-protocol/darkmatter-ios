@@ -2479,13 +2479,9 @@ struct ConversationView: View {
         guard isInitialTimelinePositionSettled else { return }
         let visibleRowKeys = timelineVisibility.visibleRowKeys
         guard !visibleRowKeys.isEmpty else { return }
-        let records = viewModel.timeline.compactMap { item -> AppMessageRecordFfi? in
-            guard visibleRowKeys.contains(item.rowFrameKey),
-                  case .message(let record, _) = item.kind
-            else { return nil }
-            return record
-        }
-        viewModel.markVisibleMessagesRead(records)
+        viewModel.markVisibleMessagesRead(
+            viewModel.records(forRowFrameKeys: visibleRowKeys)
+        )
     }
 
     private func scrollTo(_ itemId: String, proxy: ScrollViewProxy, anchor: UnitPoint) {
