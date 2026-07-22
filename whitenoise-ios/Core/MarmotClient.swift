@@ -1,5 +1,5 @@
 import Foundation
-import MarmotKit
+@preconcurrency import MarmotKit
 
 struct TimelineReadMarkResult {
     let messageIdHex: String
@@ -12,7 +12,7 @@ struct TimelineReadMarkResult {
 /// Centralizes the on-disk root path, bootstrap relay set, and the few places
 /// the iOS app needs to make blocking-ish startup choices. Everything else
 /// the app does goes through the underlying `Marmot` instance directly.
-nonisolated final class MarmotClient: @unchecked Sendable {
+nonisolated final class MarmotClient: Sendable {
 
     /// Seed relays used to start the Rust relay plane and bootstrap new local
     /// identities. Per-account relay lists live in Marmot after setup.
