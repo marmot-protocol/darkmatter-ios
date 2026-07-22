@@ -138,7 +138,7 @@ enum MessagePreview {
     private static func mediaFallback(_ fileNames: [String]) -> String {
         let names = fileNames
             .compactMap {
-                ContentSanitizer.singleLine(
+                ContentSanitizer.compactSingleLine(
                     $0.trimmingCharacters(in: .whitespacesAndNewlines),
                     maxLength: MessageSemantics.maxImetaFileNameBytes
                 )

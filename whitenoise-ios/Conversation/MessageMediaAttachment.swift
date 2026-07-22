@@ -312,7 +312,7 @@ nonisolated struct MessageMediaAttachment: Identifiable, Hashable {
     }
 
     static func displayFileName(_ raw: String) -> String {
-        ContentSanitizer.singleLine(raw, maxLength: MessageSemantics.maxImetaFileNameBytes)
+        ContentSanitizer.compactSingleLine(raw, maxLength: MessageSemantics.maxImetaFileNameBytes)
             ?? "Attachment"
     }
 

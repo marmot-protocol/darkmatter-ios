@@ -301,7 +301,7 @@ final class TimelineStore {
                 return cached.value
             }
             let name = appState?.displayName(forAccountIdHex: preview.sender) ?? L10n.string("Unknown")
-            let text = ContentSanitizer.singleLine(
+            let text = ContentSanitizer.compactSingleLine(
                 MessagePreview.body(preview, mentionDisplayName: mentionDisplayNameResolver),
                 maxLength: 120
             ) ?? ""
@@ -322,7 +322,7 @@ final class TimelineStore {
             return cached.value
         }
         let name = appState?.displayName(forAccountIdHex: target.sender) ?? L10n.string("Unknown")
-        let text = ContentSanitizer.singleLine(displayBody(of: target), maxLength: 120) ?? ""
+        let text = ContentSanitizer.compactSingleLine(displayBody(of: target), maxLength: 120) ?? ""
         let value = (name: name, text: text)
         replyPreviewDisplayCache[record.messageIdHex] = ReplyPreviewDisplayCacheEntry(key: key, value: value)
         return value

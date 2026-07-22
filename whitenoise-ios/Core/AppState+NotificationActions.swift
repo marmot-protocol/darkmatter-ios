@@ -38,12 +38,7 @@ extension AppState {
                         messageIdHexes: [messageIdHex]
                     )
                 }
-                // The system only dismisses the acted-on notification; the
-                // conversation's siblings are read now too.
-                await notifications.removeDeliveredConversationNotifications(
-                    accountRef: route.accountRef,
-                    groupIdHex: route.groupIdHex
-                )
+                notifications.removeDeliveredNotification(identifier: route.notificationKey)
                 await self.refreshAccountUnreadSummaries(using: client)
             }
         case .markRead(let route, let messageIdHex):
@@ -65,10 +60,7 @@ extension AppState {
                 guard results.contains(where: \.succeeded) else {
                     throw NotificationActionError.markReadFailed
                 }
-                await notifications.removeDeliveredConversationNotifications(
-                    accountRef: route.accountRef,
-                    groupIdHex: route.groupIdHex
-                )
+                notifications.removeDeliveredNotification(identifier: route.notificationKey)
                 await self.refreshAccountUnreadSummaries(using: client)
             }
         }

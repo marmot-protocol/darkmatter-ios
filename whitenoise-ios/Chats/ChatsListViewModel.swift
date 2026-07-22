@@ -102,7 +102,7 @@ final class ChatsListViewModel {
             mentionDisplayName: MarkdownMentionResolver?
         ) -> String? {
             preview.flatMap {
-                ContentSanitizer.singleLine(
+                ContentSanitizer.compactSingleLine(
                     MessagePreview.body($0, mentionDisplayName: mentionDisplayName),
                     maxLength: 140
                 )

@@ -3,6 +3,7 @@ import Foundation
 nonisolated enum NostrProfileReference {
     private static let bech32Charset = Array("qpzry9x8gf2tvdw0s3jn54khce6mua7l")
     private static let maxBech32ReferenceUTF8Bytes = 4096
+    private static let maxRelayHints = 8
     /// O(1) reverse lookup for `bech32Charset`, built once. Decoding scans every
     /// character of every reference, so a linear `firstIndex(of:)` per character
     /// was O(n) per lookup (issue #33).
@@ -27,10 +28,9 @@ nonisolated enum NostrProfileReference {
     }
 
     /// Validates a pasted/scanned/deep-linked profile reference while
-    /// preserving the original reference form for Marmot resolution. In
-    /// particular, valid `nprofile` values stay as `nprofile` so Rust can use
-    /// relay hints as hidden resolution hints instead of receiving only the
-    /// decoded pubkey.
+    /// preserving the reference form for Marmot resolution. `nprofile` relay
+    /// hints are peer-controlled network destinations, so the value is rebuilt
+    /// with only bounded public WSS hints before it reaches Rust.
     static func referenceForResolution(from raw: String) -> String? {
         guard isWithinReferenceLimit(raw) else { return nil }
 
@@ -58,8 +58,7 @@ nonisolated enum NostrProfileReference {
         let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if hasCaseInsensitivePrefix(trimmed, "nprofile1") {
-            guard nprofilePubkeyHex(trimmed) != nil else { return nil }
-            return trimmed.lowercased()
+            return sanitizedNprofile(trimmed)
         }
         if hasCaseInsensitivePrefix(trimmed, "npub1") {
             guard npubPubkeyBytes(trimmed) != nil else { return nil }
@@ -91,6 +90,23 @@ nonisolated enum NostrProfileReference {
               let data = convertBits(bytes, from: 8, to: 5, pad: true)
         else { return nil }
         return bech32Encode(hrp: "npub", data: data)
+    }
+
+    /// NIP-19 nprofile encoder used when a caller needs to preserve relay hints.
+    /// Resolution still routes the result back through `referenceForResolution`,
+    /// which applies the network-destination allowlist before use.
+    static func nprofile(fromAccountIdHex accountIdHex: String, relayHints: [String]) -> String? {
+        guard let pubkey = pubkeyBytes(fromHex: accountIdHex) else { return nil }
+        var tlv: [UInt8] = [0, UInt8(pubkey.count)] + pubkey
+        for relay in relayHints {
+            let bytes = Array(relay.utf8)
+            guard bytes.count <= Int(UInt8.max) else { return nil }
+            tlv.append(1)
+            tlv.append(UInt8(bytes.count))
+            tlv.append(contentsOf: bytes)
+        }
+        guard let data = convertBits(tlv, from: 8, to: 5, pad: true) else { return nil }
+        return bech32Encode(hrp: "nprofile", data: data)
     }
 
     static func memberRef(fromReference reference: String) -> String? {
@@ -139,11 +155,32 @@ nonisolated enum NostrProfileReference {
     }
 
     private static func nprofilePubkeyHex(_ raw: String) -> String? {
+        parseNprofile(raw)?.pubkey.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func sanitizedNprofile(_ raw: String) -> String? {
+        guard let parsed = parseNprofile(raw) else { return nil }
+        var tlv: [UInt8] = [0, UInt8(parsed.pubkey.count)] + parsed.pubkey
+        for relay in parsed.relayHints {
+            let bytes = Array(relay.utf8)
+            guard bytes.count <= Int(UInt8.max) else { continue }
+            tlv.append(1)
+            tlv.append(UInt8(bytes.count))
+            tlv.append(contentsOf: bytes)
+        }
+        guard let data = convertBits(tlv, from: 8, to: 5, pad: true) else { return nil }
+        return bech32Encode(hrp: "nprofile", data: data)
+    }
+
+    private static func parseNprofile(_ raw: String) -> (pubkey: [UInt8], relayHints: [String])? {
         guard let decoded = bech32Decode(raw),
               decoded.hrp == "nprofile",
               let bytes = convertBits(decoded.data, from: 5, to: 8, pad: false)
         else { return nil }
 
+        var pubkey: [UInt8]?
+        var relayHints: [String] = []
+        var seenRelays = Set<String>()
         var i = 0
         while i + 2 <= bytes.count {
             let type = bytes[i]
@@ -152,12 +189,23 @@ nonisolated enum NostrProfileReference {
             let end = start + length
             guard end <= bytes.count else { return nil }
 
-            if type == 0, length == 32 {
-                return bytes[start..<end].map { String(format: "%02x", $0) }.joined()
+            switch type {
+            case 0:
+                guard length == 32, pubkey == nil else { return nil }
+                pubkey = Array(bytes[start..<end])
+            case 1 where relayHints.count < maxRelayHints:
+                if let rawRelay = String(bytes: bytes[start..<end], encoding: .utf8),
+                   let relay = RelayURL.normalized(rawRelay),
+                   seenRelays.insert(relay).inserted {
+                    relayHints.append(relay)
+                }
+            default:
+                break
             }
             i = end
         }
-        return nil
+        guard i == bytes.count, let pubkey else { return nil }
+        return (pubkey, relayHints)
     }
 
     private static func pubkeyBytes(fromHex raw: String) -> [UInt8]? {

@@ -1,7 +1,9 @@
 import CryptoKit
 import Foundation
+import ImageIO
 import Intents
 import Synchronization
+import UniformTypeIdentifiers
 import UserNotifications
 
 /// Decorates message notifications as communication notifications so the
@@ -41,11 +43,12 @@ nonisolated enum NotificationCommunicationDecorator {
     ) -> UNNotificationContent {
         guard let senderName = presentation.senderName, !senderName.isEmpty else { return content }
         let handle = personHandleValue(for: presentation)
+        let safeAvatarData = avatarData.flatMap { isAllowedAvatarData($0) ? $0 : nil }
         let sender = INPerson(
             personHandle: INPersonHandle(value: handle, type: .unknown),
             nameComponents: nil,
             displayName: senderName,
-            image: avatarData.map(INImage.init(imageData:)),
+            image: safeAvatarData.map(INImage.init(imageData:)),
             contactIdentifier: nil,
             customIdentifier: handle
         )
@@ -229,9 +232,25 @@ nonisolated enum NotificationCommunicationDecorator {
         ) else { return nil }
         guard let http = response as? HTTPURLResponse,
               http.statusCode == 200,
-              !data.isEmpty
+              isAllowedAvatarData(data)
         else { return nil }
         return data
+    }
+
+    /// `INImage(imageData:)` accepts arbitrary bytes and defers interpretation
+    /// to system services. Sniff the payload locally and allow only decodable
+    /// raster image sources before caching or crossing that boundary.
+    static func isAllowedAvatarData(_ data: Data) -> Bool {
+        guard !data.isEmpty,
+              data.count <= maxAvatarBytes,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0,
+              let typeIdentifier = CGImageSourceGetType(source),
+              let type = UTType(typeIdentifier as String),
+              type.conforms(to: .image),
+              !type.conforms(to: .svg)
+        else { return false }
+        return true
     }
 
     private static var cacheDirectory: URL? {
@@ -256,7 +275,7 @@ nonisolated enum NotificationCommunicationDecorator {
               let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
               now.timeIntervalSince(modified) < avatarCacheLifetime,
               let data = try? Data(contentsOf: file),
-              !data.isEmpty, data.count <= maxAvatarBytes
+              isAllowedAvatarData(data)
         else { return nil }
         return data
     }

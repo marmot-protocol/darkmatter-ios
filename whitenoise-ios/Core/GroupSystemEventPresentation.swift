@@ -218,7 +218,7 @@ nonisolated enum GroupSystemEventPresentation {
 
         private func sanitizedFallback(_ value: String?) -> String? {
             guard let value = trimmed(value) else { return nil }
-            return ContentSanitizer.singleLine(value, maxLength: ContentSanitizer.maxGroupNameLength)
+            return ContentSanitizer.compactSingleLine(value, maxLength: ContentSanitizer.maxGroupNameLength)
         }
 
         private func normalizedHex(_ value: String?) -> String? {

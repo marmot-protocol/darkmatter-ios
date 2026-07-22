@@ -1462,7 +1462,7 @@ struct ConversationView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
-                Text(ContentSanitizer.singleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
+                Text(ContentSanitizer.compactSingleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -1516,7 +1516,7 @@ struct ConversationView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(L10n.string("Editing message"))
                     .font(.caption.weight(.semibold))
-                Text(ContentSanitizer.singleLine(viewModel.displayBody(of: session.message), maxLength: 100) ?? "")
+                Text(ContentSanitizer.compactSingleLine(viewModel.displayBody(of: session.message), maxLength: 100) ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

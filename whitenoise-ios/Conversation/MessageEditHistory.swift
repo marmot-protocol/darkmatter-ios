@@ -89,7 +89,7 @@ nonisolated enum EditHistoryPresentation {
                 mentionDisplayName: mentionDisplayName
             ) ?? record.plaintext
         }
-        return ContentSanitizer.singleLine(flattened, maxLength: maxRowBodyLength) ?? ""
+        return ContentSanitizer.compactSingleLine(flattened, maxLength: maxRowBodyLength) ?? ""
     }
 }
 

@@ -2331,9 +2331,13 @@ struct RelaySettingsTests {
         #expect(RelaySettings.bootstrapRelays(from: lists) == ["wss://source.example"])
     }
 
-    @Test func relayInputAllowsWebsocketSchemesOnly() {
-        #expect(RelaySettings.normalizedRelayURL("  ws://relay.example  ") == "ws://relay.example")
+    @Test func relayInputRequiresPublicSecureWebsocketDestinations() {
+        #expect(RelaySettings.normalizedRelayURL("  ws://relay.example  ") == nil)
         #expect(RelaySettings.normalizedRelayURL("wss://relay.example") == "wss://relay.example")
+        #expect(RelaySettings.normalizedRelayURL("wss://localhost") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://127.0.0.1") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://10.0.0.1") == nil)
+        #expect(RelaySettings.normalizedRelayURL("wss://[::1]") == nil)
         #expect(RelaySettings.normalizedRelayURL("https://relay.example") == nil)
         #expect(RelaySettings.normalizedRelayURL("relay.example") == nil)
         #expect(RelaySettings.normalizedRelayURL("wss://") == nil)
@@ -3235,6 +3239,31 @@ struct NotificationPresentationTests {
         #expect(presentation?.route.groupIdHex == "group-a")
         #expect(presentation?.route.messageIdHex == "message-1")
         #expect(presentation?.userInfo[LocalNotificationProjection.accountRefKey] == "account-a")
+        #expect(presentation?.userInfo[LocalNotificationProjection.accountIdHexKey] == hex("11"))
+    }
+
+    @Test func notificationDeliveryDispositionMarkersAreExplicit() {
+        #expect(LocalNotificationProjection.isQuietOrFallback(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.quietDisposition,
+        ]))
+        #expect(LocalNotificationProjection.isQuietOrFallback(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.fallbackDisposition,
+        ]))
+        #expect(!LocalNotificationProjection.isQuietOrFallback(from: [:]))
+        #expect(LocalNotificationProjection.isActionFailure(from: [
+            LocalNotificationProjection.deliveryDispositionKey:
+                LocalNotificationProjection.actionFailureDisposition,
+        ]))
+    }
+
+    @Test func notificationActionsRemoveOnlyTheActedNotification() {
+        #expect(
+            NotificationActionDeliveredNotificationPolicy.identifiersToRemove(
+                actedNotificationIdentifier: "acted"
+            ) == ["acted"]
+        )
     }
 
     @Test func groupMessageUsesGroupTitleAndSenderBodyPrefix() {
@@ -4233,6 +4262,43 @@ struct NotificationServiceProjectionTests {
         #expect(readCount == 2)
     }
 
+    @Test func archivedLookupsRunOnlyForRecordsPassingCheapPolicyGates() {
+        let collection = BackgroundNotificationCollectionFfi(
+            status: .newData,
+            notifications: [
+                notificationUpdate(accountRef: "allowed", accountIdHex: hex("11")),
+                notificationUpdate(accountRef: "disabled", accountIdHex: hex("22")),
+                notificationUpdate(accountRef: "muted", accountIdHex: hex("33")),
+                notificationUpdate(
+                    accountRef: "mentions-only-plain",
+                    accountIdHex: hex("44"),
+                    isMention: false
+                ),
+                notificationUpdate(
+                    accountRef: "mentions-only-mention",
+                    accountIdHex: hex("44"),
+                    isMention: true
+                ),
+                notificationUpdate(accountRef: "self", accountIdHex: hex("55"), isFromSelf: true),
+            ],
+            error: nil
+        )
+
+        let accounts = NotificationPresentationPolicy.accountRefsRequiringArchivedLookup(
+            for: collection,
+            localNotificationsEnabled: { $0 != "disabled" },
+            notifyMode: { accountIdHex, _ in
+                switch accountIdHex {
+                case hex("33"): .nothing
+                case hex("44"): .mentionsOnly
+                default: .all
+                }
+            }
+        )
+
+        #expect(accounts == ["allowed", "mentions-only-mention"])
+    }
+
     @Test func settingsReadPolicySuppressesOnlyExplicitFalse() {
         #expect(NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
             true
@@ -4471,6 +4537,16 @@ struct ContentSanitizerTests {
 
     @Test func relayDisplayLineStripsInvisibleLetterScalars() {
         #expect(ContentSanitizer.relayDisplayLine("relay\u{115F}\u{1160}\u{3164}\u{FFA0}\u{2800}.example", maxLength: 80) == "relay.example")
+    }
+
+    @Test func compactSingleLineStripsInvisibleFormatAndBlankScalars() {
+        #expect(
+            ContentSanitizer.compactSingleLine(
+                "before\u{200D}\u{2060}\u{3164}after",
+                maxLength: 80
+            ) == "beforeafter"
+        )
+        #expect(ContentSanitizer.compactSingleLine("\u{3164}", maxLength: 80) == nil)
     }
 
     @Test func imageURLAllowsHttps() {
@@ -5258,6 +5334,15 @@ struct ChatsListProjectionTests {
         )
 
         #expect(item.avatarURL?.absoluteString == "https://cdn.example.com/group.png")
+    }
+
+    @Test func chatRowsDoNotFetchAvatarsBeforeInviteConfirmation() throws {
+        let avatarURL = try #require(URL(string: "https://cdn.example.com/group.png"))
+
+        #expect(ChatRow.automaticAvatarURL(avatarURL, pendingConfirmation: true) == nil)
+        #expect(
+            ChatRow.automaticAvatarURL(avatarURL, pendingConfirmation: false) == avatarURL
+        )
     }
 
     @Test func itemSurfacesUnreadMentionProjection() throws {
@@ -6777,6 +6862,47 @@ struct ConversationTimelineProjectionTests {
             }
         }
         return nil
+    }
+}
+
+struct NetworkTrustRegressionTests {
+    @Test func nprofileResolutionStripsUnsafeRelayHintsBeforeMarmot() throws {
+        let accountIdHex = hex("42")
+        let raw = try #require(NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: [
+                "wss://relay.example/path",
+                "ws://insecure.example",
+                "wss://127.0.0.1/private",
+                "wss://relay.example/path",
+            ]
+        ))
+
+        let sanitized = try #require(NostrProfileReference.referenceForResolution(from: raw))
+        #expect(NostrProfileReference.pubkeyHex(fromBech32: sanitized) == accountIdHex)
+        #expect(sanitized == NostrProfileReference.nprofile(
+            fromAccountIdHex: accountIdHex,
+            relayHints: ["wss://relay.example/path"]
+        ))
+    }
+
+    @Test func malformedPunycodeHostIsStillFlaggedAsInternationalized() throws {
+        let url = try #require(URL(string: "https://xn--.example/path"))
+        let display = MessageExternalLinkConfirmation.displayText(for: url)
+
+        #expect(display.contains("IDN/punycode"))
+    }
+
+    @Test func notificationAvatarBytesRequireADecodableRasterImage() throws {
+        let png = try #require(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+        ))
+
+        #expect(NotificationCommunicationDecorator.isAllowedAvatarData(png))
+        #expect(!NotificationCommunicationDecorator.isAllowedAvatarData(Data("not an image".utf8)))
+        #expect(!NotificationCommunicationDecorator.isAllowedAvatarData(Data(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>".utf8
+        )))
     }
 }
 
