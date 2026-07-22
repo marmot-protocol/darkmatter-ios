@@ -734,7 +734,9 @@ final class ChatsListViewModel {
         avatarURLTask = Task { @MainActor [weak self, weak appState] in
             defer { self?.finishAvatarEnrichmentTask(taskID: taskID) }
             guard let self, let appState else { return }
-            while !Task.isCancelled, self.currentAccount == accountRef {
+            while !Task.isCancelled,
+                  appState.canUseRuntimeForForegroundWork,
+                  self.currentAccount == accountRef {
                 let avatarGroupIds = self.pendingAvatarURLRefreshGroupIds
                 let displayGroupIds = self.pendingGroupDetailsRefreshGroupIds
                 self.pendingAvatarURLRefreshGroupIds = []
@@ -746,9 +748,10 @@ final class ChatsListViewModel {
                 var failedAvatarGroupIds: Set<String> = []
                 var failedDisplayGroupIds: Set<String> = []
                 let muteLookup = self.currentMuteLookup()
-                for groupId in groupIds where !Task.isCancelled {
+                for groupId in groupIds where !Task.isCancelled && appState.canUseRuntimeForForegroundWork {
                     let details: GroupDetailsFfi
                     do {
+                        guard appState.canUseRuntimeForForegroundWork else { return }
                         let client = try appState.currentMarmotClient()
                         details = try await client.groupDetails(
                             accountRef: accountRef,
@@ -765,7 +768,9 @@ final class ChatsListViewModel {
                         }
                         continue
                     }
-                    guard self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef) else { return }
+                    guard appState.canUseRuntimeForForegroundWork,
+                          self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef)
+                    else { return }
 
                     // `groupDetails` is a suspension point: a full-snapshot
                     // replace (`applyChatListSnapshot`) can run during the await
@@ -804,7 +809,10 @@ final class ChatsListViewModel {
                         changed = true
                     }
                 }
-                guard !Task.isCancelled, self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef) else { break }
+                guard !Task.isCancelled,
+                      appState.canUseRuntimeForForegroundWork,
+                      self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef)
+                else { break }
                 self.pendingAvatarURLRefreshGroupIds.formUnion(
                     failedAvatarGroupIds.filter { self.rowByGroupId[$0] != nil }
                 )

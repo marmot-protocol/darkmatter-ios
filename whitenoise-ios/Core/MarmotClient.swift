@@ -12,7 +12,7 @@ struct TimelineReadMarkResult {
 /// Centralizes the on-disk root path, bootstrap relay set, and the few places
 /// the iOS app needs to make blocking-ish startup choices. Everything else
 /// the app does goes through the underlying `Marmot` instance directly.
-final class MarmotClient {
+nonisolated final class MarmotClient: @unchecked Sendable {
 
     /// Seed relays used to start the Rust relay plane and bootstrap new local
     /// identities. Per-account relay lists live in Marmot after setup.
@@ -35,21 +35,37 @@ final class MarmotClient {
     /// with `.frozen` so they cannot ratchet the durable transport-cursor
     /// floor. Throwing because the keychain-backed account store can fail to
     /// initialize (account secrets are stored in the Keychain, not on disk).
-    init(
+    convenience init(
         rootPath: String,
         relayUrls: [String],
         cursorPersistence: CursorPersistenceFfi = .advance
     ) throws {
+        try self.init(
+            rootPath: rootPath,
+            relayUrls: relayUrls,
+            cursorPersistence: cursorPersistence,
+            telemetryConfig: TelemetryBuildConfig.current()
+        )
+    }
+
+    init(
+        rootPath: String,
+        relayUrls: [String],
+        cursorPersistence: CursorPersistenceFfi,
+        telemetryConfig: TelemetryBuildConfig
+    ) throws {
         self.rootPath = rootPath
         self.relayUrls = relayUrls
         self.cursorPersistence = cursorPersistence
-        self.telemetryConfig = TelemetryBuildConfig.current()
+        self.telemetryConfig = telemetryConfig
         self.marmot = try Marmot.newWithCursorPersistence(
             rootPath: rootPath,
             relayUrls: relayUrls,
             cursorPersistence: cursorPersistence
         )
-        try configureAuditLogTracker()
+        _ = try marmot.setAuditLogTrackerConfig(
+            config: telemetryConfig.auditTrackerConfig()
+        )
     }
 
     func freshRuntime() throws -> MarmotClient {
@@ -623,11 +639,6 @@ final class MarmotClient {
         )
     }
 
-    private func configureAuditLogTracker() throws {
-        _ = try marmot.setAuditLogTrackerConfig(
-            config: telemetryConfig.auditTrackerConfig()
-        )
-    }
 }
 
 protocol AccountRelayListManaging {

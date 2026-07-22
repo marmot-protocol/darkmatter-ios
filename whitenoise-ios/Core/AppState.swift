@@ -26,6 +26,12 @@ nonisolated enum ForegroundRuntimeWorkGate {
     }
 }
 
+struct ForegroundMaintenanceTasks {
+    let notificationSubscription: Task<Void, Never>?
+    let connectivityCatchUp: Task<Void, Never>?
+    let profileRefresh: Task<Void, Never>?
+}
+
 /// Root observable state for the app.
 ///
 /// Holds the `Marmot` handle, the current set of `AccountSummaryFfi`, and
@@ -327,9 +333,9 @@ final class AppState {
     /// Non-optional for call-site ergonomics: the runtime is only released
     /// while the app is suspended, when no UI or view-model code runs. If
     /// something does touch it during the foreground transition (before
-    /// `resumeAfterForegroundActivation` restores it), it is rebuilt on demand,
-    /// reopening on-disk storage. A rebuild failure is the same unrecoverable
-    /// Keychain/storage failure the app traps on at launch.
+    /// `resumeAfterForegroundActivation` restores it), fail closed. Only the
+    /// explicit async lifecycle paths may rebuild the store, off the MainActor;
+    /// an incidental accessor must never reopen it while suspended.
     var marmot: Marmot {
         if let client { return client.marmot }
         do {
@@ -341,8 +347,9 @@ final class AppState {
         }
     }
 
-    // Redacted crash messages for the unrecoverable Keychain/storage init and
-    // rebuild traps. Surface only the error type, never its description, so
+    // Redacted crash messages for unrecoverable Keychain/storage init and
+    // unavailable-runtime traps. Surface only the error type, never its
+    // description, so
     // internal Keychain/storage details can't leak into crash logs (#21).
     static func redactedStorageInitFailureMessage(for error: Error) -> String {
         "Failed to initialize durable Marmot storage (\(type(of: error)))"
@@ -427,7 +434,8 @@ final class AppState {
 
     /// Internal (not `private`) so `RuntimeLifecycle` can stop the subscription
     /// from its suspend and startup-failure-release paths.
-    func stopNotificationSubscription() {
+    @discardableResult
+    func stopNotificationSubscription() -> Task<Void, Never>? {
         notificationCoordinator.stopNotificationSubscription()
     }
 
@@ -444,8 +452,8 @@ final class AppState {
     /// Returns the already-live foreground runtime for settings reads, or nil
     /// while the app is inactive/suspending/suspended. Settings reload tasks can
     /// resume during the background transition; using this helper avoids the
-    /// rebuilding `marmot` / `runtimeClient()` accessors so they cannot re-open
-    /// the App Group SQLite store after suspension deliberately released it.
+    /// raw `marmot` / `runtimeClient()` accessors so background tasks fail closed
+    /// after suspension deliberately releases the App Group SQLite store.
     private func foregroundSettingsReadClient() -> MarmotClient? {
         let liveClient = client
         guard SettingsReadRuntimeGate.canRead(
@@ -860,10 +868,13 @@ final class AppState {
     @MainActor
     @discardableResult
     func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi {
+        guard phase == .ready else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
         if enabled && !telemetryBuildConfig.telemetryCredentialsAvailable {
             throw TelemetrySettingsActionError.telemetryNotConfigured
         }
-        let client = try runtimeClient()
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
+        let client = lease.client
         if enabled {
             try await client.configureTelemetryRuntime()
         }
@@ -884,7 +895,12 @@ final class AppState {
     @MainActor
     @discardableResult
     func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
-        try await marmot.setAuditLogSettings(settings: AuditLogSettingsFfi(enabled: enabled,  dataMode: .fullData))
+        guard phase == .ready else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
+        return try await lease.client.marmot.setAuditLogSettings(
+            settings: AuditLogSettingsFfi(enabled: enabled, dataMode: .fullData)
+        )
     }
 
     func auditLogFiles() async throws -> [AuditLogFileFfi]? {
@@ -904,7 +920,9 @@ final class AppState {
         // a success haptic while nothing was deleted, then the files reappear on
         // the next foreground reload — a false confirmation for a privacy action.
         guard phase == .ready else { throw AuditLogActionError.runtimeNotReady }
-        let client = try runtimeClient()
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
+        let client = lease.client
         let files = try await client.auditLogFiles()
         for file in files {
             _ = try await client.marmot.deleteAuditLogFile(path: file.path)
@@ -917,6 +935,10 @@ final class AppState {
     /// duplicating the catch-up state.
     func catchUpAfterForegroundActivation() async {
         await notificationCoordinator.catchUpAfterForegroundActivation(host: self)
+    }
+
+    func scheduleConnectivityCatchUp() {
+        notificationCoordinator.scheduleConnectivityCatchUp(host: self)
     }
 
     /// Scene-phase entry points. Owned by `RuntimeLifecycle`; these forwarders
@@ -950,10 +972,16 @@ final class AppState {
     /// drain itself goes back through `cancelNativePushRegistrationTask()` so the
     /// task stays owned by `NotificationCoordinator` (master #401).
     @MainActor
-    func beginForegroundMaintenanceCancellation() -> Task<Void, Never>? {
+    func beginForegroundMaintenanceCancellation() -> ForegroundMaintenanceTasks {
+        let notificationSubscription = stopNotificationSubscription()
+        let connectivityCatchUp = notificationCoordinator.cancelConnectivityCatchUpWithoutAwaiting()
         notificationCoordinator.cancelNativePushRegistrationTaskWithoutAwaiting()
         retentionSweeper.cancelWithoutAwaiting()
-        return pauseProfileFetchQueue()
+        return ForegroundMaintenanceTasks(
+            notificationSubscription: notificationSubscription,
+            connectivityCatchUp: connectivityCatchUp,
+            profileRefresh: pauseProfileFetchQueue()
+        )
     }
 
     static func nativePushEnabledAccountRefs(
@@ -1016,12 +1044,11 @@ final class AppState {
             return
         }
         // A badge refresh has no foreground UI to update while the durable
-        // runtime is down, so it must never resurrect it: rebuilding a suspended
+        // runtime is down, so it must never resurrect it: opening a suspended
         // runtime in the background would strand a durable `.advance` runtime
         // holding the App Group SQLite lock (`0xdead10cc`). Foreground callers
         // have a live `client`; a notification action passes its leased runtime.
-        // With neither, degrade to a no-op rather than reach the rebuilding
-        // `runtimeClient()` accessor.
+        // With neither, degrade to a no-op.
         guard let summaryClient = leasedClient ?? client else { return }
         unreadSummaryRefreshGeneration += 1
         let generation = unreadSummaryRefreshGeneration
@@ -1055,8 +1082,10 @@ final class AppState {
     @MainActor
     @discardableResult
     func createIdentity() async throws -> AccountSummaryFfi {
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
-        let summary = try await marmot.createIdentity(
+        let summary = try await lease.client.marmot.createIdentity(
             defaultRelays: relays,
             bootstrapRelays: relays
         )
@@ -1068,8 +1097,10 @@ final class AppState {
     @MainActor
     @discardableResult
     func importIdentity(_ identity: String) async throws -> AccountSummaryFfi {
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
-        let summary = try await marmot.login(
+        let summary = try await lease.client.marmot.login(
             identity: identity,
             defaultRelays: relays,
             bootstrapRelays: relays

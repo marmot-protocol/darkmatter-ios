@@ -177,9 +177,14 @@ protocol NotificationCoordinatorHost: AnyObject {
 final class NotificationCoordinator {
     @ObservationIgnored private let notificationDriver = NotificationDriver()
     private var nativePushRegistrationTask: Task<Void, Never>?
+    private var connectivityCatchUpTask: Task<Void, Never>?
+    private var connectivityCatchUpTaskID = UUID()
     private var isForegroundCatchUpRunning = false
     private var notificationSubscriptionFailureToastPresented = false
     private var nativePushRegistrationFailureToastPresented = false
+#if DEBUG
+    var beforeForegroundCatchUpForTesting: (() async -> Void)?
+#endif
 
     private static let notificationSubscriptionInitialRetryDelayNanoseconds: UInt64 = 1_000_000_000
     private static let notificationSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 60_000_000_000
@@ -193,6 +198,7 @@ final class NotificationCoordinator {
     @MainActor
     deinit {
         nativePushRegistrationTask?.cancel()
+        connectivityCatchUpTask?.cancel()
     }
 
     func startReadyForegroundMaintenance(
@@ -255,7 +261,8 @@ final class NotificationCoordinator {
         notificationDriver.start(runner: runner)
     }
 
-    func stopNotificationSubscription() {
+    @discardableResult
+    func stopNotificationSubscription() -> Task<Void, Never>? {
         notificationDriver.stop()
     }
 
@@ -620,12 +627,43 @@ final class NotificationCoordinator {
         isForegroundCatchUpRunning = true
         defer { isForegroundCatchUpRunning = false }
 
+#if DEBUG
+        if let beforeForegroundCatchUpForTesting {
+            await beforeForegroundCatchUpForTesting()
+        }
+#endif
+        guard !Task.isCancelled else { return }
+
         do {
             try await host.marmot.catchUpAccounts()
         } catch {
             // Foreground catch-up is a best-effort safety net. The live
             // subscription and NSE path continue to handle notification flow.
         }
+    }
+
+    func scheduleConnectivityCatchUp(host: NotificationCoordinatorHost) {
+        guard connectivityCatchUpTask == nil else { return }
+        let id = UUID()
+        connectivityCatchUpTaskID = id
+        connectivityCatchUpTask = Task { [weak self, weak host] in
+            guard let self, let host else { return }
+            await self.catchUpAfterForegroundActivation(host: host)
+            self.clearCompletedConnectivityCatchUp(id: id)
+        }
+    }
+
+    func cancelConnectivityCatchUpWithoutAwaiting() -> Task<Void, Never>? {
+        let task = connectivityCatchUpTask
+        connectivityCatchUpTask = nil
+        connectivityCatchUpTaskID = UUID()
+        task?.cancel()
+        return task
+    }
+
+    private func clearCompletedConnectivityCatchUp(id: UUID) {
+        guard connectivityCatchUpTaskID == id else { return }
+        connectivityCatchUpTask = nil
     }
 
     static func nativePushEnabledAccountRefs(
