@@ -209,19 +209,31 @@
         }
       }
     },
-    "NSMicrophoneUsageDescription" : {
-      "extractionState" : "manual",
+    "NSLocationWhenInUseUsageDescription" : {
+      "comment" : "Privacy - Location When In Use Usage Description",
+      "extractionState" : "extracted_with_value",
       "localizations" : {
         "en" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "White Noise uses the microphone to record encrypted voice messages."
+            "state" : "new",
+            "value" : "White Noise uses your location only when you choose to share it in an encrypted chat."
           }
-        },
+        }
+      }
+    },
+    "NSMicrophoneUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "White Noise verwendet das Mikrofon, um verschlüsselte Sprachnachrichten aufzunehmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "White Noise uses the microphone to record encrypted voice messages."
           }
         },
         "es" : {
