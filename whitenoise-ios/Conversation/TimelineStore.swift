@@ -60,6 +60,11 @@ final class TimelineStore {
     /// Own durable rows whose `sourceMessageIdHex` is still nil — committed
     /// to the group locally but never delivered to any relay.
     @ObservationIgnored private var undeliveredOwnMessageIds: Set<String> = []
+    /// Successful send results whose delivered timeline upsert has not been
+    /// consumed yet. Marmot publishes a nil-source local projection before
+    /// transport and the sourced projection after transport; the subscription
+    /// can deliver that first upsert after the async send call has returned.
+    @ObservationIgnored private var publishedOutgoingMessageIdsAwaitingProjection: Set<String> = []
     /// Message ids for which Rust's `replyToMessageIdHex` projection has been
     /// mirrored. Presence with no entry in `replyTargetByMessageId` means the row
     /// authoritatively has no reply target, so do not recover one from tags.
@@ -612,13 +617,18 @@ final class TimelineStore {
         replyPreviewDisplayCache[appRecord.messageIdHex] = nil
         groupSystemDisplayCache[appRecord.messageIdHex] = nil
         messageById[appRecord.messageIdHex] = appRecord
-        // `sourceMessageIdHex` is the delivery marker: an own send commits and
-        // projects locally before it publishes, so nil means committed but
-        // never delivered (sent offline / relays unreachable).
+        // `sourceMessageIdHex` is the durable delivery marker. A nil-source
+        // projection normally means committed but undelivered, except while a
+        // successful send result is waiting for its sourced upsert to catch up.
         if appRecord.direction == "sent", record.sourceMessageIdHex == nil {
-            undeliveredOwnMessageIds.insert(appRecord.messageIdHex)
+            if publishedOutgoingMessageIdsAwaitingProjection.contains(appRecord.messageIdHex) {
+                undeliveredOwnMessageIds.remove(appRecord.messageIdHex)
+            } else {
+                undeliveredOwnMessageIds.insert(appRecord.messageIdHex)
+            }
         } else {
             undeliveredOwnMessageIds.remove(appRecord.messageIdHex)
+            publishedOutgoingMessageIdsAwaitingProjection.remove(appRecord.messageIdHex)
         }
         let replacedConfirmedPendingRow = confirmedPendingTimelineRecordIds.remove(appRecord.messageIdHex) != nil
         replyProjectionKnownMessageIds.insert(appRecord.messageIdHex)
@@ -688,6 +698,7 @@ final class TimelineStore {
         messageById[messageIdHex] = nil
         messageStatusById[messageIdHex] = nil
         undeliveredOwnMessageIds.remove(messageIdHex)
+        publishedOutgoingMessageIdsAwaitingProjection.remove(messageIdHex)
         confirmedPendingTimelineRecordIds.remove(messageIdHex)
         replyProjectionKnownMessageIds.remove(messageIdHex)
         replyTargetByMessageId[messageIdHex] = nil
@@ -1014,14 +1025,16 @@ final class TimelineStore {
                 messageById[realId] = confirmed
                 projectionChanged = true
             }
-            // A non-throwing send can still be undelivered (committed while
-            // offline); the timeline row's nil source id recorded it. Keep
-            // the failure visible instead of stamping a checkmark over it.
-            let confirmedStatus: MessageStatus = undeliveredOwnMessageIds.contains(realId) ? .failed : .sent
-            if messageStatusById[realId] != confirmedStatus {
+            let needsProjectionAckGuard = !durableRowAlreadyLoaded
+                || undeliveredOwnMessageIds.contains(realId)
+            if needsProjectionAckGuard {
+                publishedOutgoingMessageIdsAwaitingProjection.insert(realId)
+            }
+            undeliveredOwnMessageIds.remove(realId)
+            if messageStatusById[realId] != .sent {
                 projectionChanged = true
             }
-            messageStatusById[realId] = confirmedStatus
+            messageStatusById[realId] = .sent
         }
         let rowId = "msg:\(realId.isEmpty ? tempId : realId)"
         projectionChanged = (transientTimelineItems.removeValue(forKey: "msg:\(tempId)") != nil) || projectionChanged
@@ -1251,12 +1264,14 @@ final class TimelineStore {
             editProjections.hasOptimistic ||
             !systemTimelineItems.isEmpty ||
             mediaProjections.hasPending ||
-            !transientTimelineItems.isEmpty
+            !transientTimelineItems.isEmpty ||
+            !publishedOutgoingMessageIdsAwaitingProjection.isEmpty
         deletedProjections.removeAllOptimistic()
         reactionProjections.removeAllOptimistic()
         editProjections.removeAllOptimistic()
         systemTimelineItems.removeAll()
         transientTimelineItems.removeAll()
+        publishedOutgoingMessageIdsAwaitingProjection.removeAll()
         mediaProjections.removeAllPending()
         let deletedChanged = deletedProjections.rebuild()
         let reactionsChanged = recomputeReactions()

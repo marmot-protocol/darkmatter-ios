@@ -78,6 +78,16 @@ extension View {
             self
         }
     }
+
+    /// Keeps custom bottom input surfaces from adding a scroll-edge fade on iOS 26.
+    @ViewBuilder
+    func compatibleBottomScrollEdgeEffectHidden() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectHidden(true, for: .bottom)
+        } else {
+            self
+        }
+    }
 }
 
 private struct CompatibleInputRoundedChromeModifier: ViewModifier {

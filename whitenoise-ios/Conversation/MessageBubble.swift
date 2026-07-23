@@ -150,6 +150,10 @@ struct MessageBubble: View {
         return !sanitizedBodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var sharedLocation: SharedLocation? {
+        SharedLocationText.location(from: record.plaintext)
+    }
+
     private var showsStandardBody: Bool {
         debugStyle?.isUserVisibleBubble ?? true
     }
@@ -304,7 +308,11 @@ struct MessageBubble: View {
                 replyHeader(replyPreview)
             }
             if showsStandardBody {
-                messageBodyText(hasReply: replyPreview != nil)
+                if let sharedLocation {
+                    sharedLocationBody(sharedLocation)
+                } else {
+                    messageBodyText(hasReply: replyPreview != nil)
+                }
                 if let debugStyle, debugStyle.isUserVisibleBubble {
                     debugTagsFooter(debugStyle)
                 }
@@ -327,6 +335,29 @@ struct MessageBubble: View {
         }
         // No .textSelection here: it installs its own long-press recognizer
         // that swallows the bubble's long-press. Copy is in the actions sheet.
+    }
+
+    private func sharedLocationBody(_ location: SharedLocation) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                _ = handleMessageLink(location.url)
+            } label: {
+                SharedLocationMapPreview(location: location)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.string("Location"))
+
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                Label(L10n.string("Location"), systemImage: "mappin.and.ellipse")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
+                messageMetadataFooter
+                    .fixedSize()
+            }
+            .foregroundStyle(isFromMe ? Color.white : Color.primary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+        }
     }
 
     private func debugHeader(_ style: MessageDebugStyle) -> some View {

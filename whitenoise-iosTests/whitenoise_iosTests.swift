@@ -6362,6 +6362,69 @@ struct ConversationTimelineProjectionTests {
         #expect(!viewModel.canRetryFailedSend(rowId: rowId))
     }
 
+    @Test func successfulSendAckDoesNotFlashFailedWhileDeliveredProjectionCatchesUp() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let messageId = hex("b8")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let pending = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "published",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+
+        viewModel.applyPendingOutgoingMessage(tempId: "pending-ack", record: pending)
+        viewModel.confirmSent(tempId: "pending-ack", record: pending, messageId: messageId)
+
+        let localProjection = timelineRecord(
+            messageIdHex: messageId,
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: pending.plaintext,
+            timelineAt: 10
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [localProjection], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        let rowId = "msg:\(messageId)"
+        func status() -> MessageStatus? {
+            viewModel.timeline.compactMap { item -> MessageStatus? in
+                guard item.id == rowId, case .message(_, let status) = item.kind else { return nil }
+                return status
+            }.first
+        }
+
+        #expect(status() == .sent)
+        #expect(!viewModel.canRetryFailedSend(rowId: rowId))
+
+        let deliveredProjection = timelineRecord(
+            messageIdHex: messageId,
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: pending.plaintext,
+            timelineAt: 10
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [deliveredProjection], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(status() == .sent)
+    }
+
     @Test func failedSendRowSupportsRetryGatingAndDiscard() throws {
         let sender = hex("11")
         let groupIdHex = hex("aa")
@@ -10632,9 +10695,19 @@ struct TimelineBottomTests {
         )
 
         #expect(validBottom.overscrollPastBottom == 0)
-        #expect(!TimelineBottom.shouldRepairBottomOverscroll(validBottom))
+        #expect(!TimelineBottom.shouldRepairBottomOverscroll(
+            validBottom,
+            isUserScrolling: false
+        ))
         #expect(belowContent.overscrollPastBottom == 70)
-        #expect(TimelineBottom.shouldRepairBottomOverscroll(belowContent))
+        #expect(TimelineBottom.shouldRepairBottomOverscroll(
+            belowContent,
+            isUserScrolling: false
+        ))
+        #expect(!TimelineBottom.shouldRepairBottomOverscroll(
+            belowContent,
+            isUserScrolling: true
+        ))
     }
 
     @Test func pinnedContentGrowthKeepsTimelinePinned() {
@@ -10804,6 +10877,28 @@ struct TimelineBottomTests {
         #expect(userWins.reason == .buttonTap)
         #expect(userWins.targetID == "message-b")
         #expect(automaticDoesNotOverrideUser == buttonTap)
+    }
+
+    @Test func userScrollSuppressesAutomaticBottomRequestsButNotButtonTap() {
+        for reason in [
+            TimelineBottomScrollReason.contentGrowth,
+            .timelineChange,
+            .viewportChange,
+        ] {
+            #expect(!TimelineBottomScrollCoordinator.shouldExecute(
+                reason: reason,
+                isUserScrolling: true
+            ))
+            #expect(TimelineBottomScrollCoordinator.shouldExecute(
+                reason: reason,
+                isUserScrolling: false
+            ))
+        }
+
+        #expect(TimelineBottomScrollCoordinator.shouldExecute(
+            reason: .buttonTap,
+            isUserScrolling: true
+        ))
     }
 
     @Test func timelineScrollRequestsSkipAlreadyHandledTarget() {
