@@ -30,7 +30,7 @@ final class ChatsListViewModel {
             avatarSeed: String? = nil,
             title: String,
             isMuted: Bool = false,
-            draftText: String? = nil,
+            draftSummary: MessageDraftSummaryFfi? = nil,
             mentionDisplayName: MarkdownMentionResolver? = nil
         ) {
             let previewText = Self.sanitizedPreview(
@@ -43,7 +43,10 @@ final class ChatsListViewModel {
             self.title = title
             self.isMuted = isMuted
             self.previewText = previewText
-            self.draftPreview = ConversationDraftPreview.text(from: draftText)
+            self.draftPreview = ConversationDraftPreview.text(
+                from: draftSummary,
+                mentionDisplayName: mentionDisplayName
+            )
             self.searchHaystack = Self.makeSearchHaystack(
                 title: title,
                 previewText: previewText,
@@ -204,7 +207,7 @@ final class ChatsListViewModel {
             currentAccount = nil
             return
         }
-        await draftStore.loadIfNeeded()
+        await draftStore.loadIfNeeded(accountRef: accountRef)
         guard !Task.isCancelled else { return }
         guard let appState, appState.canUseRuntimeForForegroundWork else { return }
         currentAccount = accountRef
@@ -297,7 +300,7 @@ final class ChatsListViewModel {
               let appState,
               appState.canUseRuntimeForForegroundWork
         else { return }
-        await draftStore.loadIfNeeded()
+        await draftStore.loadIfNeeded(accountRef: accountRef)
         do {
             let snapshot = try await appState.currentMarmotClient().chatList(
                 accountRef: accountRef,
@@ -569,8 +572,8 @@ final class ChatsListViewModel {
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
             } ?? false,
-            draftText: draftAccountRef.flatMap {
-                draftStore.draft(accountRef: $0, groupIdHex: row.groupIdHex)
+            draftSummary: draftAccountRef.flatMap {
+                draftStore.summary(accountRef: $0, groupIdHex: row.groupIdHex)
             },
             mentionDisplayName: { [weak appState] entity in
                 #if DEBUG

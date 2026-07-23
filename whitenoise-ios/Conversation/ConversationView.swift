@@ -885,6 +885,7 @@ struct ConversationView: View {
         let preservedDraft: String
         let preservedMediaDrafts: [MediaDraftAttachment]
         let preservedMentionState: ComposerMentionDraftState
+        let preservedReplyTargetMessageIdHex: String?
     }
 
     init(
@@ -1224,7 +1225,17 @@ struct ConversationView: View {
             }
             .onChange(of: draft) { _, draft in
                 if editSession == nil {
-                    persistDraft(draft)
+                    persistCurrentDraft(text: draft)
+                }
+            }
+            .onChange(of: mediaDrafts.map(\.id)) { _, _ in
+                if editSession == nil {
+                    persistCurrentDraft()
+                }
+            }
+            .onChange(of: viewModel?.replyTargetMessageIdHex) { _, _ in
+                if editSession == nil {
+                    persistCurrentDraft()
                 }
             }
             .onAppear {
@@ -1239,9 +1250,13 @@ struct ConversationView: View {
                 cancelPendingTimelineFollowUpWork()
                 dismissKeyboard()
                 if let editSession {
-                    persistDraft(editSession.preservedMentionState)
+                    persistDraft(
+                        editSession.preservedMentionState,
+                        mediaAttachments: editSession.preservedMediaDrafts,
+                        replyToMessageIdHex: editSession.preservedReplyTargetMessageIdHex
+                    )
                 } else {
-                    persistDraft(draft)
+                    persistCurrentDraft()
                 }
                 onDraftChanged?()
                 exitMessageSelection()
@@ -1261,8 +1276,13 @@ struct ConversationView: View {
             VStack(spacing: 0) {
                 if let viewModel, let editSession {
                     editBar(for: editSession, viewModel: viewModel)
-                } else if let viewModel, let replyingTo = viewModel.replyingTo {
-                    replyBar(for: replyingTo, viewModel: viewModel)
+                } else if let viewModel,
+                          let replyTargetMessageIdHex = viewModel.replyTargetMessageIdHex
+                {
+                    replyBar(
+                        for: viewModel.replyingTo ?? viewModel.record(for: replyTargetMessageIdHex),
+                        viewModel: viewModel
+                    )
                 }
                 let inlineAudioDraft = ComposerMediaDraftPresentation.inlineAudioDraft(in: mediaDrafts)
                 let mentionCandidates = inlineAudioDraft == nil ? (viewModel?.mentionCandidates(for: draft) ?? []) : []
@@ -1452,25 +1472,41 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity, minHeight: 32)
     }
 
-    private func replyBar(for record: AppMessageRecordFfi, viewModel: ConversationViewModel) -> some View {
+    private func replyBar(
+        for record: AppMessageRecordFfi?,
+        viewModel: ConversationViewModel
+    ) -> some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.accentColor)
                 .frame(width: 3, height: 34)
             VStack(alignment: .leading, spacing: 1) {
-                Text(L10n.formatted("Replying to %@", appState.displayName(forAccountIdHex: record.sender)))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
-                Text(ContentSanitizer.compactSingleLine(viewModel.displayBody(of: record), maxLength: 100) ?? "")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .shadow(color: .black.opacity(0.22), radius: 1, y: 1)
+                if let record {
+                    Text(L10n.formatted(
+                        "Replying to %@",
+                        appState.displayName(forAccountIdHex: record.sender)
+                    ))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
+                    Text(ContentSanitizer.compactSingleLine(
+                        viewModel.displayBody(of: record),
+                        maxLength: 100
+                    ) ?? "")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .shadow(color: .black.opacity(0.22), radius: 1, y: 1)
+                } else {
+                    Text(L10n.string("Reply"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
+                }
             }
             Spacer()
             Button {
-                viewModel.replyingTo = nil
+                viewModel.restoreReplyTarget(messageIdHex: nil)
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: replyCloseIconSize, weight: .semibold))
@@ -2515,6 +2551,8 @@ struct ConversationView: View {
         let preservedMediaDrafts = editSession?.preservedMediaDrafts ?? mediaDrafts
         let preservedMentionState = editSession?.preservedMentionState
             ?? viewModel.composerMentionDraftState(for: preservedDraft)
+        let preservedReplyTargetMessageIdHex = editSession?.preservedReplyTargetMessageIdHex
+            ?? viewModel.replyTargetMessageIdHex
         viewModel.replyingTo = nil
         mediaDrafts.removeAll()
         cancelVoiceRecording()
@@ -2522,7 +2560,8 @@ struct ConversationView: View {
             message: message,
             preservedDraft: preservedDraft,
             preservedMediaDrafts: preservedMediaDrafts,
-            preservedMentionState: preservedMentionState
+            preservedMentionState: preservedMentionState,
+            preservedReplyTargetMessageIdHex: preservedReplyTargetMessageIdHex
         )
         draft = viewModel.editingText(for: message)
         composerFocusRequest += 1
@@ -2543,6 +2582,7 @@ struct ConversationView: View {
         guard let editSession else { return }
         self.editSession = nil
         viewModel?.restoreComposerMentionDraftState(editSession.preservedMentionState)
+        viewModel?.restoreReplyTarget(messageIdHex: editSession.preservedReplyTargetMessageIdHex)
         draft = editSession.preservedDraft
         mediaDrafts = editSession.preservedMediaDrafts
     }
@@ -2573,6 +2613,7 @@ struct ConversationView: View {
                 guard self.editSession?.id == editSession.id else { return }
                 self.editSession = nil
                 viewModel.restoreComposerMentionDraftState(editSession.preservedMentionState)
+                viewModel.restoreReplyTarget(messageIdHex: editSession.preservedReplyTargetMessageIdHex)
                 draft = editSession.preservedDraft
                 mediaDrafts = editSession.preservedMediaDrafts
             }
@@ -2612,31 +2653,60 @@ struct ConversationView: View {
     private func restorePersistedDraft() async {
         guard let draftAccountRef, let viewModel else { return }
         let draftBeforeLoad = draft
-        await appState.conversationDraftStore.loadIfNeeded()
-        guard !Task.isCancelled, draft == draftBeforeLoad else { return }
-        guard let snapshot = appState.conversationDraftStore.snapshot(
+        let mediaIDsBeforeLoad = mediaDrafts.map(\.id)
+        let replyBeforeLoad = viewModel.replyTargetMessageIdHex
+        guard let snapshot = await appState.conversationDraftStore.snapshot(
             accountRef: draftAccountRef,
             groupIdHex: chat.groupIdHex
         ) else {
+            guard !Task.isCancelled,
+                  draft == draftBeforeLoad,
+                  mediaDrafts.map(\.id) == mediaIDsBeforeLoad,
+                  viewModel.replyTargetMessageIdHex == replyBeforeLoad
+            else { return }
             draft = ""
+            mediaDrafts.removeAll()
+            viewModel.restoreReplyTarget(messageIdHex: nil)
             return
         }
-        viewModel.restoreComposerMentionDraftState(ComposerMentionDraftState(snapshot: snapshot))
-        draft = snapshot.text
+        guard !Task.isCancelled,
+              draft == draftBeforeLoad,
+              mediaDrafts.map(\.id) == mediaIDsBeforeLoad,
+              viewModel.replyTargetMessageIdHex == replyBeforeLoad
+        else { return }
+        let mentionState = ComposerMentionDraftState(
+            canonicalText: snapshot.canonicalText,
+            mentionDisplayName: { appState.mentionDisplayName(for: $0) }
+        )
+        viewModel.restoreComposerMentionDraftState(mentionState)
+        viewModel.restoreReplyTarget(messageIdHex: snapshot.replyToMessageIdHex)
+        mediaDrafts = snapshot.mediaAttachments
+        draft = mentionState.draft
     }
 
-    private func persistDraft(_ draft: String) {
-        guard let viewModel else {
-            persistDraft(ComposerMentionDraftState(draft: draft, selectedMentions: []))
-            return
-        }
-        persistDraft(viewModel.composerMentionDraftState(for: draft))
+    private func persistCurrentDraft(text: String? = nil) {
+        let text = text ?? draft
+        let mentionState = viewModel?.composerMentionDraftState(for: text)
+            ?? ComposerMentionDraftState(draft: text, selectedMentions: [])
+        persistDraft(
+            mentionState,
+            mediaAttachments: mediaDrafts,
+            replyToMessageIdHex: viewModel?.replyTargetMessageIdHex
+        )
     }
 
-    private func persistDraft(_ mentionState: ComposerMentionDraftState) {
+    private func persistDraft(
+        _ mentionState: ComposerMentionDraftState,
+        mediaAttachments: [MediaDraftAttachment],
+        replyToMessageIdHex: String?
+    ) {
         guard let draftAccountRef else { return }
         appState.conversationDraftStore.setDraft(
-            mentionState.snapshot,
+            ConversationDraftSnapshot(
+                canonicalText: mentionState.canonicalText,
+                replyToMessageIdHex: replyToMessageIdHex,
+                mediaAttachments: mediaAttachments
+            ),
             accountRef: draftAccountRef,
             groupIdHex: chat.groupIdHex
         )

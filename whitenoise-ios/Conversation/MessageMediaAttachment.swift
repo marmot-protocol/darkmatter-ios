@@ -400,6 +400,19 @@ nonisolated struct MediaDraftAttachment: Identifiable, Hashable {
         )
     }
 
+    var messageDraftAttachment: MessageDraftAttachmentFfi {
+        MessageDraftAttachmentFfi(
+            id: id.uuidString,
+            fileName: fileName,
+            mediaType: mediaType,
+            plaintext: data,
+            dim: dim,
+            thumbhash: thumbhash,
+            durationSeconds: durationSeconds,
+            waveformSamples: waveformSamples.map(Double.init)
+        )
+    }
+
     static func == (lhs: MediaDraftAttachment, rhs: MediaDraftAttachment) -> Bool {
         lhs.id == rhs.id
             && lhs.fileName == rhs.fileName
@@ -429,6 +442,62 @@ nonisolated enum MediaDraftProcessor {
     static let maxImageAttachmentBytes = 10 * 1024 * 1024
     static let maxAttachmentBytes = 50 * 1024 * 1024
     static let draftThumbnailPixelSize: CGFloat = 160
+
+    @MainActor
+    static func restoredDraftAttachments(
+        from stored: [MessageDraftAttachmentFfi]
+    ) async -> [MediaDraftAttachment] {
+        var restored: [MediaDraftAttachment] = []
+        var ids = Set<UUID>()
+        for attachment in stored.prefix(maxAttachmentCount) {
+            let id = UUID(uuidString: attachment.id) ?? UUID()
+            guard ids.insert(id).inserted else { continue }
+            let kind = MediaAttachmentKind.classify(
+                mediaType: attachment.mediaType,
+                fileName: attachment.fileName
+            )
+            let maxBytes = kind == .image ? maxImageAttachmentBytes : maxAttachmentBytes
+            guard attachment.plaintext.count <= maxBytes,
+                  attachment.durationSeconds?.isFinite != false,
+                  attachment.waveformSamples.allSatisfy(\.isFinite)
+            else { continue }
+
+            let thumbnail: UIImage?
+            let restoredDim: String?
+            switch kind {
+            case .image:
+                thumbnail = await MessageMediaThumbnailDecoder.image(
+                    data: attachment.plaintext,
+                    maxPixelSize: Int(draftThumbnailPixelSize),
+                    scale: 1
+                )
+                restoredDim = attachment.dim
+            case .video:
+                let metadata = await MediaVideoMetadata.metadata(
+                    from: attachment.plaintext,
+                    mediaType: attachment.mediaType
+                )
+                thumbnail = metadata.thumbnail
+                restoredDim = attachment.dim ?? metadata.dim
+            case .audio, .document, .unsupported:
+                thumbnail = nil
+                restoredDim = attachment.dim
+            }
+
+            restored.append(MediaDraftAttachment(
+                id: id,
+                fileName: attachment.fileName,
+                mediaType: attachment.mediaType,
+                data: attachment.plaintext,
+                dim: restoredDim,
+                thumbhash: attachment.thumbhash,
+                thumbnail: thumbnail,
+                durationSeconds: attachment.durationSeconds,
+                waveformSamples: attachment.waveformSamples.map { CGFloat($0) }
+            ))
+        }
+        return restored
+    }
 
     enum Failure: LocalizedError {
         case unsupportedImage

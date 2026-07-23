@@ -36,7 +36,18 @@ nonisolated enum MediaUploadIntegrity {
 final class ComposerModel {
     private(set) var sendInFlight = false
     /// The message the composer is currently replying to (set by swipe / menu).
-    var replyingTo: AppMessageRecordFfi?
+    var replyingTo: AppMessageRecordFfi? {
+        didSet {
+            restoredReplyTargetMessageIdHex = nil
+        }
+    }
+    private var restoredReplyTargetMessageIdHex: String?
+    var replyTargetMessageIdHex: String? {
+        if let messageIdHex = replyingTo?.messageIdHex, !messageIdHex.isEmpty {
+            return messageIdHex
+        }
+        return restoredReplyTargetMessageIdHex
+    }
 
     @ObservationIgnored private weak var appState: AppState?
     @ObservationIgnored private let groupIdHex: String
@@ -50,6 +61,13 @@ final class ComposerModel {
         self.appState = appState
         self.groupIdHex = groupIdHex
         self.timelineStore = timelineStore
+    }
+
+    func restoreReplyTarget(messageIdHex: String?, record: AppMessageRecordFfi?) {
+        replyingTo = record
+        if record == nil {
+            restoredReplyTargetMessageIdHex = Hex.normalized32Bytes(messageIdHex)
+        }
     }
 
     /// Re-sends a failed text message from its retained optimistic record.
@@ -291,7 +309,6 @@ final class ComposerModel {
     }
 
     private func replyTargetMessageId() -> String? {
-        guard let replyingTo, !replyingTo.messageIdHex.isEmpty else { return nil }
-        return replyingTo.messageIdHex
+        replyTargetMessageIdHex
     }
 }

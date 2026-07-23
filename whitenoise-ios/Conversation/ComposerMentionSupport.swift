@@ -129,29 +129,23 @@ nonisolated struct ComposerMentionDraftState: Equatable, Sendable {
         self.selectedMentions = selectedMentions
     }
 
-    init(snapshot: ConversationDraftSnapshot) {
-        draft = snapshot.text
-        selectedMentions = snapshot.mentions.map {
-            ComposerMentionSelection(
-                utf16Location: $0.utf16Location,
-                utf16Length: $0.utf16Length,
-                displayName: $0.displayName,
-                npub: $0.npub
-            )
+    init(
+        canonicalText: String,
+        mentionDisplayName: MarkdownMentionResolver?
+    ) {
+        let projection = CanonicalMentionDisplayProjection.project(canonicalText) { npub in
+            mentionDisplayName?(MarkdownNostrEntityFfi(hrp: .npub, bech32: npub))
         }
+        draft = projection.text
+        selectedMentions = projection.selectedMentions
     }
 
-    var snapshot: ConversationDraftSnapshot {
-        ConversationDraftSnapshot(
-            text: draft,
-            mentions: selectedMentions.map {
-                ConversationDraftMention(
-                    utf16Location: $0.utf16Location,
-                    utf16Length: $0.utf16Length,
-                    displayName: $0.displayName,
-                    npub: $0.npub
-                )
-            }
+    var canonicalText: String {
+        ComposerMentionCanonicalizer.canonicalize(
+            draft,
+            candidates: [],
+            selectedMentions: selectedMentions,
+            rosterResolution: .unresolved
         )
     }
 }

@@ -95,6 +95,51 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
+    /// Reads metadata-only composer drafts off the main actor. Attachment
+    /// plaintext is deliberately omitted by the binding until one conversation
+    /// is opened.
+    func messageDrafts(accountRef: String) async throws -> [MessageDraftSummaryFfi] {
+        try await Task.detached(priority: .utility) { [marmot, accountRef] in
+            try marmot.messageDrafts(accountRef: accountRef)
+        }.value
+    }
+
+    /// Hydrates one composer draft, including attachment plaintext, off the main
+    /// actor so opening a media-heavy draft cannot block SwiftUI.
+    func messageDraft(accountRef: String, groupIdHex: String) async throws -> MessageDraftFfi? {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, groupIdHex] in
+            try marmot.messageDraft(accountRef: accountRef, groupIdHex: groupIdHex)
+        }.value
+    }
+
+    /// Persists one complete composer draft in the account's encrypted
+    /// SQLCipher store without performing synchronous FFI work on MainActor.
+    func saveMessageDraft(
+        accountRef: String,
+        groupIdHex: String,
+        content: String,
+        replyToMessageIdHex: String?,
+        mediaAttachments: [MessageDraftAttachmentFfi]
+    ) async throws -> MessageDraftFfi {
+        try await Task.detached(priority: .utility) {
+            [marmot, accountRef, groupIdHex, content, replyToMessageIdHex, mediaAttachments] in
+            try marmot.saveMessageDraft(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                content: content,
+                replyToMessageIdHex: replyToMessageIdHex,
+                mediaAttachments: mediaAttachments
+            )
+        }.value
+    }
+
+    /// Deletes one composer draft from the encrypted account store.
+    func deleteMessageDraft(accountRef: String, groupIdHex: String) async throws {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, groupIdHex] in
+            try marmot.deleteMessageDraft(accountRef: accountRef, groupIdHex: groupIdHex)
+        }.value
+    }
+
     /// Reads the per-account unread aggregate off the main actor. The generated
     /// `Marmot.accountUnreadSummary` binding is a synchronous storage aggregate
     /// over each account's materialized chat-list projection.

@@ -88,8 +88,8 @@ final class AppState {
         accountUnreadStore.byAccountId
     }
 
-    /// Account/group-scoped unsent composer text. The store owns protected-file
-    /// persistence and is shared by conversations and the chat-list projection.
+    /// Account/group-scoped composer drafts. Marmot owns encrypted persistence;
+    /// this store keeps the shared in-memory summary and pending-write projection.
     @ObservationIgnored let conversationDraftStore: ConversationDraftStore
 
     /// The account whose chats / messages are currently displayed.
@@ -291,6 +291,7 @@ final class AppState {
         self.customizedQuickReactions = QuickReactionPreferences.load(from: .standard)
         self.profileStore.appState = self
         self.runtimeLifecycle.configure(appState: self)
+        self.conversationDraftStore.configure(persistence: self)
     }
 
     convenience init(client: MarmotClient) {
@@ -956,10 +957,17 @@ final class AppState {
 
     @discardableResult
     func startRuntimeSuspension() -> Task<Void, Never> {
+        // Claim the live runtime before the lifecycle flips its foreground gate.
+        // The suspension task waits for this mutation lease before closing
+        // SQLCipher, so the final composer keystrokes cannot race teardown.
+        let draftLease = try? runtimeLifecycle.beginForegroundRuntimeMutation()
         let runtimeSuspensionTask = runtimeLifecycle.startRuntimeSuspension()
         let conversationDraftStore = conversationDraftStore
         return Task { @MainActor in
-            await conversationDraftStore.flush()
+            if let draftLease {
+                defer { runtimeLifecycle.endForegroundRuntimeMutation(draftLease) }
+                await conversationDraftStore.flush(using: draftLease.client)
+            }
             await runtimeSuspensionTask.value
         }
     }
