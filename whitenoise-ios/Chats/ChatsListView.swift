@@ -107,18 +107,19 @@ struct ChatsListView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     settingsButton
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 0) {
-                        filterMenu
-                        Button {
-                            showNewChat = true
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                                .font(.system(size: 17, weight: .semibold))
-                                .frame(width: 40, height: 44)
-                                .contentShape(.rect)
-                        }
-                        .accessibilityLabel("New message")
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        chatListActions
+                            .padding(.vertical, 4)
+                            .glassEffect(
+                                .clear.interactive(),
+                                in: Capsule(style: .continuous)
+                            )
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        chatListActions
                     }
                 }
             }
@@ -270,6 +271,21 @@ struct ChatsListView: View {
 
     // MARK: - Filter
 
+    private var chatListActions: some View {
+        HStack(spacing: 0) {
+            filterMenu
+            Button {
+                showNewChat = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 40, height: 44)
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("New message")
+        }
+    }
+
     private var filterMenu: some View {
         Menu {
             Picker("Filter", selection: $scope) {
@@ -361,7 +377,6 @@ struct ChatsListView: View {
                 }
             }
             .listStyle(.plain)
-            .contentMargins(.top, 0, for: .scrollContent)
             .compatibleBottomScrollEdgeEffect()
             .overlay {
                 if rows.isEmpty { emptyState }

@@ -158,10 +158,42 @@ struct ChatSurfacePresentationTests {
         #expect(ComposerExpandedEditorPresentation.shouldShowExpandButton(for: "one\ntwo\nthree\nfour"))
     }
 
-    @Test func sharedLocationUsesStableMapURLCoordinates() {
+    @Test func sharedLocationUsesCanonicalGoogleMapsURLCoordinates() {
         #expect(
             SharedLocationText.value(latitude: 9.0765, longitude: 7.3986)
-                == "https://maps.apple.com/?ll=9.076500,7.398600"
+                == "https://www.google.com/maps/search/?api=1&query=9.076500%2C7.398600"
         )
+    }
+
+    @Test func sharedLocationRecognizesGoogleAndLegacyAppleMapURLs() throws {
+        let google = try #require(SharedLocationText.location(
+            from: "https://www.google.com/maps/search/?api=1&query=9.076500%2C7.398600"
+        ))
+        #expect(google.latitude == 9.0765)
+        #expect(google.longitude == 7.3986)
+        #expect(google.url.host == "www.google.com")
+
+        let apple = try #require(SharedLocationText.location(
+            from: "https://maps.apple.com/?ll=-33.856800,151.215300"
+        ))
+        #expect(apple.latitude == -33.8568)
+        #expect(apple.longitude == 151.2153)
+        #expect(apple.url.host == "maps.apple.com")
+    }
+
+    @Test func sharedLocationRejectsNonCanonicalOrInvalidMapURLs() {
+        let invalidValues = [
+            "Meet here: https://www.google.com/maps/search/?api=1&query=9.0%2C7.0",
+            "https://www.google.com.evil.example/maps/search/?api=1&query=9.0%2C7.0",
+            "https://www.google.com/maps/search/?query=9.0%2C7.0",
+            "https://www.google.com/maps/search/?api=1&query=91.0%2C7.0",
+            "https://www.google.com/maps/search/?api=1&query=9.0%2C7.0&query",
+            "https://maps.apple.com/?ll=9.0,181.0",
+            "https://maps.apple.com/place?ll=9.0,7.0",
+        ]
+
+        for value in invalidValues {
+            #expect(SharedLocationText.location(from: value) == nil)
+        }
     }
 }

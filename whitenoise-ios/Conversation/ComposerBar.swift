@@ -203,11 +203,11 @@ struct ComposerBar: View {
                         HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
                             inputCapsule
                             trailingActionSlot
+                                .animation(.easeInOut(duration: 0.22), value: showsMic)
+                                .animation(.easeInOut(duration: 0.22), value: showsSend)
                         }
                     }
                 }
-                .animation(.easeInOut(duration: 0.22), value: showsMic)
-                .animation(.easeInOut(duration: 0.22), value: showsSend)
                 .disabled(!inputEnabled)
                 .opacity(inputEnabled ? 1 : 0.68)
             }
@@ -263,6 +263,11 @@ struct ComposerBar: View {
                 accessoryPanel(activeAccessoryPanel)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
+                if isRestoringKeyboard {
+                    Color(.systemBackground)
+                        .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
+                        .transition(.identity)
+                }
                 Divider()
                     .padding(.top, BottomInputChromeLayout.composerPaneSpacing)
             }

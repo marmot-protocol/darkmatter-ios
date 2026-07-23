@@ -51,8 +51,11 @@ enum TimelineBottom {
         max(0, visibleBottomY - (contentHeight + bottomContentInset))
     }
 
-    static func shouldRepairBottomOverscroll(_ viewport: TimelineBottomViewport) -> Bool {
-        viewport.overscrollPastBottom > overscrollRepairThreshold
+    static func shouldRepairBottomOverscroll(
+        _ viewport: TimelineBottomViewport,
+        isUserScrolling: Bool
+    ) -> Bool {
+        !isUserScrolling && viewport.overscrollPastBottom > overscrollRepairThreshold
     }
 }
 
@@ -174,6 +177,13 @@ enum TimelineBottomScrollCoordinator {
     ) -> Bool {
         guard let nextTargetID else { return false }
         return nextTargetID == lastAutomaticTargetID
+    }
+
+    static func shouldExecute(
+        reason: TimelineBottomScrollReason,
+        isUserScrolling: Bool
+    ) -> Bool {
+        reason.isUserInitiated || !isUserScrolling
     }
 }
 
@@ -1613,9 +1623,18 @@ struct ConversationView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
+        .background {
+            LinearGradient(
+                stops: [
+                    .init(color: Color(.systemBackground), location: 0),
+                    .init(color: Color(.systemBackground).opacity(0.94), location: 0.58),
+                    .init(color: Color(.systemBackground).opacity(0.68), location: 0.82),
+                    .init(color: Color(.systemBackground).opacity(0), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
         }
     }
 
@@ -1822,9 +1841,13 @@ struct ConversationView: View {
                         // put instead of rubber-banding under the pinned day
                         // header.
                         .scrollBounceBehavior(.basedOnSize)
+                        .compatibleBottomScrollEdgeEffectHidden()
                         .scrollDismissesKeyboard(.interactively)
                         .onScrollPhaseChange { _, phase in
                             isUserScrollingTimeline = phase == .interacting || phase == .decelerating
+                            if isUserScrollingTimeline {
+                                cancelPendingBottomScroll()
+                            }
                             if phase == .idle, isAtTimelineBottom {
                                 userMovedAwayFromTimelineBottom = false
                             }
@@ -1846,7 +1869,10 @@ struct ConversationView: View {
                             } else if isInitialBottomPositioning(viewModel: viewModel) {
                                 isAtTimelineBottom = true
                                 scheduleInitialBottomStabilization(proxy: proxy, viewModel: viewModel)
-                            } else if TimelineBottom.shouldRepairBottomOverscroll(current) {
+                            } else if TimelineBottom.shouldRepairBottomOverscroll(
+                                current,
+                                isUserScrolling: isUserScrollingTimeline
+                            ) {
                                 isAtTimelineBottom = true
                                 scheduleScrollToBottom(
                                     proxy: proxy,
@@ -2274,6 +2300,10 @@ struct ConversationView: View {
             didFinishPositioning: isInitialTimelinePositionSettled,
             reason: reason
         ) else { return }
+        guard TimelineBottomScrollCoordinator.shouldExecute(
+            reason: reason,
+            isUserScrolling: isUserScrollingTimeline
+        ) else { return }
 
         if reason == .timelineChange,
            TimelineBottomScrollCoordinator.shouldSkipTimelineChangeScroll(
@@ -2298,6 +2328,10 @@ struct ConversationView: View {
             guard !Task.isCancelled, let request = pendingBottomScrollRequest else { return }
             pendingBottomScrollRequest = nil
             pendingBottomScrollTask = nil
+            guard TimelineBottomScrollCoordinator.shouldExecute(
+                reason: request.reason,
+                isUserScrolling: isUserScrollingTimeline
+            ) else { return }
             scrollToBottom(proxy: proxy, animated: request.animated, targetID: request.targetID)
             lastAutomaticBottomScrollTargetID = request.targetID
         }

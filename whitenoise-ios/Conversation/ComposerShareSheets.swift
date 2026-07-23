@@ -5,14 +5,6 @@ import CoreLocation
 import MapKit
 import SwiftUI
 
-nonisolated enum SharedLocationText {
-    static func value(latitude: Double, longitude: Double) -> String {
-        let latitude = String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), latitude)
-        let longitude = String(format: "%.6f", locale: Locale(identifier: "en_US_POSIX"), longitude)
-        return "https://maps.apple.com/?ll=\(latitude),\(longitude)"
-    }
-}
-
 enum ContactCardExport {
     static func data(for contact: CNContact) throws -> Data {
         try CNContactVCardSerialization.data(with: [contact])
