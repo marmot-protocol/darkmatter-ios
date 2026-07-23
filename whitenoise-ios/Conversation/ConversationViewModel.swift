@@ -181,6 +181,7 @@ final class ConversationViewModel {
         get { composer.replyingTo }
         set { composer.replyingTo = newValue }
     }
+    var replyTargetMessageIdHex: String? { composer.replyTargetMessageIdHex }
 
     private weak var appState: AppState?
     private let initialTitle: String?
@@ -503,6 +504,13 @@ final class ConversationViewModel {
 
     func restoreComposerMentionDraftState(_ state: ComposerMentionDraftState) {
         mentionController.restoreDraftState(state)
+    }
+
+    func restoreReplyTarget(messageIdHex: String?) {
+        composer.restoreReplyTarget(
+            messageIdHex: messageIdHex,
+            record: messageIdHex.flatMap { record(for: $0) }
+        )
     }
 
     func editingText(for message: AppMessageRecordFfi) -> String {

@@ -1,39 +1,88 @@
 import Foundation
+import MarmotKit
 import Testing
 @testable import whitenoise_ios
 
 @MainActor
 struct ConversationDraftStoreTests {
-    @Test func draftsPersistAcrossStoreInstancesAndStayAccountGroupScoped() async throws {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-
-        let first = ConversationDraftStore(fileURL: fixture.file)
-        await first.loadIfNeeded()
-        first.setDraft("first account, first group", accountRef: "account-a", groupIdHex: "group-a")
-        first.setDraft("first account, second group", accountRef: "account-a", groupIdHex: "group-b")
-        first.setDraft("second account", accountRef: "account-b", groupIdHex: "group-a")
+    @Test func draftsPersistAcrossStoreInstancesAndStayAccountGroupScoped() async {
+        let persistence = DraftPersistenceProbe()
+        let first = ConversationDraftStore(persistence: persistence)
+        first.setDraft(
+            textSnapshot("first account, first group"),
+            accountRef: "account-a",
+            groupIdHex: "group-a"
+        )
+        first.setDraft(
+            textSnapshot("first account, second group"),
+            accountRef: "account-a",
+            groupIdHex: "group-b"
+        )
+        first.setDraft(
+            textSnapshot("second account"),
+            accountRef: "account-b",
+            groupIdHex: "group-a"
+        )
         await first.flush()
 
-        let restored = ConversationDraftStore(fileURL: fixture.file)
-        await restored.loadIfNeeded()
+        let restored = ConversationDraftStore(persistence: persistence)
+        await restored.loadIfNeeded(accountRef: "account-a")
+        await restored.loadIfNeeded(accountRef: "account-b")
 
-        #expect(restored.draft(accountRef: "account-a", groupIdHex: "group-a") == "first account, first group")
-        #expect(restored.draft(accountRef: "account-a", groupIdHex: "group-b") == "first account, second group")
-        #expect(restored.draft(accountRef: "account-b", groupIdHex: "group-a") == "second account")
-        #expect(restored.draft(accountRef: "account-b", groupIdHex: "group-b") == nil)
+        #expect(
+            await restored.snapshot(accountRef: "account-a", groupIdHex: "group-a")
+                == textSnapshot("first account, first group")
+        )
+        #expect(
+            await restored.snapshot(accountRef: "account-a", groupIdHex: "group-b")
+                == textSnapshot("first account, second group")
+        )
+        #expect(
+            await restored.snapshot(accountRef: "account-b", groupIdHex: "group-a")
+                == textSnapshot("second account")
+        )
+        #expect(await restored.snapshot(accountRef: "account-b", groupIdHex: "group-b") == nil)
     }
 
-    @Test func mentionIdentityPersistsWithItsDraftOccurrence() async throws {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let npub = try #require(NostrProfileReference.npub(
-            fromAccountIdHex: String(repeating: "11", count: 32)
-        ))
+    @Test func bindingRoundTripPreservesReplyAndAttachmentPlaintext() async throws {
+        let persistence = DraftPersistenceProbe()
+        let attachment = MediaDraftAttachment(
+            id: UUID(),
+            fileName: "notes.txt",
+            mediaType: "text/plain",
+            data: Data("private attachment".utf8),
+            dim: nil,
+            thumbhash: "thumbhash",
+            durationSeconds: 1.5,
+            waveformSamples: [0.1, 0.4, 0.2]
+        )
         let snapshot = ConversationDraftSnapshot(
-            text: "ask @Alex",
-            mentions: [
-                ConversationDraftMention(
+            canonicalText: "reply with a file",
+            replyToMessageIdHex: hex("ab"),
+            mediaAttachments: [attachment]
+        )
+
+        let first = ConversationDraftStore(persistence: persistence)
+        first.setDraft(snapshot, accountRef: "account", groupIdHex: "group")
+        await first.flush()
+
+        let restored = ConversationDraftStore(persistence: persistence)
+        let hydrated = try #require(
+            await restored.snapshot(accountRef: "account", groupIdHex: "group")
+        )
+        #expect(hydrated == snapshot)
+        #expect(restored.summary(accountRef: "account", groupIdHex: "group")?.mediaAttachments.first?
+            .plaintextSize == UInt64(attachment.data.count))
+    }
+
+    @Test func mentionIdentityRoundTripsThroughCanonicalBindingText() throws {
+        let npub = try #require(NostrProfileReference.npub(
+            fromAccountIdHex: hex("11")
+        ))
+        let displayState = ComposerMentionDraftState(
+            draft: "ask @Alex",
+            selectedMentions: [
+                ComposerMentionSelection(
                     utf16Location: "ask ".utf16.count,
                     utf16Length: "@Alex".utf16.count,
                     displayName: "Alex",
@@ -42,134 +91,207 @@ struct ConversationDraftStoreTests {
             ]
         )
 
-        let first = ConversationDraftStore(fileURL: fixture.file)
-        await first.loadIfNeeded()
-        first.setDraft(snapshot, accountRef: "account", groupIdHex: "group")
-        await first.flush()
+        #expect(displayState.canonicalText == "ask @\(npub)")
 
-        let restored = ConversationDraftStore(fileURL: fixture.file)
-        await restored.loadIfNeeded()
-        #expect(restored.snapshot(accountRef: "account", groupIdHex: "group") == snapshot)
+        let restored = ComposerMentionDraftState(
+            canonicalText: displayState.canonicalText,
+            mentionDisplayName: { _ in "Alex" }
+        )
+        #expect(restored == displayState)
     }
 
-    @Test func legacyDraftDocumentWithoutMentionMetadataStillLoads() async throws {
+    @Test func legacyJSONIsImportedIntoTheBindingAndRemoved() async throws {
         let fixture = makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         try FileManager.default.createDirectory(at: fixture.root, withIntermediateDirectories: true)
+        let npub = try #require(NostrProfileReference.npub(fromAccountIdHex: hex("22")))
         let legacyDocument = """
         {
           "version": 1,
           "entries": [
             {
               "key": { "accountRef": "account", "groupIdHex": "group" },
-              "text": "legacy draft",
+              "text": "ask @Alex",
+              "mentions": [
+                {
+                  "utf16Location": 4,
+                  "utf16Length": 5,
+                  "displayName": "Alex",
+                  "npub": "\(npub)"
+                }
+              ],
               "updatedAt": 1
             }
           ]
         }
         """
         try #require(legacyDocument.data(using: .utf8)).write(to: fixture.file)
-
-        let store = ConversationDraftStore(fileURL: fixture.file)
-        await store.loadIfNeeded()
-
-        #expect(store.snapshot(accountRef: "account", groupIdHex: "group") == ConversationDraftSnapshot(
-            text: "legacy draft",
-            mentions: []
-        ))
-    }
-
-    @Test func invalidPersistedMentionRangesAreDiscardedWithoutLosingText() async {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let store = ConversationDraftStore(fileURL: fixture.file)
-        await store.loadIfNeeded()
-        let snapshot = ConversationDraftSnapshot(
-            text: "ask @Alex",
-            mentions: [
-                ConversationDraftMention(
-                    utf16Location: Int.max,
-                    utf16Length: Int.max,
-                    displayName: "Alex",
-                    npub: "invalid"
-                ),
-            ]
+        let persistence = DraftPersistenceProbe()
+        let store = ConversationDraftStore(
+            persistence: persistence,
+            legacyFileURL: fixture.file
         )
 
-        store.setDraft(snapshot, accountRef: "account", groupIdHex: "group")
+        async let firstLoad: Void = store.loadIfNeeded(accountRef: "account")
+        async let secondLoad: Void = store.loadIfNeeded(accountRef: "account")
+        _ = await (firstLoad, secondLoad)
 
-        #expect(store.snapshot(accountRef: "account", groupIdHex: "group") == ConversationDraftSnapshot(
-            text: snapshot.text,
-            mentions: []
-        ))
-    }
-
-    @Test func blankDraftsAreRemovedAndStoredTextIsBoundedWithoutRewritingContent() async {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let store = ConversationDraftStore(fileURL: fixture.file)
-        await store.loadIfNeeded()
-
-        let exact = "  First line\nsecond line  "
-        store.setDraft(exact, accountRef: "account", groupIdHex: "group")
-        #expect(store.draft(accountRef: "account", groupIdHex: "group") == exact)
-
-        store.setDraft(" \n\t ", accountRef: "account", groupIdHex: "group")
-        #expect(store.draft(accountRef: "account", groupIdHex: "group") == nil)
-
-        let oversized = String(repeating: "x", count: ContentSanitizer.maxMessageLength + 100)
-        store.setDraft(oversized, accountRef: "account", groupIdHex: "group")
-        #expect(store.draft(accountRef: "account", groupIdHex: "group")?.count == ContentSanitizer.maxMessageLength)
-    }
-
-    @Test func removingAnAccountKeepsOtherAccountsDrafts() async {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let store = ConversationDraftStore(fileURL: fixture.file)
-        await store.loadIfNeeded()
-        store.setDraft("remove", accountRef: "account-a", groupIdHex: "group")
-        store.setDraft("keep", accountRef: "account-b", groupIdHex: "group")
-
-        store.removeDrafts(accountRef: "account-a")
-
-        #expect(store.draft(accountRef: "account-a", groupIdHex: "group") == nil)
-        #expect(store.draft(accountRef: "account-b", groupIdHex: "group") == "keep")
-    }
-
-    @Test func backgroundSuspensionFlushesTheLatestDraftImmediately() async throws {
-        let fixture = makeFixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let store = ConversationDraftStore(fileURL: fixture.file)
-        await store.loadIfNeeded()
-        let appState = AppState(
-            client: try MarmotClient.testClient(),
-            notifications: .shared,
-            conversationDraftStore: store
+        #expect(persistence.summaryLoadCount == 1)
+        #expect(persistence.persistCount == 1)
+        #expect(
+            await store.snapshot(accountRef: "account", groupIdHex: "group")?.canonicalText
+                == "ask @\(npub)"
         )
-        // Runtime suspension deliberately waits for bootstrap registration
-        // during a real launch-to-background race. Enter the normal onboarding
-        // runtime state before exercising the draft flush boundary.
-        await appState.bootstrap()
-
-        store.setDraft("last keystrokes", accountRef: "account", groupIdHex: "group")
-        await appState.startRuntimeSuspension().value
-
-        let restored = ConversationDraftStore(fileURL: fixture.file)
-        await restored.loadIfNeeded()
-        #expect(restored.draft(accountRef: "account", groupIdHex: "group") == "last keystrokes")
+        #expect(!FileManager.default.fileExists(atPath: fixture.file.path))
     }
 
-    @Test func chatListPreviewCollapsesLinesAndUnsafeFormatting() {
+    @Test func blankDraftDeletesTheBindingRowWhileReplyOnlyDraftPersists() async {
+        let persistence = DraftPersistenceProbe()
+        let store = ConversationDraftStore(persistence: persistence)
+        store.setDraft(
+            ConversationDraftSnapshot(
+                canonicalText: "",
+                replyToMessageIdHex: hex("cd"),
+                mediaAttachments: []
+            ),
+            accountRef: "account",
+            groupIdHex: "group"
+        )
+        await store.flush()
+        #expect(persistence.draft(accountRef: "account", groupIdHex: "group") != nil)
+
+        store.setDraft(
+            ConversationDraftSnapshot(
+                canonicalText: " \n\t ",
+                replyToMessageIdHex: nil,
+                mediaAttachments: []
+            ),
+            accountRef: "account",
+            groupIdHex: "group"
+        )
+        await store.flush()
+
+        #expect(persistence.draft(accountRef: "account", groupIdHex: "group") == nil)
+        #expect(persistence.deleteCount == 1)
+    }
+
+    @Test func flushPersistsTheLatestDebouncedRevisionImmediately() async {
+        let persistence = DraftPersistenceProbe()
+        let store = ConversationDraftStore(persistence: persistence)
+        store.setDraft(textSnapshot("first"), accountRef: "account", groupIdHex: "group")
+        store.setDraft(textSnapshot("last keystrokes"), accountRef: "account", groupIdHex: "group")
+
+        await store.flush()
+
+        #expect(
+            persistence.draft(accountRef: "account", groupIdHex: "group")?.content
+                == "last keystrokes"
+        )
+        #expect(persistence.persistCount == 1)
+    }
+
+    @Test func chatListPreviewProjectsCanonicalMentionsAndSanitizesText() throws {
+        let npub = try #require(NostrProfileReference.npub(fromAccountIdHex: hex("33")))
         let preview = ConversationDraftPreview.text(
-            from: "  First\u{202E}\nsecond\u{200B}  "
+            from: MessageDraftSummaryFfi(
+                groupIdHex: "group",
+                content: "  First @\(npub)\u{202E}\nsecond\u{200B}  ",
+                replyToMessageIdHex: nil,
+                mediaAttachments: [],
+                createdAtMs: 1,
+                updatedAtMs: 1
+            ),
+            mentionDisplayName: { _ in "Alice" }
         )
 
-        #expect(preview == "First second")
+        #expect(preview == "First @Alice second")
+    }
+
+    private func textSnapshot(_ text: String) -> ConversationDraftSnapshot {
+        ConversationDraftSnapshot(
+            canonicalText: text,
+            replyToMessageIdHex: nil,
+            mediaAttachments: []
+        )
+    }
+
+    private func hex(_ byte: String) -> String {
+        String(repeating: byte, count: 32)
     }
 
     private func makeFixture() -> (root: URL, file: URL) {
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ConversationDraftStoreTests-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent(
+                "ConversationDraftStoreTests-\(UUID().uuidString)",
+                isDirectory: true
+            )
         return (root, root.appendingPathComponent("drafts.json"))
+    }
+}
+
+@MainActor
+private final class DraftPersistenceProbe: ConversationDraftPersistence {
+    private var drafts: [ConversationDraftKey: MessageDraftFfi] = [:]
+    private(set) var summaryLoadCount = 0
+    private(set) var persistCount = 0
+    private(set) var deleteCount = 0
+    private var clock: Int64 = 0
+
+    func loadMessageDraftSummaries(accountRef: String) async throws -> [MessageDraftSummaryFfi] {
+        summaryLoadCount += 1
+        return drafts.compactMap { key, draft in
+            guard key.accountRef == accountRef else { return nil }
+            return MessageDraftSummaryFfi(
+                groupIdHex: draft.groupIdHex,
+                content: draft.content,
+                replyToMessageIdHex: draft.replyToMessageIdHex,
+                mediaAttachments: draft.mediaAttachments.map {
+                    MessageDraftAttachmentSummaryFfi(
+                        id: $0.id,
+                        fileName: $0.fileName,
+                        mediaType: $0.mediaType,
+                        plaintextSize: UInt64($0.plaintext.count)
+                    )
+                },
+                createdAtMs: draft.createdAtMs,
+                updatedAtMs: draft.updatedAtMs
+            )
+        }
+    }
+
+    func loadMessageDraft(
+        accountRef: String,
+        groupIdHex: String
+    ) async throws -> MessageDraftFfi? {
+        draft(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func persistMessageDraft(
+        accountRef: String,
+        groupIdHex: String,
+        snapshot: ConversationDraftSnapshot
+    ) async throws -> MessageDraftFfi {
+        persistCount += 1
+        clock += 1
+        let key = ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)
+        let saved = MessageDraftFfi(
+            groupIdHex: groupIdHex,
+            content: snapshot.canonicalText,
+            replyToMessageIdHex: snapshot.replyToMessageIdHex,
+            mediaAttachments: snapshot.mediaAttachments.map(\.messageDraftAttachment),
+            createdAtMs: drafts[key]?.createdAtMs ?? clock,
+            updatedAtMs: clock
+        )
+        drafts[key] = saved
+        return saved
+    }
+
+    func deletePersistedMessageDraft(accountRef: String, groupIdHex: String) async throws {
+        deleteCount += 1
+        drafts[ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)] = nil
+    }
+
+    func draft(accountRef: String, groupIdHex: String) -> MessageDraftFfi? {
+        drafts[ConversationDraftKey(accountRef: accountRef, groupIdHex: groupIdHex)]
     }
 }

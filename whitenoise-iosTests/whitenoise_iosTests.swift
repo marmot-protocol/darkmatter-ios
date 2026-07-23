@@ -5409,7 +5409,14 @@ struct ChatsListProjectionTests {
             ),
             avatarURL: nil,
             title: "Drafts",
-            draftText: "  Follow up\nwith Alice  "
+            draftSummary: MessageDraftSummaryFfi(
+                groupIdHex: hex("df"),
+                content: "  Follow up\nwith Alice  ",
+                replyToMessageIdHex: nil,
+                mediaAttachments: [],
+                createdAtMs: 1,
+                updatedAtMs: 1
+            )
         )
 
         #expect(item.draftPreview == "Follow up with Alice")
