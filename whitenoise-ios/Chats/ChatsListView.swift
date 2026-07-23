@@ -14,7 +14,7 @@ struct ChatsListView: View {
     @State private var pendingSingleDelete: LocalDeleteTarget?
     @State private var deletingChatIds = Set<String>()
     @State private var bulkDeleteInProgress = false
-    @FocusState private var searchFocused: Bool
+    @State private var searchPresented = false
 
     private struct LocalDeleteTarget: Equatable {
         let id: String
@@ -75,8 +75,6 @@ struct ChatsListView: View {
         )
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                chatListSearchBar
-
                 Group {
                     if let viewModel {
                         content(viewModel: viewModel, rows: visibleRows)
@@ -86,6 +84,14 @@ struct ChatsListView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .searchable(
+                text: $searchText,
+                isPresented: $searchPresented,
+                placement: .navigationBarDrawer(displayMode: .automatic),
+                prompt: Text("Search chats")
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             .trueBlackScaffoldBackground()
             .safeAreaInset(edge: .bottom) {
                 if selectionMode, viewModel != nil {
@@ -244,50 +250,8 @@ struct ChatsListView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            searchFocused = false
+            searchPresented = false
         }
-    }
-
-    // MARK: - Search
-
-    private var chatListSearchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            TextField("Search chats", text: $searchText)
-                .focused($searchFocused)
-                .font(.body)
-                .submitLabel(.search)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 40, height: 40)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, searchText.isEmpty ? 12 : 0)
-        .frame(minHeight: 40)
-        .background(
-            Color(.secondarySystemFill),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
-        .background(Color(.systemBackground))
     }
 
     private var subscriptionScope: SubscriptionScope {
@@ -397,6 +361,7 @@ struct ChatsListView: View {
                 }
             }
             .listStyle(.plain)
+            .contentMargins(.top, 0, for: .scrollContent)
             .compatibleBottomScrollEdgeEffect()
             .overlay {
                 if rows.isEmpty { emptyState }
