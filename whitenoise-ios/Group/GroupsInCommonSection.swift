@@ -50,22 +50,34 @@ struct GroupsInCommonSection: View {
             }
 
             ForEach(visibleShared) { group in
+                let displayTitle = group.isDirectMessage
+                    ? contactName
+                    : group.title
                 Button {
                     onOpenChat(group.groupIdHex)
                 } label: {
                     HStack(spacing: 12) {
                         AvatarBubble(
                             seed: group.groupIdHex,
-                            title: group.title,
+                            title: displayTitle,
                             pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
                         )
                         .frame(width: 40, height: 40)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(group.title)
+                            Text(displayTitle)
                                 .lineLimit(1)
-                            Text(L10n.plural("%lld members", Int64(group.memberCount)))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if group.isDirectMessage {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "person.fill")
+                                    Text("Direct message")
+                                }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(L10n.plural("%lld members", Int64(group.memberCount)))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         Spacer(minLength: 8)
                     }

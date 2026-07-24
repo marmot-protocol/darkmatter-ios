@@ -418,8 +418,8 @@ final class GroupDetailsViewModel {
         }
     }
 
-    /// Direct-chat details show the named groups both people share, derived
-    /// from the same on-demand snapshots the recipient directory loads.
+    /// Direct-chat details show every group both people share, including this
+    /// direct-message chat, derived from the recipient directory snapshots.
     func loadSharedGroups(using appState: AppState, force: Bool = false) async {
         guard let conversation, conversation.groupDisplay.isDirectMessage,
               let otherMember = conversation.otherMember

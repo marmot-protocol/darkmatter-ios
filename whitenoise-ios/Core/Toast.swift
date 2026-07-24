@@ -17,21 +17,30 @@ struct Toast: Identifiable, Equatable {
     let style: Style
     let duration: TimeInterval
 
-    static func success(_ title: String, message: String? = nil, duration: TimeInterval = 2.5) -> Toast {
+    static func success(_ title: String, message: String? = nil, duration: TimeInterval = 3.0) -> Toast {
         Toast(title: title, message: message, style: .success, duration: duration)
     }
 
-    static func warning(_ title: String, message: String? = nil, duration: TimeInterval = 3.0) -> Toast {
+    static func warning(_ title: String, message: String? = nil, duration: TimeInterval = 3.5) -> Toast {
         Toast(title: title, message: message, style: .warning, duration: duration)
     }
 
-    static func error(_ title: String, message: String? = nil, duration: TimeInterval = 3.5) -> Toast {
+    static func error(_ title: String, message: String? = nil, duration: TimeInterval = 4.0) -> Toast {
         Toast(title: title, message: message, style: .error, duration: duration)
     }
 }
 
 enum ToastOverlayPresentation {
     static let windowLevel = UIWindow.Level.alert + 1
+}
+
+enum ToastDismissGesture {
+    static func shouldDismiss(
+        translation: CGFloat,
+        predictedEndTranslation: CGFloat
+    ) -> Bool {
+        translation <= -28 || predictedEndTranslation <= -60
+    }
 }
 
 /// Top-of-screen overlay host. Attach to the root view; views below read
@@ -46,14 +55,20 @@ struct ToastHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear {
-                ToastOverlayPresenter.shared.update(toast: appState.activeToast)
+                updateOverlay(appState.activeToast)
             }
             .onChange(of: appState.activeToast) { _, toast in
-                ToastOverlayPresenter.shared.update(toast: toast)
+                updateOverlay(toast)
             }
             .onDisappear {
                 ToastOverlayPresenter.shared.update(toast: nil)
             }
+    }
+
+    private func updateOverlay(_ toast: Toast?) {
+        ToastOverlayPresenter.shared.update(toast: toast) {
+            appState.dismissToast()
+        }
     }
 }
 
@@ -64,7 +79,7 @@ private final class ToastOverlayPresenter {
     private var window: ToastOverlayWindow?
     private var host: UIHostingController<ToastWindowContent>?
 
-    func update(toast: Toast?) {
+    func update(toast: Toast?, onDismiss: @escaping () -> Void = {}) {
         guard let toast else {
             dismiss()
             return
@@ -74,7 +89,13 @@ private final class ToastOverlayPresenter {
 
         let window = window(for: scene)
         window.layer.removeAllAnimations()
-        host?.rootView = ToastWindowContent(toast: toast)
+        host?.rootView = ToastWindowContent(
+            toast: toast,
+            onDismiss: onDismiss,
+            onFrameChange: { [weak window] frame in
+                window?.interactiveFrame = frame
+            }
+        )
 
         if window.isHidden {
             window.alpha = 0
@@ -87,6 +108,7 @@ private final class ToastOverlayPresenter {
 
     private func dismiss() {
         guard let window else { return }
+        window.interactiveFrame = .null
         UIView.animate(withDuration: 0.18) {
             window.alpha = 0
         } completion: { [weak self] _ in
@@ -104,7 +126,11 @@ private final class ToastOverlayPresenter {
         }
         window?.isHidden = true
 
-        let host = UIHostingController(rootView: ToastWindowContent(toast: nil))
+        let host = UIHostingController(rootView: ToastWindowContent(
+            toast: nil,
+            onDismiss: {},
+            onFrameChange: { _ in }
+        ))
         host.view.backgroundColor = .clear
 
         let window = ToastOverlayWindow(windowScene: scene)
@@ -127,33 +153,45 @@ private final class ToastOverlayPresenter {
 }
 
 private final class ToastOverlayWindow: UIWindow {
+    var interactiveFrame: CGRect = .null
+
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        false
+        interactiveFrame.contains(point)
     }
 }
 
 private struct ToastWindowContent: View {
     let toast: Toast?
+    let onDismiss: () -> Void
+    let onFrameChange: (CGRect) -> Void
 
     var body: some View {
         VStack {
             if let toast {
-                ToastView(toast: toast)
+                ToastView(toast: toast, onDismiss: onDismiss)
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .id(toast.id)
+                    .onGeometryChange(for: CGRect.self) { proxy in
+                        proxy.frame(in: .global)
+                    } action: { frame in
+                        onFrameChange(frame)
+                    }
             }
             Spacer(minLength: 0)
+                .allowsHitTesting(false)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.smooth(duration: 0.25), value: toast)
-        .allowsHitTesting(false)
     }
 }
 
 private struct ToastView: View {
     let toast: Toast
+    let onDismiss: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -181,6 +219,29 @@ private struct ToastView: View {
                 .strokeBorder(tint.opacity(0.3), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
+        .offset(y: dragOffset)
+        .opacity(1 - min(abs(dragOffset) / 120, 0.6))
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    dragOffset = min(0, value.translation.height)
+                }
+                .onEnded { value in
+                    if ToastDismissGesture.shouldDismiss(
+                        translation: value.translation.height,
+                        predictedEndTranslation: value.predictedEndTranslation.height
+                    ) {
+                        onDismiss()
+                    } else {
+                        withAnimation(.smooth(duration: 0.2)) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
+        .accessibilityAction(.escape) {
+            onDismiss()
+        }
     }
 
     private var icon: String {

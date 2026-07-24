@@ -2999,6 +2999,31 @@ struct ToastPresentationTests {
     @Test func toastOverlayPresentsAboveModalWindows() {
         #expect(ToastOverlayPresentation.windowLevel.rawValue > UIWindow.Level.alert.rawValue)
     }
+
+    @Test func toastDefaultsStayVisibleLongEnoughToRead() {
+        #expect(Toast.success("Saved").duration == 3.0)
+        #expect(Toast.warning("Warning").duration == 3.5)
+        #expect(Toast.error("Failed").duration == 4.0)
+    }
+
+    @Test func upwardToastGestureDismissesByDistanceOrVelocity() {
+        #expect(ToastDismissGesture.shouldDismiss(
+            translation: -28,
+            predictedEndTranslation: -28
+        ))
+        #expect(ToastDismissGesture.shouldDismiss(
+            translation: -12,
+            predictedEndTranslation: -60
+        ))
+        #expect(!ToastDismissGesture.shouldDismiss(
+            translation: -12,
+            predictedEndTranslation: -20
+        ))
+        #expect(!ToastDismissGesture.shouldDismiss(
+            translation: 40,
+            predictedEndTranslation: 60
+        ))
+    }
 }
 
 struct DiagnosticsPresentationTests {
@@ -4871,7 +4896,57 @@ struct GroupDisplayTests {
     }
 }
 
+private actor ConcurrentLoadProbe {
+    private var active = 0
+
+    func begin() -> Int {
+        active += 1
+        return active
+    }
+
+    func end() {
+        active -= 1
+    }
+}
+
 struct GroupImageSearchTests {
+    @Test func groupImageThumbnailLoadsStayWithinConcurrencyLimit() async {
+        let limiter = GroupImageThumbnailLoadLimiter(maximumConcurrentLoads: 4)
+        let probe = ConcurrentLoadProbe()
+
+        let peak = await withTaskGroup(of: Int.self, returning: Int.self) { group in
+            for _ in 0..<20 {
+                group.addTask {
+                    await limiter.acquire()
+                    let active = await probe.begin()
+                    try? await Task.sleep(nanoseconds: 5_000_000)
+                    await probe.end()
+                    await limiter.release()
+                    return active
+                }
+            }
+            var peak = 0
+            for await active in group {
+                peak = max(peak, active)
+            }
+            return peak
+        }
+
+        #expect(peak == 4)
+    }
+
+    @Test func duckDuckGoRequestsCarryBrowserIdentityAndSameOriginReferer() throws {
+        let apiURL = try #require(URL(string: "https://duckduckgo.com/i.js?q=cats"))
+        let referer = try #require(URL(string: "https://duckduckgo.com/"))
+
+        let request = DuckDuckGoImageSearchClient.request(for: apiURL, referer: referer)
+
+        #expect(request.value(forHTTPHeaderField: "Referer") == "https://duckduckgo.com/")
+        #expect(request.value(forHTTPHeaderField: "User-Agent")?.contains("Mobile/15E148 Safari/604.1") == true)
+        #expect(request.value(forHTTPHeaderField: "Cache-Control") == "no-store")
+        #expect(request.value(forHTTPHeaderField: "Pragma") == "no-cache")
+    }
+
     @Test func duckDuckGoVQDParserHandlesKnownEmbeddings() throws {
         #expect(DuckDuckGoImageSearchClient.vqdToken(in: #"DDG.duckbar.load('images', {vqd:'4-1234567890'});"#) == "4-1234567890")
         #expect(DuckDuckGoImageSearchClient.vqdToken(in: #""vqd":"3-abc&amp;def""#) == "3-abc&def")

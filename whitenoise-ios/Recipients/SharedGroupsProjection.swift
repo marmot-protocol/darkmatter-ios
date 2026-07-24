@@ -1,9 +1,7 @@
 import Foundation
 
-/// Groups a profile subject shares with the active account: named groups
-/// where both are on the roster and the viewer is still a member. The
-/// unnamed two-person chat is the DM itself and stays excluded; a *named*
-/// pair group counts. Derived from the same screen-lifetime snapshots the
+/// Groups a profile subject shares with the active account, including their
+/// direct-message chats. Derived from the same screen-lifetime snapshots the
 /// recipient directory loads.
 nonisolated enum SharedGroupsProjection {
     struct SharedGroup: Equatable, Identifiable {
@@ -11,6 +9,7 @@ nonisolated enum SharedGroupsProjection {
         let title: String
         let avatarUrl: String?
         let memberCount: Int
+        let isDirectMessage: Bool
 
         var id: String { groupIdHex }
     }
@@ -25,8 +24,7 @@ nonisolated enum SharedGroupsProjection {
         else { return [] }
         return snapshots
             .filter { snapshot in
-                guard snapshot.sanitizedName != nil,
-                      snapshot.isSelfMember,
+                guard snapshot.isSelfMember,
                       snapshot.memberIdsHex.count >= 2
                 else { return false }
                 let roster = Set(snapshot.memberIdsHex.map { $0.lowercased() })
@@ -38,7 +36,9 @@ nonisolated enum SharedGroupsProjection {
                     groupIdHex: snapshot.groupIdHex,
                     title: snapshot.title,
                     avatarUrl: snapshot.avatarUrl,
-                    memberCount: snapshot.memberIdsHex.count
+                    memberCount: snapshot.memberIdsHex.count,
+                    isDirectMessage: snapshot.sanitizedName == nil
+                        && snapshot.memberIdsHex.count == 2
                 )
             }
     }
@@ -70,7 +70,8 @@ nonisolated enum SharedGroupsProjection {
                     groupIdHex: snapshot.groupIdHex,
                     title: snapshot.title,
                     avatarUrl: snapshot.avatarUrl,
-                    memberCount: snapshot.memberIdsHex.count
+                    memberCount: snapshot.memberIdsHex.count,
+                    isDirectMessage: false
                 )
             }
     }

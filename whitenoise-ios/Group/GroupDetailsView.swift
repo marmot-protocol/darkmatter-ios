@@ -1111,7 +1111,8 @@ struct GroupDetailsView: View {
 
     private var contactTitle: String {
         guard let contactAccountIdHex else { return viewModel.displayTitle }
-        return appState.displayName(forAccountIdHex: contactAccountIdHex)
+        return appState.knownDisplayName(forAccountIdHex: contactAccountIdHex)
+            ?? appState.shortNpub(forAccountIdHex: contactAccountIdHex)
     }
 
     private var nickname: String? {

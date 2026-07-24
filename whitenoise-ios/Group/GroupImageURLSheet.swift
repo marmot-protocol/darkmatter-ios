@@ -12,6 +12,11 @@ struct GroupImageSearchResult: Identifiable, Equatable {
 }
 
 struct DuckDuckGoImageSearchClient {
+    private static let browserUserAgent =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) " +
+        "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 " +
+        "Mobile/15E148 Safari/604.1"
+
     func search(_ rawQuery: String) async throws -> [GroupImageSearchResult] {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { throw DuckDuckGoImageSearchError.emptyQuery }
@@ -37,7 +42,10 @@ struct DuckDuckGoImageSearchClient {
             URLQueryItem(name: "p", value: "1")
         ]
 
-        let resultsData = try await data(for: api.url!)
+        let resultsData = try await data(
+            for: api.url!,
+            referer: URL(string: "https://duckduckgo.com/")!
+        )
         return try Self.decodeResults(from: resultsData)
     }
 
@@ -99,16 +107,30 @@ struct DuckDuckGoImageSearchClient {
         return ContentSanitizer.imageURL(candidate)
     }
 
-    private func data(for url: URL) async throws -> Data {
-        let request = RemoteImageFetch.request(
+    static func request(for url: URL, referer: URL? = nil) -> URLRequest {
+        var request = RemoteImageFetch.request(
             for: url,
             accept: "application/json,text/html;q=0.9,*/*;q=0.8"
         )
-        let (data, response) = try await RemoteImageFetch.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode)
-        else { throw DuckDuckGoImageSearchError.badResponse }
-        return data
+        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+        if let referer {
+            request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
+        }
+        return request
+    }
+
+    private func data(for url: URL, referer: URL? = nil) async throws -> Data {
+        do {
+            let (data, response) = try await RemoteImageFetch.data(
+                for: Self.request(for: url, referer: referer)
+            )
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode)
+            else { throw DuckDuckGoImageSearchError.badResponse }
+            return data
+        } catch let error as URLError where error.code == .badServerResponse {
+            throw DuckDuckGoImageSearchError.badResponse
+        }
     }
 
     private static func sourceHost(for raw: String?) -> String? {
@@ -569,6 +591,36 @@ private struct GroupImageResultCell: View {
     }
 }
 
+actor GroupImageThumbnailLoadLimiter {
+    static let shared = GroupImageThumbnailLoadLimiter(maximumConcurrentLoads: 4)
+
+    private let maximumConcurrentLoads: Int
+    private var activeLoads = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maximumConcurrentLoads: Int) {
+        self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
+    }
+
+    func acquire() async {
+        if activeLoads < maximumConcurrentLoads {
+            activeLoads += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            activeLoads = max(0, activeLoads - 1)
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 private struct GroupImageRemoteThumbnail: View {
     private static let displaySize = CGSize(width: 108, height: 92)
 
@@ -602,14 +654,20 @@ private struct GroupImageRemoteThumbnail: View {
 
     private func loadImage(scale: CGFloat) async {
         phase = .loading
+        await GroupImageThumbnailLoadLimiter.shared.acquire()
         do {
+            try Task.checkCancellation()
             let image = try await RemoteAvatarImageLoader.image(
                 for: url,
                 maxPixelSize: Self.thumbnailMaxPixelSize(scale: scale),
                 scale: scale
             )
+            await GroupImageThumbnailLoadLimiter.shared.release()
+            guard !Task.isCancelled else { return }
             phase = .success(image)
         } catch {
+            await GroupImageThumbnailLoadLimiter.shared.release()
+            guard !Task.isCancelled else { return }
             phase = .failure
         }
     }
