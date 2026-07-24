@@ -275,7 +275,10 @@ struct ProfileContentView: View {
     }
 
     private var title: String {
-        if let hex = model.hex { return appState.displayName(forAccountIdHex: hex) }
+        if let hex = model.hex {
+            return appState.knownDisplayName(forAccountIdHex: hex)
+                ?? IdentityFormatter.short(displayReference)
+        }
         return IdentityFormatter.short(npub)
     }
 

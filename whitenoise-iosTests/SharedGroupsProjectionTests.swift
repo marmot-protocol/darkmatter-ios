@@ -6,7 +6,7 @@ struct SharedGroupsProjectionTests {
     private let alice = String(repeating: "bb", count: 32)
     private let bob = String(repeating: "cc", count: 32)
 
-    @Test func includesOnlyNamedGroupsContainingBothParties() {
+    @Test func includesEveryGroupContainingBothPartiesAndClassifiesDirectMessages() {
         let shared = snapshot("g1", name: "Team", members: [me, alice, bob], activity: 5)
         let namedPair = snapshot("g6", name: "Us two", members: [me, alice], activity: 7)
         let directChat = snapshot("g2", name: nil, members: [me, alice], activity: 9)
@@ -20,10 +20,12 @@ struct SharedGroupsProjectionTests {
             myAccountIdHex: me
         )
 
-        #expect(result.map(\.groupIdHex) == ["g6", "g1"])
-        #expect(result.first?.title == "Us two")
-        #expect(result.first?.memberCount == 2)
-        #expect(result.last?.title == "Team")
+        #expect(result.map(\.groupIdHex) == ["g2", "g3", "g6", "g1"])
+        #expect(result.map(\.isDirectMessage) == [true, false, false, false])
+        #expect(result[0].memberCount == 2)
+        #expect(result[1].memberCount == 3)
+        #expect(result[2].title == "Us two")
+        #expect(result[3].title == "Team")
     }
 
     @Test func ordersByMostRecentActivity() {
