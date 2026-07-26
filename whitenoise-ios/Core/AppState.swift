@@ -1110,7 +1110,7 @@ final class AppState {
     @MainActor
     @discardableResult
     func importIdentity(_ identity: String) async throws -> AccountSummaryFfi {
-        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        let lease = try await runtimeLifecycle.beginUserInitiatedForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
         let summary = try await lease.client.marmot.login(

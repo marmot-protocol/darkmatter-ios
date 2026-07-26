@@ -183,7 +183,7 @@ final class NotificationCoordinator {
     private var notificationSubscriptionFailureToastPresented = false
     private var nativePushRegistrationFailureToastPresented = false
 #if DEBUG
-    var beforeForegroundCatchUpForTesting: (() async -> Void)?
+    var foregroundCatchUpOperationForTesting: (() async throws -> Void)?
 #endif
 
     private static let notificationSubscriptionInitialRetryDelayNanoseconds: UInt64 = 1_000_000_000
@@ -191,6 +191,10 @@ final class NotificationCoordinator {
     private static let pushRegistrationLog = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
         category: "push-registration"
+    )
+    private static let foregroundCatchUpLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "foreground-resume"
     )
 
     var notificationSubscriptionActive: Bool { notificationDriver.isRunning }
@@ -626,17 +630,35 @@ final class NotificationCoordinator {
 
         isForegroundCatchUpRunning = true
         defer { isForegroundCatchUpRunning = false }
-
-#if DEBUG
-        if let beforeForegroundCatchUpForTesting {
-            await beforeForegroundCatchUpForTesting()
+        let startedAt = ContinuousClock.now
+        var outcome = "cancelled"
+        defer {
+            let elapsed = startedAt.duration(to: ContinuousClock.now).components
+            let elapsedMilliseconds = Double(elapsed.seconds) * 1_000
+                + Double(elapsed.attoseconds) / 1_000_000_000_000_000
+            Self.foregroundCatchUpLog.info(
+                "catch_up outcome=\(outcome, privacy: .public) duration_ms=\(elapsedMilliseconds, format: .fixed(precision: 0), privacy: .public)"
+            )
         }
-#endif
+
         guard !Task.isCancelled else { return }
 
         do {
-            try await host.marmot.catchUpAccounts()
+#if DEBUG
+            if let foregroundCatchUpOperationForTesting {
+                try await foregroundCatchUpOperationForTesting()
+            } else {
+                try await host.currentMarmotClient().catchUpAccounts()
+            }
+#else
+            try await host.currentMarmotClient().catchUpAccounts()
+#endif
+            try Task.checkCancellation()
+            outcome = "succeeded"
+        } catch is CancellationError {
+            outcome = "cancelled"
         } catch {
+            outcome = "failed"
             // Foreground catch-up is a best-effort safety net. The live
             // subscription and NSE path continue to handle notification flow.
         }
@@ -693,6 +715,14 @@ final class NotificationCoordinator {
 
     func drainNativePushRegistrationTaskForTesting() async {
         await nativePushRegistrationTask?.value
+    }
+
+    func drainConnectivityCatchUpTaskForTesting() async {
+        await connectivityCatchUpTask?.value
+    }
+
+    var hasConnectivityCatchUpTaskForTesting: Bool {
+        connectivityCatchUpTask != nil
     }
     #endif
 }

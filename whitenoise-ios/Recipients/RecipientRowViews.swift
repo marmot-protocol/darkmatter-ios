@@ -143,7 +143,7 @@ struct RecipientQuickActionRow: View {
 /// feeds the same query pipeline as typing.
 struct RecipientSearchField: View {
     @Binding var text: String
-    var placeholder: LocalizedStringKey = "Search or paste npub"
+    var placeholder: LocalizedStringKey = "Search people or paste a profile"
     /// Optional QR-scan affordance rendered beside the paste icon.
     var onScan: (() -> Void)?
 
@@ -153,8 +153,12 @@ struct RecipientSearchField: View {
                 .foregroundStyle(.secondary)
             TextField(placeholder, text: $text)
                 .font(.body)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(minWidth: 0, maxWidth: .infinity)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .clipped()
             if text.isEmpty {
                 Button {
                     if let pasted = UIPasteboard.general.string?
@@ -195,6 +199,8 @@ struct RecipientSearchField: View {
                 .accessibilityLabel("Clear search")
             }
         }
+        .frame(maxWidth: .infinity)
+        .clipped()
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(Color(.tertiarySystemFill), in: .rect(cornerRadius: 10))

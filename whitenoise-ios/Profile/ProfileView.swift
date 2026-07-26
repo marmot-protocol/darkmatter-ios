@@ -3,7 +3,9 @@ import MarmotKit
 
 nonisolated enum ProfileReferenceResolution {
     static func referenceForResolution(_ raw: String) -> String? {
-        NostrProfileReference.referenceForResolution(from: raw)
+        // The current MarmotKit account resolver accepts npub/hex, so validated
+        // nprofile values cross the binding boundary as their canonical hex key.
+        NostrProfileReference.memberRef(from: raw)
     }
 }
 
