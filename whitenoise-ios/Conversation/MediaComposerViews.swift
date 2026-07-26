@@ -523,6 +523,7 @@ private enum PhotoLibraryPickerError: LocalizedError {
 
 struct PhotoLibraryPickerView: UIViewControllerRepresentable {
     let selectionLimit: Int
+    var filter: PHPickerFilter = .any(of: [.images, .videos])
     let onSelection: ([PhotoLibrarySelection]) -> Void
     let onError: (Error) -> Void
     let onDismiss: () -> Void
@@ -533,7 +534,7 @@ struct PhotoLibraryPickerView: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
-        configuration.filter = .any(of: [.images, .videos])
+        configuration.filter = filter
         configuration.selectionLimit = max(1, selectionLimit)
         configuration.preferredAssetRepresentationMode = .current
 

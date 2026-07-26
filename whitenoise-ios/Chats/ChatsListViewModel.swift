@@ -78,6 +78,7 @@ final class ChatsListViewModel {
                 avatarUrl: row.avatarUrl,
                 avatarDim: nil,
                 avatarThumbhash: nil,
+                imageHashHex: row.avatar?.imageHashHex,
                 encryptedMedia: AppGroupEncryptedMediaComponentFfi(
                     componentId: 0,
                     component: "",

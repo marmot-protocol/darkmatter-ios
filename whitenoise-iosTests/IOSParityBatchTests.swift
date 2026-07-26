@@ -86,6 +86,39 @@ struct IOSParityBatchTests {
         #expect(openedGroupId == "empty-group")
     }
 
+    @Test func newGroupCreationPassesEncryptedInitialImageInput() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "active-account"
+        let model = NewChatFlowViewModel()
+        let draft = GroupImageUploadDraft(
+            data: Data([4, 5, 6]),
+            mediaType: "image/jpeg",
+            sourceURL: "https://images.example/group.jpg",
+            dim: "32x16",
+            thumbhash: nil
+        )
+        var capturedImage: InitialGroupImageFfi?
+        var openedGroupId: String?
+        model.createGroupWithInitialImageForTesting = { _, _, _, _, image in
+            capturedImage = image
+            return "group-with-image"
+        }
+
+        await model.createGroup(
+            name: "Image Group",
+            description: "",
+            retentionSeconds: 0,
+            image: draft,
+            using: appState,
+            onOpen: { openedGroupId = $0 }
+        )
+
+        #expect(capturedImage?.plaintext == draft.data)
+        #expect(capturedImage?.mediaType == draft.mediaType)
+        #expect(capturedImage?.sourceUrl == nil)
+        #expect(openedGroupId == "group-with-image")
+    }
+
     @Test func emptyGroupInviteRequiresConfirmedSoleMemberAdmin() {
         #expect(EmptyGroupConversationPresentation.canInvite(
             isSelfMember: true,

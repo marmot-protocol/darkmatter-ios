@@ -29,6 +29,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
     let sanitizedName: String?
     let title: String
     let avatarUrl: String?
+    let imageHashHex: String?
     let isSelfMember: Bool
     let lastActivityAt: UInt64
     let memberIdsHex: [String]
@@ -45,6 +46,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
                 ?? ContentSanitizer.groupName(row.title)
                 ?? IdentityFormatter.short(row.groupIdHex),
             avatarUrl: details?.group.avatarUrl ?? row.avatarUrl,
+            imageHashHex: details?.group.imageHashHex ?? row.avatar?.imageHashHex,
             isSelfMember: GroupManagementPresentation.isActiveChatListMember(row.selfMembership),
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
             memberIdsHex: details?.members.map(GroupMemberDetailsPresentation.profileAccountIdHex) ?? [],
@@ -59,6 +61,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         sanitizedName: String?,
         title: String,
         avatarUrl: String?,
+        imageHashHex: String? = nil,
         isSelfMember: Bool,
         lastActivityAt: UInt64,
         memberIdsHex: [String],
@@ -70,6 +73,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         self.sanitizedName = sanitizedName
         self.title = title
         self.avatarUrl = avatarUrl
+        self.imageHashHex = imageHashHex
         self.isSelfMember = isSelfMember
         self.lastActivityAt = lastActivityAt
         self.memberIdsHex = memberIdsHex

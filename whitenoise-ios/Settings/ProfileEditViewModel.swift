@@ -15,11 +15,13 @@ final class ProfileEditViewModel {
     var displayName = ""
     var about = ""
     var picture = ""
+    var banner = ""
     var nip05 = ""
     // Not user-editable here; preserved so a kind:0 republish keeps it.
     var existingLud16: String?
 
     var isPublishing = false
+    var isUploadingPicture = false
     var error: String?
 
     private(set) var loadedAccountIdHex: String?
@@ -40,18 +42,22 @@ final class ProfileEditViewModel {
             displayName: displayName,
             about: about,
             picture: picture,
+            banner: banner,
             nip05: nip05,
             preservedLud16: existingLud16
         )
     }
 
     var invalidPictureMessage: String? { validationMessage(for: .picture) }
+    var invalidBannerMessage: String? { validationMessage(for: .banner) }
     var invalidNip05Message: String? { validationMessage(for: .nip05) }
 
     func validationMessage(for field: ProfileEditMetadataField) -> String? {
         guard currentDraft.validationError == field else { return nil }
         switch field {
         case .picture:
+            return L10n.string("Only public HTTPS image URLs are allowed.")
+        case .banner:
             return L10n.string("Only public HTTPS image URLs are allowed.")
         case .nip05:
             return L10n.string("Enter a valid NIP-05 address like name@example.com.")
@@ -112,6 +118,7 @@ final class ProfileEditViewModel {
             displayName = ""
             about = ""
             picture = ""
+            banner = ""
             nip05 = ""
             error = nil
         }
@@ -158,11 +165,50 @@ final class ProfileEditViewModel {
             picture = ProfileEditFieldSeeding.seeded(
                 current: picture, loaded: formFields.picture, isNewAccount: false
             )
+            banner = ProfileEditFieldSeeding.seeded(
+                current: banner, loaded: formFields.banner, isNewAccount: false
+            )
             nip05 = ProfileEditFieldSeeding.seeded(
                 current: nip05, loaded: formFields.nip05, isNewAccount: false
             )
             loadedAccountIdHex = id
         }
+    }
+
+    /// Uploads the selected public profile image without encryption. Publishing
+    /// the returned URL remains part of the explicit Save profile action.
+    func updatePicture(
+        with draft: GroupImageUploadDraft?,
+        using appState: AppState
+    ) async throws {
+        guard !isUploadingPicture, !isPublishing else {
+            throw ProfileImageUploadError.unavailable
+        }
+        guard let accountRef = appState.activeAccountRef,
+              let accountIdHex = appState.activeAccount?.accountIdHex,
+              loadedAccountIdHex == accountIdHex
+        else {
+            throw ProfileImageUploadError.unavailable
+        }
+
+        guard let draft else {
+            picture = ""
+            return
+        }
+
+        isUploadingPicture = true
+        defer { isUploadingPicture = false }
+        let client = try appState.currentMarmotClient()
+        let uploadedURL = try await client.uploadProfileImage(
+            accountRef: accountRef,
+            data: draft.data,
+            mediaType: draft.mediaType,
+            blossomServer: nil
+        )
+        guard let normalizedURL = ContentSanitizer.imageURL(uploadedURL)?.absoluteString else {
+            throw ProfileImageUploadError.invalidReturnedURL
+        }
+        picture = normalizedURL
     }
 
     func publish(using appState: AppState) async {
@@ -205,6 +251,20 @@ final class ProfileEditViewModel {
             Haptics.error()
             self.error = error.localizedDescription
             appState.present(.error(L10n.string("Couldn't publish profile"), message: error.localizedDescription))
+        }
+    }
+}
+
+nonisolated enum ProfileImageUploadError: LocalizedError {
+    case invalidReturnedURL
+    case unavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidReturnedURL:
+            L10n.string("The image server returned an invalid URL.")
+        case .unavailable:
+            L10n.string("Profile image upload is not available right now.")
         }
     }
 }

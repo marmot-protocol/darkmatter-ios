@@ -523,7 +523,7 @@ final class NotificationCoordinator {
             rawToken: tokenHex,
             serverPubkeyHex: config.serverPubkeyHex,
             relayHint: NativePushRelayHintPolicy.relayHint(from: config)
-        )
+        ).registration
     }
 
     func syncNativePushRegistrationIfEnabled(host: NotificationCoordinatorHost) async {

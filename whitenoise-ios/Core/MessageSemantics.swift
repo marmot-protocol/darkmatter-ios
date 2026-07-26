@@ -195,7 +195,7 @@ nonisolated enum MessageSemantics {
     }
 
     static func imetaTag(for reference: MediaAttachmentReferenceFfi) -> MessageTagFfi {
-        var values = [imetaTag, "v \(reference.version)"]
+        var values = [imetaTag, "v \(reference.version.wireValue)"]
         values.append(contentsOf: reference.locators.map { "locator \($0.kind) \($0.value)" })
         values.append("ciphertext_sha256 \(reference.ciphertextSha256)")
         values.append("plaintext_sha256 \(reference.plaintextSha256)")

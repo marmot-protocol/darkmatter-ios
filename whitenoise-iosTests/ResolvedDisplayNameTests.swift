@@ -10,7 +10,7 @@ import Foundation
 struct ResolvedDisplayNameTests {
     private func profile(displayName: String? = nil, name: String? = nil) -> UserProfileMetadataFfi {
         UserProfileMetadataFfi(
-            name: name, displayName: displayName, about: nil, picture: nil, nip05: nil, lud16: nil
+            name: name, displayName: displayName, about: nil, picture: nil, banner: nil, nip05: nil, lud16: nil
         )
     }
 
@@ -63,6 +63,7 @@ struct ResolvedDisplayNameTests {
                 displayName: "Alice",
                 about: nil,
                 picture: "https://example.com/a.png",
+                banner: nil,
                 nip05: nil,
                 lud16: nil
             ),

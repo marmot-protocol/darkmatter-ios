@@ -1009,6 +1009,9 @@ final class TimelineStore {
             contentTokens: record.contentTokens,
             kind: record.kind,
             tags: record.tags,
+            sourceEpoch: record.sourceEpoch,
+            retentionSeconds: record.retentionSeconds,
+            retentionExpiresAt: record.retentionExpiresAt,
             recordedAt: record.recordedAt,
             receivedAt: record.receivedAt
         )

@@ -57,7 +57,9 @@ struct GroupsInCommonSection: View {
                     onOpenChat(group.groupIdHex)
                 } label: {
                     HStack(spacing: 12) {
-                        AvatarBubble(
+                        GroupAvatarBubble(
+                            groupIdHex: group.groupIdHex,
+                            imageHashHex: group.imageHashHex,
                             seed: group.groupIdHex,
                             title: displayTitle,
                             pictureURL: ContentSanitizer.imageURL(group.avatarUrl)
@@ -134,7 +136,9 @@ struct AddToGroupSheet: View {
                             Task { await add(to: group) }
                         } label: {
                             HStack(spacing: 12) {
-                                AvatarBubble(
+                                GroupAvatarBubble(
+                                    groupIdHex: group.groupIdHex,
+                                    imageHashHex: group.imageHashHex,
                                     seed: group.groupIdHex,
                                     title: group.title,
                                     pictureURL: ContentSanitizer.imageURL(group.avatarUrl)

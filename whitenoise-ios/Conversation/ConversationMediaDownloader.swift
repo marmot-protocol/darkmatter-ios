@@ -6,7 +6,7 @@ import MarmotKit
 /// Dedup key for an in-flight media download: a content-addressed media
 /// reference normalized to lowercase hex.
 struct MediaDownloadInFlightKey: Hashable {
-    let version: String
+    let version: EncryptedMediaVersionFfi
     let plaintextSha256: String
     let ciphertextSha256: String
     let nonceHex: String

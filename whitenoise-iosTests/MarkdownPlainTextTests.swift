@@ -26,9 +26,9 @@ struct MarkdownPlainTextTests {
     @Test func linksReduceToLabelsAndImagesToAlt() {
         let flattened = MarkdownPlainText.flatten(doc([
             .paragraph(inlines: [
-                .link(dest: "https://example.com", title: nil, children: [.text(content: "label")]),
-                .image(dest: "https://example.com/i.png", title: nil, alt: [.text(content: "alt")]),
-                .autolink(url: "https://auto.example", kind: .uri),
+                .link(dest: "https://example.com", title: nil, children: [.text(content: "label")], classification: .web),
+                .image(dest: "https://example.com/i.png", title: nil, alt: [.text(content: "alt")], classification: .web),
+                .autolink(url: "https://auto.example", kind: .uri, classification: .web),
             ])
         ]))
         #expect(flattened == "label alt https://auto.example")
@@ -226,7 +226,8 @@ struct MarkdownPlainTextTests {
             mediaJson: nil,
             media: [],
             agentTextStreamJson: nil,
-            deleted: false
+            deleted: false,
+            invalidationStatus: nil
         )
         #expect(MessagePreview.body(preview) == "code reply")
     }

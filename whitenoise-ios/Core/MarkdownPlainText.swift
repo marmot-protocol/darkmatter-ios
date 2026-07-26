@@ -109,11 +109,11 @@ enum MarkdownPlainText {
                 break
             case .emph(let children), .strong(let children), .strikethrough(let children):
                 appendInlines(children, to: &state, depth: depth + 1)
-            case .link(_, _, let children):
+            case .link(_, _, let children, _):
                 appendInlines(children, to: &state, depth: depth + 1)
-            case .image(_, _, let alt):
+            case .image(_, _, let alt, _):
                 appendInlines(alt, to: &state, depth: depth + 1)
-            case .autolink(let url, _):
+            case .autolink(let url, _, _):
                 state.append(url)
             case .nostrMention(let entity):
                 if let name = state.mentionDisplayName?(entity) {

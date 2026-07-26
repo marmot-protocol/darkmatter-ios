@@ -12,13 +12,12 @@ struct ChatRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarBubble(
+            GroupAvatarBubble(
+                groupIdHex: item.id,
+                imageHashHex: encryptedImageHashHex,
                 seed: item.avatarSeed,
                 title: title,
-                pictureURL: Self.automaticAvatarURL(
-                    item.avatarURL,
-                    pendingConfirmation: item.row.pendingConfirmation
-                )
+                pictureURL: avatarURLForDisplay
             )
             .frame(width: 52, height: 52)
 
@@ -72,6 +71,20 @@ struct ChatRow: View {
 
     private var title: String {
         item.title
+    }
+
+    private var encryptedImageHashHex: String? {
+        item.row.pendingConfirmation ? nil : item.row.avatar?.imageHashHex
+    }
+
+    private var avatarURLForDisplay: URL? {
+        if encryptedImageHashHex != nil, ContentSanitizer.imageURL(item.row.avatarUrl) == nil {
+            return nil
+        }
+        return Self.automaticAvatarURL(
+            item.avatarURL,
+            pendingConfirmation: item.row.pendingConfirmation
+        )
     }
 
     /// Latest message preview. Sent messages are prefixed with "You:".
@@ -133,6 +146,7 @@ struct AvatarBubble: View {
     let seed: String
     let title: String
     var pictureURL: URL? = nil
+    var pictureImage: UIImage? = nil
 
     var body: some View {
         Circle()
@@ -145,6 +159,10 @@ struct AvatarBubble: View {
                 initialsView
                 if let pictureURL {
                     AvatarRemoteImage(url: pictureURL)
+                } else if let pictureImage {
+                    Image(uiImage: pictureImage)
+                        .resizable()
+                        .scaledToFill()
                 }
             }
             .clipShape(Circle())
@@ -176,6 +194,211 @@ struct AvatarBubble: View {
     static func paletteIndex(forHash hash: Int, paletteCount: Int) -> Int {
         precondition(paletteCount > 0)
         return Int(hash.magnitude % UInt(paletteCount))
+    }
+}
+
+/// Group avatar renderer. URL components retain precedence for backwards
+/// compatibility; otherwise the content-addressed encrypted Blossom image is
+/// fetched and decrypted through Marmot.
+struct GroupAvatarBubble: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.displayScale) private var displayScale
+
+    let groupIdHex: String
+    let imageHashHex: String?
+    let seed: String
+    let title: String
+    var pictureURL: URL? = nil
+
+    @State private var phase = Phase.idle
+
+    var body: some View {
+        GeometryReader { proxy in
+            let request = request(
+                size: proxy.size,
+                scale: displayScale,
+                accountRef: appState.activeAccountRef
+            )
+            AvatarBubble(
+                seed: seed,
+                title: title,
+                pictureURL: pictureURL,
+                pictureImage: image(for: request)
+            )
+            .task(id: request) {
+                await load(request)
+            }
+        }
+    }
+
+    private func request(
+        size: CGSize,
+        scale: CGFloat,
+        accountRef: String?
+    ) -> GroupAvatarImageRequest? {
+        guard pictureURL == nil,
+              let accountRef,
+              let imageHashHex,
+              !imageHashHex.isEmpty
+        else { return nil }
+        return GroupAvatarImageRequest(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            imageHashHex: imageHashHex,
+            maxPixelSize: Int(ceil(max(size.width, size.height, 1) * max(scale, 1)))
+        )
+    }
+
+    private func image(for request: GroupAvatarImageRequest?) -> UIImage? {
+        guard case .success(let loadedRequest, let image) = phase,
+              loadedRequest == request
+        else { return nil }
+        return image
+    }
+
+    private func load(_ request: GroupAvatarImageRequest?) async {
+        guard let request else {
+            phase = .idle
+            return
+        }
+        phase = .loading(request)
+        do {
+            let client = try appState.currentMarmotClient()
+            let image = try await GroupAvatarImageLoader.image(
+                request: request,
+                scale: displayScale,
+                client: client
+            )
+            guard !Task.isCancelled else { return }
+            phase = .success(request, image)
+        } catch {
+            guard !Task.isCancelled else { return }
+            phase = .failure(request)
+        }
+    }
+
+    private enum Phase {
+        case idle
+        case loading(GroupAvatarImageRequest)
+        case success(GroupAvatarImageRequest, UIImage)
+        case failure(GroupAvatarImageRequest)
+    }
+}
+
+private struct GroupAvatarImageRequest: Hashable {
+    let accountRef: String
+    let groupIdHex: String
+    let imageHashHex: String
+    let maxPixelSize: Int
+}
+
+private actor GroupAvatarLoadLimiter {
+    static let shared = GroupAvatarLoadLimiter(maximumConcurrentLoads: 4)
+
+    private let maximumConcurrentLoads: Int
+    private var activeLoads = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maximumConcurrentLoads: Int) {
+        self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
+    }
+
+    func acquire() async {
+        if activeLoads < maximumConcurrentLoads {
+            activeLoads += 1
+        } else {
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            activeLoads = max(0, activeLoads - 1)
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
+@MainActor
+private enum GroupAvatarImageLoader {
+    private final class CachedImage: NSObject {
+        let image: UIImage
+
+        init(_ image: UIImage) {
+            self.image = image
+        }
+    }
+
+    private static let cache: NSCache<NSString, CachedImage> = {
+        let cache = NSCache<NSString, CachedImage>()
+        cache.totalCostLimit = 20 * 1024 * 1024
+        return cache
+    }()
+
+    private static let dataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.totalCostLimit = 16 * 1024 * 1024
+        return cache
+    }()
+
+    private static var inFlight: [String: Task<Data, Error>] = [:]
+
+    static func image(
+        request: GroupAvatarImageRequest,
+        scale: CGFloat,
+        client: MarmotClient
+    ) async throws -> UIImage {
+        let cacheKey = "\(request.accountRef):\(request.imageHashHex):\(request.maxPixelSize)" as NSString
+        if let cached = cache.object(forKey: cacheKey)?.image {
+            return cached
+        }
+
+        let dataKey = "\(request.accountRef):\(request.groupIdHex):\(request.imageHashHex)"
+        let data: Data
+        if let cached = dataCache.object(forKey: dataKey as NSString) {
+            data = cached as Data
+        } else if let task = inFlight[dataKey] {
+            data = try await task.value
+        } else {
+            let task = Task {
+                await GroupAvatarLoadLimiter.shared.acquire()
+                do {
+                    try Task.checkCancellation()
+                    let data = try await client.downloadGroupBlossomImage(
+                        accountRef: request.accountRef,
+                        groupIdHex: request.groupIdHex
+                    )
+                    await GroupAvatarLoadLimiter.shared.release()
+                    return data
+                } catch {
+                    await GroupAvatarLoadLimiter.shared.release()
+                    throw error
+                }
+            }
+            inFlight[dataKey] = task
+            defer { inFlight[dataKey] = nil }
+            data = try await task.value
+            dataCache.setObject(
+                data as NSData,
+                forKey: dataKey as NSString,
+                cost: data.count
+            )
+        }
+
+        guard let image = await RemoteImageDecoder.downsampledImage(
+            from: data,
+            maxPixelSize: request.maxPixelSize,
+            scale: scale
+        ) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        cache.setObject(
+            CachedImage(image),
+            forKey: cacheKey,
+            cost: DecodedImageCost.decodedBitmapByteCost(for: image)
+        )
+        return image
     }
 }
 

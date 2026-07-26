@@ -1654,10 +1654,15 @@ struct ConversationView: View {
             HStack(spacing: 10) {
                 if let viewModel {
                     let groupDisplay = viewModel.groupDisplay
-                    AvatarBubble(
+                    GroupAvatarBubble(
+                        groupIdHex: viewModel.group.groupIdHex,
+                        imageHashHex: viewModel.group.pendingConfirmation ? nil : viewModel.group.imageHashHex,
                         seed: GroupDisplay.avatarSeed(for: groupDisplay),
                         title: chrome.title,
-                        pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+                        pictureURL: viewModel.group.imageHashHex != nil
+                            && ContentSanitizer.imageURL(viewModel.group.avatarUrl) == nil
+                            ? nil
+                            : GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
                     )
                     .frame(width: 34, height: 34)
                 }

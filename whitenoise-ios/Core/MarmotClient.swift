@@ -471,6 +471,22 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.createGroup(accountRef: accountRef, name: name, memberRefs: memberRefs, description: description)
     }
 
+    func createGroupWithInitialImage(
+        accountRef: String,
+        name: String,
+        memberRefs: [String],
+        description: String?,
+        initialImage: InitialGroupImageFfi?
+    ) async throws -> String {
+        try await marmot.createGroupWithInitialImage(
+            accountRef: accountRef,
+            name: name,
+            memberRefs: memberRefs,
+            description: description,
+            initialImage: initialImage
+        )
+    }
+
     func setGroupArchived(accountRef: String, groupIdHex: String, archived: Bool) async throws -> AppGroupRecordFfi {
         try await marmot.setGroupArchived(accountRef: accountRef, groupIdHex: groupIdHex, archived: archived)
     }
@@ -537,6 +553,28 @@ nonisolated final class MarmotClient: Sendable {
 
     func updateGroupAvatarUrl(accountRef: String, groupIdHex: String, url: String?, dim: String?, thumbhash: String?) async throws -> SendSummaryFfi {
         try await marmot.updateGroupAvatarUrl(accountRef: accountRef, groupIdHex: groupIdHex, url: url, dim: dim, thumbhash: thumbhash)
+    }
+
+    func updateGroupImage(
+        accountRef: String,
+        groupIdHex: String,
+        plaintext: Data,
+        mediaType: String
+    ) async throws -> SendSummaryFfi {
+        try await marmot.updateGroupImage(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            plaintext: plaintext,
+            mediaType: mediaType
+        )
+    }
+
+    func clearGroupImage(accountRef: String, groupIdHex: String) async throws -> SendSummaryFfi {
+        try await marmot.clearGroupImage(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func downloadGroupBlossomImage(accountRef: String, groupIdHex: String) async throws -> Data {
+        try await marmot.downloadGroupBlossomImage(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
     func updateMessageRetention(accountRef: String, groupIdHex: String, disappearingMessageSecs: UInt64) async throws -> SendSummaryFfi {
@@ -606,6 +644,20 @@ nonisolated final class MarmotClient: Sendable {
     /// `async throws`, so these forward directly without `Task.detached`.
     func publishUserProfile(accountRef: String, profile: UserProfileMetadataFfi, defaultRelays: [String], bootstrapRelays: [String]) async throws -> UserProfileMetadataFfi {
         try await marmot.publishUserProfile(accountRef: accountRef, profile: profile, defaultRelays: defaultRelays, bootstrapRelays: bootstrapRelays)
+    }
+
+    func uploadProfileImage(
+        accountRef: String,
+        data: Data,
+        mediaType: String,
+        blossomServer: String?
+    ) async throws -> String {
+        try await marmot.uploadProfileImage(
+            accountRef: accountRef,
+            data: data,
+            mediaType: mediaType,
+            blossomServer: blossomServer
+        )
     }
 
     func refreshProfile(accountIdHex: String, relays: [String]) async throws {

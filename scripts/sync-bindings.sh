@@ -52,6 +52,11 @@ rsync -a --delete \
     "$VENDOR_DIR/MarmotKit.xcframework/"
 cp "$OUTPUT_DIR/MarmotKit.swift" "$VENDOR_DIR/Sources/MarmotKit/MarmotKit.swift"
 
+echo "==> Stripping debug symbols from vendored static libraries"
+while IFS= read -r -d '' library; do
+    xcrun strip -S "$library"
+done < <(find "$VENDOR_DIR/MarmotKit.xcframework" -name 'libmarmot_uniffi.a' -print0)
+
 echo "==> Tidying generated text artifacts"
 find "$VENDOR_DIR" \( -name '*.swift' -o -name '*.h' \) -print0 \
     | xargs -0 perl -pi -e 's/[ \t]+$//'

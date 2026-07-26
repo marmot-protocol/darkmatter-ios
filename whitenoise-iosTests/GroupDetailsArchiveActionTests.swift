@@ -109,21 +109,40 @@ struct GroupDetailsArchiveActionTests {
         )
         let model = GroupDetailsViewModel()
         let publisher = GroupAvatarPublishProbe()
+        var progressPhases: [GroupImageProgressPhase?] = []
+        let draft = GroupImageUploadDraft(
+            data: Data([1, 2, 3]),
+            mediaType: "image/jpeg",
+            sourceURL: nil,
+            dim: nil,
+            thumbhash: nil
+        )
 
         model.conversation = conversation
-        model.updateGroupAvatarUrlForTesting = { accountRef, groupIdHex, url in
-            try await publisher.publish(accountRef: accountRef, groupIdHex: groupIdHex, url: url)
+        model.updateGroupImageForTesting = { accountRef, groupIdHex, data, mediaType in
+            try await publisher.publish(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                data: data,
+                mediaType: mediaType
+            )
         }
 
         let first = Task { @MainActor in
-            try await model.updateGroupImage(url: "https://example.com/avatar.png", using: appState)
+            try await model.updateGroupImage(
+                draft: draft,
+                using: appState,
+                onProgress: { progressPhases.append($0) }
+            )
         }
         await publisher.waitUntilStarted()
 
         #expect(model.membershipActionInFlight)
+        #expect(progressPhases == [.updating])
+        #expect(appState.activeToast == nil)
 
         let second = Task { @MainActor in
-            try await model.updateGroupImage(url: "https://example.com/avatar.png", using: appState)
+            try await model.updateGroupImage(draft: draft, using: appState)
         }
         await #expect(throws: GroupDetailsActionError.operationInFlight) {
             try await second.value
@@ -133,7 +152,8 @@ struct GroupDetailsArchiveActionTests {
             GroupAvatarPublishProbe.Request(
                 accountRef: "account-1",
                 groupIdHex: groupIdHex,
-                url: "https://example.com/avatar.png"
+                data: draft.data,
+                mediaType: draft.mediaType
             ),
         ])
 
@@ -141,6 +161,88 @@ struct GroupDetailsArchiveActionTests {
         try await first.value
 
         #expect(!model.membershipActionInFlight)
+        #expect(progressPhases == [.updating, .finishing, nil])
+    }
+
+    @Test func encryptedImageUploadClearsLegacyURLOnlyAfterUploadSucceeds() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(
+                groupIdHex: groupIdHex,
+                archived: false,
+                avatarUrl: "https://legacy.example/group.jpg"
+            )
+        )
+        let model = GroupDetailsViewModel()
+        let draft = GroupImageUploadDraft(
+            data: Data([7, 8, 9]),
+            mediaType: "image/jpeg",
+            sourceURL: nil,
+            dim: nil,
+            thumbhash: nil
+        )
+        var operations: [String] = []
+        model.conversation = conversation
+        model.updateGroupImageForTesting = { _, _, _, _ in
+            operations.append("upload")
+            return SendSummaryFfi(published: 1, messageIds: ["upload"])
+        }
+        model.updateGroupAvatarUrlForTesting = { _, _, url in
+            #expect(url == nil)
+            operations.append("clear-url")
+            return SendSummaryFfi(published: 1, messageIds: ["clear"])
+        }
+
+        try await model.updateGroupImage(draft: draft, using: appState)
+
+        #expect(operations == ["upload", "clear-url"])
+    }
+
+    @Test func legacyURLClearRetryDoesNotUploadEncryptedImageAgain() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(
+                groupIdHex: groupIdHex,
+                archived: false,
+                avatarUrl: "https://legacy.example/group.jpg"
+            )
+        )
+        let model = GroupDetailsViewModel()
+        let draft = GroupImageUploadDraft(
+            data: Data([1]),
+            mediaType: "image/jpeg",
+            sourceURL: nil,
+            dim: nil,
+            thumbhash: nil
+        )
+        var uploadCount = 0
+        var clearCount = 0
+        model.conversation = conversation
+        model.updateGroupImageForTesting = { _, _, _, _ in
+            uploadCount += 1
+            return SendSummaryFfi(published: 1, messageIds: ["upload"])
+        }
+        model.updateGroupAvatarUrlForTesting = { _, _, _ in
+            clearCount += 1
+            if clearCount == 1 {
+                throw GroupImageTestError.clearFailed
+            }
+            return SendSummaryFfi(published: 1, messageIds: ["clear"])
+        }
+
+        await #expect(throws: GroupImageTestError.self) {
+            try await model.updateGroupImage(draft: draft, using: appState)
+        }
+        try await model.updateGroupImage(draft: draft, using: appState)
+
+        #expect(uploadCount == 1)
+        #expect(clearCount == 2)
     }
 
     @Test func clearingDescriptionPublishesTheExplicitEmptyStringSentinel() async throws {
@@ -286,6 +388,10 @@ struct GroupDetailsArchiveActionTests {
     }
 }
 
+private enum GroupImageTestError: Error {
+    case clearFailed
+}
+
 @MainActor
 private final class GroupArchivePublishProbe {
     struct Request: Equatable {
@@ -374,15 +480,26 @@ private final class GroupAvatarPublishProbe {
     struct Request: Equatable {
         let accountRef: String
         let groupIdHex: String
-        let url: String?
+        let data: Data
+        let mediaType: String
     }
 
     private(set) var requests: [Request] = []
     private var startWaiters: [CheckedContinuation<Void, Never>] = []
     private var firstCompletion: CheckedContinuation<SendSummaryFfi, Error>?
 
-    func publish(accountRef: String, groupIdHex: String, url: String?) async throws -> SendSummaryFfi {
-        let request = Request(accountRef: accountRef, groupIdHex: groupIdHex, url: url)
+    func publish(
+        accountRef: String,
+        groupIdHex: String,
+        data: Data,
+        mediaType: String
+    ) async throws -> SendSummaryFfi {
+        let request = Request(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            data: data,
+            mediaType: mediaType
+        )
         requests.append(request)
         startWaiters.forEach { $0.resume() }
         startWaiters.removeAll()
@@ -413,7 +530,8 @@ private func archiveTestGroup(
     groupIdHex: String,
     archived: Bool,
     selfMembership: SelfMembershipFfi = .member,
-    description: String = ""
+    description: String = "",
+    avatarUrl: String? = nil
 ) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
         groupIdHex: groupIdHex,
@@ -423,7 +541,7 @@ private func archiveTestGroup(
         admins: [],
         relays: [],
         nostrGroupIdHex: String(repeating: "cd", count: 32),
-        avatarUrl: nil,
+        avatarUrl: avatarUrl,
         avatarDim: nil,
         avatarThumbhash: nil,
         encryptedMedia: AppGroupEncryptedMediaComponentFfi(
