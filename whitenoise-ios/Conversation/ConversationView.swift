@@ -444,9 +444,9 @@ enum ConversationHeaderSecondary: Equatable {
 }
 
 /// What the timeline area shows while it holds no rows. The `connecting` state
-/// distinguishes a runtime warming up after a background resume (a network wait
-/// worth labelling) from a brief steady-state local read, so the content area
-/// reads as "catching up" rather than a contextless spinner.
+/// distinguishes local runtime hydration after a background resume from a brief
+/// steady-state local read. Relay catch-up continues independently after this
+/// state clears.
 enum ConversationEmptyState: Equatable {
     case error
     case connecting

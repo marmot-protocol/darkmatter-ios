@@ -32,11 +32,28 @@ nonisolated enum RecipientIdentifierQuery: Equatable {
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
         return (name: parts[0].lowercased(), domain: parts[1].lowercased())
     }
+
+    /// A validated public-key reference already identifies its recipient; it
+    /// does not need a running Marmot client or a relay profile lookup to
+    /// become selectable. Profile metadata can enrich the row independently.
+    static func resolvedProfileReference(_ reference: String) -> ResolvedRecipient? {
+        guard let memberRef = NostrProfileReference.memberRef(fromReference: reference) else {
+            return nil
+        }
+        let accountIdHex = Hex.normalized32Bytes(memberRef)
+            ?? NostrProfileReference.pubkeyHex(fromBech32: memberRef)
+        guard let accountIdHex else { return nil }
+        return ResolvedRecipient(
+            accountIdHex: accountIdHex,
+            memberRef: memberRef,
+            queriedNip05: nil
+        )
+    }
 }
 
-/// A person an identifier-shaped query resolved to. `memberRef` preserves the
-/// original reference form (an nprofile keeps its relay hints for Marmot);
-/// NIP-05 resolutions submit the resolved pubkey, never the raw address.
+/// A person an identifier-shaped query resolved to. `memberRef` is normalized
+/// to a form the current MarmotKit runtime accepts (npub or canonical hex);
+/// NIP-05 and nprofile resolutions submit the resolved pubkey.
 nonisolated struct ResolvedRecipient: Equatable {
     let accountIdHex: String
     let memberRef: String

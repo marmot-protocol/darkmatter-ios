@@ -21,10 +21,11 @@ nonisolated enum AddMembersPresentation {
     static func memberRef(fromScannedPayload raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        if case .profile(let memberRef) = DeepLink.parse(string: trimmed) {
-            return memberRef
-        }
-        return NostrProfileReference.referenceForResolution(fromReference: trimmed)
+        // MarmotKit 0.9.7 normalizes npub/hex member references but not the
+        // nprofile TLV wrapper. Decode a validated nprofile to canonical hex at
+        // the app boundary so lookup and group creation share one supported
+        // runtime input while still applying relay-hint validation first.
+        return NostrProfileReference.memberRef(from: trimmed)
     }
 
     /// Parses and normalizes a raw member reference. The `normalize` closure

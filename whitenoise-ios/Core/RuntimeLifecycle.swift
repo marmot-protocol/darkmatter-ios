@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 import MarmotKit
 
 /// Runtime handle for one notification action: either the live foreground
@@ -80,21 +81,25 @@ final class RuntimeLifecycle {
 #if DEBUG
     @ObservationIgnored var afterBootstrapRuntimeStartForTesting: (() async -> Void)?
     @ObservationIgnored var afterForegroundRuntimeCreatedForTesting: (() async -> Void)?
-    @ObservationIgnored var beforeForegroundCatchUpForTesting: (() async -> Void)?
 #endif
     /// Observed (like the original AppState stored flag) so the foreground/local
     /// runtime gates that fold it in stay reactive.
     private var isRuntimeSuspending = false
     private(set) var runtimeSuspendedForBackground = false
     /// True while the runtime is being (re)started after a background
-    /// suspension. During this window the account worker is still hydrating and
-    /// running its initial relay catch-up, so live reads (timeline tail, group
-    /// roster) are briefly blocked. Conversation chrome surfaces a "Connecting…"
-    /// status off this flag instead of appearing frozen. MainActor-owned.
+    /// suspension and its account workers are hydrating local state. Marmot
+    /// signals command-readiness before its initial relay sync completes, so
+    /// this clears as soon as the restored client is published. Network catch-up
+    /// has separate task ownership and must not hold the whole UI in a
+    /// "Connecting…" state. MainActor-owned.
     private(set) var isRuntimeWarmingUp = false
     private(set) var runtimeGeneration = 0
 
     @ObservationIgnored private weak var appState: AppState?
+    private static let foregroundResumeLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "foreground-resume"
+    )
 
     init(
         client: MarmotClient,
@@ -341,17 +346,6 @@ final class RuntimeLifecycle {
         bootstrapTask = nil
     }
 
-    // MARK: - Foreground catch-up
-
-    /// Foreground relay catch-up. The catch-up gate, in-flight flag, and the
-    /// actual `catchUpAccounts()` FFI call live in `NotificationCoordinator`
-    /// (master extracted that as part of #401); RuntimeLifecycle only sequences
-    /// it from the resume path and delegates back through `AppState` so the
-    /// catch-up state is not duplicated here.
-    func catchUpAfterForegroundActivation() async {
-        await appState?.catchUpAfterForegroundActivation()
-    }
-
     // MARK: - Suspend / resume
 
     func setAppSceneActive(_ active: Bool) {
@@ -451,10 +445,15 @@ final class RuntimeLifecycle {
     }
 
     private func resumeAfterForegroundActivation(activationID: UUID) async {
+        let resumeStartedAt = ContinuousClock.now
+        let suspensionWaitStartedAt = ContinuousClock.now
         await waitForRuntimeSuspensionToFinish()
+        let suspensionWaitMilliseconds = Self.elapsedMilliseconds(since: suspensionWaitStartedAt)
         guard phaseOwnsLiveRuntime, ownsForegroundActivation(id: activationID) else { return }
 
         let isRestartingAfterSuspension = runtimeSuspendedForBackground
+        var constructionMilliseconds = 0.0
+        var startMilliseconds = 0.0
         if isRestartingAfterSuspension {
             isRuntimeWarmingUp = true
         }
@@ -468,7 +467,9 @@ final class RuntimeLifecycle {
 
         if isRestartingAfterSuspension {
             do {
+                let constructionStartedAt = ContinuousClock.now
                 let restored = try await makeRuntime()
+                constructionMilliseconds = Self.elapsedMilliseconds(since: constructionStartedAt)
 #if DEBUG
                 if let afterForegroundRuntimeCreatedForTesting {
                     await afterForegroundRuntimeCreatedForTesting()
@@ -479,7 +480,9 @@ final class RuntimeLifecycle {
                     return
                 }
                 do {
+                    let startStartedAt = ContinuousClock.now
                     try await restored.startRuntime()
+                    startMilliseconds = Self.elapsedMilliseconds(since: startStartedAt)
                 } catch {
                     await restored.marmot.shutdown()
                     if ownsForegroundActivation(id: activationID) {
@@ -495,6 +498,10 @@ final class RuntimeLifecycle {
                 }
                 client = restored
                 noteRuntimeForegroundReadyAfterSuspension()
+                // `startRuntime()` returns after local hydration and account
+                // command-readiness. Marmot's initial relay sync continues
+                // asynchronously, so local conversations can be shown now.
+                isRuntimeWarmingUp = false
                 // The notification subscription needs an active account, so it
                 // only belongs to `.ready`. An `.onboarding` resume rebuilds the
                 // runtime (releasing the suspended App Group SQLite lock) but
@@ -517,21 +524,34 @@ final class RuntimeLifecycle {
         }
 
         guard ownsForegroundActivation(id: activationID) else { return }
+        Self.foregroundResumeLog.info(
+            """
+            local_ready restarted=\(isRestartingAfterSuspension, privacy: .public) \
+            wait_for_suspension_ms=\(suspensionWaitMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+            runtime_construction_ms=\(constructionMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+            runtime_start_ms=\(startMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+            total_ms=\(Self.elapsedMilliseconds(since: resumeStartedAt), format: .fixed(precision: 0), privacy: .public)
+            """
+        )
         // The remaining maintenance is account-scoped and no-ops safely in
-        // `.onboarding`: `catchUpAfterForegroundActivation` is `.ready`-gated by
+        // `.onboarding`: foreground catch-up is `.ready`-gated by
         // `ForegroundNotificationSyncPolicy`, and the push-registration / profile
         // queue paths find no accounts to act on while onboarding.
-#if DEBUG
-        if let beforeForegroundCatchUpForTesting {
-            await beforeForegroundCatchUpForTesting()
-        }
-#endif
-        await catchUpAfterForegroundActivation()
-        guard ownsForegroundActivation(id: activationID) else { return }
+        //
+        // Reuse the coordinator-owned connectivity task. Suspension cancels and
+        // drains this task before releasing the client, while a stale/inactive
+        // activation is rejected by the coordinator's foreground gate.
+        appState?.scheduleConnectivityCatchUp()
         appState?.scheduleNativePushRegistrationIfEnabled()
         appState?.resumeProfileFetchQueueIfNeeded()
         appState?.scheduleAccountUnreadSummaryRefresh()
         appState?.startRetentionSweeps()
+    }
+
+    private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = start.duration(to: ContinuousClock.now).components
+        return Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
     }
 
     private func ownsForegroundActivation(id: UUID) -> Bool {
@@ -660,6 +680,19 @@ final class RuntimeLifecycle {
         let id = UUID()
         foregroundMutationLeaseIDs.insert(id)
         return ForegroundRuntimeMutationLease(id: id, client: client)
+    }
+
+    /// Joins any foreground runtime rebuild before leasing it for an explicit
+    /// user action. A tap can arrive just after the scene becomes active but
+    /// before the asynchronous resume task has restored the durable runtime.
+    /// Claiming foreground activation here is safe because this path is only
+    /// called from a visible, user-initiated identity import.
+    func beginUserInitiatedForegroundRuntimeMutation() async throws -> ForegroundRuntimeMutationLease {
+        if let lease = try? beginForegroundRuntimeMutation() {
+            return lease
+        }
+        await startForegroundActivation().value
+        return try beginForegroundRuntimeMutation()
     }
 
     func endForegroundRuntimeMutation(_ lease: ForegroundRuntimeMutationLease) {

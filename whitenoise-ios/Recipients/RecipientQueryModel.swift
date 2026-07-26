@@ -4,8 +4,8 @@ import MarmotKit
 /// Search-field state for one recipient screen: the query text plus the
 /// identifier-resolution state machine. Each screen (New Message, New Group,
 /// Add Members) owns its own instance so queries don't leak between steps.
-/// Marmot reference decoding and NIP-05 lookups run off the MainActor; NIP-05
-/// lookups are debounced because each one is a network fetch.
+/// Public-key references resolve locally after checksum/shape validation;
+/// NIP-05 lookups are debounced because each one is a network fetch.
 @MainActor
 @Observable
 final class RecipientQueryModel {
@@ -32,6 +32,7 @@ final class RecipientQueryModel {
 
     func clear() {
         resolveTask?.cancel()
+        resolveTask = nil
         resolveGeneration += 1
         text = ""
         resolution = .idle
@@ -39,20 +40,19 @@ final class RecipientQueryModel {
 
     func queryChanged(using appState: AppState) {
         resolveTask?.cancel()
+        resolveTask = nil
         resolveGeneration += 1
         let generation = resolveGeneration
         switch RecipientIdentifierQuery.classify(text) {
         case .none:
             resolution = .idle
         case .profileReference(let reference):
-            resolution = .resolving
-            resolveTask = Task { [weak self] in
-                await self?.resolveProfileReference(
-                    reference,
-                    generation: generation,
-                    using: appState
-                )
+            guard let resolved = RecipientIdentifierQuery.resolvedProfileReference(reference) else {
+                resolution = .invalid
+                return
             }
+            resolution = .resolved(resolved)
+            warmProfile(resolved.accountIdHex, using: appState)
         case .nip05(let name, let domain):
             resolution = .resolving
             resolveTask = Task { [weak self] in
@@ -64,32 +64,6 @@ final class RecipientQueryModel {
                 )
             }
         }
-    }
-
-    private func resolveProfileReference(
-        _ reference: String,
-        generation: Int,
-        using appState: AppState
-    ) async {
-        guard let client = try? appState.currentMarmotClient() else {
-            adopt(.failed, generation: generation)
-            return
-        }
-        let accountIdHex = await client.accountIdHex(reference: reference)
-        guard !Task.isCancelled else { return }
-        guard let accountIdHex else {
-            adopt(.invalid, generation: generation)
-            return
-        }
-        warmProfile(accountIdHex, using: appState)
-        adopt(
-            .resolved(ResolvedRecipient(
-                accountIdHex: accountIdHex,
-                memberRef: reference,
-                queriedNip05: nil
-            )),
-            generation: generation
-        )
     }
 
     private func resolveNip05(

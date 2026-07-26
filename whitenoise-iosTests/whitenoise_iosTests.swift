@@ -545,6 +545,10 @@ struct AppStateBootstrapTests {
     @Test func onboardingRuntimeSuspendsForBackgroundAndResumesForForeground() async throws {
         let appState = try testAppState()
         await appState.bootstrap()
+        var catchUpAttempts = 0
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
+            catchUpAttempts += 1
+        }
 
         #expect(appState.phase == .onboarding)
         #expect(appState.accounts.isEmpty)
@@ -575,6 +579,10 @@ struct AppStateBootstrapTests {
         #expect(appState.client != nil)
         #expect(!appState.marmot.isStopping())
         #expect(!appState.notificationSubscriptionActive)
+        #expect(!appState.isRuntimeWarmingUp)
+        await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
+        #expect(catchUpAttempts == 0)
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
 
         await appState.startRuntimeSuspension().value
         resetPersistedActiveAccountRef()
@@ -677,33 +685,100 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
-    /// #511: the "Connecting…" warm-up flag covers runtime restart plus the
-    /// initial foreground catch-up. It must not clear in the gap between
-    /// `startRuntime()` returning and `catchUpAfterForegroundActivation()`.
-    @Test func runtimeWarmupStaysActiveUntilForegroundCatchUpStarts() async throws {
+    /// Marmot signals command-readiness after local hydration and runs its
+    /// initial relay sync asynchronously. Foreground catch-up must still run,
+    /// but it cannot hold the whole conversation UI in "Connecting…".
+    @Test func runtimeWarmupClearsBeforeForegroundCatchUpCompletes() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
 
         await appState.startRuntimeSuspension().value
 
         let checkpoint = AsyncTestCheckpoint()
-        appState.runtimeLifecycle.beforeForegroundCatchUpForTesting = {
+        var catchUpAttempts = 0
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
+            catchUpAttempts += 1
             await checkpoint.pause()
         }
 
         let activation = appState.startForegroundActivation()
         await checkpoint.waitUntilPaused()
+        await activation.value
 
-        #expect(appState.isRuntimeWarmingUp)
+        #expect(!appState.isRuntimeWarmingUp)
+        #expect(!appState.runtimeSuspendedForBackground)
+        #expect(appState.client != nil)
+        #expect(catchUpAttempts == 1)
+        #expect(appState.notificationCoordinator.hasConnectivityCatchUpTaskForTesting)
 
         await checkpoint.release()
-        await activation.value
-        appState.runtimeLifecycle.beforeForegroundCatchUpForTesting = nil
+        await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
 
         #expect(!appState.isRuntimeWarmingUp)
         #expect(!appState.runtimeSuspendedForBackground)
 
         await stopReadyRuntime(appState)
+    }
+
+    @Test func foregroundCatchUpFailureDoesNotFailOrReblockReadyRuntime() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        await appState.startRuntimeSuspension().value
+
+        var catchUpAttempts = 0
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
+            catchUpAttempts += 1
+            throw ForegroundRuntimeMutationError.runtimeUnavailable
+        }
+
+        await appState.startForegroundActivation().value
+        await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
+
+        #expect(catchUpAttempts == 1)
+        #expect(appState.phase == .ready)
+        #expect(!appState.isRuntimeWarmingUp)
+        #expect(!appState.runtimeSuspendedForBackground)
+        #expect(appState.client != nil)
+
+        await stopReadyRuntime(appState)
+    }
+
+    @Test func staleForegroundActivationDoesNotScheduleCatchUpAfterBackgroundWins() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+
+        await appState.startRuntimeSuspension().value
+
+        let checkpoint = AsyncTestCheckpoint()
+        appState.runtimeLifecycle.afterForegroundRuntimeCreatedForTesting = {
+            await checkpoint.pause()
+        }
+        var catchUpAttempts = 0
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
+            catchUpAttempts += 1
+        }
+
+        let activation = appState.startForegroundActivation()
+        await checkpoint.waitUntilPaused()
+        let suspension = appState.startRuntimeSuspension()
+
+        await checkpoint.release()
+        await activation.value
+        await suspension.value
+        await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
+        appState.runtimeLifecycle.afterForegroundRuntimeCreatedForTesting = nil
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
+
+        #expect(catchUpAttempts == 0)
+        #expect(!appState.isAppSceneActive)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(appState.client == nil)
+        #expect(!appState.isRuntimeWarmingUp)
+
+        resetPersistedActiveAccountRef()
     }
 
     /// #445: if the app is backgrounded while `performBootstrap` is still in
@@ -1121,13 +1196,15 @@ struct AppStateBootstrapTests {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
         let checkpoint = AsyncTestCheckpoint()
-        let liveClient = try #require(appState.client)
 
-        appState.notificationCoordinator.beforeForegroundCatchUpForTesting = {
+        await appState.startRuntimeSuspension().value
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
             await checkpoint.pause()
         }
-        appState.scheduleConnectivityCatchUp()
+        let activation = appState.startForegroundActivation()
         await checkpoint.waitUntilPaused()
+        await activation.value
+        let liveClient = try #require(appState.client)
 
         let suspension = appState.startRuntimeSuspension()
         var suspensionCompleted = false
@@ -1144,7 +1221,7 @@ struct AppStateBootstrapTests {
         await checkpoint.release()
         await suspension.value
         await observer.value
-        appState.notificationCoordinator.beforeForegroundCatchUpForTesting = nil
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
 
         #expect(suspensionCompleted)
         #expect(appState.client == nil)
@@ -7213,6 +7290,7 @@ struct GroupManagementPresentationTests {
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
         let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
         let nprofile = "nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8gpp4mhxue69uhhytnc9e3k7mgpz4mhxue69uhkg6nzv9ejuumpv34kytnrdaksjlyr9p"
+        let nprofileHex = "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
 
         #expect(
             AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(npub)") == npub
@@ -7230,18 +7308,19 @@ struct GroupManagementPresentationTests {
             AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(npub)") == npub
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: nprofile) == nprofile
+            AddMembersPresentation.memberRef(fromScannedPayload: nprofile) == nprofileHex
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(nprofile)") == nprofile
+            AddMembersPresentation.memberRef(fromScannedPayload: "nostr:\(nprofile)") == nprofileHex
         )
         #expect(
-            AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(nprofile)") == nprofile
+            AddMembersPresentation.memberRef(fromScannedPayload: "\(DeepLink.scheme)://profile/\(nprofile)") == nprofileHex
         )
         #expect(
             DeepLink.parse(string: "nostr:\(nprofile)") == .profile(npub: nprofile)
         )
-        #expect(NostrProfileReference.memberRef(from: nprofile) == "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d")
+        #expect(NostrProfileReference.memberRef(from: nprofile) == nprofileHex)
+        #expect(ProfileReferenceResolution.referenceForResolution(nprofile) == nprofileHex)
         #expect(
             NostrProfileReference.memberRef(from: "3BF0C63FCB93463407AF97A5E5EE64FA883D107EF9E558472C4EB9AAAEFA459D") == "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d"
         )
