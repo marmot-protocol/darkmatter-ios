@@ -1,7 +1,7 @@
-mdk-sha: 1d6b9f1d
+mdk-sha: a4374b78
 mdk-branch: HEAD
-mdk-tag: marmotkit-v0.9.6
-built-at: 2026-07-26T10:22:17Z
+mdk-tag: marmotkit-v0.9.7
+built-at: 2026-07-26T16:21:33Z
 uniffi-version: 0.28.3
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim

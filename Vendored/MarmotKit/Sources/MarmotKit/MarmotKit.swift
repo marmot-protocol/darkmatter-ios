@@ -2322,8 +2322,9 @@ public protocol MarmotProtocol : AnyObject {
      * same identity can be signed back in from the account picker with its
      * groups, message history, and drafts intact. The account ref stays valid
      * after this returns. The returned `SignOutOutcomeFfi` surfaces per-relay
-     * KeyPackage cleanup failures so the app can show a "will retry on next
-     * sign-in" hint (mdk#477).
+     * KeyPackage cleanup failures. These are the final best-effort results for
+     * this call; the runtime does not persist a remote-deletion retry queue
+     * (mdk#477).
      */
     func signOut(accountRef: String, deleteKeyPackages: Bool) async throws  -> SignOutOutcomeFfi
 
@@ -4480,8 +4481,9 @@ open func signInAccount(accountRef: String)async throws  -> AccountSummaryFfi {
      * same identity can be signed back in from the account picker with its
      * groups, message history, and drafts intact. The account ref stays valid
      * after this returns. The returned `SignOutOutcomeFfi` surfaces per-relay
-     * KeyPackage cleanup failures so the app can show a "will retry on next
-     * sign-in" hint (mdk#477).
+     * KeyPackage cleanup failures. These are the final best-effort results for
+     * this call; the runtime does not persist a remote-deletion retry queue
+     * (mdk#477).
      */
 open func signOut(accountRef: String, deleteKeyPackages: Bool)async throws  -> SignOutOutcomeFfi {
     return
@@ -12969,7 +12971,7 @@ public func FfiConverterTypeSendSummaryFfi_lower(_ value: SendSummaryFfi) -> Rus
  * Structured result of the non-destructive `signOut`. The account's local
  * state is kept on device; only the relay-published KeyPackages are cleaned
  * up (when requested), so the app can render the same per-relay
- * partial-failure sheet as a wipe and show a "will retry on next sign-in" hint.
+ * partial-failure sheet as a wipe. Failures are not durably queued for retry.
  */
 public struct SignOutOutcomeFfi {
     /**
@@ -20239,7 +20241,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_sign_in_account() != 63258) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_sign_out() != 46293) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_sign_out() != 9623) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_sign_out_and_wipe() != 44173) {
