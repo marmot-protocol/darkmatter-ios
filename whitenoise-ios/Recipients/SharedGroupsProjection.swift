@@ -8,6 +8,7 @@ nonisolated enum SharedGroupsProjection {
         let groupIdHex: String
         let title: String
         let avatarUrl: String?
+        let imageHashHex: String?
         let memberCount: Int
         let isDirectMessage: Bool
 
@@ -36,6 +37,7 @@ nonisolated enum SharedGroupsProjection {
                     groupIdHex: snapshot.groupIdHex,
                     title: snapshot.title,
                     avatarUrl: snapshot.avatarUrl,
+                    imageHashHex: snapshot.imageHashHex,
                     memberCount: snapshot.memberIdsHex.count,
                     isDirectMessage: snapshot.sanitizedName == nil
                         && snapshot.memberIdsHex.count == 2
@@ -70,6 +72,7 @@ nonisolated enum SharedGroupsProjection {
                     groupIdHex: snapshot.groupIdHex,
                     title: snapshot.title,
                     avatarUrl: snapshot.avatarUrl,
+                    imageHashHex: snapshot.imageHashHex,
                     memberCount: snapshot.memberIdsHex.count,
                     isDirectMessage: false
                 )

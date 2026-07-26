@@ -1,29 +1,60 @@
 import SwiftUI
 import MarmotKit
+import PhotosUI
+import UniformTypeIdentifiers
+import UIKit
 
 /// Edit the Nostr kind:0 profile for the currently active account. Marmot
 /// chooses the account relay lists; iOS only supplies the edited metadata.
 struct ProfileEditView: View {
     @Environment(AppState.self) private var appState
     @State private var model = ProfileEditViewModel()
+    @State private var showImagePicker = false
+    @State private var showMoreFields = false
 
     var body: some View {
         @Bindable var model = model
         return Form {
             Section {
                 if let active = appState.activeAccount {
-                    AvatarBubble(
-                        seed: active.accountIdHex,
-                        title: model.displayName.isEmpty
-                            ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
-                            : model.displayName,
-                        pictureURL: ContentSanitizer.imageURL(model.picture)
-                    )
-                    .frame(width: 72, height: 72)
+                    Button {
+                        showImagePicker = true
+                    } label: {
+                        VStack(spacing: 7) {
+                            AvatarBubble(
+                                seed: active.accountIdHex,
+                                title: model.displayName.isEmpty
+                                    ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
+                                    : model.displayName,
+                                pictureURL: ContentSanitizer.imageURL(model.picture)
+                            )
+                            .frame(width: 80, height: 80)
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "camera.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(7)
+                                    .background(Color.accentColor, in: Circle())
+                                    .overlay {
+                                        Circle().strokeBorder(Color(.systemBackground), lineWidth: 2)
+                                    }
+                            }
+
+                            Text("Tap to change profile image")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
+                    .disabled(
+                        model.isPublishing
+                            || model.isUploadingPicture
+                            || model.loadedAccountIdHex != active.accountIdHex
+                    )
                 }
             }
 
@@ -31,15 +62,6 @@ struct ProfileEditView: View {
                 TextField("Display name", text: $model.displayName)
                 TextField("About", text: $model.about, axis: .vertical)
                     .lineLimit(2...5)
-                TextField("Picture URL", text: $model.picture)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                if let invalidPictureMessage = model.invalidPictureMessage {
-                    Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
                 TextField("NIP-05 (name@domain)", text: $model.nip05)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -47,6 +69,31 @@ struct ProfileEditView: View {
                     Label(invalidNip05Message, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)
                         .foregroundStyle(.red)
+                }
+
+                DisclosureGroup(isExpanded: $showMoreFields) {
+                    TextField("Profile Image URL", text: $model.picture)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    if let invalidPictureMessage = model.invalidPictureMessage {
+                        Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+
+                    TextField("Banner Image URL", text: $model.banner)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                    if let invalidBannerMessage = model.invalidBannerMessage {
+                        Label(invalidBannerMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } label: {
+                    Text("More")
+                        .foregroundStyle(Color.accentColor)
                 }
             }
 
@@ -80,12 +127,28 @@ struct ProfileEditView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: appState.activeAccount?.accountIdHex) { await model.loadExisting(using: appState) }
+        .sheet(isPresented: $showImagePicker) {
+            if let active = appState.activeAccount {
+                ProfileImagePickerSheet(
+                    accountIdHex: active.accountIdHex,
+                    title: model.displayName.isEmpty
+                        ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
+                        : model.displayName,
+                    currentURL: ContentSanitizer.imageURL(model.picture),
+                    onSave: ProfileImageSaveSubmitter { draft in
+                        try await model.updatePicture(with: draft, using: appState)
+                    }
+                )
+                .appAppearance()
+            }
+        }
     }
 
     /// Stays in the view because it also reads `appState.activeAccountRef`; the
     /// draft validation it consults lives on the model's `currentDraft`.
     private var saveDisabled: Bool {
         model.isPublishing
+            || model.isUploadingPicture
             || appState.activeAccountRef == nil
             || model.loadedAccountIdHex != appState.activeAccount?.accountIdHex
             || model.currentDraft.validationError != nil
@@ -137,6 +200,7 @@ nonisolated struct ProfileEditFormFields: Equatable {
     var displayName: String
     var about: String
     var picture: String
+    var banner: String
     var nip05: String
     var lud16: String
 
@@ -145,6 +209,7 @@ nonisolated struct ProfileEditFormFields: Equatable {
         displayName = profile.displayName ?? ""
         about = profile.about ?? ""
         picture = profile.picture ?? ""
+        banner = profile.banner ?? ""
         nip05 = profile.nip05 ?? ""
         lud16 = profile.lud16 ?? ""
     }
@@ -152,6 +217,7 @@ nonisolated struct ProfileEditFormFields: Equatable {
 
 nonisolated enum ProfileEditMetadataField: Equatable {
     case picture
+    case banner
     case nip05
 }
 
@@ -160,14 +226,36 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
     var displayName: String
     var about: String
     var picture: String
+    var banner: String
     var nip05: String
     // lud16 is not editable on this screen. It is carried forward verbatim from
     // the existing profile so publishing a kind:0 replacement never blanks it.
     var preservedLud16: String?
 
+    init(
+        name: String?,
+        displayName: String,
+        about: String,
+        picture: String,
+        banner: String = "",
+        nip05: String,
+        preservedLud16: String?
+    ) {
+        self.name = name
+        self.displayName = displayName
+        self.about = about
+        self.picture = picture
+        self.banner = banner
+        self.nip05 = nip05
+        self.preservedLud16 = preservedLud16
+    }
+
     var validationError: ProfileEditMetadataField? {
         if !trimmedPicture.isEmpty, normalizedPictureURL == nil {
             return .picture
+        }
+        if !trimmedBanner.isEmpty, normalizedBannerURL == nil {
+            return .banner
         }
         if !trimmedNip05.isEmpty, normalizedNip05 == nil {
             return .nip05
@@ -184,6 +272,7 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
             displayName: displayName,
             about: ContentSanitizer.multilineText(about),
             picture: normalizedPictureURL,
+            banner: normalizedBannerURL,
             nip05: normalizedNip05,
             lud16: preservedLud16
         )
@@ -197,6 +286,10 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
         nip05.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var trimmedBanner: String {
+        banner.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var normalizedPictureURL: String? {
         guard !trimmedPicture.isEmpty else { return nil }
         return ContentSanitizer.imageURL(trimmedPicture)?.absoluteString
@@ -205,6 +298,11 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
     private var normalizedNip05: String? {
         ContentSanitizer.profileAddress(trimmedNip05)
     }
+
+    private var normalizedBannerURL: String? {
+        guard !trimmedBanner.isEmpty else { return nil }
+        return ContentSanitizer.imageURL(trimmedBanner)?.absoluteString
+    }
 }
 
 nonisolated struct ProfileEditMetadata: Equatable {
@@ -212,6 +310,7 @@ nonisolated struct ProfileEditMetadata: Equatable {
     var displayName: String?
     var about: String?
     var picture: String?
+    var banner: String?
     var nip05: String?
     var lud16: String?
 
@@ -221,8 +320,405 @@ nonisolated struct ProfileEditMetadata: Equatable {
             displayName: displayName,
             about: about,
             picture: picture,
+            banner: banner,
             nip05: nip05,
             lud16: lud16
         )
+    }
+}
+
+enum ProfileImageProgressPhase: Equatable {
+    case preparing
+    case uploading
+
+    var label: String {
+        switch self {
+        case .preparing:
+            L10n.string("Preparing image…")
+        case .uploading:
+            L10n.string("Uploading profile image…")
+        }
+    }
+}
+
+/// Keeps the async save callback out of the SwiftUI value type. This mirrors
+/// the group-image submitter and avoids the debug-build closure marshalling
+/// issue that previously affected async view callbacks with image data.
+@MainActor
+final class ProfileImageSaveSubmitter {
+    private let run: (GroupImageUploadDraft?) async throws -> Void
+
+    init(_ run: @escaping (GroupImageUploadDraft?) async throws -> Void) {
+        self.run = run
+    }
+
+    func save(_ draft: GroupImageUploadDraft?) async throws {
+        try await run(draft)
+    }
+}
+
+struct ProfileImagePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let accountIdHex: String
+    let title: String
+    let currentURL: URL?
+    let onSave: ProfileImageSaveSubmitter
+    var searchClient = DuckDuckGoImageSearchClient()
+
+    @State private var draft: GroupImageUploadDraft?
+    @State private var searchQuery = ""
+    @State private var searchResults: [GroupImageSearchResult] = []
+    @State private var searchError: String?
+    @State private var saveError: String?
+    @State private var isSearching = false
+    @State private var isPreparing = false
+    @State private var isUploading = false
+    @State private var showPhotoPicker = false
+    @State private var showFileImporter = false
+    @State private var progressPhase: ProfileImageProgressPhase?
+
+    private let resultColumns = [
+        GridItem(.adaptive(minimum: 108), spacing: 12)
+    ]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                previewSection
+                deviceSection
+                searchSection
+
+                if let saveError {
+                    Section {
+                        Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Profile image")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isUploading)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Use Image") {
+                        Task { await save(draft) }
+                    }
+                    .disabled(draft == nil || isBusy)
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .interactiveDismissDisabled(isUploading)
+        .sheet(isPresented: $showPhotoPicker) {
+            PhotoLibraryPickerView(
+                selectionLimit: 1,
+                filter: .images,
+                onSelection: { selections in
+                    guard let selection = selections.first else { return }
+                    preparePhotoSelection(selection)
+                },
+                onError: { error in
+                    saveError = error.localizedDescription
+                },
+                onDismiss: {
+                    showPhotoPicker = false
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false,
+            onCompletion: prepareFileSelection
+        )
+    }
+
+    private var previewSection: some View {
+        Section {
+            VStack(spacing: 8) {
+                AvatarBubble(
+                    seed: accountIdHex,
+                    title: title,
+                    pictureURL: draft == nil ? currentURL : nil,
+                    pictureImage: draft?.thumbnail
+                )
+                .frame(width: 88, height: 88)
+                .overlay {
+                    if progressPhase != nil {
+                        ZStack {
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 42, height: 42)
+                            ProgressView()
+                        }
+                        .transition(.opacity.combined(with: .scale))
+                    }
+                }
+
+                ZStack {
+                    Text(ProfileImageProgressPhase.preparing.label)
+                        .hidden()
+                        .accessibilityHidden(true)
+                    Text(ProfileImageProgressPhase.uploading.label)
+                        .hidden()
+                        .accessibilityHidden(true)
+
+                    if let progressPhase {
+                        Text(progressPhase.label)
+                            .transition(.opacity)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(progressPhase == nil)
+            }
+            .animation(.easeInOut(duration: 0.2), value: progressPhase)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    private var deviceSection: some View {
+        Section("Choose from your device") {
+            Button {
+                showPhotoPicker = true
+            } label: {
+                Label("Photo Library", systemImage: "photo.on.rectangle")
+            }
+            .disabled(isBusy)
+
+            Button {
+                showFileImporter = true
+            } label: {
+                Label("Files", systemImage: "folder")
+            }
+            .disabled(isBusy)
+
+            if currentURL != nil {
+                Button(role: .destructive) {
+                    Task { await save(nil) }
+                } label: {
+                    Label("Remove image", systemImage: "trash")
+                }
+                .disabled(isBusy)
+            }
+        }
+    }
+
+    private var searchSection: some View {
+        Section("Search the web") {
+            HStack(spacing: 8) {
+                TextField("Image search", text: $searchQuery)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.search)
+                    .disabled(isBusy)
+                    .onSubmit { startSearch() }
+
+                Button {
+                    startSearch()
+                } label: {
+                    if isSearching || isPreparing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(searchButtonDisabled)
+                .accessibilityLabel("Search the web")
+            }
+
+            Label(
+                L10n.string("Web search sends your query and IP address to DuckDuckGo and image hosts."),
+                systemImage: "lock.shield"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if let searchError {
+                Label(searchError, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            if !searchResults.isEmpty {
+                LazyVGrid(columns: resultColumns, spacing: 12) {
+                    ForEach(searchResults) { result in
+                        Button {
+                            prepareSearchResult(result)
+                        } label: {
+                            GroupImageResultCell(
+                                result: result,
+                                isSelected: result.imageURL.absoluteString == draft?.sourceURL
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isBusy)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private var isBusy: Bool {
+        isSearching || isPreparing || isUploading
+    }
+
+    private var searchButtonDisabled: Bool {
+        GroupImageURLSheet.preparedSearchQuery(
+            searchQuery,
+            isSearching: isSearching,
+            isSaving: isPreparing || isUploading
+        ) == nil
+    }
+
+    private func startSearch() {
+        guard let query = GroupImageURLSheet.preparedSearchQuery(
+            searchQuery,
+            isSearching: isSearching,
+            isSaving: isPreparing || isUploading
+        ) else { return }
+        isSearching = true
+        searchError = nil
+        Task { await search(query: query) }
+    }
+
+    private func search(query: String) async {
+        defer { isSearching = false }
+        do {
+            let results = try await searchClient.search(query)
+            guard GroupImageURLSheet.shouldApplySearchCompletion(
+                issuedQuery: query,
+                currentQuery: searchQuery,
+                isCancelled: Task.isCancelled
+            ) else { return }
+            searchResults = results
+            if results.isEmpty {
+                searchError = L10n.string("No usable HTTPS images found.")
+            }
+        } catch {
+            guard GroupImageURLSheet.shouldApplySearchCompletion(
+                issuedQuery: query,
+                currentQuery: searchQuery,
+                isCancelled: Task.isCancelled
+            ) else { return }
+            searchError = error.localizedDescription
+        }
+    }
+
+    private func preparePhotoSelection(_ selection: PhotoLibrarySelection) {
+        beginPreparing()
+        Task {
+            await prepare(
+                data: selection.data,
+                fileName: selection.fileName,
+                typeIdentifier: selection.typeIdentifier,
+                sourceURL: nil
+            )
+        }
+    }
+
+    private func prepareFileSelection(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            saveError = error.localizedDescription
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            beginPreparing()
+            let isSecurityScoped = url.startAccessingSecurityScopedResource()
+            Task {
+                defer {
+                    if isSecurityScoped {
+                        url.stopAccessingSecurityScopedResource()
+                    }
+                }
+                do {
+                    draft = try await GroupImageDraftProcessor.prepare(fileURL: url)
+                    Haptics.selection()
+                } catch {
+                    saveError = error.localizedDescription
+                    Haptics.error()
+                }
+                finishPreparing()
+            }
+        }
+    }
+
+    private func prepareSearchResult(_ result: GroupImageSearchResult) {
+        beginPreparing()
+        Task {
+            do {
+                let data = try await RemoteImageFetch.imageData(for: result.imageURL)
+                await prepare(
+                    data: data,
+                    fileName: result.imageURL.lastPathComponent,
+                    typeIdentifier: nil,
+                    sourceURL: result.imageURL
+                )
+            } catch {
+                saveError = error.localizedDescription
+                Haptics.error()
+                finishPreparing()
+            }
+        }
+    }
+
+    private func prepare(
+        data: Data,
+        fileName: String?,
+        typeIdentifier: String?,
+        sourceURL: URL?
+    ) async {
+        do {
+            draft = try await GroupImageDraftProcessor.prepare(
+                data: data,
+                fileName: fileName,
+                typeIdentifier: typeIdentifier,
+                sourceURL: sourceURL
+            )
+            Haptics.selection()
+        } catch {
+            saveError = error.localizedDescription
+            Haptics.error()
+        }
+        finishPreparing()
+    }
+
+    private func beginPreparing() {
+        isPreparing = true
+        progressPhase = .preparing
+        saveError = nil
+    }
+
+    private func finishPreparing() {
+        isPreparing = false
+        progressPhase = nil
+    }
+
+    private func save(_ draft: GroupImageUploadDraft?) async {
+        isUploading = true
+        progressPhase = draft == nil ? nil : .uploading
+        saveError = nil
+        defer {
+            isUploading = false
+            progressPhase = nil
+        }
+        do {
+            try await onSave.save(draft)
+            dismiss()
+        } catch {
+            saveError = error.localizedDescription
+            Haptics.error()
+        }
     }
 }

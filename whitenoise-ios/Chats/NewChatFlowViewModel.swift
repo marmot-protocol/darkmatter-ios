@@ -23,6 +23,9 @@ final class NewChatFlowViewModel {
     @ObservationIgnored var createGroupForTesting: (
         @MainActor (String, String, [String], String?) async throws -> String
     )?
+    @ObservationIgnored var createGroupWithInitialImageForTesting: (
+        @MainActor (String, String, [String], String?, InitialGroupImageFfi) async throws -> String
+    )?
 #endif
 
     var isBusy: Bool { starter.isCreating || isCreatingGroup }
@@ -147,6 +150,7 @@ final class NewChatFlowViewModel {
         name: String,
         description: String,
         retentionSeconds: UInt64,
+        image: GroupImageUploadDraft? = nil,
         using appState: AppState,
         onOpen: (String) -> Void
     ) async {
@@ -164,7 +168,15 @@ final class NewChatFlowViewModel {
             let normalizedDescription = NewGroupPresentation.normalizedDescription(description)
             let groupIdHex: String
 #if DEBUG
-            if let createGroupForTesting {
+            if let image, let createGroupWithInitialImageForTesting {
+                groupIdHex = try await createGroupWithInitialImageForTesting(
+                    accountRef,
+                    normalizedName,
+                    groupSelection.memberRefs,
+                    normalizedDescription,
+                    image.initialImage
+                )
+            } else if image == nil, let createGroupForTesting {
                 groupIdHex = try await createGroupForTesting(
                     accountRef,
                     normalizedName,
@@ -173,20 +185,22 @@ final class NewChatFlowViewModel {
                 )
             } else {
                 let client = try appState.currentMarmotClient()
-                groupIdHex = try await client.createGroup(
+                groupIdHex = try await client.createGroupWithInitialImage(
                     accountRef: accountRef,
                     name: normalizedName,
                     memberRefs: groupSelection.memberRefs,
-                    description: normalizedDescription
+                    description: normalizedDescription,
+                    initialImage: image?.initialImage
                 )
             }
 #else
             let client = try appState.currentMarmotClient()
-            groupIdHex = try await client.createGroup(
+            groupIdHex = try await client.createGroupWithInitialImage(
                 accountRef: accountRef,
                 name: normalizedName,
                 memberRefs: groupSelection.memberRefs,
-                description: normalizedDescription
+                description: normalizedDescription,
+                initialImage: image?.initialImage
             )
 #endif
             if retentionSeconds > 0 {

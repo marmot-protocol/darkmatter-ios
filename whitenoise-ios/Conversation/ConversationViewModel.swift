@@ -1615,8 +1615,11 @@ final class ConversationViewModel {
             contentTokens: r.message.contentTokens,
             kind: r.message.kind,
             tags: r.message.tags,
+            sourceEpoch: r.message.sourceEpoch,
+            retentionSeconds: r.message.retentionSeconds,
+            retentionExpiresAt: r.message.retentionExpiresAt,
             recordedAt: r.message.recordedAt > 0 ? r.message.recordedAt : now,
-            receivedAt: now
+            receivedAt: r.message.receivedAt > 0 ? r.message.receivedAt : now
         )
     }
 

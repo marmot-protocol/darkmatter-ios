@@ -208,7 +208,7 @@ struct ContactNicknameResolutionTests {
 
     private func profile(displayName: String) -> UserProfileMetadataFfi {
         UserProfileMetadataFfi(
-            name: nil, displayName: displayName, about: nil, picture: nil, nip05: nil, lud16: nil
+            name: nil, displayName: displayName, about: nil, picture: nil, banner: nil, nip05: nil, lud16: nil
         )
     }
 

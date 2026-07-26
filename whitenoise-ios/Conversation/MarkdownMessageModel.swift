@@ -448,17 +448,17 @@ enum MarkdownMessageBuilder {
                 nested.strikethrough = true
                 emitted = walkInlines(children, into: &out, context: nested, budget: &budget, depth: depth + 1) || emitted
 
-            case .link(let dest, _, let children):
+            case .link(let dest, _, let children, _):
                 var nested = context
                 if context.link == nil, let url = allowedLinkURL(dest) {
                     nested.link = url
                 }
                 emitted = walkInlines(children, into: &out, context: nested, budget: &budget, depth: depth + 1) || emitted
 
-            case .image(let dest, _, let alt):
+            case .image(let dest, _, let alt, _):
                 emitted = appendImage(dest: dest, alt: alt, to: &out, context: context, budget: &budget, depth: depth) || emitted
 
-            case .autolink(let url, let kind):
+            case .autolink(let url, let kind, _):
                 emitted = appendAutolink(url, kind: kind, to: &out, context: context, budget: &budget) || emitted
 
             case .nostrMention(let entity):

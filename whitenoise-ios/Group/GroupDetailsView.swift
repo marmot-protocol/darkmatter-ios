@@ -200,10 +200,17 @@ struct GroupDetailsView: View {
         }
         .sheet(isPresented: $model.showGroupImageEditor) {
             GroupImageURLSheet(
-                initialURL: viewModel.group.avatarUrl,
-                onSave: GroupImageSaveSubmitter { url in
-                    try await model.updateGroupImage(url: url, using: appState)
-                }
+                hasCurrentImage: viewModel.group.avatarUrl != nil || viewModel.group.imageHashHex != nil,
+                currentURL: ContentSanitizer.imageURL(viewModel.group.avatarUrl),
+                currentGroupIdHex: viewModel.group.groupIdHex,
+                currentImageHashHex: viewModel.group.imageHashHex,
+                onSave: GroupImageSaveSubmitter(progressReporting: { draft, onProgress in
+                    try await model.updateGroupImage(
+                        draft: draft,
+                        using: appState,
+                        onProgress: onProgress
+                    )
+                })
             )
             .appAppearance()
         }
@@ -404,7 +411,7 @@ struct GroupDetailsView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(
-                            viewModel.group.avatarUrl == nil
+                            !hasGroupImage
                                 ? L10n.string("Set group image")
                                 : L10n.string("Edit group image")
                         )
@@ -448,10 +455,15 @@ struct GroupDetailsView: View {
     }
 
     private func groupAvatar(groupDisplay: GroupDisplay.Resolved, displayTitle: String) -> some View {
-        AvatarBubble(
+        GroupAvatarBubble(
+            groupIdHex: viewModel.group.groupIdHex,
+            imageHashHex: viewModel.group.pendingConfirmation ? nil : viewModel.group.imageHashHex,
             seed: GroupDisplay.avatarSeed(for: groupDisplay),
             title: displayTitle,
-            pictureURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
+            pictureURL: viewModel.group.imageHashHex != nil
+                && ContentSanitizer.imageURL(viewModel.group.avatarUrl) == nil
+                ? nil
+                : GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
         )
         .frame(width: 88, height: 88)
     }
@@ -581,7 +593,7 @@ struct GroupDetailsView: View {
                 model.showGroupImageEditor = true
             } label: {
                 Label(
-                    viewModel.group.avatarUrl == nil ? L10n.string("Set Image") : L10n.string("Edit Image"),
+                    hasGroupImage ? L10n.string("Edit Image") : L10n.string("Set Image"),
                     systemImage: "photo"
                 )
             }
@@ -885,6 +897,10 @@ struct GroupDetailsView: View {
         }
     }
 
+    private var hasGroupImage: Bool {
+        viewModel.group.avatarUrl != nil || viewModel.group.imageHashHex != nil
+    }
+
     private var transcriptExportSection: some View {
         Section {
             Button {
@@ -1177,15 +1193,12 @@ struct GroupDetailsView: View {
 
 enum GroupDetailsActionError: Equatable, LocalizedError {
     case noActiveAccount
-    case invalidImageURL
     case operationInFlight
 
     var errorDescription: String? {
         switch self {
         case .noActiveAccount:
             L10n.string("No active account is selected.")
-        case .invalidImageURL:
-            L10n.string("Use a public HTTPS image URL.")
         case .operationInFlight:
             L10n.string("Another group update is still in progress.")
         }

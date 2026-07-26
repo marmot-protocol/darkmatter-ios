@@ -108,7 +108,7 @@ struct MarkdownMessageBuilderTests {
 
     @Test func httpsLinkGetsLinkAttributeAndUnderline() throws {
         let attributed = try firstParagraph(doc([para([
-            .link(dest: "https://example.com/x", title: nil, children: [.text(content: "label")])
+            .link(dest: "https://example.com/x", title: nil, children: [.text(content: "label")], classification: .web)
         ])]))
 
         let run = try #require(attributed.runs.first)
@@ -120,7 +120,7 @@ struct MarkdownMessageBuilderTests {
     @Test func dangerousLinkSchemesRenderAsPlainText() throws {
         for dest in ["javascript:alert(1)", "data:text/html,<b>x</b>", "file:///etc/passwd", "ftp://host/x"] {
             let attributed = try firstParagraph(doc([para([
-                .link(dest: dest, title: nil, children: [.text(content: "label")])
+                .link(dest: dest, title: nil, children: [.text(content: "label")], classification: .dangerous)
             ])]))
 
             #expect(String(attributed.characters) == "label", "dest: \(dest)")
@@ -132,12 +132,12 @@ struct MarkdownMessageBuilderTests {
 
     @Test func autolinksLinkifyAndEmailSynthesizesMailto() throws {
         let uri = try firstParagraph(doc([para([
-            .autolink(url: "https://example.com", kind: .uri)
+            .autolink(url: "https://example.com", kind: .uri, classification: .web)
         ])]))
         #expect(try #require(uri.runs.first).link == URL(string: "https://example.com"))
 
         let email = try firstParagraph(doc([para([
-            .autolink(url: "a@b.com", kind: .email)
+            .autolink(url: "a@b.com", kind: .email, classification: .contact)
         ])]))
         #expect(String(email.characters) == "a@b.com")
         #expect(try #require(email.runs.first).link == URL(string: "mailto:a@b.com"))
@@ -277,7 +277,7 @@ struct MarkdownMessageBuilderTests {
 
     @Test func imageRendersAltAsLinkWithoutFetching() throws {
         let attributed = try firstParagraph(doc([para([
-            .image(dest: "https://example.com/pic.png", title: nil, alt: [.text(content: "a cat")])
+            .image(dest: "https://example.com/pic.png", title: nil, alt: [.text(content: "a cat")], classification: .web)
         ])]))
 
         let run = try #require(attributed.runs.first)
@@ -287,7 +287,7 @@ struct MarkdownMessageBuilderTests {
 
     @Test func imageWithoutAltUsesPlaceholderLabel() throws {
         let attributed = try firstParagraph(doc([para([
-            .image(dest: "https://example.com/pic.png", title: nil, alt: [])
+            .image(dest: "https://example.com/pic.png", title: nil, alt: [], classification: .web)
         ])]))
 
         #expect(String(attributed.characters) == L10n.string("Image"))
@@ -297,7 +297,7 @@ struct MarkdownMessageBuilderTests {
         let attributed = try firstParagraph(doc([para([
             .image(dest: "https://example.com/pic.png", title: nil, alt: [
                 .emph(children: [.text(content: "\u{202E}\u{200B}")])
-            ])
+            ], classification: .web)
         ])]))
 
         #expect(String(attributed.characters) == L10n.string("Image"))
@@ -305,7 +305,7 @@ struct MarkdownMessageBuilderTests {
 
     @Test func imageWithBlockedSchemeRendersPlainAlt() throws {
         let attributed = try firstParagraph(doc([para([
-            .image(dest: "file:///etc/passwd", title: nil, alt: [.text(content: "alt")])
+            .image(dest: "file:///etc/passwd", title: nil, alt: [.text(content: "alt")], classification: .dangerous)
         ])]))
 
         #expect(String(attributed.characters) == "alt")
@@ -315,8 +315,8 @@ struct MarkdownMessageBuilderTests {
     @Test func imageInsideLinkKeepsOuterDestination() throws {
         let attributed = try firstParagraph(doc([para([
             .link(dest: "https://outer.com", title: nil, children: [
-                .image(dest: "https://inner.com/i.png", title: nil, alt: [.text(content: "a")])
-            ])
+                .image(dest: "https://inner.com/i.png", title: nil, alt: [.text(content: "a")], classification: .web)
+            ], classification: .web)
         ])]))
 
         #expect(try #require(attributed.runs.first).link == URL(string: "https://outer.com"))
@@ -545,7 +545,7 @@ struct MarkdownMessageBuilderTests {
                 .text(content: "Hello "),
                 .strong(children: [.text(content: "world")]),
                 .text(content: ", see "),
-                .link(dest: "https://example.com", title: nil, children: [.text(content: "this")]),
+                .link(dest: "https://example.com", title: nil, children: [.text(content: "this")], classification: .web),
             ]),
             .codeBlock(kind: .fenced, info: "swift", content: "print(1)\n"),
             .thematicBreak,

@@ -5066,55 +5066,39 @@ struct GroupImageSearchTests {
         #expect(!result.title.contains("\u{200B}"))
     }
 
-    @Test func groupImageSheetUsesProfileImageURLPolicy() {
-        #expect(GroupImageURLSheet.validatedImageURL("https://example.com/a.png")?.absoluteString == "https://example.com/a.png")
-        #expect(GroupImageURLSheet.validatedImageURL("http://example.com/a.png") == nil)
-        #expect(GroupImageURLSheet.validatedImageURL("https://localhost/a.png") == nil)
+    @Test func groupImageDraftMapsToInitialEncryptedImageInput() {
+        let draft = GroupImageUploadDraft(
+            data: Data([1, 2, 3]),
+            mediaType: "image/jpeg",
+            sourceURL: "https://images.example/group.jpg",
+            dim: "640x480",
+            thumbhash: "thumb"
+        )
+
+        #expect(draft.initialImage.plaintext == draft.data)
+        #expect(draft.initialImage.mediaType == draft.mediaType)
+        #expect(draft.initialImage.sourceUrl == nil)
+        #expect(draft.initialImage.dim == draft.dim)
+        #expect(draft.initialImage.thumbhash == draft.thumbhash)
     }
 
-    @Test func groupImageSheetRemoveBypassesDraftValidationGuard() {
-        // Saving a typed draft that does not resolve to a valid HTTPS URL is
-        // rejected (the user intends to save an invalid URL).
-        #expect(GroupImageURLSheet.shouldRejectSave(hasDraft: true, resolvedURL: nil, isRemoval: false))
-        // Clearing is judged on raw stored presence: a peer-set URL this
-        // client's sanitizer rejects must still be clearable.
-        #expect(!GroupImageURLSheet.saveDisabled(
-            isSaving: false, trimmedDraft: "", normalizedDraft: nil,
-            hasStoredURL: true, normalizedStored: nil
-        ))
-        // Nothing stored + empty draft = nothing to save.
-        #expect(GroupImageURLSheet.saveDisabled(
-            isSaving: false, trimmedDraft: "", normalizedDraft: nil,
-            hasStoredURL: false, normalizedStored: nil
-        ))
-        // Unchanged valid draft stays disabled; a new valid draft enables.
-        #expect(GroupImageURLSheet.saveDisabled(
-            isSaving: false, trimmedDraft: "https://a.example/x.png",
-            normalizedDraft: "https://a.example/x.png",
-            hasStoredURL: true, normalizedStored: "https://a.example/x.png"
-        ))
-        #expect(!GroupImageURLSheet.saveDisabled(
-            isSaving: false, trimmedDraft: "https://a.example/y.png",
-            normalizedDraft: "https://a.example/y.png",
-            hasStoredURL: true, normalizedStored: "https://a.example/x.png"
-        ))
-        // A non-empty draft that fails validation never saves.
-        #expect(GroupImageURLSheet.saveDisabled(
-            isSaving: false, trimmedDraft: "http://a.example/x.png", normalizedDraft: nil,
-            hasStoredURL: true, normalizedStored: nil
-        ))
+    @Test func groupImageDraftProcessorNormalizesDeviceImageForUpload() async throws {
+        let png = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 16)).pngData { context in
+            UIColor.systemTeal.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 32, height: 16))
+        }
 
-        // Saving a draft that resolves to a valid URL is allowed.
-        #expect(!GroupImageURLSheet.shouldRejectSave(hasDraft: true, resolvedURL: "https://example.com/a.png", isRemoval: false))
+        let draft = try await GroupImageDraftProcessor.prepare(
+            data: png,
+            fileName: "group.png",
+            typeIdentifier: "public.png"
+        )
 
-        // Saving with an empty field (no draft) is allowed.
-        #expect(!GroupImageURLSheet.shouldRejectSave(hasDraft: false, resolvedURL: nil, isRemoval: false))
-
-        // Removing the existing image must never be blocked by a stray/invalid
-        // draft left in the URL field (issue #324) — the remove intent passes
-        // nil to clear the image and is unrelated to the typed draft.
-        #expect(!GroupImageURLSheet.shouldRejectSave(hasDraft: true, resolvedURL: nil, isRemoval: true))
-        #expect(!GroupImageURLSheet.shouldRejectSave(hasDraft: false, resolvedURL: nil, isRemoval: true))
+        #expect(!draft.data.isEmpty)
+        #expect(draft.mediaType == "image/jpeg")
+        let prepared = try #require(UIImage(data: draft.data)?.cgImage)
+        #expect(draft.dim == "\(prepared.width)x\(prepared.height)")
+        #expect(draft.initialImage.sourceUrl == nil)
     }
 
     @Test func groupImageSearchClaimsInFlightGuardBeforeStartingTask() {
@@ -8158,6 +8142,36 @@ struct ReceivedMessageTimestampTests {
         #expect(record.tags == runtime.message.tags)
     }
 
+    @Test func receivedRecordPreservesSourceRetentionAndObservationMetadata() {
+        let message = ReceivedMessageFfi(
+            messageIdHex: hex("cc"),
+            groupIdHex: hex("aa"),
+            sender: hex("11"),
+            senderDisplayName: nil,
+            plaintext: "hello",
+            contentTokens: .emptyDocument,
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            sourceEpoch: 12,
+            retentionSeconds: 60,
+            retentionExpiresAt: 1_700_000_060,
+            recordedAt: 1_700_000_000,
+            receivedAt: 1_700_000_010
+        )
+        let runtime = RuntimeMessageReceivedFfi(
+            accountIdHex: hex("11"),
+            accountLabel: "account-a",
+            message: message
+        )
+
+        let record = ConversationViewModel.receivedToRecord(runtime, now: 1_800_000_000)
+
+        #expect(record.sourceEpoch == message.sourceEpoch)
+        #expect(record.retentionSeconds == message.retentionSeconds)
+        #expect(record.retentionExpiresAt == message.retentionExpiresAt)
+        #expect(record.receivedAt == message.receivedAt)
+    }
+
     private func receivedMessage(recordedAt: UInt64) -> ReceivedMessageFfi {
         ReceivedMessageFfi(
             messageIdHex: hex("cc"),
@@ -8391,7 +8405,7 @@ struct MessageSemanticsTests {
         #expect(info[0].plaintextSha256 == hex("33"))
         #expect(info[0].ciphertextSha256 == hex("44"))
         #expect(info[0].nonceHex == nonce)
-        #expect(info[0].version == "encrypted-media-v1")
+        #expect(info[0].version == .v1)
         #expect(info[0].dim == "640x480")
         #expect(MessagePreview.body(record) == "caption")
     }

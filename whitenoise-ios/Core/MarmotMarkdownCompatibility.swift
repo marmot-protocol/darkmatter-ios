@@ -7,6 +7,77 @@ extension MarkdownDocumentFfi {
     }
 }
 
+extension EncryptedMediaVersionFfi {
+    init?(wireValue: String) {
+        switch wireValue {
+        case "encrypted-media-v1":
+            self = .v1
+        case "encrypted-media-v2":
+            self = .v2
+        default:
+            return nil
+        }
+    }
+
+    var wireValue: String {
+        switch self {
+        case .v1:
+            return "encrypted-media-v1"
+        case .v2:
+            return "encrypted-media-v2"
+        }
+    }
+}
+
+extension AppGroupEncryptedMediaComponentFfi {
+    init(
+        componentId: UInt32,
+        component: String,
+        required: Bool,
+        mediaFormat: String,
+        allowedLocatorKinds: [String],
+        defaultBlobEndpoints: [AppBlobEndpointFfi]
+    ) {
+        self.init(
+            componentId: componentId,
+            component: component,
+            required: required,
+            version: EncryptedMediaVersionFfi(wireValue: mediaFormat),
+            mediaFormat: mediaFormat,
+            allowedLocatorKinds: allowedLocatorKinds,
+            defaultBlobEndpoints: defaultBlobEndpoints
+        )
+    }
+}
+
+extension MediaAttachmentReferenceFfi {
+    init(
+        locators: [MediaLocatorFfi],
+        ciphertextSha256: String,
+        plaintextSha256: String,
+        nonceHex: String,
+        fileName: String,
+        mediaType: String,
+        version: String,
+        sourceEpoch: UInt64,
+        dim: String?,
+        thumbhash: String?
+    ) {
+        self.init(
+            locators: locators,
+            ciphertextSha256: ciphertextSha256,
+            plaintextSha256: plaintextSha256,
+            nonceHex: nonceHex,
+            fileName: fileName,
+            mediaType: mediaType,
+            version: EncryptedMediaVersionFfi(wireValue: version) ?? .v1,
+            sourceEpoch: sourceEpoch,
+            dim: dim,
+            thumbhash: thumbhash
+        )
+    }
+}
+
 extension AppGroupRecordFfi {
     init(
         groupIdHex: String,
@@ -21,6 +92,7 @@ extension AppGroupRecordFfi {
         avatarThumbhash: String?,
         imageHashHex: String? = nil,
         encryptedMedia: AppGroupEncryptedMediaComponentFfi,
+        disappearingMessageSecs: UInt64 = 0,
         archived: Bool,
         pendingConfirmation: Bool,
         selfMembership: SelfMembershipFfi = .member,
@@ -29,7 +101,9 @@ extension AppGroupRecordFfi {
     ) {
         self.init(
             groupIdHex: groupIdHex,
+            protocolProfile: .current,
             endpoint: endpoint,
+            profilePresent: true,
             name: name,
             description: description,
             admins: admins,
@@ -40,12 +114,56 @@ extension AppGroupRecordFfi {
             avatarThumbhash: avatarThumbhash,
             imageHashHex: imageHashHex,
             encryptedMedia: encryptedMedia,
-            disappearingMessageSecs: 0,
+            disappearingMessageSecs: disappearingMessageSecs,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            unrecoverable: false,
             selfMembership: selfMembership,
             welcomerAccountIdHex: welcomerAccountIdHex,
             viaWelcomeMessageIdHex: viaWelcomeMessageIdHex
+        )
+    }
+}
+
+extension NotificationUpdateFfi {
+    init(
+        notificationKey: String,
+        conversationKey: String,
+        trigger: NotificationTriggerFfi,
+        accountRef: String,
+        accountIdHex: String,
+        groupIdHex: String,
+        groupName: String?,
+        isDm: Bool,
+        isMention: Bool,
+        messageIdHex: String?,
+        sender: NotificationUserFfi,
+        receiver: NotificationUserFfi,
+        previewText: String?,
+        reactionEmoji: String?,
+        reactedToPreview: String?,
+        timestampMs: Int64,
+        isFromSelf: Bool
+    ) {
+        self.init(
+            notificationKey: notificationKey,
+            conversationKey: conversationKey,
+            trigger: trigger,
+            trafficClass: .standard,
+            accountRef: accountRef,
+            accountIdHex: accountIdHex,
+            groupIdHex: groupIdHex,
+            groupName: groupName,
+            isDm: isDm,
+            isMention: isMention,
+            messageIdHex: messageIdHex,
+            sender: sender,
+            receiver: receiver,
+            previewText: previewText,
+            reactionEmoji: reactionEmoji,
+            reactedToPreview: reactedToPreview,
+            timestampMs: timestampMs,
+            isFromSelf: isFromSelf
         )
     }
 }
@@ -110,7 +228,46 @@ extension AccountSummaryFfi {
     }
 }
 
+extension SendSummaryFfi {
+    init(published: UInt32, messageIds: [String]) {
+        self.init(
+            published: published,
+            messageIds: messageIds,
+            maintenanceDisposition: .ready
+        )
+    }
+}
+
 extension AppMessageRecordFfi {
+    init(
+        messageIdHex: String,
+        direction: String,
+        groupIdHex: String,
+        sender: String,
+        plaintext: String,
+        contentTokens: MarkdownDocumentFfi,
+        kind: UInt64,
+        tags: [MessageTagFfi],
+        recordedAt: UInt64,
+        receivedAt: UInt64
+    ) {
+        self.init(
+            messageIdHex: messageIdHex,
+            direction: direction,
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: plaintext,
+            contentTokens: contentTokens,
+            kind: kind,
+            tags: tags,
+            sourceEpoch: nil,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
+            recordedAt: recordedAt,
+            receivedAt: receivedAt
+        )
+    }
+
     init(
         messageIdHex: String,
         direction: String,
@@ -131,6 +288,9 @@ extension AppMessageRecordFfi {
             contentTokens: .emptyDocument,
             kind: kind,
             tags: tags,
+            sourceEpoch: nil,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
             recordedAt: recordedAt,
             receivedAt: receivedAt
         )
@@ -138,6 +298,34 @@ extension AppMessageRecordFfi {
 }
 
 extension ReceivedMessageFfi {
+    init(
+        messageIdHex: String,
+        groupIdHex: String,
+        sender: String,
+        senderDisplayName: String?,
+        plaintext: String,
+        contentTokens: MarkdownDocumentFfi,
+        kind: UInt64,
+        tags: [MessageTagFfi],
+        recordedAt: UInt64
+    ) {
+        self.init(
+            messageIdHex: messageIdHex,
+            groupIdHex: groupIdHex,
+            sender: sender,
+            senderDisplayName: senderDisplayName,
+            plaintext: plaintext,
+            contentTokens: contentTokens,
+            kind: kind,
+            tags: tags,
+            sourceEpoch: 0,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
+            recordedAt: recordedAt,
+            receivedAt: 0
+        )
+    }
+
     init(
         messageIdHex: String,
         groupIdHex: String,
@@ -157,7 +345,11 @@ extension ReceivedMessageFfi {
             contentTokens: .emptyDocument,
             kind: kind,
             tags: tags,
-            recordedAt: recordedAt
+            sourceEpoch: 0,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
+            recordedAt: recordedAt,
+            receivedAt: 0
         )
     }
 }
@@ -254,7 +446,8 @@ extension TimelineReplyPreviewFfi {
             mediaJson: mediaJson,
             media: media,
             agentTextStreamJson: agentTextStreamJson,
-            deleted: deleted
+            deleted: deleted,
+            invalidationStatus: nil
         )
     }
 }

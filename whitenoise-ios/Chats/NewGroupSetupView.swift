@@ -12,19 +12,33 @@ struct NewGroupSetupView: View {
     @State private var name = ""
     @State private var retentionSeconds: UInt64 = 0
     @State private var showRetentionPicker = false
+    @State private var groupImage: GroupImageUploadDraft?
+    @State private var showGroupImagePicker = false
 
     var body: some View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    ZStack {
-                        Circle()
-                            .fill(.tint.opacity(0.12))
-                        Image(systemName: "camera")
-                            .foregroundStyle(.tint)
+                    Button {
+                        showGroupImagePicker = true
+                    } label: {
+                        AvatarBubble(
+                            seed: "new-group",
+                            title: name,
+                            pictureImage: groupImage?.thumbnail
+                        )
+                        .overlay {
+                            if groupImage == nil {
+                                Image(systemName: "camera")
+                                    .foregroundStyle(.white)
+                                    .shadow(radius: 2)
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
                     .frame(width: 52, height: 52)
-                    .accessibilityHidden(true)
+                    .disabled(model.isCreatingGroup)
+                    .accessibilityLabel("Set group image")
                     TextField(
                         model.groupSelection.isEmpty
                             ? L10n.string("Group name")
@@ -93,6 +107,17 @@ struct NewGroupSetupView: View {
         .navigationDestination(isPresented: $showRetentionPicker) {
             RetentionPresetPickerView(selection: $retentionSeconds)
         }
+        .sheet(isPresented: $showGroupImagePicker) {
+            GroupImageURLSheet(
+                hasCurrentImage: groupImage != nil,
+                currentURL: nil,
+                initialDraft: groupImage,
+                onSave: GroupImageSaveSubmitter { draft in
+                    groupImage = draft
+                }
+            )
+            .appAppearance()
+        }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(model.isCreatingGroup ? L10n.string("Creating…") : L10n.string("Create")) {
@@ -101,6 +126,7 @@ struct NewGroupSetupView: View {
                             name: name,
                             description: "",
                             retentionSeconds: retentionSeconds,
+                            image: groupImage,
                             using: appState,
                             onOpen: onOpen
                         )

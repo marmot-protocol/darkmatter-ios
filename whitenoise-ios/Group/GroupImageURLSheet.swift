@@ -1,4 +1,6 @@
 import Foundation
+import MarmotKit
+import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -194,57 +196,186 @@ enum DuckDuckGoImageSearchError: LocalizedError {
 }
 
 
+struct GroupImageUploadDraft: Equatable {
+    let data: Data
+    let mediaType: String
+    let sourceURL: String?
+    let dim: String?
+    let thumbhash: String?
+    let thumbnail: UIImage?
+
+    init(
+        data: Data,
+        mediaType: String,
+        sourceURL: String?,
+        dim: String?,
+        thumbhash: String?,
+        thumbnail: UIImage? = nil
+    ) {
+        self.data = data
+        self.mediaType = mediaType
+        self.sourceURL = sourceURL
+        self.dim = dim
+        self.thumbhash = thumbhash
+        self.thumbnail = thumbnail
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.data == rhs.data
+            && lhs.mediaType == rhs.mediaType
+            && lhs.sourceURL == rhs.sourceURL
+            && lhs.dim == rhs.dim
+            && lhs.thumbhash == rhs.thumbhash
+    }
+
+    var initialImage: InitialGroupImageFfi {
+        InitialGroupImageFfi(
+            plaintext: data,
+            mediaType: mediaType,
+            // Do not publish the web origin as the legacy URL-avatar fallback.
+            // The selected bytes must use the encrypted group-image component.
+            sourceUrl: nil,
+            dim: dim,
+            thumbhash: thumbhash
+        )
+    }
+}
+
+enum GroupImageDraftProcessor {
+    static func prepare(
+        data: Data,
+        fileName: String?,
+        typeIdentifier: String? = nil,
+        sourceURL: URL? = nil
+    ) async throws -> GroupImageUploadDraft {
+        let attachment = try await MediaDraftProcessor.preparedAttachment(
+            from: data,
+            fileName: fileName,
+            typeIdentifier: typeIdentifier
+        )
+        return try uploadDraft(from: attachment, sourceURL: sourceURL)
+    }
+
+    static func prepare(fileURL: URL) async throws -> GroupImageUploadDraft {
+        let attachment = try await MediaDraftProcessor.preparedAttachment(fromFileURL: fileURL)
+        return try uploadDraft(from: attachment, sourceURL: nil)
+    }
+
+    private static func uploadDraft(
+        from attachment: MediaDraftAttachment,
+        sourceURL: URL?
+    ) throws -> GroupImageUploadDraft {
+        guard attachment.kind == .image else {
+            throw MediaDraftProcessor.Failure.unsupportedImage
+        }
+        return GroupImageUploadDraft(
+            data: attachment.data,
+            mediaType: attachment.mediaType,
+            sourceURL: sourceURL?.absoluteString,
+            dim: attachment.dim,
+            thumbhash: attachment.thumbhash,
+            thumbnail: attachment.thumbnail
+        )
+    }
+}
+
+enum GroupImageProgressPhase: Equatable {
+    case preparing
+    case updating
+    case finishing
+
+    var label: String {
+        switch self {
+        case .preparing:
+            L10n.string("Preparing image…")
+        case .updating:
+            L10n.string("Updating group image…")
+        case .finishing:
+            L10n.string("Finishing update…")
+        }
+    }
+}
+
 /// Reference box for the save callback — the same toolchain hazard
 /// `GroupRetentionSubmitter` works around: an async closure stored in a view
 /// struct garbles its argument in debug builds, which crashed the save path.
 @MainActor
 final class GroupImageSaveSubmitter {
-    private let run: (String?) async throws -> Void
+    typealias ProgressHandler = @MainActor (GroupImageProgressPhase?) -> Void
 
-    init(_ run: @escaping (String?) async throws -> Void) {
+    private let run: (GroupImageUploadDraft?, ProgressHandler) async throws -> Void
+
+    init(_ run: @escaping (GroupImageUploadDraft?) async throws -> Void) {
+        self.run = { draft, _ in
+            try await run(draft)
+        }
+    }
+
+    init(
+        progressReporting run: @escaping (
+            GroupImageUploadDraft?,
+            ProgressHandler
+        ) async throws -> Void
+    ) {
         self.run = run
     }
 
-    func save(_ urlString: String?) async throws {
-        try await run(urlString)
+    func save(
+        _ draft: GroupImageUploadDraft?,
+        onProgress: @escaping ProgressHandler
+    ) async throws {
+        try await run(draft, onProgress)
     }
 }
 
 struct GroupImageURLSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let initialURL: String?
+    let hasCurrentImage: Bool
+    let currentURL: URL?
+    let currentGroupIdHex: String?
+    let currentImageHashHex: String?
     var searchClient = DuckDuckGoImageSearchClient()
     let onSave: GroupImageSaveSubmitter
 
-    @State private var imageURLDraft: String
+    @State private var draft: GroupImageUploadDraft?
     @State private var searchQuery = ""
     @State private var searchResults: [GroupImageSearchResult] = []
     @State private var searchError: String?
     @State private var saveError: String?
     @State private var isSearching = false
+    @State private var isPreparing = false
     @State private var isSaving = false
+    @State private var showPhotoPicker = false
+    @State private var progressPhase: GroupImageProgressPhase?
 
     private let resultColumns = [
         GridItem(.adaptive(minimum: 108), spacing: 12)
     ]
 
     init(
-        initialURL: String?,
+        hasCurrentImage: Bool,
+        currentURL: URL?,
+        currentGroupIdHex: String? = nil,
+        currentImageHashHex: String? = nil,
+        initialDraft: GroupImageUploadDraft? = nil,
         searchClient: DuckDuckGoImageSearchClient = DuckDuckGoImageSearchClient(),
         onSave: GroupImageSaveSubmitter
     ) {
-        self.initialURL = initialURL
+        self.hasCurrentImage = hasCurrentImage
+        self.currentURL = currentURL
+        self.currentGroupIdHex = currentGroupIdHex
+        self.currentImageHashHex = currentImageHashHex
         self.searchClient = searchClient
         self.onSave = onSave
-        _imageURLDraft = State(initialValue: initialURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
+        _draft = State(initialValue: initialDraft)
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 previewSection
-                directURLSection
+                deviceSection
                 searchSection
 
                 if let saveError {
@@ -265,61 +396,121 @@ struct GroupImageURLSheet: View {
                     Button("Save") {
                         Task { await saveDraft() }
                     }
-                    .disabled(saveDisabled)
+                    .disabled(draft == nil || isBusy)
                 }
             }
         }
         .presentationDetents([.large])
+        .interactiveDismissDisabled(isSaving)
+        .sheet(isPresented: $showPhotoPicker) {
+            PhotoLibraryPickerView(
+                selectionLimit: 1,
+                filter: .images,
+                onSelection: { selections in
+                    guard let selection = selections.first else { return }
+                    preparePhotoSelection(selection)
+                },
+                onError: { error in
+                    saveError = error.localizedDescription
+                },
+                onDismiss: {
+                    showPhotoPicker = false
+                }
+            )
+            .ignoresSafeArea()
+        }
     }
 
     private var previewSection: some View {
         Section {
             HStack(spacing: 16) {
-                AvatarBubble(
-                    seed: "group-image-preview",
-                    title: "Group",
-                    pictureURL: validatedDraftURL
-                )
-                .frame(width: 72, height: 72)
+                VStack(spacing: 6) {
+                    previewAvatar
+                        .overlay {
+                            if progressPhase != nil {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 38, height: 38)
+                                    ProgressView()
+                                        .controlSize(.regular)
+                                }
+                                .transition(.opacity.combined(with: .scale))
+                            }
+                        }
+
+                    if let progressPhase {
+                        Text(progressPhase.label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 132)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: progressPhase)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(previewTitle)
+                    Text("Group image")
                         .font(.headline)
                         .lineLimit(1)
-                    if let previewSubtitle {
-                        Text(previewSubtitle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
+                    Text("End-to-end encrypted group messaging.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
             }
             .padding(.vertical, 6)
         }
     }
 
-    private var directURLSection: some View {
-        Section("Image URL") {
-            TextField("https://example.com/image.jpg", text: $imageURLDraft)
-                .keyboardType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .disabled(isSaving)
+    @ViewBuilder
+    private var previewAvatar: some View {
+        if let draft {
+            AvatarBubble(
+                seed: "group-image-preview",
+                title: "Group",
+                pictureImage: draft.thumbnail
+            )
+            .frame(width: 72, height: 72)
+        } else if let currentGroupIdHex {
+            GroupAvatarBubble(
+                groupIdHex: currentGroupIdHex,
+                imageHashHex: currentImageHashHex,
+                seed: currentGroupIdHex,
+                title: "Group",
+                pictureURL: currentURL
+            )
+            .frame(width: 72, height: 72)
+        } else {
+            AvatarBubble(
+                seed: "group-image-preview",
+                title: "Group",
+                pictureURL: currentURL
+            )
+            .frame(width: 72, height: 72)
+        }
+    }
 
-            if hasDraft && validatedDraftURL == nil {
-                Label("Use a public HTTPS image URL.", systemImage: "lock.shield")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+    private var deviceSection: some View {
+        Section {
+            Button {
+                showPhotoPicker = true
+            } label: {
+                Label("Photo Library", systemImage: "photo.on.rectangle")
             }
+            .disabled(isBusy)
 
-            if hasStoredImageURL {
+            if hasCurrentImage {
                 Button(role: .destructive) {
                     Task { await removeImage() }
                 } label: {
                     Label("Remove image", systemImage: "trash")
                 }
-                .disabled(isSaving)
+                .disabled(isBusy)
             }
+        } header: {
+            Text("Photos")
         }
     }
 
@@ -330,13 +521,13 @@ struct GroupImageURLSheet: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.search)
-                    .disabled(isSearching || isSaving)
+                    .disabled(isBusy)
                     .onSubmit { startSearch() }
 
                 Button {
                     startSearch()
                 } label: {
-                    if isSearching {
+                    if isSearching || isPreparing {
                         ProgressView()
                             .controlSize(.small)
                     } else {
@@ -365,16 +556,15 @@ struct GroupImageURLSheet: View {
                 LazyVGrid(columns: resultColumns, spacing: 12) {
                     ForEach(searchResults) { result in
                         Button {
-                            imageURLDraft = result.imageURL.absoluteString
-                            saveError = nil
-                            Haptics.selection()
+                            prepareSearchResult(result)
                         } label: {
                             GroupImageResultCell(
                                 result: result,
-                                isSelected: result.imageURL == validatedDraftURL
+                                isSelected: result.imageURL.absoluteString == draft?.sourceURL
                             )
                         }
                         .buttonStyle(.plain)
+                        .disabled(isBusy)
                     }
                 }
                 .padding(.vertical, 4)
@@ -382,82 +572,16 @@ struct GroupImageURLSheet: View {
         }
     }
 
-    private var trimmedDraft: String {
-        imageURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var hasDraft: Bool {
-        !trimmedDraft.isEmpty
-    }
-
-    private var validatedDraftURL: URL? {
-        Self.validatedImageURL(imageURLDraft)
-    }
-
-    private var normalizedDraftURL: String? {
-        validatedDraftURL?.absoluteString
-    }
-
-    private var normalizedInitialURL: String? {
-        Self.validatedImageURL(initialURL)?.absoluteString
-    }
-
-    /// The stored value is peer-controlled and may fail this client's
-    /// sanitizer; clearing it must stay possible, so presence is judged on
-    /// the raw string, not the sanitized form.
-    private var hasStoredImageURL: Bool {
-        !(initialURL ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var saveDisabled: Bool {
-        Self.saveDisabled(
-            isSaving: isSaving,
-            trimmedDraft: trimmedDraft,
-            normalizedDraft: normalizedDraftURL,
-            hasStoredURL: hasStoredImageURL,
-            normalizedStored: normalizedInitialURL
-        )
-    }
-
-    static func saveDisabled(
-        isSaving: Bool,
-        trimmedDraft: String,
-        normalizedDraft: String?,
-        hasStoredURL: Bool,
-        normalizedStored: String?
-    ) -> Bool {
-        if isSaving { return true }
-        if !trimmedDraft.isEmpty, normalizedDraft == nil { return true }
-        if trimmedDraft.isEmpty {
-            // Save-to-clear is judged on raw stored presence so an
-            // unsanitizable peer-set URL can still be cleared.
-            return !hasStoredURL
-        }
-        return normalizedDraft == normalizedStored
+    private var isBusy: Bool {
+        isSearching || isPreparing || isSaving
     }
 
     private var searchButtonDisabled: Bool {
         Self.preparedSearchQuery(
             searchQuery,
             isSearching: isSearching,
-            isSaving: isSaving
+            isSaving: isPreparing || isSaving
         ) == nil
-    }
-
-    private var previewTitle: String {
-        if let host = validatedDraftURL?.host {
-            return host
-        }
-        return hasDraft ? L10n.string("Invalid image URL") : L10n.string("No image selected")
-    }
-
-    private var previewSubtitle: String? {
-        guard hasDraft else { return nil }
-        return validatedDraftURL == nil ? L10n.string("Only public HTTPS image URLs are allowed.") : trimmedDraft
-    }
-
-    static func validatedImageURL(_ draft: String?) -> URL? {
-        ContentSanitizer.imageURL(draft)
     }
 
     static func preparedSearchQuery(
@@ -517,38 +641,86 @@ struct GroupImageURLSheet: View {
     }
 
     private func saveDraft() async {
-        await save(normalizedDraftURL, isRemoval: false)
+        guard let draft else { return }
+        await save(draft)
     }
 
     private func removeImage() async {
-        await save(nil, isRemoval: true)
+        await save(nil)
     }
 
-    /// Whether a save attempt should be rejected before reaching `onSave`.
-    ///
-    /// The draft-validation guard applies only to the *save the typed draft*
-    /// path: a non-empty draft that does not resolve to a valid HTTPS image
-    /// URL must not be saved. The destructive *remove* path explicitly passes
-    /// `nil` to clear the existing image and must bypass this guard entirely —
-    /// a stray/invalid draft left in the text field has nothing to do with
-    /// removing the current image.
-    static func shouldRejectSave(hasDraft: Bool, resolvedURL: String?, isRemoval: Bool) -> Bool {
-        if isRemoval { return false }
-        return hasDraft && resolvedURL == nil
-    }
-
-    private func save(_ urlString: String?, isRemoval: Bool) async {
-        if Self.shouldRejectSave(hasDraft: hasDraft, resolvedURL: urlString, isRemoval: isRemoval) {
-            saveError = L10n.string("Use a public HTTPS image URL.")
-            Haptics.error()
-            return
-        }
-
-        isSaving = true
+    private func preparePhotoSelection(_ selection: PhotoLibrarySelection) {
+        isPreparing = true
+        progressPhase = .preparing
         saveError = nil
-        defer { isSaving = false }
+        Task {
+            await prepare(
+                data: selection.data,
+                fileName: selection.fileName,
+                typeIdentifier: selection.typeIdentifier,
+                sourceURL: nil
+            )
+        }
+    }
+
+    private func prepareSearchResult(_ result: GroupImageSearchResult) {
+        isPreparing = true
+        progressPhase = .preparing
+        saveError = nil
+        Task {
+            do {
+                let data = try await RemoteImageFetch.imageData(for: result.imageURL)
+                await prepare(
+                    data: data,
+                    fileName: result.imageURL.lastPathComponent,
+                    typeIdentifier: nil,
+                    sourceURL: result.imageURL
+                )
+            } catch {
+                isPreparing = false
+                progressPhase = nil
+                saveError = error.localizedDescription
+                Haptics.error()
+            }
+        }
+    }
+
+    private func prepare(
+        data: Data,
+        fileName: String?,
+        typeIdentifier: String?,
+        sourceURL: URL?
+    ) async {
+        defer {
+            isPreparing = false
+            progressPhase = nil
+        }
         do {
-            try await onSave.save(urlString)
+            draft = try await GroupImageDraftProcessor.prepare(
+                data: data,
+                fileName: fileName,
+                typeIdentifier: typeIdentifier,
+                sourceURL: sourceURL
+            )
+            Haptics.selection()
+        } catch {
+            saveError = error.localizedDescription
+            Haptics.error()
+        }
+    }
+
+    private func save(_ draft: GroupImageUploadDraft?) async {
+        isSaving = true
+        progressPhase = .updating
+        saveError = nil
+        defer {
+            isSaving = false
+            progressPhase = nil
+        }
+        do {
+            try await onSave.save(draft) { phase in
+                progressPhase = phase
+            }
             dismiss()
         } catch {
             saveError = error.localizedDescription
@@ -557,7 +729,7 @@ struct GroupImageURLSheet: View {
     }
 }
 
-private struct GroupImageResultCell: View {
+struct GroupImageResultCell: View {
     let result: GroupImageSearchResult
     let isSelected: Bool
 
@@ -621,7 +793,7 @@ actor GroupImageThumbnailLoadLimiter {
     }
 }
 
-private struct GroupImageRemoteThumbnail: View {
+struct GroupImageRemoteThumbnail: View {
     private static let displaySize = CGSize(width: 108, height: 92)
 
     let url: URL

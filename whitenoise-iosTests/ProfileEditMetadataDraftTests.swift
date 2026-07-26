@@ -99,6 +99,7 @@ struct ProfileEditMetadataDraftTests {
             displayName: nil,
             about: nil,
             picture: nil,
+            banner: "https://example.com/banner.png",
             nip05: nil,
             lud16: nil
         )
@@ -106,6 +107,7 @@ struct ProfileEditMetadataDraftTests {
         let formFields = ProfileEditFormFields(profile: profile)
         #expect(formFields.name == "alice")
         #expect(formFields.displayName == "")
+        #expect(formFields.banner == "https://example.com/banner.png")
     }
 
     @Test func preservesExistingNameWhenDisplayNameChanges() throws {
@@ -153,6 +155,22 @@ struct ProfileEditMetadataDraftTests {
         #expect(metadata.picture == "https://cdn.example.com/avatar.png")
     }
 
+    @Test func normalizesValidHttpsBannerURL() throws {
+        let draft = ProfileEditMetadataDraft(
+            name: nil,
+            displayName: "Alice",
+            about: "",
+            picture: "",
+            banner: " https://cdn.example.com/banner.png ",
+            nip05: "",
+            preservedLud16: nil
+        )
+
+        let metadata = try #require(draft.normalizedMetadata)
+        #expect(metadata.banner == "https://cdn.example.com/banner.png")
+        #expect(metadata.ffi.banner == "https://cdn.example.com/banner.png")
+    }
+
     @Test func rejectsInvalidPictureURLBeforePublish() {
         let draft = ProfileEditMetadataDraft(
             name: nil,
@@ -179,6 +197,21 @@ struct ProfileEditMetadataDraftTests {
 
         let metadata = try #require(draft.normalizedMetadata)
         #expect(metadata.picture == nil)
+    }
+
+    @Test func rejectsInvalidBannerURLBeforePublish() {
+        let draft = ProfileEditMetadataDraft(
+            name: nil,
+            displayName: "Alice",
+            about: "",
+            picture: "",
+            banner: "http://legacy.example/banner.png",
+            nip05: "",
+            preservedLud16: nil
+        )
+
+        #expect(draft.validationError == .banner)
+        #expect(draft.normalizedMetadata == nil)
     }
 
     @Test func seedsEmptyFieldOnSameAccountReloadWithoutClobberingEdits() {
@@ -210,5 +243,34 @@ struct ProfileEditMetadataDraftTests {
     @Test func adoptsDifferentAccountValueEvenWhenFieldIsNonEmpty() {
         #expect(ProfileEditFieldSeeding.seeded(current: "Alice", loaded: "Bob", isNewAccount: true) == "Bob")
         #expect(ProfileEditFieldSeeding.seeded(current: "Alice", loaded: "", isNewAccount: true) == "")
+    }
+}
+
+struct MarmotKitBuildLabelTests {
+    @Test func taggedBuildShowsVersionAndShortHash() {
+        #expect(
+            MarmotKitBuildLabel.text(
+                tag: "marmotkit-v0.9.5",
+                sha: "5729f6cde28323b3"
+            ) == "MarmotKit v0.9.5 (5729f6cd)"
+        )
+    }
+
+    @Test func sourceBuildOmitsVersionEvenWhenBuiltFromTaggedCommit() {
+        #expect(
+            MarmotKitBuildLabel.text(
+                tag: "marmotkit-v0.9.5",
+                sha: "5729f6cd-dirty"
+            ) == "MarmotKit (5729f6cd)"
+        )
+    }
+
+    @Test func untaggedCleanBuildOmitsVersion() {
+        #expect(
+            MarmotKitBuildLabel.text(
+                tag: "",
+                sha: "abcdef1234567890"
+            ) == "MarmotKit (abcdef12)"
+        )
     }
 }

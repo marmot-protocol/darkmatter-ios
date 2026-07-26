@@ -48,19 +48,36 @@ nonisolated enum MessageRetentionSweep {
             let groups = groupsByAccountRef[accountRef] ?? []
             for groupIdHex in MessageRetentionSweepPolicy.sweepGroupIds(from: groups) {
                 guard !Task.isCancelled else { break }
+                // Marmot 0.9.5 reports the ciphertext hashes whose secrets were
+                // retired. Resolve their plaintext cache keys before pruning,
+                // while the media records are still queryable.
+                guard let mediaRecords = try? await client.listMedia(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                ) else { continue }
+                let plaintextHashByCiphertextHash = Dictionary(
+                    mediaRecords.map {
+                        (
+                            $0.reference.ciphertextSha256.lowercased(),
+                            $0.reference.plaintextSha256.lowercased()
+                        )
+                    },
+                    uniquingKeysWith: { first, _ in first }
+                )
                 guard let result = try? await client.secureDeleteExpired(
                     accountRef: accountRef,
                     groupIdHex: groupIdHex
                 ) else { continue }
-                if !result.mediaPlaintextSha256.isEmpty {
-                    let hashes = Set(result.mediaPlaintextSha256)
+                if !result.mediaCiphertextSha256.isEmpty {
+                    let hashes = Set(result.mediaCiphertextSha256.compactMap {
+                        plaintextHashByCiphertextHash[$0.lowercased()]
+                    })
                     if !(await MessageMediaCache.removeCachedData(forPlaintextHashes: hashes)) {
                         outcome.failedMediaPlaintextHashes.formUnion(hashes)
                     }
                 }
                 if result.prunedMessages > 0
                     || !result.mediaCiphertextSha256.isEmpty
-                    || !result.mediaPlaintextSha256.isEmpty
                 {
                     outcome.prunedGroupIds.insert(groupIdHex)
                     outcome.prunedMessageCount &+= result.prunedMessages

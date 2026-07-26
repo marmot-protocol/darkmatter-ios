@@ -37,6 +37,7 @@ final class GroupDetailsViewModel {
     private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private let recipientDirectory = RecipientDirectory()
     private var didLoadSharedMedia = false
+    private var pendingLegacyAvatarClearAfterImageMutation = false
 
     // Bound by the view at the top of `body` (both @ObservationIgnored, so the
     // assignment never triggers a re-render). `conversation` is therefore set
@@ -50,6 +51,8 @@ final class GroupDetailsViewModel {
     @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupDescriptionForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupAvatarUrlForTesting: (@MainActor (String, String, String?) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var updateGroupImageForTesting: (@MainActor (String, String, Data, String) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var clearGroupImageForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var listMediaForTesting: (@MainActor (String, String) async throws -> [MediaRecordFfi])?
     @ObservationIgnored var leaveGroupForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var deleteGroupLocalForTesting: (@MainActor (String, String) async throws -> Bool)?
@@ -320,62 +323,127 @@ final class GroupDetailsViewModel {
         }
     }
 
-    func updateGroupImage(url: String?, using appState: AppState) async throws {
+    func updateGroupImage(
+        draft: GroupImageUploadDraft?,
+        using appState: AppState,
+        onProgress: (GroupImageProgressPhase?) -> Void = { _ in }
+    ) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
         guard !membershipActionInFlight else { throw GroupDetailsActionError.operationInFlight }
-        let normalizedURL: String?
-        if let url {
-            guard let sanitized = GroupImageURLSheet.validatedImageURL(url) else {
-                throw GroupDetailsActionError.invalidImageURL
-            }
-            normalizedURL = sanitized.absoluteString
-        } else {
-            normalizedURL = nil
-        }
         membershipActionInFlight = true
+        onProgress(.updating)
         defer { membershipActionInFlight = false }
 
         do {
-            appState.present(.warning(L10n.string("Updating group image…"), message: L10n.string("Publishing group update.")))
-            let summary: SendSummaryFfi
+            let client = try appState.currentMarmotClient()
+            var summary: SendSummaryFfi?
 #if DEBUG
-            if let updateGroupAvatarUrlForTesting {
-                summary = try await updateGroupAvatarUrlForTesting(
-                    accountRef,
-                    conversation.group.groupIdHex,
-                    normalizedURL
+            if let draft {
+                if !pendingLegacyAvatarClearAfterImageMutation {
+                    if let updateGroupImageForTesting {
+                        summary = try await updateGroupImageForTesting(
+                            accountRef,
+                            conversation.group.groupIdHex,
+                            draft.data,
+                            draft.mediaType
+                        )
+                    } else {
+                        summary = try await client.updateGroupImage(
+                            accountRef: accountRef,
+                            groupIdHex: conversation.group.groupIdHex,
+                            plaintext: draft.data,
+                            mediaType: draft.mediaType
+                        )
+                    }
+                }
+            } else if conversation.group.imageHashHex != nil,
+                      !pendingLegacyAvatarClearAfterImageMutation {
+                if let clearGroupImageForTesting {
+                    summary = try await clearGroupImageForTesting(
+                        accountRef,
+                        conversation.group.groupIdHex
+                    )
+                } else {
+                    summary = try await client.clearGroupImage(
+                        accountRef: accountRef,
+                        groupIdHex: conversation.group.groupIdHex
+                    )
+                }
+            }
+#else
+            if let draft {
+                if !pendingLegacyAvatarClearAfterImageMutation {
+                    summary = try await client.updateGroupImage(
+                        accountRef: accountRef,
+                        groupIdHex: conversation.group.groupIdHex,
+                        plaintext: draft.data,
+                        mediaType: draft.mediaType
+                    )
+                }
+            } else if conversation.group.imageHashHex != nil,
+                      !pendingLegacyAvatarClearAfterImageMutation {
+                summary = try await client.clearGroupImage(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex
                 )
-            } else {
-                let client = try appState.currentMarmotClient()
+            }
+#endif
+
+            onProgress(.finishing)
+
+            // URL avatars win over encrypted Blossom images in Marmot's
+            // projection. Clear a legacy URL only after the replacement
+            // upload succeeds, so a partial migration keeps the old image.
+            if conversation.group.avatarUrl != nil {
+                pendingLegacyAvatarClearAfterImageMutation = true
+#if DEBUG
+                if let updateGroupAvatarUrlForTesting {
+                    summary = try await updateGroupAvatarUrlForTesting(
+                        accountRef,
+                        conversation.group.groupIdHex,
+                        nil
+                    )
+                } else {
+                    summary = try await client.updateGroupAvatarUrl(
+                        accountRef: accountRef,
+                        groupIdHex: conversation.group.groupIdHex,
+                        url: nil,
+                        dim: nil,
+                        thumbhash: nil
+                    )
+                }
+#else
                 summary = try await client.updateGroupAvatarUrl(
                     accountRef: accountRef,
                     groupIdHex: conversation.group.groupIdHex,
-                    url: normalizedURL,
+                    url: nil,
                     dim: nil,
                     thumbhash: nil
                 )
-            }
-#else
-            let client = try appState.currentMarmotClient()
-            summary = try await client.updateGroupAvatarUrl(
-                accountRef: accountRef,
-                groupIdHex: conversation.group.groupIdHex,
-                url: normalizedURL,
-                dim: nil,
-                thumbhash: nil
-            )
 #endif
-            await refreshGroupManagementAndNotify()
-            await refreshVisibleDebugState(using: appState)
-            Haptics.success()
-            appState.present(.success(
-                normalizedURL == nil ? L10n.string("Group image removed") : L10n.string("Group image updated"),
-                message: publishMessage(for: summary)
-            ))
+                pendingLegacyAvatarClearAfterImageMutation = false
+            } else if pendingLegacyAvatarClearAfterImageMutation {
+                pendingLegacyAvatarClearAfterImageMutation = false
+            }
+
+            if let summary {
+                await refreshGroupManagementAndNotify()
+                await refreshVisibleDebugState(using: appState)
+                Haptics.success()
+                onProgress(nil)
+                appState.present(.success(
+                    draft == nil ? L10n.string("Group image removed") : L10n.string("Group image updated"),
+                    message: publishMessage(for: summary)
+                ))
+            } else {
+                onProgress(nil)
+            }
         } catch {
+            onProgress(.finishing)
             await refreshAfterFailedMutation(using: appState)
             Haptics.error()
             actionError = error.localizedDescription
+            onProgress(nil)
             appState.present(.error(L10n.string("Couldn't update group image"), message: error.localizedDescription))
             throw error
         }
