@@ -81,6 +81,11 @@ final class RuntimeLifecycle {
 #if DEBUG
     @ObservationIgnored var afterBootstrapRuntimeStartForTesting: (() async -> Void)?
     @ObservationIgnored var afterForegroundRuntimeCreatedForTesting: (() async -> Void)?
+    @ObservationIgnored var hostPerformanceObserverForTesting: ((
+        HostPerformanceOperationFfi,
+        UInt64,
+        HostPerformanceOutcomeFfi
+    ) -> Void)?
 #endif
     /// Observed (like the original AppState stored flag) so the foreground/local
     /// runtime gates that fold it in stay reactive.
@@ -240,6 +245,14 @@ final class RuntimeLifecycle {
             if appState.accounts.isEmpty {
                 appState.activeAccountRef = nil
                 appState.setPhase(.onboarding)
+                if appState.sceneHasReportedPhase, appState.isAppSceneActive, let client {
+                    recordHostPerformance(
+                        using: client,
+                        operation: .splashReady,
+                        since: bootstrapStartedAt,
+                        outcome: .success
+                    )
+                }
                 Self.coldBootstrapLog.info(
                     """
                     local_ready phase=onboarding \
@@ -257,6 +270,14 @@ final class RuntimeLifecycle {
                     appState.activeAccountRef = appState.accounts.first?.label
                 }
                 appState.setPhase(.ready)
+                if appState.sceneHasReportedPhase, appState.isAppSceneActive, let client {
+                    recordHostPerformance(
+                        using: client,
+                        operation: .splashReady,
+                        since: bootstrapStartedAt,
+                        outcome: .success
+                    )
+                }
                 Self.coldBootstrapLog.info(
                     """
                     local_ready phase=ready \
@@ -281,6 +302,17 @@ final class RuntimeLifecycle {
                 appState.startReadyForegroundMaintenance()
             }
         } catch {
+            if !(error is CancellationError),
+               appState.sceneHasReportedPhase,
+               appState.isAppSceneActive,
+               let client {
+                recordHostPerformance(
+                    using: client,
+                    operation: .splashReady,
+                    since: bootstrapStartedAt,
+                    outcome: .failure
+                )
+            }
             await releaseRuntimeAfterStartupFailure()
             appState.setPhase(.failed(error.localizedDescription))
         }
@@ -514,6 +546,14 @@ final class RuntimeLifecycle {
                     try await restored.startRuntime()
                     startMilliseconds = Self.elapsedMilliseconds(since: startStartedAt)
                 } catch {
+                    if !(error is CancellationError), ownsForegroundActivation(id: activationID) {
+                        recordHostPerformance(
+                            using: restored,
+                            operation: .foregroundLocalReady,
+                            since: resumeStartedAt,
+                            outcome: .failure
+                        )
+                    }
                     await restored.marmot.shutdown()
                     if ownsForegroundActivation(id: activationID) {
                         appState?.stopNotificationSubscription()
@@ -532,6 +572,12 @@ final class RuntimeLifecycle {
                 // command-readiness. Marmot's initial relay sync continues
                 // asynchronously, so local conversations can be shown now.
                 isRuntimeWarmingUp = false
+                recordHostPerformance(
+                    using: restored,
+                    operation: .foregroundLocalReady,
+                    since: resumeStartedAt,
+                    outcome: .success
+                )
                 // The notification subscription needs an active account, so it
                 // only belongs to `.ready`. An `.onboarding` resume rebuilds the
                 // runtime (releasing the suspended App Group SQLite lock) but
@@ -582,6 +628,23 @@ final class RuntimeLifecycle {
         let elapsed = start.duration(to: ContinuousClock.now).components
         return Double(elapsed.seconds) * 1_000
             + Double(elapsed.attoseconds) / 1_000_000_000_000_000
+    }
+
+    private func recordHostPerformance(
+        using client: MarmotClient,
+        operation: HostPerformanceOperationFfi,
+        since start: ContinuousClock.Instant,
+        outcome: HostPerformanceOutcomeFfi
+    ) {
+        let durationMs = UInt64(max(0, Self.elapsedMilliseconds(since: start)).rounded())
+#if DEBUG
+        hostPerformanceObserverForTesting?(operation, durationMs, outcome)
+#endif
+        client.recordHostPerformance(
+            operation: operation,
+            durationMs: durationMs,
+            outcome: outcome
+        )
     }
 
     private func ownsForegroundActivation(id: UUID) -> Bool {

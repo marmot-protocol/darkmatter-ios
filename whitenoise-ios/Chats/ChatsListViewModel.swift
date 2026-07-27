@@ -23,6 +23,7 @@ final class ChatsListViewModel {
         let previewText: String?
         let draftPreview: String?
         let searchHaystack: String
+        let leaveRequestPending: Bool
 
         init(
             row: ChatListRowFfi,
@@ -30,6 +31,7 @@ final class ChatsListViewModel {
             avatarSeed: String? = nil,
             title: String,
             isMuted: Bool = false,
+            leaveRequestPending: Bool = false,
             draftSummary: MessageDraftSummaryFfi? = nil,
             mentionDisplayName: MarkdownMentionResolver? = nil
         ) {
@@ -42,6 +44,7 @@ final class ChatsListViewModel {
             self.avatarSeed = avatarSeed ?? row.groupIdHex
             self.title = title
             self.isMuted = isMuted
+            self.leaveRequestPending = leaveRequestPending
             self.previewText = previewText
             self.draftPreview = ConversationDraftPreview.text(
                 from: draftSummary,
@@ -60,9 +63,12 @@ final class ChatsListViewModel {
         var unreadMentionCount: UInt64 { row.unreadMentionCount }
         var hasUnreadMention: Bool { row.unreadMention || row.unreadMentionCount > 0 }
         var isArchived: Bool { row.archived }
-        var selfMembership: SelfMembershipFfi { row.selfMembership }
+        var selfMembership: SelfMembershipFfi {
+            leaveRequestPending ? .left : row.selfMembership
+        }
         var isActiveMember: Bool {
-            GroupManagementPresentation.isActiveChatListMember(row.selfMembership)
+            !leaveRequestPending
+                && GroupManagementPresentation.isActiveChatListMember(row.selfMembership)
         }
         var firstUnreadMessageIdHex: String? { row.firstUnreadMessageIdHex }
         var lastMessage: ChatListMessagePreviewFfi? { row.lastMessage }
@@ -89,7 +95,7 @@ final class ChatsListViewModel {
                 ),
                 archived: row.archived,
                 pendingConfirmation: row.pendingConfirmation,
-                selfMembership: row.selfMembership,
+                selfMembership: selfMembership,
                 welcomerAccountIdHex: nil,
                 viaWelcomeMessageIdHex: nil
             )
@@ -145,6 +151,9 @@ final class ChatsListViewModel {
     private var rowByGroupId: [String: ChatListRowFfi] = [:]
     private var itemByGroupId: [String: Item] = [:]
     private var pendingChatListRowsByGroupId: [String: ChatListRowFfi] = [:]
+    /// Presentation-only bridge for Marmot's durable leave-request gate. The
+    /// current bindings expose terminal membership but not a pending request.
+    private var locallyRequestedLeaveGroupIds: Set<String> = []
     private var avatarURLByGroupId: [String: String] = [:]
     private var avatarURLLoadedGroupIds: Set<String> = []
     private var pendingAvatarURLRefreshGroupIds: Set<String> = []
@@ -195,6 +204,7 @@ final class ChatsListViewModel {
                 visibleRowsRevision &+= 1
             }
             pendingChatListRowsByGroupId = [:]
+            locallyRequestedLeaveGroupIds = []
             avatarURLByGroupId = [:]
             avatarURLLoadedGroupIds = []
             pendingAvatarURLRefreshGroupIds = []
@@ -348,6 +358,7 @@ final class ChatsListViewModel {
         var nextItems: [String: Item] = [:]
         var changed = false
         let muteLookup = currentMuteLookup()
+        locallyRequestedLeaveGroupIds.formIntersection(mergedSnapshot.map(\.groupIdHex))
         for row in mergedSnapshot {
             updateCachedGroupDetails(with: row)
             let item = makeItem(for: row, muteLookup: muteLookup)
@@ -446,6 +457,7 @@ final class ChatsListViewModel {
 
     func removeChatListRow(groupIdHex: String) {
         pendingChatListRowsByGroupId[groupIdHex] = nil
+        locallyRequestedLeaveGroupIds.remove(groupIdHex)
         let hadPublishedRow = rowByGroupId[groupIdHex] != nil || itemByGroupId[groupIdHex] != nil
         rowByGroupId[groupIdHex] = nil
         itemByGroupId[groupIdHex] = nil
@@ -464,12 +476,11 @@ final class ChatsListViewModel {
     }
 
     func markGroupLeft(groupIdHex: String) {
-        guard var row = rowByGroupId[groupIdHex] else { return }
+        guard let row = rowByGroupId[groupIdHex] else { return }
         if let currentAccount {
             draftStore.removeDraft(accountRef: currentAccount, groupIdHex: groupIdHex)
         }
-        row.selfMembership = .left
-        row.pendingConfirmation = false
+        locallyRequestedLeaveGroupIds.insert(groupIdHex)
         if storeRow(row) {
             publishItems()
         }
@@ -565,6 +576,13 @@ final class ChatsListViewModel {
         let display = display(for: row, details: groupDetailsCache[row.groupIdHex])
         let draftAccountRef = currentAccount ?? appState?.activeAccountRef
         let muteLookup = muteLookup ?? currentMuteLookup()
+        let leaveRequestPending: Bool
+        if row.selfMembership == .member {
+            leaveRequestPending = locallyRequestedLeaveGroupIds.contains(row.groupIdHex)
+        } else {
+            locallyRequestedLeaveGroupIds.remove(row.groupIdHex)
+            leaveRequestPending = false
+        }
         return Item(
             row: row,
             avatarURL: display.avatarURL,
@@ -573,6 +591,7 @@ final class ChatsListViewModel {
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
             } ?? false,
+            leaveRequestPending: leaveRequestPending,
             draftSummary: draftAccountRef.flatMap {
                 draftStore.summary(accountRef: $0, groupIdHex: row.groupIdHex)
             },
@@ -934,26 +953,18 @@ final class ChatsListViewModel {
     }
     #endif
 
-    /// Newest projected activity first; rows without messages fall back to the
-    /// projection update time, then title.
+    /// Match Marmot's durable chat-list ordering. `activitySortAt` survives
+    /// secure pruning even when a row no longer has a last-message preview.
     private static let sortRule: (Item, Item) -> Bool = { a, b in
-        switch (a.row.lastMessage?.timelineAt, b.row.lastMessage?.timelineAt) {
-        case let (ta?, tb?) where ta != tb:
-            return ta > tb
-        case (nil, _?):
-            return false
-        case (_?, nil):
-            return true
-        default:
-            if a.row.updatedAt != b.row.updatedAt {
-                return a.row.updatedAt > b.row.updatedAt
-            }
-            return a.title.localizedCaseInsensitiveCompare(b.title) == .orderedAscending
+        if a.row.activitySortAt != b.row.activitySortAt {
+            return a.row.activitySortAt > b.row.activitySortAt
         }
+        return a.id < b.id
     }
 
     private static func row(from group: AppGroupRecordFfi) -> ChatListRowFfi {
         let title = ContentSanitizer.groupName(group.name) ?? IdentityFormatter.short(group.groupIdHex)
+        let now = UInt64(Date().timeIntervalSince1970)
         return ChatListRowFfi(
             groupIdHex: group.groupIdHex,
             archived: group.archived,
@@ -970,7 +981,9 @@ final class ChatsListViewModel {
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
-            updatedAt: UInt64(Date().timeIntervalSince1970),
+            conversationCreatedAt: now,
+            activitySortAt: now,
+            updatedAt: now,
             selfMembership: group.selfMembership
         )
     }

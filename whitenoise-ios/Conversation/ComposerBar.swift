@@ -56,6 +56,12 @@ nonisolated enum ComposerAttachmentButtonTapBehavior: Equatable {
     case showUnavailableTooltip
 }
 
+nonisolated enum ComposerAvailabilityPresentation {
+    static func showsInput(disabledMessage: String?) -> Bool {
+        disabledMessage == nil
+    }
+}
+
 nonisolated struct ComposerAttachmentButtonAppearance: Equatable {
     let iconTone: ComposerSideIconTone
     let chromeInteractive: Bool
@@ -191,25 +197,23 @@ struct ComposerBar: View {
                     ComposerMentionPicker(candidates: mentionCandidates, onSelect: onMentionSelect)
                 }
 
-                if let disabledMessage {
-                    inactiveComposerMessage(disabledMessage)
-                }
-
-                HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                    bottomInputGlassContainer {
-                        attachmentButton
-                    }
-                    bottomInputGlassContainer {
-                        HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                            inputCapsule
-                            trailingActionSlot
-                                .animation(.easeInOut(duration: 0.22), value: showsMic)
-                                .animation(.easeInOut(duration: 0.22), value: showsSend)
+                if ComposerAvailabilityPresentation.showsInput(disabledMessage: disabledMessage) {
+                    HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
+                        bottomInputGlassContainer {
+                            attachmentButton
+                        }
+                        bottomInputGlassContainer {
+                            HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
+                                inputCapsule
+                                trailingActionSlot
+                                    .animation(.easeInOut(duration: 0.22), value: showsMic)
+                                    .animation(.easeInOut(duration: 0.22), value: showsSend)
+                            }
                         }
                     }
+                } else if let disabledMessage {
+                    inactiveComposerMessage(disabledMessage)
                 }
-                .disabled(!inputEnabled)
-                .opacity(inputEnabled ? 1 : 0.68)
             }
             .padding(.horizontal, BottomInputChromeLayout.keyboardOpenHorizontalInset)
             .padding(.top, BottomInputChromeLayout.topInset)

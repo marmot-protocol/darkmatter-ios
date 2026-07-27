@@ -10,6 +10,7 @@ nonisolated enum GroupMemberManagementAction: Equatable {
 
 nonisolated enum GroupManagementPresentation {
     static let inactiveGroupComposerMessage = L10n.string("This group is inactive. You can't send new messages.")
+    static let leftGroupComposerMessage = L10n.string("You left the group")
 
     static func isActiveChatListMember(_ membership: SelfMembershipFfi) -> Bool {
         membership == .member
@@ -38,14 +39,14 @@ nonisolated enum GroupManagementPresentation {
         myAccountId: String?,
         fallbackSelfMembership: SelfMembershipFfi = .member
     ) -> Bool {
+        guard isActiveChatListMember(fallbackSelfMembership) else { return false }
+
         if let state {
             return state.isSelfAdmin
                 || state.canLeave
                 || state.requiresSelfDemoteBeforeLeave
                 || state.memberActions.contains { $0.isSelf }
         }
-
-        guard isActiveChatListMember(fallbackSelfMembership) else { return false }
 
         if !groupMemberDetails.isEmpty {
             return groupMemberDetails.contains { member in

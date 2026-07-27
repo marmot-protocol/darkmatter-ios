@@ -2099,6 +2099,14 @@ public protocol MarmotProtocol : AnyObject {
     func reactToMessage(accountRef: String, groupIdHex: String, targetMessageId: String, emoji: String) async throws  -> SendSummaryFfi
 
     /**
+     * Record one approved host-app milestone.
+     *
+     * The operation is a closed enum and the exported metrics carry no
+     * caller-supplied labels.
+     */
+    func recordHostPerformance(operation: HostPerformanceOperationFfi, durationMs: UInt64, outcome: HostPerformanceOutcomeFfi)
+
+    /**
      * Fetch and cache an account's own Nostr kind:0 profile from `relays`.
      * After this resolves, `user_profile` / `display_name` return the
      * freshly-fetched metadata (name, picture, etc.) for that account.
@@ -2340,8 +2348,16 @@ public protocol MarmotProtocol : AnyObject {
     func signOutAndWipe(accountRef: String) async throws  -> WipeOutcomeFfi
 
     /**
-     * Bring the runtime online: reconcile known accounts, start workers,
-     * subscribe to transport events.
+     * Bring the runtime to local readiness.
+     *
+     * On success, persisted account state is hydrated and worker-routed local
+     * reads are available. Relay activation, group-subscription registration,
+     * shared-directory synchronization, and initial catch-up continue
+     * asynchronously. Hosts should render local projections immediately and
+     * represent network progress separately.
+     *
+     * The binding signature and result type are unchanged; this local-ready
+     * completion point is the behavioral contract for this implementation.
      */
     func start() async throws
 
@@ -3772,6 +3788,21 @@ open func reactToMessage(accountRef: String, groupIdHex: String, targetMessageId
 }
 
     /**
+     * Record one approved host-app milestone.
+     *
+     * The operation is a closed enum and the exported metrics carry no
+     * caller-supplied labels.
+     */
+open func recordHostPerformance(operation: HostPerformanceOperationFfi, durationMs: UInt64, outcome: HostPerformanceOutcomeFfi) {try! rustCall() {
+    uniffi_marmot_uniffi_fn_method_marmot_record_host_performance(self.uniffiClonePointer(),
+        FfiConverterTypeHostPerformanceOperationFfi.lower(operation),
+        FfiConverterUInt64.lower(durationMs),
+        FfiConverterTypeHostPerformanceOutcomeFfi.lower(outcome),$0
+    )
+}
+}
+
+    /**
      * Fetch and cache an account's own Nostr kind:0 profile from `relays`.
      * After this resolves, `user_profile` / `display_name` return the
      * freshly-fetched metadata (name, picture, etc.) for that account.
@@ -4529,8 +4560,16 @@ open func signOutAndWipe(accountRef: String)async throws  -> WipeOutcomeFfi {
 }
 
     /**
-     * Bring the runtime online: reconcile known accounts, start workers,
-     * subscribe to transport events.
+     * Bring the runtime to local readiness.
+     *
+     * On success, persisted account state is hydrated and worker-routed local
+     * reads are available. Relay activation, group-subscription registration,
+     * shared-directory synchronization, and initial catch-up continue
+     * asynchronously. Hosts should render local projections immediately and
+     * represent network progress separately.
+     *
+     * The binding signature and result type are unchanged; this local-ready
+     * completion point is the behavioral contract for this implementation.
      */
 open func start()async throws  {
     return
@@ -7773,6 +7812,8 @@ public struct ChatListRowFfi {
     public var firstUnreadMessageIdHex: String?
     public var lastReadMessageIdHex: String?
     public var lastReadTimelineAt: UInt64?
+    public var conversationCreatedAt: UInt64
+    public var activitySortAt: UInt64
     public var updatedAt: UInt64
     /**
      * Whether the local account is still a member of this group, and if not,
@@ -7782,7 +7823,7 @@ public struct ChatListRowFfi {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(groupIdHex: String, archived: Bool, pendingConfirmation: Bool, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool, unreadMentionCount: UInt64, unreadMention: Bool, firstUnreadMessageIdHex: String?, lastReadMessageIdHex: String?, lastReadTimelineAt: UInt64?, updatedAt: UInt64,
+    public init(groupIdHex: String, archived: Bool, pendingConfirmation: Bool, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool, unreadMentionCount: UInt64, unreadMention: Bool, firstUnreadMessageIdHex: String?, lastReadMessageIdHex: String?, lastReadTimelineAt: UInt64?, conversationCreatedAt: UInt64, activitySortAt: UInt64, updatedAt: UInt64,
         /**
          * Whether the local account is still a member of this group, and if not,
          * whether it left voluntarily or was removed.
@@ -7802,6 +7843,8 @@ public struct ChatListRowFfi {
         self.firstUnreadMessageIdHex = firstUnreadMessageIdHex
         self.lastReadMessageIdHex = lastReadMessageIdHex
         self.lastReadTimelineAt = lastReadTimelineAt
+        self.conversationCreatedAt = conversationCreatedAt
+        self.activitySortAt = activitySortAt
         self.updatedAt = updatedAt
         self.selfMembership = selfMembership
     }
@@ -7856,6 +7899,12 @@ extension ChatListRowFfi: Equatable, Hashable {
         if lhs.lastReadTimelineAt != rhs.lastReadTimelineAt {
             return false
         }
+        if lhs.conversationCreatedAt != rhs.conversationCreatedAt {
+            return false
+        }
+        if lhs.activitySortAt != rhs.activitySortAt {
+            return false
+        }
         if lhs.updatedAt != rhs.updatedAt {
             return false
         }
@@ -7881,6 +7930,8 @@ extension ChatListRowFfi: Equatable, Hashable {
         hasher.combine(firstUnreadMessageIdHex)
         hasher.combine(lastReadMessageIdHex)
         hasher.combine(lastReadTimelineAt)
+        hasher.combine(conversationCreatedAt)
+        hasher.combine(activitySortAt)
         hasher.combine(updatedAt)
         hasher.combine(selfMembership)
     }
@@ -7909,6 +7960,8 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
                 firstUnreadMessageIdHex: FfiConverterOptionString.read(from: &buf),
                 lastReadMessageIdHex: FfiConverterOptionString.read(from: &buf),
                 lastReadTimelineAt: FfiConverterOptionUInt64.read(from: &buf),
+                conversationCreatedAt: FfiConverterUInt64.read(from: &buf),
+                activitySortAt: FfiConverterUInt64.read(from: &buf),
                 updatedAt: FfiConverterUInt64.read(from: &buf),
                 selfMembership: FfiConverterTypeSelfMembershipFfi.read(from: &buf)
         )
@@ -7930,6 +7983,8 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.firstUnreadMessageIdHex, into: &buf)
         FfiConverterOptionString.write(value.lastReadMessageIdHex, into: &buf)
         FfiConverterOptionUInt64.write(value.lastReadTimelineAt, into: &buf)
+        FfiConverterUInt64.write(value.conversationCreatedAt, into: &buf)
+        FfiConverterUInt64.write(value.activitySortAt, into: &buf)
         FfiConverterUInt64.write(value.updatedAt, into: &buf)
         FfiConverterTypeSelfMembershipFfi.write(value.selfMembership, into: &buf)
     }
@@ -15362,6 +15417,134 @@ extension GroupEvolutionPhaseFfi: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum HostPerformanceOperationFfi {
+
+    case splashReady
+    case foregroundLocalReady
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHostPerformanceOperationFfi: FfiConverterRustBuffer {
+    typealias SwiftType = HostPerformanceOperationFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostPerformanceOperationFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .splashReady
+
+        case 2: return .foregroundLocalReady
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HostPerformanceOperationFfi, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .splashReady:
+            writeInt(&buf, Int32(1))
+
+
+        case .foregroundLocalReady:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostPerformanceOperationFfi_lift(_ buf: RustBuffer) throws -> HostPerformanceOperationFfi {
+    return try FfiConverterTypeHostPerformanceOperationFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostPerformanceOperationFfi_lower(_ value: HostPerformanceOperationFfi) -> RustBuffer {
+    return FfiConverterTypeHostPerformanceOperationFfi.lower(value)
+}
+
+
+
+extension HostPerformanceOperationFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum HostPerformanceOutcomeFfi {
+
+    case success
+    case failure
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHostPerformanceOutcomeFfi: FfiConverterRustBuffer {
+    typealias SwiftType = HostPerformanceOutcomeFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> HostPerformanceOutcomeFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .success
+
+        case 2: return .failure
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: HostPerformanceOutcomeFfi, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .success:
+            writeInt(&buf, Int32(1))
+
+
+        case .failure:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostPerformanceOutcomeFfi_lift(_ buf: RustBuffer) throws -> HostPerformanceOutcomeFfi {
+    return try FfiConverterTypeHostPerformanceOutcomeFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHostPerformanceOutcomeFfi_lower(_ value: HostPerformanceOutcomeFfi) -> RustBuffer {
+    return FfiConverterTypeHostPerformanceOutcomeFfi.lower(value)
+}
+
+
+
+extension HostPerformanceOutcomeFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum MaintenancePhaseFfi {
 
     case catchUp
@@ -20136,6 +20319,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_react_to_message() != 39138) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_record_host_performance() != 50448) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_refresh_profile() != 33641) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -20247,7 +20433,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_sign_out_and_wipe() != 44173) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_start() != 20136) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_start() != 2138) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_start_agent_text_stream() != 35574) {

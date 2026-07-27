@@ -259,6 +259,7 @@ final class AppState {
     /// fallback); do not recompute `TelemetryBuildConfig.current()` here.
     var telemetryBuildConfig: TelemetryBuildConfig { runtimeLifecycle.telemetryBuildConfig }
     var notificationSubscriptionActive: Bool { notificationCoordinator.notificationSubscriptionActive }
+    var isConnectivityCatchUpInProgress: Bool { notificationCoordinator.isForegroundCatchUpRunning }
     var canRefreshProfiles: Bool { runtimeLifecycle.canRefreshProfiles }
     var canUseRuntimeForLocalForegroundWork: Bool { runtimeLifecycle.canUseRuntimeForLocalForegroundWork }
     var canUseRuntimeForForegroundWork: Bool { runtimeLifecycle.canUseRuntimeForForegroundWork }
@@ -1105,15 +1106,28 @@ final class AppState {
     @MainActor
     @discardableResult
     func createIdentity() async throws -> AccountSummaryFfi {
+        let summary = try await createIdentityForProfileSetup()
+        await completeIdentityProfileSetup(summary)
+        return summary
+    }
+
+    /// Creates the durable identity without routing out of onboarding. The
+    /// sign-up profile flow uses the returned account to publish optional
+    /// metadata, then calls `completeIdentityProfileSetup` exactly once.
+    @MainActor
+    func createIdentityForProfileSetup() async throws -> AccountSummaryFfi {
         let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
-        let summary = try await lease.client.marmot.createIdentity(
+        return try await lease.client.marmot.createIdentity(
             defaultRelays: relays,
             bootstrapRelays: relays
         )
+    }
+
+    @MainActor
+    func completeIdentityProfileSetup(_ summary: AccountSummaryFfi) async {
         await activateNewIdentity(summary)
-        return summary
     }
 
     /// Import an existing local-signing identity (nsec).
