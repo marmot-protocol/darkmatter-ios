@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 @preconcurrency import MarmotKit
 
 struct TimelineReadMarkResult {
@@ -13,6 +14,10 @@ struct TimelineReadMarkResult {
 /// the iOS app needs to make blocking-ish startup choices. Everything else
 /// the app does goes through the underlying `Marmot` instance directly.
 nonisolated final class MarmotClient: Sendable {
+    private static let coldBootstrapLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "cold-bootstrap"
+    )
 
     /// Seed relays used to start the Rust relay plane and bootstrap new local
     /// identities. Per-account relay lists live in Marmot after setup.
@@ -54,6 +59,7 @@ nonisolated final class MarmotClient: Sendable {
         cursorPersistence: CursorPersistenceFfi,
         telemetryConfig: TelemetryBuildConfig
     ) throws {
+        let constructionStartedAt = ContinuousClock.now
         self.rootPath = rootPath
         self.relayUrls = relayUrls
         self.cursorPersistence = cursorPersistence
@@ -65,6 +71,9 @@ nonisolated final class MarmotClient: Sendable {
         )
         _ = try marmot.setAuditLogTrackerConfig(
             config: telemetryConfig.auditTrackerConfig()
+        )
+        Self.coldBootstrapLog.info(
+            "runtime_constructed duration_ms=\(Self.elapsedMilliseconds(since: constructionStartedAt), format: .fixed(precision: 0), privacy: .public)"
         )
     }
 
@@ -734,6 +743,12 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.setRelayTelemetryRuntimeConfig(
             config: telemetryConfig.runtimeConfig(installId: installId)
         )
+    }
+
+    private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = start.duration(to: ContinuousClock.now).components
+        return Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
     }
 
 }

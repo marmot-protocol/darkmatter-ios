@@ -114,6 +114,46 @@ struct RemoteImageLoaderTests {
         #expect(await probe.callCount() == 1)
     }
 
+    @Test func avatarDiskCacheSurvivesMemoryCacheResetAndExpiresOldEntries() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RemoteAvatarDiskCacheTests-\(UUID().uuidString)", isDirectory: true)
+        let cache = RemoteAvatarDiskCache(
+            directoryURL: root,
+            maximumBytes: 1_024,
+            maximumEntryBytes: 128,
+            maximumAge: 60
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = try #require(URL(string: "https://example.com/persisted-avatar.png"))
+        let data = Data([0x89, 0x50, 0x4E, 0x47])
+        let writtenAt = Date(timeIntervalSince1970: 1_000)
+
+        await cache.store(data, for: url, now: writtenAt)
+
+        #expect(await cache.cachedFileExistsForTesting(for: url))
+        #expect(await cache.data(for: url, now: writtenAt.addingTimeInterval(59)) == data)
+        #expect(await cache.data(for: url, now: writtenAt.addingTimeInterval(120)) == nil)
+        #expect(!(await cache.cachedFileExistsForTesting(for: url)))
+    }
+
+    @Test func avatarDiskCacheRejectsOversizedEntries() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("RemoteAvatarDiskCacheTests-\(UUID().uuidString)", isDirectory: true)
+        let cache = RemoteAvatarDiskCache(
+            directoryURL: root,
+            maximumBytes: 1_024,
+            maximumEntryBytes: 4,
+            maximumAge: 60
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = try #require(URL(string: "https://example.com/oversized-avatar.png"))
+
+        await cache.store(Data(repeating: 0x01, count: 5), for: url)
+
+        #expect(await cache.data(for: url) == nil)
+        #expect(!(await cache.cachedFileExistsForTesting(for: url)))
+    }
+
     @Test func avatarLoaderCacheCostExceedsCompressedBytesForHighlyCompressibleImage() throws {
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1

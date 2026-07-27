@@ -1007,9 +1007,11 @@ final class AppState {
     /// itself stays on AppState (it is account/profile maintenance, not
     /// lifecycle).
     @MainActor
-    func refreshAccounts() async throws {
+    func refreshAccounts(refreshUnreadSummaries: Bool = true) async throws {
         accountStore.accounts = try await runtimeClient().listAccounts()
-        await refreshAccountUnreadSummaries()
+        if refreshUnreadSummaries {
+            await refreshAccountUnreadSummaries()
+        }
         updateProfileProjectionLocalAccountLabels()
         warmLocalAccountProfileProjections()
     }
@@ -1019,6 +1021,9 @@ final class AppState {
     /// runtime shuts down; an escaping task could otherwise hold the FFI
     /// handle mid-`accountUnreadSummary()` while `shutdown()` runs.
     @ObservationIgnored private var unreadSummaryRefreshTask: Task<Void, Never>?
+#if DEBUG
+    @ObservationIgnored var beforeUnreadSummaryRefreshForTesting: (() async -> Void)?
+#endif
 
     /// Fire-and-forget wrapper for foreground resume — background reads and
     /// notification actions can move the read cursor while the cached summary
@@ -1051,6 +1056,11 @@ final class AppState {
             accountUnreadStore.refreshed(from: [], accounts: [])
             return
         }
+#if DEBUG
+        if let beforeUnreadSummaryRefreshForTesting {
+            await beforeUnreadSummaryRefreshForTesting()
+        }
+#endif
         // A badge refresh has no foreground UI to update while the durable
         // runtime is down, so it must never resurrect it: opening a suspended
         // runtime in the background would strand a durable `.advance` runtime

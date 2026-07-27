@@ -1,5 +1,6 @@
 import Foundation
 import MarmotKit
+import OSLog
 
 struct ProfileProjectionRequest: Equatable, Sendable {
     var accountIdHex: String
@@ -62,6 +63,11 @@ final class ProfileStore {
     var scheduledProfileFetchIDs: Set<String> = []
     var activeProfileFetchID: String?
     var profileProjectionCacheNeedsReloadOnResume = false
+    private static let profileProjectionLoadBatchSize = 64
+    private static let hydrationLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "profile-hydration"
+    )
 
     // Contact nicknames: private per-device labels layered over the projection
     // cache. Only the main app writes them, so the snapshot is loaded once and
@@ -320,35 +326,44 @@ final class ProfileStore {
             finishProfileProjectionLoadQueue(taskID: taskID)
         }
 
-        while !Task.isCancelled, canRefreshProfiles, let id = nextQueuedProfileProjectionLoadID() {
-            let version = profileProjectionLoadVersions[id] ?? 0
-            let projection = await loadProfileProjection(forAccountIdHex: id)
+        while !Task.isCancelled, canRefreshProfiles {
+            let ids = nextQueuedProfileProjectionLoadIDs(limit: Self.profileProjectionLoadBatchSize)
+            guard !ids.isEmpty else { break }
+            let versions = Dictionary(uniqueKeysWithValues: ids.map {
+                ($0, profileProjectionLoadVersions[$0] ?? 0)
+            })
+            let hydrationStartedAt = ContinuousClock.now
+            let projections = await loadProfileProjections(forAccountIdsHex: ids)
             guard !Task.isCancelled else { break }
             guard canRefreshProfiles else {
-                // Gate closed mid-load: `id` was dequeued but is still marked
-                // scheduled. Re-arm it (front of the queue) so it isn't orphaned —
-                // `resumeProfileFetchQueueIfNeeded()` re-drains it when the gate
-                // reopens, instead of a later cache miss being suppressed by the
-                // stale scheduled marker.
-                queuedProfileProjectionLoadIDs.insert(id, at: 0)
+                // The batch was dequeued but remains marked scheduled. Re-arm it
+                // in the same order so foreground resume cannot orphan any id.
+                queuedProfileProjectionLoadIDs.insert(contentsOf: ids, at: 0)
                 break
             }
-            guard profileProjectionLoadVersions[id] == version else { continue }
+            for id in ids {
+                guard let version = versions[id],
+                      profileProjectionLoadVersions[id] == version
+                else { continue }
 
-            scheduledProfileProjectionLoadIDs.remove(id)
-            if let projection {
-                applyProfileProjection(projection, forAccountIdHex: id)
-            }
+                scheduledProfileProjectionLoadIDs.remove(id)
+                let projection = projections[id]
+                if let projection {
+                    applyProfileProjection(projection, forAccountIdHex: id)
+                }
 
-            let shouldRefresh = profileProjectionRefreshAfterLoadIDs.remove(id) != nil
-            if shouldRefresh, projection?.hasRemoteIdentity != true {
-                scheduleProfileRefresh(forAccountIdHex: id)
+                let shouldRefresh = profileProjectionRefreshAfterLoadIDs.remove(id) != nil
+                if shouldRefresh, projection?.hasRemoteIdentity != true {
+                    scheduleProfileRefresh(forAccountIdHex: id)
+                }
+                pruneProfileProjectionLoadVersionIfSettled(
+                    forAccountIdHex: id,
+                    matching: version
+                )
             }
-            // The queued load for `id` is the current one (token still matches)
-            // and is now applied. Prune its version entry when no further
-            // load/refresh work remains for `id` so the map stays bounded to
-            // in-flight work instead of growing per distinct id (#353).
-            pruneProfileProjectionLoadVersionIfSettled(forAccountIdHex: id, matching: version)
+            Self.hydrationLog.debug(
+                "local_batch count=\(ids.count, privacy: .public) duration_ms=\(Self.elapsedMilliseconds(since: hydrationStartedAt), format: .fixed(precision: 0), privacy: .public)"
+            )
         }
     }
 
@@ -361,18 +376,30 @@ final class ProfileStore {
         }
     }
 
-    private func nextQueuedProfileProjectionLoadID() -> String? {
-        guard !queuedProfileProjectionLoadIDs.isEmpty else { return nil }
-        return queuedProfileProjectionLoadIDs.removeFirst()
+    private func nextQueuedProfileProjectionLoadIDs(limit: Int) -> [String] {
+        guard limit > 0, !queuedProfileProjectionLoadIDs.isEmpty else { return [] }
+        let count = min(limit, queuedProfileProjectionLoadIDs.count)
+        let ids = Array(queuedProfileProjectionLoadIDs.prefix(count))
+        queuedProfileProjectionLoadIDs.removeFirst(count)
+        return ids
     }
 
     private func loadProfileProjection(forAccountIdHex id: String) async -> ProfileDisplayProjection? {
-        guard let appState, let client = try? appState.currentMarmotClient() else { return nil }
-        let request = profileProjectionRequest(forAccountIdHex: id)
-        let projections = await client.profileProjections(for: [request])
-        guard var projection = projections[id] else { return nil }
-        projection.localAccountLabel = localAccountLabel(forAccountIdHex: id)
-        return projection
+        await loadProfileProjections(forAccountIdsHex: [id])[id]
+    }
+
+    private func loadProfileProjections(
+        forAccountIdsHex ids: [String]
+    ) async -> [String: ProfileDisplayProjection] {
+        guard let appState, let client = try? appState.currentMarmotClient() else { return [:] }
+        let requests = ids.map(profileProjectionRequest(forAccountIdHex:))
+        var projections = await client.profileProjections(for: requests)
+        for id in ids {
+            guard var projection = projections[id] else { continue }
+            projection.localAccountLabel = localAccountLabel(forAccountIdHex: id)
+            projections[id] = projection
+        }
+        return projections
     }
 
     private func profileProjectionRequest(forAccountIdHex id: String) -> ProfileProjectionRequest {
@@ -427,6 +454,12 @@ final class ProfileStore {
               !profileProjectionRefreshAfterLoadIDs.contains(id)
         else { return }
         profileProjectionLoadVersions.removeValue(forKey: id)
+    }
+
+    private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = start.duration(to: ContinuousClock.now).components
+        return Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
     }
 
     // MARK: - Relay refresh queue
