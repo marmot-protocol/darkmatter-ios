@@ -594,8 +594,11 @@ nonisolated final class MarmotClient: Sendable {
         )
     }
 
-    func secureDeleteExpired(accountRef: String, groupIdHex: String) async throws -> SecureDeleteExpiredResultFfi {
-        try await marmot.secureDeleteExpired(accountRef: accountRef, groupIdHex: groupIdHex)
+    func sweepExpiredRetention(
+        accountRef: String,
+        nowMs: UInt64
+    ) async throws -> RetentionSweepReportFfi {
+        try await marmot.sweepExpiredRetention(accountRef: accountRef, nowMs: nowMs)
     }
 
     func leaveGroup(accountRef: String, groupIdHex: String) async throws -> SendSummaryFfi {

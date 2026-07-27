@@ -75,6 +75,82 @@ nonisolated enum MessageBubbleTextLayout {
     }
 }
 
+nonisolated enum SingleEmojiMessagePresentation {
+    static let fontSize: CGFloat = 64
+
+    static func emoji(in text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 1, let character = trimmed.first else { return nil }
+
+        let scalars = character.unicodeScalars
+        let hasEmojiCapableScalar = scalars.contains { $0.properties.isEmoji }
+        let requestsEmojiRendering = scalars.contains {
+            $0.properties.isEmojiPresentation
+                || $0.value == 0xFE0F
+                || $0.value == 0x20E3
+        }
+
+        guard hasEmojiCapableScalar, requestsEmojiRendering else { return nil }
+        return trimmed
+    }
+}
+
+nonisolated enum MessageExpirationPresentation {
+    enum Detail: Equatable {
+        case expired
+        case relative(Date)
+        case absolute(Date)
+    }
+
+    static let systemImage = "timer"
+    static let relativeTimeHorizon: TimeInterval = 24 * 60 * 60
+
+    static func showsIndicator(retentionSeconds: UInt64?, expiresAt: UInt64?) -> Bool {
+        guard let retentionSeconds, retentionSeconds > 0,
+              let expiresAt, expiresAt > 0
+        else { return false }
+
+        return true
+    }
+
+    static func detail(expiresAt: UInt64?, now: Date = Date()) -> Detail? {
+        guard let expiresAt, expiresAt > 0 else { return nil }
+        let expirationDate = Date(timeIntervalSince1970: TimeInterval(expiresAt))
+        let remaining = expirationDate.timeIntervalSince(now)
+
+        if remaining <= 0 {
+            return .expired
+        }
+        if remaining <= relativeTimeHorizon {
+            return .relative(expirationDate)
+        }
+        return .absolute(expirationDate)
+    }
+
+    @MainActor
+    static func detailLabel(
+        expiresAt: UInt64?,
+        now: Date = Date(),
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String? {
+        switch detail(expiresAt: expiresAt, now: now) {
+        case .expired:
+            return L10n.formatted("Expired", arguments: [], locale: locale)
+        case .relative(let expirationDate):
+            let formatter = RelativeDateTimeFormatter()
+            formatter.locale = locale
+            formatter.dateTimeStyle = .numeric
+            formatter.unitsStyle = .full
+            return formatter.localizedString(for: expirationDate, relativeTo: now)
+        case .absolute(let expirationDate):
+            let style = Date.FormatStyle(date: .long, time: .standard).locale(locale)
+            return expirationDate.formatted(style)
+        case nil:
+            return nil
+        }
+    }
+}
+
 struct MessageFooterPresentation: Equatable {
     let systemImage: String?
     let accessibilityLabel: String?
@@ -153,6 +229,7 @@ struct MessageMetadataFooter: View {
     let isFromMe: Bool
     let usesLightForeground: Bool
     var showsDeliveryStatus: Bool = true
+    var showsExpirationTimer: Bool = false
     var onViewEditHistory: (() -> Void)?
 
     private var presentation: MessageFooterPresentation {
@@ -175,6 +252,11 @@ struct MessageMetadataFooter: View {
                 } else {
                     Text(L10n.string("Edited"))
                 }
+            }
+            if showsExpirationTimer {
+                Image(systemName: MessageExpirationPresentation.systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+                    .accessibilityLabel(L10n.string("Disappearing messages"))
             }
             if showsDeliveryStatus, let systemImage = presentation.systemImage {
                 Image(systemName: systemImage)

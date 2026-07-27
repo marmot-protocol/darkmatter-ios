@@ -118,6 +118,21 @@ struct MessageInfoSheet: View {
                 value: MessageInfoPresentation.timestampLabel(record.receivedAt) ?? L10n.string("Unknown"),
                 systemImage: "tray.and.arrow.down"
             )
+
+            if hasExpirationTimer {
+                Divider().padding(.leading, 44)
+
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    infoRow(
+                        title: "Expires",
+                        value: MessageExpirationPresentation.detailLabel(
+                            expiresAt: record.retentionExpiresAt,
+                            now: context.date
+                        ) ?? L10n.string("Unknown"),
+                        systemImage: MessageExpirationPresentation.systemImage
+                    )
+                }
+            }
         }
         .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
     }
@@ -150,6 +165,13 @@ struct MessageInfoSheet: View {
 
     private var isFromMe: Bool {
         record.direction == "sent"
+    }
+
+    private var hasExpirationTimer: Bool {
+        MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: record.retentionSeconds,
+            expiresAt: record.retentionExpiresAt
+        )
     }
 
     private var statusSystemImage: String {

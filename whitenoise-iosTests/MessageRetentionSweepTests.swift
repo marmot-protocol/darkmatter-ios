@@ -57,8 +57,8 @@ struct MessageRetentionSweepTests {
         #expect(MessageRetentionSweepPolicy.sweepIntervalNanoseconds > 0)
     }
 
-    /// Marmot's prune result reports plaintext hashes directly, so eviction
-    /// needs no pre-prune media listing and must clear both cache stores.
+    /// Cache eviction clears both decrypted stores for each plaintext hash
+    /// resolved from Marmot's privacy-safe ciphertext-hash sweep report.
     @Test func cacheEvictionRemovesOnlyReportedPlaintextHashes() throws {
         let cachesDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("retention-sweep-tests-\(UUID().uuidString)", isDirectory: true)

@@ -32,30 +32,33 @@ nonisolated enum MessageRetentionSweep {
     struct Outcome {
         var prunedGroupIds: Set<String> = []
         var prunedMessageCount: UInt64 = 0
-        var failedMediaPlaintextHashes: Set<String> = []
+        var mediaPlaintextHashes: Set<String> = []
+        var requiresFullMediaPurge = false
     }
 
-    /// One sweep pass: for every retention-enabled group, secure-delete
-    /// expired records and evict their decrypted media from the cache.
-    /// Per-account/per-group failures are best-effort skips.
+    /// One sweep pass delegates expiry eligibility to Marmot so unread-message,
+    /// clock-skew, and bounded-scan deferrals stay engine-owned. Media references
+    /// are captured before pruning because the cache is keyed by plaintext hash
+    /// while Marmot intentionally reports only ciphertext hashes.
     static func run(
         client: MarmotClient,
-        groupsByAccountRef: [String: [AppGroupRecordFfi]]
+        groupsByAccountRef: [String: [AppGroupRecordFfi]],
+        nowMs: UInt64 = UInt64(Date().timeIntervalSince1970 * 1_000)
     ) async -> Outcome {
         var outcome = Outcome()
         for accountRef in groupsByAccountRef.keys.sorted() {
             guard !Task.isCancelled else { break }
             let groups = groupsByAccountRef[accountRef] ?? []
+            var plaintextHashByGroupAndCiphertextHash: [String: [String: String]] = [:]
             for groupIdHex in MessageRetentionSweepPolicy.sweepGroupIds(from: groups) {
                 guard !Task.isCancelled else { break }
-                // Marmot 0.9.5 reports the ciphertext hashes whose secrets were
-                // retired. Resolve their plaintext cache keys before pruning,
-                // while the media records are still queryable.
                 guard let mediaRecords = try? await client.listMedia(
                     accountRef: accountRef,
                     groupIdHex: groupIdHex
-                ) else { continue }
-                let plaintextHashByCiphertextHash = Dictionary(
+                ) else {
+                    continue
+                }
+                plaintextHashByGroupAndCiphertextHash[groupIdHex] = Dictionary(
                     mediaRecords.map {
                         (
                             $0.reference.ciphertextSha256.lowercased(),
@@ -64,23 +67,32 @@ nonisolated enum MessageRetentionSweep {
                     },
                     uniquingKeysWith: { first, _ in first }
                 )
-                guard let result = try? await client.secureDeleteExpired(
+            }
+            guard !Task.isCancelled,
+                  let report = try? await client.sweepExpiredRetention(
                     accountRef: accountRef,
-                    groupIdHex: groupIdHex
-                ) else { continue }
-                if !result.mediaCiphertextSha256.isEmpty {
-                    let hashes = Set(result.mediaCiphertextSha256.compactMap {
-                        plaintextHashByCiphertextHash[$0.lowercased()]
-                    })
-                    if !(await MessageMediaCache.removeCachedData(forPlaintextHashes: hashes)) {
-                        outcome.failedMediaPlaintextHashes.formUnion(hashes)
-                    }
+                    nowMs: nowMs
+                  )
+            else { continue }
+            for group in report.groups {
+                let ciphertextHashes = Set(group.mediaCiphertextSha256.map { $0.lowercased() })
+                if group.prunedMessages > 0 || !ciphertextHashes.isEmpty {
+                    outcome.prunedGroupIds.insert(group.groupIdHex)
+                    outcome.prunedMessageCount &+= group.prunedMessages
                 }
-                if result.prunedMessages > 0
-                    || !result.mediaCiphertextSha256.isEmpty
-                {
-                    outcome.prunedGroupIds.insert(groupIdHex)
-                    outcome.prunedMessageCount &+= result.prunedMessages
+                guard !ciphertextHashes.isEmpty else { continue }
+                guard let plaintextByCiphertext =
+                    plaintextHashByGroupAndCiphertextHash[group.groupIdHex]
+                else {
+                    outcome.requiresFullMediaPurge = true
+                    continue
+                }
+                for ciphertextHash in ciphertextHashes {
+                    guard let plaintextHash = plaintextByCiphertext[ciphertextHash] else {
+                        outcome.requiresFullMediaPurge = true
+                        continue
+                    }
+                    outcome.mediaPlaintextHashes.insert(plaintextHash)
                 }
             }
         }
@@ -150,6 +162,7 @@ final class MessageRetentionSweeper {
     private var sweepTask: Task<Void, Never>?
     private var groupSubscriptionsByAccountRef: [String: MessageRetentionGroupSubscription] = [:]
     private var pendingMediaPlaintextHashes: Set<String> = []
+    private var pendingFullMediaPurge = false
     private weak var appState: AppState?
 
     deinit {
@@ -209,8 +222,15 @@ final class MessageRetentionSweeper {
               ),
               let client = try? appState.currentMarmotClient()
         else { return }
-        if !pendingMediaPlaintextHashes.isEmpty,
-           await MessageMediaCache.removeCachedData(forPlaintextHashes: pendingMediaPlaintextHashes) {
+        if pendingFullMediaPurge {
+            if await MessageMediaCache.purgeAllDecryptedMedia() {
+                pendingFullMediaPurge = false
+                pendingMediaPlaintextHashes.removeAll()
+            }
+        } else if !pendingMediaPlaintextHashes.isEmpty,
+                  await MessageMediaCache.removeCachedData(
+                    forPlaintextHashes: pendingMediaPlaintextHashes
+                  ) {
             pendingMediaPlaintextHashes.removeAll()
         }
         let accountRefs = MessageRetentionSweepPolicy.sweepAccountRefs(from: appState.accounts)
@@ -220,7 +240,19 @@ final class MessageRetentionSweeper {
             client: client,
             groupsByAccountRef: groupsByAccountRef
         )
-        pendingMediaPlaintextHashes.formUnion(outcome.failedMediaPlaintextHashes)
+        if outcome.requiresFullMediaPurge {
+            if await MessageMediaCache.purgeAllDecryptedMedia() {
+                pendingFullMediaPurge = false
+                pendingMediaPlaintextHashes.removeAll()
+            } else {
+                pendingFullMediaPurge = true
+            }
+        } else if !outcome.mediaPlaintextHashes.isEmpty,
+                  !(await MessageMediaCache.removeCachedData(
+                    forPlaintextHashes: outcome.mediaPlaintextHashes
+                  )) {
+            pendingMediaPlaintextHashes.formUnion(outcome.mediaPlaintextHashes)
+        }
         guard !Task.isCancelled, !outcome.prunedGroupIds.isEmpty else { return }
         appState.noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
     }
@@ -305,11 +337,13 @@ extension AppState {
                 noteRetentionSweepCompleted(prunedGroupIds: outcome.prunedGroupIds)
             }
             let cacheEvictionSucceeded: Bool
-            if outcome.failedMediaPlaintextHashes.isEmpty {
+            if outcome.requiresFullMediaPurge {
+                cacheEvictionSucceeded = await MessageMediaCache.purgeAllDecryptedMedia()
+            } else if outcome.mediaPlaintextHashes.isEmpty {
                 cacheEvictionSucceeded = true
             } else {
                 cacheEvictionSucceeded = await MessageMediaCache.removeCachedData(
-                    forPlaintextHashes: outcome.failedMediaPlaintextHashes
+                    forPlaintextHashes: outcome.mediaPlaintextHashes
                 )
             }
             return !Task.isCancelled && cacheEvictionSucceeded

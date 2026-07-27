@@ -16,7 +16,10 @@ struct MarkdownTokenThreadingTests {
     @Test func timelineConversionKeepsContentTokens() {
         let record = TimelineMessageRecordFfi(
             messageIdHex: "01",
-            sourceMessageIdHex: nil,
+            sourceMessageIdHex: "02",
+            sourceEpoch: 7,
+            retentionSeconds: 300,
+            retentionExpiresAt: 301,
             direction: "received",
             groupIdHex: "aa",
             sender: "11",
@@ -40,6 +43,9 @@ struct MarkdownTokenThreadingTests {
 
         let converted = ConversationViewModel.appMessageRecord(from: record)
         #expect(converted.contentTokens == tokens)
+        #expect(converted.sourceEpoch == 7)
+        #expect(converted.retentionSeconds == 300)
+        #expect(converted.retentionExpiresAt == 301)
     }
 
     /// Regression: confirmSent rebuilt the timeline record through the
@@ -72,6 +78,47 @@ struct MarkdownTokenThreadingTests {
         }
         #expect(confirmed.count == 1)
         #expect(confirmed.first?.contentTokens == tokens)
+    }
+
+    @Test func durableTimelineUpsertPublishesPinnedRetentionMetadata() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [retentionTimelineRecord(
+                    sourceEpoch: nil,
+                    retentionSeconds: nil,
+                    retentionExpiresAt: nil
+                )],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(
+                messages: [retentionTimelineRecord(
+                    sourceEpoch: 7,
+                    retentionSeconds: 300,
+                    retentionExpiresAt: 600
+                )],
+                hasMoreBefore: false,
+                hasMoreAfter: false
+            ),
+            placement: .window
+        )
+
+        let displayed = try #require(viewModel.timeline.first)
+        guard case .message(let record, _) = displayed.kind else {
+            Issue.record("Expected the durable message row")
+            return
+        }
+        #expect(record.sourceEpoch == 7)
+        #expect(record.retentionSeconds == 300)
+        #expect(record.retentionExpiresAt == 600)
     }
 
     @Test func timelinePagePrecomputesMarkdownBlocksForMessageRows() throws {
@@ -166,5 +213,38 @@ struct MarkdownTokenThreadingTests {
         let converted = ConversationViewModel.receivedToRecord(received, now: 9)
         #expect(converted.contentTokens == tokens)
         #expect(converted.recordedAt == 5)
+    }
+
+    private func retentionTimelineRecord(
+        sourceEpoch: UInt64?,
+        retentionSeconds: UInt64?,
+        retentionExpiresAt: UInt64?
+    ) -> TimelineMessageRecordFfi {
+        TimelineMessageRecordFfi(
+            messageIdHex: "01",
+            sourceMessageIdHex: "02",
+            sourceEpoch: sourceEpoch,
+            retentionSeconds: retentionSeconds,
+            retentionExpiresAt: retentionExpiresAt,
+            direction: "received",
+            groupIdHex: "aa",
+            sender: "11",
+            plaintext: "hello",
+            contentTokens: .emptyDocument,
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            timelineAt: 300,
+            receivedAt: 300,
+            replyToMessageIdHex: nil,
+            replyPreview: nil,
+            mediaJson: nil,
+            media: [],
+            agentTextStreamJson: nil,
+            groupSystem: nil,
+            reactions: TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
+            deleted: false,
+            deletedByMessageIdHex: nil,
+            invalidationStatus: nil
+        )
     }
 }

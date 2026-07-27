@@ -91,4 +91,31 @@ struct ReactionDetailsPresentationTests {
         let label = MessageInfoPresentation.timestampLabel(1, locale: Locale(identifier: "en_US"))
         #expect(label?.isEmpty == false)
     }
+
+    @MainActor
+    @Test func messageExpirationLabelIsRelativeNearbyAndAbsoluteBeyondOneDay() throws {
+        let locale = Locale(identifier: "en_US")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let near = UInt64(now.addingTimeInterval(5 * 60).timeIntervalSince1970)
+        let far = UInt64(now.addingTimeInterval(2 * 24 * 60 * 60).timeIntervalSince1970)
+
+        let nearLabel = try #require(MessageExpirationPresentation.detailLabel(
+            expiresAt: near,
+            now: now,
+            locale: locale
+        ))
+        let farLabel = try #require(MessageExpirationPresentation.detailLabel(
+            expiresAt: far,
+            now: now,
+            locale: locale
+        ))
+
+        #expect(nearLabel.lowercased().contains("minute"))
+        #expect(farLabel == MessageInfoPresentation.timestampLabel(far, locale: locale))
+        #expect(MessageExpirationPresentation.detailLabel(
+            expiresAt: UInt64(now.timeIntervalSince1970),
+            now: now,
+            locale: locale
+        ) == "Expired")
+    }
 }
