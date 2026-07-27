@@ -122,7 +122,6 @@ struct SupportChatView: View {
                 }
             }
         }
-        .trueBlackScaffoldBackground()
         .localizedNavigationTitle("Chat with support")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.isCreatingChat)

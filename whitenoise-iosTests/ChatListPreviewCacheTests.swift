@@ -62,10 +62,71 @@ struct ChatListPreviewCacheTests {
         #expect(ChatRow.subtitleText(for: emptyItem, activeAccountIdHex: "self") == "No messages yet")
     }
 
+    @Test func groupPreviewUsesProjectedSenderNameWhileDirectMessageDoesNot() {
+        let groupItem = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(senderDisplayName: " Alice ")),
+            avatarURL: nil,
+            title: "Room",
+            isDirectMessage: false
+        )
+        let directItem = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(senderDisplayName: "Alice")),
+            avatarURL: nil,
+            title: "Alice",
+            isDirectMessage: true
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: groupItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Fallback" }
+        ) == ChatRowPreviewPresentation(prefix: "Alice", body: "hello"))
+        #expect(ChatRow.previewPresentation(
+            for: directItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Fallback" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: "hello"))
+    }
+
+    @Test func terminalMembershipReplacesStaleMessagePreview() {
+        let leftItem = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(), selfMembership: .left),
+            avatarURL: nil,
+            title: "Room"
+        )
+        let removedItem = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(), selfMembership: .removed),
+            avatarURL: nil,
+            title: "Room"
+        )
+
+        #expect(ChatRow.subtitleText(for: leftItem, activeAccountIdHex: "self") == "You left this chat.")
+        #expect(ChatRow.subtitleText(for: removedItem, activeAccountIdHex: "self") == "You were removed from this chat.")
+    }
+
+    @Test func durablePendingLeaveHasDistinctPreviewFromResolvedLeave() {
+        let pendingItem = ChatsListViewModel.Item(
+            row: row(
+                lastMessage: preview(),
+                selfMembership: .left,
+                leaveRequestPending: true
+            ),
+            avatarURL: nil,
+            title: "Room",
+            leaveRequestPending: true
+        )
+
+        #expect(ChatRow.subtitleText(for: pendingItem, activeAccountIdHex: "self") == "Leaving…")
+        #expect(pendingItem.selfMembership == .left)
+        #expect(!pendingItem.isActiveMember)
+    }
+
     private func row(
         groupIdHex: String = "0123456789abcdef",
         title: String = "Room",
-        lastMessage: ChatListMessagePreviewFfi? = nil
+        lastMessage: ChatListMessagePreviewFfi? = nil,
+        selfMembership: SelfMembershipFfi = .member,
+        leaveRequestPending: Bool = false
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
@@ -84,13 +145,16 @@ struct ChatListPreviewCacheTests {
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
             updatedAt: 1,
-            selfMembership: .member
+            selfMembership: selfMembership,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil
         )
     }
 
     private func preview(
         messageIdHex: String = "01",
         sender: String = "sender",
+        senderDisplayName: String? = nil,
         plaintext: String = "hello",
         contentTokens: MarkdownDocumentFfi = MarkdownDocumentFfi(blocks: [], truncated: false),
         kind: UInt64 = MessageSemantics.kindChat,
@@ -100,7 +164,7 @@ struct ChatListPreviewCacheTests {
         ChatListMessagePreviewFfi(
             messageIdHex: messageIdHex,
             sender: sender,
-            senderDisplayName: nil,
+            senderDisplayName: senderDisplayName,
             plaintext: plaintext,
             contentTokens: contentTokens,
             kind: kind,

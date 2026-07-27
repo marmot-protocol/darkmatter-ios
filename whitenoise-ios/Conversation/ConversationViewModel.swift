@@ -406,7 +406,10 @@ final class ConversationViewModel {
 
     var inactiveGroupMessage: String? {
         guard !canSendMessages else { return nil }
-        if leaveRequestPending || group.selfMembership == .left {
+        if leaveRequestPending {
+            return GroupManagementPresentation.leavingGroupComposerMessage
+        }
+        if group.selfMembership == .left {
             return GroupManagementPresentation.leftGroupComposerMessage
         }
         return GroupManagementPresentation.inactiveGroupComposerMessage
@@ -630,7 +633,7 @@ final class ConversationViewModel {
     ) {
         self.appState = appState
         self.group = group
-        self.leaveRequestPending = leaveRequestPending
+        self.leaveRequestPending = leaveRequestPending || group.leaveRequestPending
         self.initialTitle = initialTitle
         self.initialOtherMember = initialOtherMember
         self.initialMemberCount = initialMemberCount
@@ -703,8 +706,23 @@ final class ConversationViewModel {
         stopLiveSubscriptions()
     }
 
-    func markSelfLeft() {
+    func markLeaveRequested() {
         leaveRequestPending = true
+        var updatedGroup = group
+        updatedGroup.leaveRequestPending = true
+        updatedGroup.leaveRequestedAtMs = updatedGroup.leaveRequestedAtMs
+            ?? UInt64(Date().timeIntervalSince1970 * 1_000)
+        group = updatedGroup
+        if var state = managementState {
+            state.canLeave = false
+            state.leaveRequestPending = true
+            state.leaveRequestedAtMs = updatedGroup.leaveRequestedAtMs
+            managementState = state
+        }
+    }
+
+    func markSelfLeft() {
+        markLeaveRequested()
         let previousIdentity = groupMlsRefreshIdentity
         var updatedGroup = group
         updatedGroup.selfMembership = .left
@@ -717,6 +735,8 @@ final class ConversationViewModel {
                 canInvite: false,
                 canLeave: false,
                 requiresSelfDemoteBeforeLeave: false,
+                leaveRequestPending: true,
+                leaveRequestedAtMs: group.leaveRequestedAtMs,
                 memberActions: state.memberActions.filter { !$0.isSelf }
             )
         }
@@ -1720,7 +1740,7 @@ final class ConversationViewModel {
             previousAdmins: previousAdmins,
             next: record
         )
-        reconcileLeaveRequest(with: record.selfMembership)
+        reconcileLeaveRequest(with: record.leaveRequestPending)
         applyGroupMlsTrackedChanges {
             group = record
         }
@@ -1757,7 +1777,7 @@ final class ConversationViewModel {
     }
 
     func applyGroupRecord(_ record: AppGroupRecordFfi) {
-        reconcileLeaveRequest(with: record.selfMembership)
+        reconcileLeaveRequest(with: record.leaveRequestPending)
         applyGroupMlsTrackedChanges {
             group = record
         }
@@ -1807,7 +1827,7 @@ final class ConversationViewModel {
         }
         state.isLastAdmin = state.isSelfAdmin && group.admins.count <= 1
         state.requiresSelfDemoteBeforeLeave = state.isSelfAdmin
-        state.canLeave = !state.requiresSelfDemoteBeforeLeave
+        state.canLeave = !state.requiresSelfDemoteBeforeLeave && !state.leaveRequestPending
         managementState = state
     }
 
@@ -1857,7 +1877,7 @@ final class ConversationViewModel {
         if announceRosterChanges && membersChanged {
             appState?.present(.success(L10n.string("Group membership updated")))
         }
-        reconcileLeaveRequest(with: details.group.selfMembership)
+        reconcileLeaveRequest(with: details.group.leaveRequestPending)
         group = details.group
         groupMemberDetails = details.members
         managementState = state
@@ -1869,10 +1889,8 @@ final class ConversationViewModel {
         }
     }
 
-    private func reconcileLeaveRequest(with membership: SelfMembershipFfi) {
-        if membership != .member {
-            leaveRequestPending = false
-        }
+    private func reconcileLeaveRequest(with pending: Bool) {
+        leaveRequestPending = pending
     }
 
 #if DEBUG

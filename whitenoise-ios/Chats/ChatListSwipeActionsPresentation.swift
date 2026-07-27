@@ -12,18 +12,22 @@ nonisolated enum ChatListSwipeActionsPresentation: Equatable {
         static let delete = Actions(rawValue: 1 << 3)
         static let mute = Actions(rawValue: 1 << 4)
         static let unmute = Actions(rawValue: 1 << 5)
+        static let read = Actions(rawValue: 1 << 6)
     }
 
-    /// Mute is per-device presentation state, so it stays available regardless
-    /// of archive state or membership.
-    static func leadingActions(isMuted: Bool) -> Actions {
-        isMuted ? [.unmute] : [.mute]
+    static func leadingActions(hasUnread: Bool) -> Actions {
+        hasUnread ? [.read] : []
     }
 
     static func trailingActions(
         isArchived: Bool,
-        selfMembership: SelfMembershipFfi
+        selfMembership: SelfMembershipFfi,
+        leaveRequestPending: Bool,
+        isMuted: Bool
     ) -> Actions {
+        if leaveRequestPending {
+            return isArchived ? [.unarchive] : [.archive]
+        }
         let isActiveMember = GroupManagementPresentation.isActiveChatListMember(selfMembership)
         if isArchived {
             var actions: Actions = [.unarchive]
@@ -38,6 +42,7 @@ nonisolated enum ChatListSwipeActionsPresentation: Equatable {
         var actions: Actions = [.archive]
         if isActiveMember {
             actions.insert(.leave)
+            actions.insert(isMuted ? .unmute : .mute)
         } else {
             actions.insert(.delete)
         }

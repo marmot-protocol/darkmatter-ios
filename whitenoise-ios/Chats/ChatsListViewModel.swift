@@ -19,6 +19,7 @@ final class ChatsListViewModel {
         let avatarURL: URL?
         let avatarSeed: String
         let title: String
+        let isDirectMessage: Bool?
         let isMuted: Bool
         let previewText: String?
         let draftPreview: String?
@@ -30,6 +31,7 @@ final class ChatsListViewModel {
             avatarURL: URL?,
             avatarSeed: String? = nil,
             title: String,
+            isDirectMessage: Bool? = nil,
             isMuted: Bool = false,
             leaveRequestPending: Bool = false,
             draftSummary: MessageDraftSummaryFfi? = nil,
@@ -43,6 +45,7 @@ final class ChatsListViewModel {
             self.avatarURL = avatarURL
             self.avatarSeed = avatarSeed ?? row.groupIdHex
             self.title = title
+            self.isDirectMessage = isDirectMessage
             self.isMuted = isMuted
             self.leaveRequestPending = leaveRequestPending
             self.previewText = previewText
@@ -63,9 +66,7 @@ final class ChatsListViewModel {
         var unreadMentionCount: UInt64 { row.unreadMentionCount }
         var hasUnreadMention: Bool { row.unreadMention || row.unreadMentionCount > 0 }
         var isArchived: Bool { row.archived }
-        var selfMembership: SelfMembershipFfi {
-            leaveRequestPending ? .left : row.selfMembership
-        }
+        var selfMembership: SelfMembershipFfi { row.selfMembership }
         var isActiveMember: Bool {
             !leaveRequestPending
                 && GroupManagementPresentation.isActiveChatListMember(row.selfMembership)
@@ -96,6 +97,8 @@ final class ChatsListViewModel {
                 archived: row.archived,
                 pendingConfirmation: row.pendingConfirmation,
                 selfMembership: selfMembership,
+                leaveRequestPending: row.leaveRequestPending,
+                leaveRequestedAtMs: row.leaveRequestedAtMs,
                 welcomerAccountIdHex: nil,
                 viaWelcomeMessageIdHex: nil
             )
@@ -151,9 +154,6 @@ final class ChatsListViewModel {
     private var rowByGroupId: [String: ChatListRowFfi] = [:]
     private var itemByGroupId: [String: Item] = [:]
     private var pendingChatListRowsByGroupId: [String: ChatListRowFfi] = [:]
-    /// Presentation-only bridge for Marmot's durable leave-request gate. The
-    /// current bindings expose terminal membership but not a pending request.
-    private var locallyRequestedLeaveGroupIds: Set<String> = []
     private var avatarURLByGroupId: [String: String] = [:]
     private var avatarURLLoadedGroupIds: Set<String> = []
     private var pendingAvatarURLRefreshGroupIds: Set<String> = []
@@ -204,7 +204,6 @@ final class ChatsListViewModel {
                 visibleRowsRevision &+= 1
             }
             pendingChatListRowsByGroupId = [:]
-            locallyRequestedLeaveGroupIds = []
             avatarURLByGroupId = [:]
             avatarURLLoadedGroupIds = []
             pendingAvatarURLRefreshGroupIds = []
@@ -358,7 +357,6 @@ final class ChatsListViewModel {
         var nextItems: [String: Item] = [:]
         var changed = false
         let muteLookup = currentMuteLookup()
-        locallyRequestedLeaveGroupIds.formIntersection(mergedSnapshot.map(\.groupIdHex))
         for row in mergedSnapshot {
             updateCachedGroupDetails(with: row)
             let item = makeItem(for: row, muteLookup: muteLookup)
@@ -457,7 +455,6 @@ final class ChatsListViewModel {
 
     func removeChatListRow(groupIdHex: String) {
         pendingChatListRowsByGroupId[groupIdHex] = nil
-        locallyRequestedLeaveGroupIds.remove(groupIdHex)
         let hadPublishedRow = rowByGroupId[groupIdHex] != nil || itemByGroupId[groupIdHex] != nil
         rowByGroupId[groupIdHex] = nil
         itemByGroupId[groupIdHex] = nil
@@ -476,11 +473,13 @@ final class ChatsListViewModel {
     }
 
     func markGroupLeft(groupIdHex: String) {
-        guard let row = rowByGroupId[groupIdHex] else { return }
+        guard var row = rowByGroupId[groupIdHex] else { return }
         if let currentAccount {
             draftStore.removeDraft(accountRef: currentAccount, groupIdHex: groupIdHex)
         }
-        locallyRequestedLeaveGroupIds.insert(groupIdHex)
+        row.leaveRequestPending = true
+        row.leaveRequestedAtMs = row.leaveRequestedAtMs
+            ?? UInt64(Date().timeIntervalSince1970 * 1_000)
         if storeRow(row) {
             publishItems()
         }
@@ -495,6 +494,8 @@ final class ChatsListViewModel {
         row.archived = record.archived
         row.pendingConfirmation = record.pendingConfirmation
         row.selfMembership = record.selfMembership
+        row.leaveRequestPending = record.leaveRequestPending
+        row.leaveRequestedAtMs = record.leaveRequestedAtMs
         row.groupName = record.name
         row.avatarUrl = record.avatarUrl
         if let name = ContentSanitizer.groupName(record.name) {
@@ -576,22 +577,16 @@ final class ChatsListViewModel {
         let display = display(for: row, details: groupDetailsCache[row.groupIdHex])
         let draftAccountRef = currentAccount ?? appState?.activeAccountRef
         let muteLookup = muteLookup ?? currentMuteLookup()
-        let leaveRequestPending: Bool
-        if row.selfMembership == .member {
-            leaveRequestPending = locallyRequestedLeaveGroupIds.contains(row.groupIdHex)
-        } else {
-            locallyRequestedLeaveGroupIds.remove(row.groupIdHex)
-            leaveRequestPending = false
-        }
         return Item(
             row: row,
             avatarURL: display.avatarURL,
             avatarSeed: display.avatarSeed,
             title: display.title,
+            isDirectMessage: display.isDirectMessage,
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
             } ?? false,
-            leaveRequestPending: leaveRequestPending,
+            leaveRequestPending: row.leaveRequestPending,
             draftSummary: draftAccountRef.flatMap {
                 draftStore.summary(accountRef: $0, groupIdHex: row.groupIdHex)
             },
@@ -662,6 +657,7 @@ final class ChatsListViewModel {
         let title: String
         let avatarURL: URL?
         let avatarSeed: String
+        let isDirectMessage: Bool?
     }
 
     static func display(
@@ -674,7 +670,10 @@ final class ChatsListViewModel {
             return Display(
                 title: Item.sanitizedTitle(for: row),
                 avatarURL: fallbackAvatarURL,
-                avatarSeed: row.groupIdHex
+                avatarSeed: row.groupIdHex,
+                isDirectMessage: ContentSanitizer.groupName(row.groupName) == nil
+                    ? nil
+                    : false
             )
         }
 
@@ -682,7 +681,8 @@ final class ChatsListViewModel {
         return Display(
             title: GroupDisplay.title(for: groupDisplay, appState: appState),
             avatarURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState) ?? fallbackAvatarURL,
-            avatarSeed: GroupDisplay.avatarSeed(for: groupDisplay)
+            avatarSeed: GroupDisplay.avatarSeed(for: groupDisplay),
+            isDirectMessage: groupDisplay.isDirectMessage
         )
     }
 
@@ -984,7 +984,9 @@ final class ChatsListViewModel {
             conversationCreatedAt: now,
             activitySortAt: now,
             updatedAt: now,
-            selfMembership: group.selfMembership
+            selfMembership: group.selfMembership,
+            leaveRequestPending: group.leaveRequestPending,
+            leaveRequestedAtMs: group.leaveRequestedAtMs
         )
     }
 }

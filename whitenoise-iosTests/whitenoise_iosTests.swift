@@ -2262,6 +2262,39 @@ struct TelemetryBuildConfigTests {
 @MainActor
 struct RelativeTimeTests {
 
+    @Test func chatListUsesLocalizedClockTimeForOlderMessagesToday() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let locale = Locale(identifier: "en_US")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let date = now.addingTimeInterval(-2 * 3600)
+        let expectedFormatter = DateFormatter()
+        expectedFormatter.locale = locale
+        expectedFormatter.setLocalizedDateFormatFromTemplate("jm")
+
+        #expect(RelativeTime.chatList(
+            date,
+            now: now,
+            calendar: calendar,
+            locale: locale
+        ) == expectedFormatter.string(from: date))
+    }
+
+    @Test func chatListKeepsLocalizedMinuteDurationForRecentMessages() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let locale = Locale(identifier: "fr_FR")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let expected = try expectedAbbreviatedDuration(4, unit: .minute, locale: locale)
+
+        #expect(RelativeTime.chatList(
+            now.addingTimeInterval(-4 * 60),
+            now: now,
+            calendar: calendar,
+            locale: locale
+        ) == expected)
+    }
+
     @Test func shortReusesCachedDateFormattersForRepeatedListRows() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -3099,6 +3132,7 @@ struct AppearancePreferencesTests {
     @Test func themePreferencesResolveToExpectedColorSchemes() {
         #expect(AppearanceTheme.resolved(rawValue: nil) == .system)
         #expect(AppearanceTheme.resolved(rawValue: "nope") == .system)
+        #expect(AppearanceTheme.resolved(rawValue: "trueBlack") == .dark)
         #expect(AppearanceTheme.system.preferredColorScheme == nil)
         #expect(AppearanceTheme.light.preferredColorScheme == .light)
         #expect(AppearanceTheme.dark.preferredColorScheme == .dark)
@@ -5905,33 +5939,31 @@ struct ChatsListProjectionTests {
 
         #expect(viewModel.items.map(\.id) == [row.groupIdHex])
         #expect(viewModel.items.first?.leaveRequestPending == true)
-        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.selfMembership == .member)
         #expect(viewModel.items.first?.isActiveMember == false)
     }
 
-    @Test func staleMemberSnapshotDoesNotReactivateLocallyRequestedLeave() throws {
+    @Test func durableMemberPendingLeaveSurvivesFreshSnapshot() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let groupId = hex("e1")
-        let row = chatListRow(groupIdHex: groupId, title: "Leaving group", updatedAt: 10)
-        viewModel.applyChatListSnapshot([row])
-        viewModel.markGroupLeft(groupIdHex: groupId)
-
         viewModel.applyChatListSnapshot([
-            chatListRow(groupIdHex: groupId, title: "Leaving group", updatedAt: 20)
+            chatListRow(
+                groupIdHex: groupId,
+                title: "Leaving group",
+                updatedAt: 20,
+                selfMembership: .member,
+                leaveRequestPending: true
+            )
         ])
 
         #expect(viewModel.items.first?.leaveRequestPending == true)
-        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.selfMembership == .member)
         #expect(viewModel.items.first?.isActiveMember == false)
     }
 
-    @Test func terminalMembershipClearsLocalLeaveRequestProjection() throws {
+    @Test func resolvedTerminalMembershipClearsPendingLeave() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let groupId = hex("e2")
-        viewModel.applyChatListSnapshot([
-            chatListRow(groupIdHex: groupId, title: "Left group", updatedAt: 10)
-        ])
-        viewModel.markGroupLeft(groupIdHex: groupId)
 
         viewModel.applyChatListSnapshot([
             chatListRow(
@@ -5943,6 +5975,22 @@ struct ChatsListProjectionTests {
         ])
 
         #expect(viewModel.items.first?.leaveRequestPending == false)
+        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.isActiveMember == false)
+    }
+
+    @Test func publishedLeaveCanRemainDurablyPending() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let row = chatListRow(
+            groupIdHex: hex("e3"),
+            title: "Leaving group",
+            selfMembership: .left,
+            leaveRequestPending: true
+        )
+
+        viewModel.applyChatListSnapshot([row])
+
+        #expect(viewModel.items.first?.leaveRequestPending == true)
         #expect(viewModel.items.first?.selfMembership == .left)
         #expect(viewModel.items.first?.isActiveMember == false)
     }
@@ -7456,6 +7504,27 @@ struct GroupManagementPresentationTests {
         ))
     }
 
+    @Test func pendingLeaveDisablesMembershipAndLeaveAffordances() {
+        let state = managementState(
+            isSelfAdmin: false,
+            isLastAdmin: false,
+            canLeave: false,
+            leaveRequestPending: true
+        )
+
+        #expect(!GroupManagementPresentation.canLeave(state: state, fallbackIsLastAdmin: false))
+        #expect(!GroupManagementPresentation.isActiveMember(
+            state: state,
+            members: [],
+            groupMemberDetails: [],
+            myAccountId: state.myAccountIdHex
+        ))
+        #expect(GroupManagementPresentation.leaveFooter(
+            state: state,
+            fallbackIsLastAdmin: false
+        ) == GroupManagementPresentation.leavingGroupComposerMessage)
+    }
+
     @Test func relayDisclosureShowsCountAndUrls() {
         let relays = ["wss://relay.example", "wss://relay.two"]
         let locale = Locale(identifier: "en_US")
@@ -8458,11 +8527,25 @@ struct ReceivedMessageTimestampTests {
     }
 }
 
+struct ChatListSearchTests {
+    @Test func matchingIgnoresCaseAndDiacritics() {
+        #expect(ChatListSearch.matches(query: "elodie", in: "Élodie and Alice"))
+        #expect(ChatListSearch.matches(query: "ALICE", in: "Élodie and Alice"))
+        #expect(!ChatListSearch.matches(query: "bob", in: "Élodie and Alice"))
+    }
+
+    @Test func blankSearchMatchesEveryRow() {
+        #expect(ChatListSearch.matches(query: "  \n", in: "Anything"))
+    }
+}
+
 struct ChatListSwipeActionsPresentationTests {
     @Test func activeMemberShowsLeaveAndArchive() {
         let actions = ChatListSwipeActionsPresentation.trailingActions(
             isArchived: false,
-            selfMembership: .member
+            selfMembership: .member,
+            leaveRequestPending: false,
+            isMuted: false
         )
         #expect(actions.contains(.leave))
         #expect(actions.contains(.archive))
@@ -8473,7 +8556,9 @@ struct ChatListSwipeActionsPresentationTests {
     @Test func inactiveMemberShowsDeleteAndArchive() {
         let actions = ChatListSwipeActionsPresentation.trailingActions(
             isArchived: false,
-            selfMembership: .removed
+            selfMembership: .removed,
+            leaveRequestPending: false,
+            isMuted: false
         )
         #expect(actions.contains(.delete))
         #expect(actions.contains(.archive))
@@ -8484,7 +8569,9 @@ struct ChatListSwipeActionsPresentationTests {
     @Test func archivedActiveMemberShowsUnarchiveAndLeave() {
         let actions = ChatListSwipeActionsPresentation.trailingActions(
             isArchived: true,
-            selfMembership: .member
+            selfMembership: .member,
+            leaveRequestPending: false,
+            isMuted: false
         )
         #expect(actions.contains(.unarchive))
         #expect(actions.contains(.leave))
@@ -8495,7 +8582,9 @@ struct ChatListSwipeActionsPresentationTests {
     @Test func archivedInactiveMemberShowsUnarchiveAndDelete() {
         let actions = ChatListSwipeActionsPresentation.trailingActions(
             isArchived: true,
-            selfMembership: .left
+            selfMembership: .left,
+            leaveRequestPending: false,
+            isMuted: false
         )
         #expect(actions.contains(.unarchive))
         #expect(actions.contains(.delete))
@@ -8504,11 +8593,27 @@ struct ChatListSwipeActionsPresentationTests {
     }
 
     @Test func bulkLocalDeleteRequiresEverySelectedMembershipToBeInactive() {
-        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: []))
-        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false]))
-        #expect(ChatListSelection.canDeleteLocally(activeMemberFlags: [false, false]))
-        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [true]))
-        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [false, true]))
+        #expect(!ChatListSelection.canDeleteLocally(activeMemberFlags: [], pendingLeaveFlags: []))
+        #expect(ChatListSelection.canDeleteLocally(
+            activeMemberFlags: [false],
+            pendingLeaveFlags: [false]
+        ))
+        #expect(ChatListSelection.canDeleteLocally(
+            activeMemberFlags: [false, false],
+            pendingLeaveFlags: [false, false]
+        ))
+        #expect(!ChatListSelection.canDeleteLocally(
+            activeMemberFlags: [true],
+            pendingLeaveFlags: [false]
+        ))
+        #expect(!ChatListSelection.canDeleteLocally(
+            activeMemberFlags: [false, true],
+            pendingLeaveFlags: [false, false]
+        ))
+        #expect(!ChatListSelection.canDeleteLocally(
+            activeMemberFlags: [false],
+            pendingLeaveFlags: [true]
+        ))
     }
 }
 
@@ -9438,7 +9543,7 @@ struct MediaComposerAvailabilityTests {
         #expect(!viewModel.canSendMediaAttachments)
     }
 
-    @Test func pendingLeaveRequestSurvivesStaleActiveGroupDetails() throws {
+    @Test func durablePendingLeaveFromGroupDetailsDisablesComposer() throws {
         let me = hex("11")
         let other = hex("22")
         let viewModel = ConversationViewModel(
@@ -9451,7 +9556,7 @@ struct MediaComposerAvailabilityTests {
             GroupMutationResultFfi(
                 summary: SendSummaryFfi(published: 0, messageIds: []),
                 details: GroupDetailsFfi(
-                    group: group(name: "leaving", admins: [other]),
+                    group: group(name: "leaving", admins: [other], leaveRequestPending: true),
                     members: [
                         groupMember(memberIdHex: me, isAdmin: false, isSelf: true),
                         groupMember(memberIdHex: other, isAdmin: true, isSelf: false),
@@ -9462,8 +9567,10 @@ struct MediaComposerAvailabilityTests {
                     isSelfAdmin: false,
                     isLastAdmin: false,
                     canInvite: false,
-                    canLeave: true,
+                    canLeave: false,
                     requiresSelfDemoteBeforeLeave: false,
+                    leaveRequestPending: true,
+                    leaveRequestedAtMs: 1_000,
                     memberActions: [
                         GroupMemberActionStateFfi(
                             memberIdHex: me,
@@ -9480,11 +9587,11 @@ struct MediaComposerAvailabilityTests {
 
         #expect(viewModel.leaveRequestPending)
         #expect(!viewModel.canSendMessages)
-        #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leftGroupComposerMessage)
+        #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leavingGroupComposerMessage)
         #expect(!viewModel.canSendMediaAttachments)
     }
 
-    @Test func terminalLeaveMembershipReplacesPendingLeaveProjection() throws {
+    @Test func resolvedTerminalLeaveClearsPendingProjection() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: group(name: "leaving"),
@@ -9499,6 +9606,23 @@ struct MediaComposerAvailabilityTests {
         #expect(!viewModel.leaveRequestPending)
         #expect(!viewModel.canSendMessages)
         #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leftGroupComposerMessage)
+    }
+
+    @Test func publishedTerminalLeaveCanRemainPending() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "leaving")
+        )
+
+        viewModel.applyGroupRecord(group(
+            name: "leaving",
+            selfMembership: .left,
+            leaveRequestPending: true
+        ))
+
+        #expect(viewModel.leaveRequestPending)
+        #expect(!viewModel.canSendMessages)
+        #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leavingGroupComposerMessage)
     }
 
     @Test func attachmentButtonUsesDisabledAppearanceWhenMediaIsUnavailable() {
@@ -11832,6 +11956,7 @@ private func group(
     archived: Bool = false,
     pendingConfirmation: Bool = false,
     selfMembership: SelfMembershipFfi = .member,
+    leaveRequestPending: Bool = false,
     welcomerAccountIdHex: String? = nil,
     encryptedMedia: AppGroupEncryptedMediaComponentFfi = encryptedMediaComponent()
 ) -> AppGroupRecordFfi {
@@ -11850,6 +11975,8 @@ private func group(
         archived: archived,
         pendingConfirmation: pendingConfirmation,
         selfMembership: selfMembership,
+        leaveRequestPending: leaveRequestPending,
+        leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
         welcomerAccountIdHex: welcomerAccountIdHex,
         viaWelcomeMessageIdHex: nil
     )
@@ -11895,7 +12022,8 @@ private func chatListRow(
     conversationCreatedAt: UInt64? = nil,
     activitySortAt: UInt64? = nil,
     updatedAt: UInt64 = 1,
-    selfMembership: SelfMembershipFfi = .member
+    selfMembership: SelfMembershipFfi = .member,
+    leaveRequestPending: Bool = false
 ) -> ChatListRowFfi {
     ChatListRowFfi(
         groupIdHex: groupIdHex,
@@ -11916,7 +12044,9 @@ private func chatListRow(
         conversationCreatedAt: conversationCreatedAt ?? updatedAt,
         activitySortAt: activitySortAt ?? updatedAt,
         updatedAt: updatedAt,
-        selfMembership: selfMembership
+        selfMembership: selfMembership,
+        leaveRequestPending: leaveRequestPending,
+        leaveRequestedAtMs: leaveRequestPending ? updatedAt * 1_000 : nil
     )
 }
 
@@ -12061,15 +12191,18 @@ private func managementState(
     isSelfAdmin: Bool,
     isLastAdmin: Bool,
     canLeave: Bool? = nil,
-    requiresSelfDemoteBeforeLeave: Bool? = nil
+    requiresSelfDemoteBeforeLeave: Bool? = nil,
+    leaveRequestPending: Bool = false
 ) -> GroupManagementStateFfi {
     GroupManagementStateFfi(
         myAccountIdHex: hex("11"),
         isSelfAdmin: isSelfAdmin,
         isLastAdmin: isLastAdmin,
         canInvite: isSelfAdmin,
-        canLeave: canLeave ?? !isSelfAdmin,
+        canLeave: leaveRequestPending ? false : (canLeave ?? !isSelfAdmin),
         requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave ?? isSelfAdmin,
+        leaveRequestPending: leaveRequestPending,
+        leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
         memberActions: []
     )
 }

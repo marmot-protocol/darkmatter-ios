@@ -19,12 +19,12 @@ struct ChatRow: View {
                 title: title,
                 pictureURL: avatarURLForDisplay
             )
-            .frame(width: 52, height: 52)
+            .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     Text(title)
-                        .font(item.hasUnread ? .headline.weight(.semibold) : .headline)
+                        .font(.headline)
                         .lineLimit(1)
                     if item.isMuted {
                         Image(systemName: MuteBadgePresentation.systemImageName)
@@ -32,41 +32,44 @@ struct ChatRow: View {
                             .foregroundStyle(.secondary)
                             .accessibilityLabel(Text(L10n.string("Muted")))
                     }
+                    if item.leaveRequestPending {
+                        Image(systemName: "hourglass")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(L10n.string("Leaving…")))
+                    } else if !item.isActiveMember {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(
+                                item.selfMembership == .left
+                                    ? Text("Left chat")
+                                    : Text("Removed from chat")
+                            )
+                    }
+                    Spacer(minLength: 8)
+                    if let timestamp {
+                        Text(timestamp)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
-                Text(subtitle)
-                    .font(.subheadline)
-                    .fontWeight(item.draftPreview != nil || item.hasUnread ? .semibold : .regular)
-                    .foregroundStyle(
-                        item.draftPreview != nil
-                            ? Color.accentColor
-                            : (item.hasUnread ? .primary : .secondary)
-                    )
-                    .lineLimit(1)
-            }
 
-            Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 6) {
-                if let timestamp {
-                    Text(timestamp)
-                        .font(.caption)
-                        .foregroundStyle(item.hasUnread ? Color.accentColor : .secondary)
-                        .fontWeight(item.hasUnread ? .semibold : .regular)
-                        .monospacedDigit()
-                }
-                if item.hasUnread || item.hasUnreadMention {
-                    HStack(spacing: 4) {
-                        if item.hasUnreadMention {
-                            MentionBadge()
-                        }
-                        if item.hasUnread {
-                            UnreadCountBadge(count: item.unreadCount)
-                        }
+                HStack(alignment: .top, spacing: 5) {
+                    previewText
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer(minLength: 8)
+                    if item.hasUnread {
+                        UnreadCountBadge(count: item.unreadCount)
                     }
                 }
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
     private var title: String {
@@ -87,26 +90,72 @@ struct ChatRow: View {
         )
     }
 
-    /// Latest message preview. Sent messages are prefixed with "You:".
-    private var subtitle: String {
-        Self.subtitleText(for: item, activeAccountIdHex: appState.activeAccount?.accountIdHex)
+    private var preview: ChatRowPreviewPresentation {
+        Self.previewPresentation(
+            for: item,
+            activeAccountIdHex: appState.activeAccount?.accountIdHex,
+            senderName: { appState.displayName(forAccountIdHex: $0) }
+        )
+    }
+
+    private var previewText: Text {
+        if let prefix = preview.prefix {
+            return Text(verbatim: prefix + ": ")
+                .bold()
+                + Text(verbatim: preview.body)
+        }
+        return Text(verbatim: preview.body)
     }
 
     static func subtitleText(
         for item: ChatsListViewModel.Item,
         activeAccountIdHex: String?
     ) -> String {
+        let presentation = previewPresentation(
+            for: item,
+            activeAccountIdHex: activeAccountIdHex,
+            senderName: { _ in "" }
+        )
+        return presentation.prefix.map { "\($0): \(presentation.body)" } ?? presentation.body
+    }
+
+    static func previewPresentation(
+        for item: ChatsListViewModel.Item,
+        activeAccountIdHex: String?,
+        senderName: (String) -> String
+    ) -> ChatRowPreviewPresentation {
+        if item.leaveRequestPending {
+            return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("Leaving…"))
+        }
+        if item.selfMembership == .left {
+            return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You left this chat."))
+        }
+        if item.selfMembership == .removed {
+            return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You were removed from this chat."))
+        }
         if let draftPreview = item.draftPreview {
-            return L10n.formatted("Draft: %@", draftPreview)
+            return ChatRowPreviewPresentation(prefix: nil, body: L10n.formatted("Draft: %@", draftPreview))
         }
         guard let latest = item.lastMessage else {
-            return L10n.string("No messages yet")
+            return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("No messages yet"))
         }
         let body = item.previewText ?? ""
         if latest.sender == activeAccountIdHex {
-            return body.isEmpty ? L10n.string("You sent a message") : L10n.formatted("You: %@", body)
+            return body.isEmpty
+                ? ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You sent a message"))
+                : ChatRowPreviewPresentation(prefix: L10n.string("You"), body: body)
         }
-        return body.isEmpty ? L10n.string("New message") : body
+        if item.isDirectMessage == false, !body.isEmpty {
+            let projectedName = ContentSanitizer.displayName(latest.senderDisplayName)
+            let fallbackName = ContentSanitizer.displayName(senderName(latest.sender))
+            if let name = projectedName ?? fallbackName {
+                return ChatRowPreviewPresentation(prefix: name, body: body)
+            }
+        }
+        return ChatRowPreviewPresentation(
+            prefix: nil,
+            body: body.isEmpty ? L10n.string("New message") : body
+        )
     }
 
     static func automaticAvatarURL(_ url: URL?, pendingConfirmation: Bool) -> URL? {
@@ -115,9 +164,14 @@ struct ChatRow: View {
 
     private var timestamp: String? {
         guard let latest = item.lastMessage else { return nil }
-        return RelativeTime.short(Date(timeIntervalSince1970: TimeInterval(latest.timelineAt)))
+        return RelativeTime.chatList(Date(timeIntervalSince1970: TimeInterval(latest.timelineAt)))
     }
 
+}
+
+nonisolated struct ChatRowPreviewPresentation: Equatable {
+    let prefix: String?
+    let body: String
 }
 
 struct MentionBadge: View {

@@ -397,15 +397,40 @@ struct ChatMuteSuppressionPolicyTests {
 struct ChatListMuteSwipeActionsTests {
 
     @Test func unmutedRowOffersMuteOnly() {
-        let actions = ChatListSwipeActionsPresentation.leadingActions(isMuted: false)
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: false,
+            selfMembership: .member,
+            leaveRequestPending: false,
+            isMuted: false
+        )
         #expect(actions.contains(.mute))
         #expect(!actions.contains(.unmute))
     }
 
     @Test func mutedRowOffersUnmuteOnly() {
-        let actions = ChatListSwipeActionsPresentation.leadingActions(isMuted: true)
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: false,
+            selfMembership: .member,
+            leaveRequestPending: false,
+            isMuted: true
+        )
         #expect(actions.contains(.unmute))
         #expect(!actions.contains(.mute))
+    }
+
+    @Test func pendingLeaveOffersOnlyArchiveControl() {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: false,
+            selfMembership: .member,
+            leaveRequestPending: true,
+            isMuted: true
+        )
+        #expect(actions == [.archive])
+    }
+
+    @Test func leadingSwipeOnlyOffersReadForUnreadRows() {
+        #expect(ChatListSwipeActionsPresentation.leadingActions(hasUnread: true).contains(.read))
+        #expect(ChatListSwipeActionsPresentation.leadingActions(hasUnread: false).isEmpty)
     }
 }
 

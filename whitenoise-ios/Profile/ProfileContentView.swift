@@ -50,7 +50,6 @@ struct ProfileContentView: View {
             sharedGroupsSection
         }
         .listStyle(.insetGrouped)
-        .trueBlackScaffoldBackground()
         .task(id: npub) { await model.resolve(npub: npub, using: appState) }
         .task(id: declaredNip05) { await model.verifyDeclaredNip05(declaredNip05) }
         .sheet(isPresented: $showStartGroup) {

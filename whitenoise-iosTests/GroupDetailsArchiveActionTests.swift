@@ -330,7 +330,38 @@ struct GroupDetailsArchiveActionTests {
         #expect(leaveRequests.first?.0 == "account-1")
         #expect(leaveRequests.first?.1 == groupIdHex)
         #expect(conversation.group.selfMembership == .left)
+        #expect(conversation.group.leaveRequestPending)
         #expect(changedRecords.map(\.selfMembership) == [.left])
+        #expect(changedRecords.map(\.leaveRequestPending) == [true])
+        #expect(leftGroupIds == [groupIdHex])
+        #expect(dismissed)
+    }
+
+    @Test func alreadyRequestedLeaveIsPresentedAsDurableProgress() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        let model = GroupDetailsViewModel()
+        var changedRecords: [AppGroupRecordFfi] = []
+        var leftGroupIds: [String] = []
+        var dismissed = false
+
+        model.conversation = conversation
+        model.onGroupChanged = { changedRecords.append($0) }
+        model.onGroupLeft = { leftGroupIds.append($0) }
+        model.leaveGroupForTesting = { _, _ in
+            throw MarmotKitError.LeaveAlreadyRequested(groupIdHex: groupIdHex)
+        }
+
+        await model.leave(using: appState, dismiss: { dismissed = true })
+
+        #expect(conversation.group.selfMembership == .member)
+        #expect(conversation.group.leaveRequestPending)
+        #expect(changedRecords.map(\.leaveRequestPending) == [true])
         #expect(leftGroupIds == [groupIdHex])
         #expect(dismissed)
     }
@@ -385,6 +416,34 @@ struct GroupDetailsArchiveActionTests {
         #expect(deleteRequests.first?.1 == groupIdHex)
         #expect(deletedGroupIds == [groupIdHex])
         #expect(dismissed)
+    }
+
+    @Test func deleteLocalIsUnavailableWhileLeaveIsPending() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(
+                groupIdHex: groupIdHex,
+                archived: false,
+                selfMembership: .left,
+                leaveRequestPending: true
+            )
+        )
+        let model = GroupDetailsViewModel()
+        var deleteRequested = false
+
+        model.conversation = conversation
+        model.deleteGroupLocalForTesting = { _, _ in
+            deleteRequested = true
+            return true
+        }
+
+        await model.deleteLocal(using: appState, dismiss: {})
+
+        #expect(!deleteRequested)
+        #expect(model.actionError == GroupManagementPresentation.leavingGroupComposerMessage)
     }
 }
 
@@ -530,6 +589,7 @@ private func archiveTestGroup(
     groupIdHex: String,
     archived: Bool,
     selfMembership: SelfMembershipFfi = .member,
+    leaveRequestPending: Bool = false,
     description: String = "",
     avatarUrl: String? = nil
 ) -> AppGroupRecordFfi {
@@ -557,6 +617,8 @@ private func archiveTestGroup(
         archived: archived,
         pendingConfirmation: false,
         selfMembership: selfMembership,
+        leaveRequestPending: leaveRequestPending,
+        leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
         welcomerAccountIdHex: nil,
         viaWelcomeMessageIdHex: nil
     )
