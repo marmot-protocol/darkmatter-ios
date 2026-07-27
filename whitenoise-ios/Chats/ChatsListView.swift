@@ -94,11 +94,27 @@ struct ChatsListView: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .trueBlackScaffoldBackground()
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if appState.isConnectivityCatchUpInProgress {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Syncing…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(.bar)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .safeAreaInset(edge: .bottom) {
                 if selectionMode, viewModel != nil {
                     chatSelectionBar(visibleRows: visibleRows)
                 }
             }
+            .animation(.smooth(duration: 0.2), value: appState.isConnectivityCatchUpInProgress)
             .onChange(of: visibleRowsKey) { _, _ in
                 selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
             }
@@ -625,14 +641,17 @@ struct ChatsListView: View {
             .tint(.blue)
         }
         if actions.contains(.delete) {
-            Button(role: .destructive) {
+            // A destructive-role swipe button makes SwiftUI optimistically
+            // remove the row before our confirmation dialog has resolved.
+            Button {
                 pendingSingleDelete = LocalDeleteTarget(id: item.id, title: item.title)
             } label: {
                 Label("Delete", systemImage: "trash")
             }
+            .tint(.red)
         }
         if actions.contains(.leave) {
-            Button(role: .destructive) {
+            Button {
                 let target = ChatListLeavePresentation.Target(
                     groupIdHex: item.id,
                     title: item.title
@@ -641,6 +660,7 @@ struct ChatsListView: View {
             } label: {
                 Label("Leave", systemImage: "person.crop.circle.badge.minus")
             }
+            .tint(.red)
         }
         if actions.contains(.archive) {
             Button {
@@ -880,6 +900,7 @@ private struct ChatDestination: View {
                 chat: item.projectedGroup,
                 accountRef: appState.activeAccountRef,
                 initialTitle: item.title,
+                initialLeaveRequestPending: item.leaveRequestPending,
                 initialTargetMessageIdHex: target.messageIdHex,
                 initialUnreadMessageIdHex: target.unreadMessageIdHex,
                 initialAppState: appState,

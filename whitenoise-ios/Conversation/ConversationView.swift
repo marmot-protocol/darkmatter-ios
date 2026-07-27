@@ -751,6 +751,7 @@ struct ConversationView: View {
     let initialTitle: String?
     let initialOtherMember: String?
     let initialMemberCount: Int?
+    let initialLeaveRequestPending: Bool
     let initialTargetMessageIdHex: String?
     let initialUnreadMessageIdHex: String?
     let forwardDestinationProvider: (() async throws -> [MessageForwardDestination])?
@@ -904,6 +905,7 @@ struct ConversationView: View {
         initialTitle: String? = nil,
         initialOtherMember: String? = nil,
         initialMemberCount: Int? = nil,
+        initialLeaveRequestPending: Bool = false,
         initialTargetMessageIdHex: String? = nil,
         initialUnreadMessageIdHex: String? = nil,
         initialAppState: AppState? = nil,
@@ -919,6 +921,7 @@ struct ConversationView: View {
         self.initialTitle = initialTitle
         self.initialOtherMember = initialOtherMember
         self.initialMemberCount = initialMemberCount
+        self.initialLeaveRequestPending = initialLeaveRequestPending
         self.forwardDestinationProvider = forwardDestinationProvider
         self.onChatListRowUpdated = onChatListRowUpdated
         self.onGroupChanged = onGroupChanged
@@ -937,6 +940,7 @@ struct ConversationView: View {
                     initialTitle: initialTitle,
                     initialOtherMember: initialOtherMember,
                     initialMemberCount: initialMemberCount,
+                    leaveRequestPending: initialLeaveRequestPending,
                     onChatListRowUpdated: onChatListRowUpdated
                 )
             }
@@ -1205,6 +1209,7 @@ struct ConversationView: View {
                         initialTitle: initialTitle,
                         initialOtherMember: initialOtherMember,
                         initialMemberCount: initialMemberCount,
+                        leaveRequestPending: initialLeaveRequestPending,
                         onChatListRowUpdated: onChatListRowUpdated
                     )
                 }

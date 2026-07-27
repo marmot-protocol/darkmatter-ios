@@ -179,7 +179,7 @@ final class NotificationCoordinator {
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var connectivityCatchUpTask: Task<Void, Never>?
     private var connectivityCatchUpTaskID = UUID()
-    private var isForegroundCatchUpRunning = false
+    private(set) var isForegroundCatchUpRunning = false
     private var notificationSubscriptionFailureToastPresented = false
     private var nativePushRegistrationFailureToastPresented = false
 #if DEBUG

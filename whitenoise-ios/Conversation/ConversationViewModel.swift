@@ -163,6 +163,7 @@ final class ConversationViewModel {
     }
 
     private(set) var group: AppGroupRecordFfi
+    private(set) var leaveRequestPending: Bool
     private(set) var members: [AppGroupMemberRecordFfi] = []
     private(set) var groupMemberDetails: [GroupMemberDetailsFfi] = []
     private(set) var mentionRosterResolution: ComposerMentionRosterResolution = .unresolved
@@ -393,6 +394,7 @@ final class ConversationViewModel {
 
     var canSendMessages: Bool {
         guard !group.pendingConfirmation else { return false }
+        guard !leaveRequestPending else { return false }
         return GroupManagementPresentation.isActiveMember(
             state: managementState,
             members: members,
@@ -403,7 +405,11 @@ final class ConversationViewModel {
     }
 
     var inactiveGroupMessage: String? {
-        canSendMessages ? nil : GroupManagementPresentation.inactiveGroupComposerMessage
+        guard !canSendMessages else { return nil }
+        if leaveRequestPending || group.selfMembership == .left {
+            return GroupManagementPresentation.leftGroupComposerMessage
+        }
+        return GroupManagementPresentation.inactiveGroupComposerMessage
     }
 
     var canSendMediaAttachments: Bool {
@@ -612,6 +618,7 @@ final class ConversationViewModel {
         initialTitle: String? = nil,
         initialOtherMember: String? = nil,
         initialMemberCount: Int? = nil,
+        leaveRequestPending: Bool = false,
         onChatListRowUpdated: ((ChatListRowFfi) -> Void)? = nil,
         deleteMessageOperation: @escaping DeleteMessageOperation = { client, accountRef, groupIdHex, messageIdHex in
             try await client.deleteMessage(
@@ -623,6 +630,7 @@ final class ConversationViewModel {
     ) {
         self.appState = appState
         self.group = group
+        self.leaveRequestPending = leaveRequestPending
         self.initialTitle = initialTitle
         self.initialOtherMember = initialOtherMember
         self.initialMemberCount = initialMemberCount
@@ -696,6 +704,7 @@ final class ConversationViewModel {
     }
 
     func markSelfLeft() {
+        leaveRequestPending = true
         let previousIdentity = groupMlsRefreshIdentity
         var updatedGroup = group
         updatedGroup.selfMembership = .left
@@ -1711,6 +1720,7 @@ final class ConversationViewModel {
             previousAdmins: previousAdmins,
             next: record
         )
+        reconcileLeaveRequest(with: record.selfMembership)
         applyGroupMlsTrackedChanges {
             group = record
         }
@@ -1747,6 +1757,7 @@ final class ConversationViewModel {
     }
 
     func applyGroupRecord(_ record: AppGroupRecordFfi) {
+        reconcileLeaveRequest(with: record.selfMembership)
         applyGroupMlsTrackedChanges {
             group = record
         }
@@ -1846,6 +1857,7 @@ final class ConversationViewModel {
         if announceRosterChanges && membersChanged {
             appState?.present(.success(L10n.string("Group membership updated")))
         }
+        reconcileLeaveRequest(with: details.group.selfMembership)
         group = details.group
         groupMemberDetails = details.members
         managementState = state
@@ -1854,6 +1866,12 @@ final class ConversationViewModel {
         bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
         if adminsChanged || membersChanged {
             scheduleTimelineTailRefresh()
+        }
+    }
+
+    private func reconcileLeaveRequest(with membership: SelfMembershipFfi) {
+        if membership != .member {
+            leaveRequestPending = false
         }
     }
 

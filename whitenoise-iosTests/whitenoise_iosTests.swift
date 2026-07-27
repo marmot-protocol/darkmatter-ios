@@ -69,9 +69,18 @@ struct AppStateBootstrapTests {
             client: try originalClient.freshRuntime(),
             notifications: deniedNotifications()
         )
+        relaunched.setAppSceneActive(true)
         let checkpoint = AsyncTestCheckpoint()
         relaunched.beforeUnreadSummaryRefreshForTesting = {
             await checkpoint.pause()
+        }
+        var splashReadySuccesses = 0
+        var phaseWhenSplashReadyWasRecorded: AppState.Phase?
+        relaunched.runtimeLifecycle.hostPerformanceObserverForTesting = { operation, _, outcome in
+            if case .splashReady = operation, case .success = outcome {
+                splashReadySuccesses += 1
+                phaseWhenSplashReadyWasRecorded = relaunched.phase
+            }
         }
 
         let bootstrap = Task { @MainActor in
@@ -81,11 +90,15 @@ struct AppStateBootstrapTests {
 
         #expect(relaunched.phase == .ready)
         #expect(!relaunched.accounts.isEmpty)
+        #expect(splashReadySuccesses == 1)
+        #expect(phaseWhenSplashReadyWasRecorded == .ready)
 
         await checkpoint.release()
         await bootstrap.value
         await relaunched.drainUnreadSummaryRefresh()
+        #expect(splashReadySuccesses == 1)
         relaunched.beforeUnreadSummaryRefreshForTesting = nil
+        relaunched.runtimeLifecycle.hostPerformanceObserverForTesting = nil
         await stopReadyRuntime(relaunched)
     }
 
@@ -137,6 +150,25 @@ struct AppStateBootstrapTests {
         try await appState.createIdentity()
 
         #expect(appState.phase == .ready)
+        #expect(appState.notificationSubscriptionActive)
+
+        await stopReadyRuntime(appState)
+    }
+
+    @Test func profileSetupCreationDefersOnboardingCompletionUntilExplicitActivation() async throws {
+        let appState = try testAppState()
+        await appState.bootstrap()
+
+        let summary = try await appState.createIdentityForProfileSetup()
+
+        #expect(appState.phase == .onboarding)
+        #expect(appState.activeAccount == nil)
+        #expect(!appState.notificationSubscriptionActive)
+
+        await appState.completeIdentityProfileSetup(summary)
+
+        #expect(appState.phase == .ready)
+        #expect(appState.activeAccount?.label == summary.label)
         #expect(appState.notificationSubscriptionActive)
 
         await stopReadyRuntime(appState)
@@ -732,6 +764,14 @@ struct AppStateBootstrapTests {
             catchUpAttempts += 1
             await checkpoint.pause()
         }
+        var localReadySuccesses = 0
+        var warmingUpWhenLocalReadyWasRecorded: Bool?
+        appState.runtimeLifecycle.hostPerformanceObserverForTesting = { operation, _, outcome in
+            if case .foregroundLocalReady = operation, case .success = outcome {
+                localReadySuccesses += 1
+                warmingUpWhenLocalReadyWasRecorded = appState.isRuntimeWarmingUp
+            }
+        }
 
         let activation = appState.startForegroundActivation()
         await checkpoint.waitUntilPaused()
@@ -742,13 +782,19 @@ struct AppStateBootstrapTests {
         #expect(appState.client != nil)
         #expect(catchUpAttempts == 1)
         #expect(appState.notificationCoordinator.hasConnectivityCatchUpTaskForTesting)
+        #expect(appState.isConnectivityCatchUpInProgress)
+        #expect(localReadySuccesses == 1)
+        #expect(warmingUpWhenLocalReadyWasRecorded == false)
 
         await checkpoint.release()
         await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
         appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
+        appState.runtimeLifecycle.hostPerformanceObserverForTesting = nil
 
         #expect(!appState.isRuntimeWarmingUp)
         #expect(!appState.runtimeSuspendedForBackground)
+        #expect(!appState.isConnectivityCatchUpInProgress)
+        #expect(localReadySuccesses == 1)
 
         await stopReadyRuntime(appState)
     }
@@ -789,8 +835,14 @@ struct AppStateBootstrapTests {
             await checkpoint.pause()
         }
         var catchUpAttempts = 0
+        var localReadySamples = 0
         appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
             catchUpAttempts += 1
+        }
+        appState.runtimeLifecycle.hostPerformanceObserverForTesting = { operation, _, _ in
+            if case .foregroundLocalReady = operation {
+                localReadySamples += 1
+            }
         }
 
         let activation = appState.startForegroundActivation()
@@ -802,9 +854,11 @@ struct AppStateBootstrapTests {
         await suspension.value
         await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
         appState.runtimeLifecycle.afterForegroundRuntimeCreatedForTesting = nil
+        appState.runtimeLifecycle.hostPerformanceObserverForTesting = nil
         appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
 
         #expect(catchUpAttempts == 0)
+        #expect(localReadySamples == 0)
         #expect(!appState.isAppSceneActive)
         #expect(appState.runtimeSuspendedForBackground)
         #expect(appState.client == nil)
@@ -2754,7 +2808,23 @@ struct LocalizationCatalogTests {
             "Please check your connection and try again.",
             "Leave “%@”?",
             "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it.",
-            "Leaving…"
+            "Leaving…",
+            "Sign Up",
+            "Choose Avatar",
+            "Change Avatar",
+            "Remove Avatar",
+            "Name",
+            "About (Optional)",
+            "Signing Up…",
+            "Couldn't create your profile. Try again.",
+            "Your profile was created, but some details couldn't be saved.",
+            "Continue",
+            "Your avatar is public. The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy.",
+            "That photo is too large. Choose a different photo.",
+            "That photo can't be used. Choose a different photo.",
+            "New profile",
+            "Profile avatar preview",
+            "Selected profile photo"
         ]
 
         for key in expectedKeys {
@@ -5458,6 +5528,27 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.first?.firstUnreadMessageIdHex == hex("c2"))
     }
 
+    @Test func projectedRowsUseDurableActivityOrderingAfterPreviewPruning() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let prunedButNewer = chatListRow(
+            groupIdHex: hex("a1"),
+            title: "Pruned",
+            activitySortAt: 30,
+            updatedAt: 40
+        )
+        let previewButOlder = chatListRow(
+            groupIdHex: hex("a2"),
+            title: "Preview",
+            lastMessage: chatListPreview(messageIdHex: hex("b2"), plaintext: "visible", timelineAt: 20),
+            activitySortAt: 20,
+            updatedAt: 50
+        )
+
+        viewModel.applyChatListSnapshot([previewButOlder, prunedButNewer])
+
+        #expect(viewModel.items.map(\.id) == [prunedButNewer.groupIdHex, previewButOlder.groupIdHex])
+    }
+
     @Test func successfulSnapshotClearsPreviousLoadError() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let row = chatListRow(groupIdHex: hex("a1"), title: "Recovered", updatedAt: 10)
@@ -5813,6 +5904,45 @@ struct ChatsListProjectionTests {
         viewModel.markGroupLeft(groupIdHex: row.groupIdHex)
 
         #expect(viewModel.items.map(\.id) == [row.groupIdHex])
+        #expect(viewModel.items.first?.leaveRequestPending == true)
+        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.isActiveMember == false)
+    }
+
+    @Test func staleMemberSnapshotDoesNotReactivateLocallyRequestedLeave() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let groupId = hex("e1")
+        let row = chatListRow(groupIdHex: groupId, title: "Leaving group", updatedAt: 10)
+        viewModel.applyChatListSnapshot([row])
+        viewModel.markGroupLeft(groupIdHex: groupId)
+
+        viewModel.applyChatListSnapshot([
+            chatListRow(groupIdHex: groupId, title: "Leaving group", updatedAt: 20)
+        ])
+
+        #expect(viewModel.items.first?.leaveRequestPending == true)
+        #expect(viewModel.items.first?.selfMembership == .left)
+        #expect(viewModel.items.first?.isActiveMember == false)
+    }
+
+    @Test func terminalMembershipClearsLocalLeaveRequestProjection() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let groupId = hex("e2")
+        viewModel.applyChatListSnapshot([
+            chatListRow(groupIdHex: groupId, title: "Left group", updatedAt: 10)
+        ])
+        viewModel.markGroupLeft(groupIdHex: groupId)
+
+        viewModel.applyChatListSnapshot([
+            chatListRow(
+                groupIdHex: groupId,
+                title: "Left group",
+                updatedAt: 20,
+                selfMembership: .left
+            )
+        ])
+
+        #expect(viewModel.items.first?.leaveRequestPending == false)
         #expect(viewModel.items.first?.selfMembership == .left)
         #expect(viewModel.items.first?.isActiveMember == false)
     }
@@ -7301,6 +7431,29 @@ struct GroupManagementPresentationTests {
         #expect(!GroupManagementPresentation.canLeave(state: state, fallbackIsLastAdmin: false))
         #expect(!GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: state))
         #expect(GroupManagementPresentation.leaveFooter(state: state, fallbackIsLastAdmin: false) == "You're the only admin. Make another member an admin before you leave.")
+    }
+
+    @Test func terminalMembershipOverridesStaleActiveManagementState() {
+        let state = managementState(
+            isSelfAdmin: false,
+            isLastAdmin: false,
+            canLeave: true
+        )
+
+        #expect(!GroupManagementPresentation.isActiveMember(
+            state: state,
+            members: [],
+            groupMemberDetails: [],
+            myAccountId: state.myAccountIdHex,
+            fallbackSelfMembership: .left
+        ))
+        #expect(!GroupManagementPresentation.isActiveMember(
+            state: state,
+            members: [],
+            groupMemberDetails: [],
+            myAccountId: state.myAccountIdHex,
+            fallbackSelfMembership: .removed
+        ))
     }
 
     @Test func relayDisclosureShowsCountAndUrls() {
@@ -9285,6 +9438,69 @@ struct MediaComposerAvailabilityTests {
         #expect(!viewModel.canSendMediaAttachments)
     }
 
+    @Test func pendingLeaveRequestSurvivesStaleActiveGroupDetails() throws {
+        let me = hex("11")
+        let other = hex("22")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "leaving"),
+            leaveRequestPending: true
+        )
+
+        viewModel.applyGroupMutation(
+            GroupMutationResultFfi(
+                summary: SendSummaryFfi(published: 0, messageIds: []),
+                details: GroupDetailsFfi(
+                    group: group(name: "leaving", admins: [other]),
+                    members: [
+                        groupMember(memberIdHex: me, isAdmin: false, isSelf: true),
+                        groupMember(memberIdHex: other, isAdmin: true, isSelf: false),
+                    ]
+                ),
+                managementState: GroupManagementStateFfi(
+                    myAccountIdHex: me,
+                    isSelfAdmin: false,
+                    isLastAdmin: false,
+                    canInvite: false,
+                    canLeave: true,
+                    requiresSelfDemoteBeforeLeave: false,
+                    memberActions: [
+                        GroupMemberActionStateFfi(
+                            memberIdHex: me,
+                            isSelf: true,
+                            isAdmin: false,
+                            canRemove: false,
+                            canPromote: false,
+                            canDemote: false
+                        )
+                    ]
+                )
+            )
+        )
+
+        #expect(viewModel.leaveRequestPending)
+        #expect(!viewModel.canSendMessages)
+        #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leftGroupComposerMessage)
+        #expect(!viewModel.canSendMediaAttachments)
+    }
+
+    @Test func terminalLeaveMembershipReplacesPendingLeaveProjection() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "leaving"),
+            leaveRequestPending: true
+        )
+
+        viewModel.applyGroupRecord(group(
+            name: "left",
+            selfMembership: .left
+        ))
+
+        #expect(!viewModel.leaveRequestPending)
+        #expect(!viewModel.canSendMessages)
+        #expect(viewModel.inactiveGroupMessage == GroupManagementPresentation.leftGroupComposerMessage)
+    }
+
     @Test func attachmentButtonUsesDisabledAppearanceWhenMediaIsUnavailable() {
         let enabled = ComposerAttachmentButtonAppearance.mediaAvailability(true)
         let disabled = ComposerAttachmentButtonAppearance.mediaAvailability(false)
@@ -9297,6 +9513,13 @@ struct MediaComposerAvailabilityTests {
         #expect(!disabled.chromeInteractive)
         #expect(disabled.controlOpacity < enabled.controlOpacity)
         #expect(disabled.tapBehavior == .showUnavailableTooltip)
+    }
+
+    @Test func inactiveComposerReplacesMessageInput() {
+        #expect(ComposerAvailabilityPresentation.showsInput(disabledMessage: nil))
+        #expect(!ComposerAvailabilityPresentation.showsInput(
+            disabledMessage: GroupManagementPresentation.leftGroupComposerMessage
+        ))
     }
 }
 
@@ -11669,6 +11892,8 @@ private func chatListRow(
     firstUnreadMessageIdHex: String? = nil,
     lastReadMessageIdHex: String? = nil,
     lastReadTimelineAt: UInt64? = nil,
+    conversationCreatedAt: UInt64? = nil,
+    activitySortAt: UInt64? = nil,
     updatedAt: UInt64 = 1,
     selfMembership: SelfMembershipFfi = .member
 ) -> ChatListRowFfi {
@@ -11688,6 +11913,8 @@ private func chatListRow(
         firstUnreadMessageIdHex: firstUnreadMessageIdHex,
         lastReadMessageIdHex: lastReadMessageIdHex,
         lastReadTimelineAt: lastReadTimelineAt,
+        conversationCreatedAt: conversationCreatedAt ?? updatedAt,
+        activitySortAt: activitySortAt ?? updatedAt,
         updatedAt: updatedAt,
         selfMembership: selfMembership
     )

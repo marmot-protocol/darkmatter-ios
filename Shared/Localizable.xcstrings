@@ -43269,6 +43269,65 @@
         }
       }
     },
+    "Syncing…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisieren…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisation…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizzazione…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizando…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Синхронизация…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senkronize ediliyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步…"
+          }
+        }
+      }
+    },
     "Synced" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -50635,6 +50694,230 @@
             "value" : "支援"
           }
         }
+      }
+    },
+    "About (Optional)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Über mich (optional)" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Acerca de (opcional)" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "À propos (facultatif)" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Info (facoltativo)" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Sobre (opcional)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "О себе (необязательно)" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Hakkında (İsteğe bağlı)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "简介（可选）" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "簡介（選填）" } }
+      }
+    },
+    "Change Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar ändern" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambiar avatar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Changer l’avatar" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Cambia avatar" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Alterar avatar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменить аватар" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarı değiştir" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改头像" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "更改頭像" } }
+      }
+    },
+    "Choose Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar auswählen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elegir avatar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisir un avatar" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Scegli avatar" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolher avatar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать аватар" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatar seç" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择头像" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇頭像" } }
+      }
+    },
+    "Continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fortfahren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Continuer" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Continua" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Продолжить" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Devam et" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "繼續" } }
+      }
+    },
+    "Couldn't create your profile. Try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Profil konnte nicht erstellt werden. Versuche es erneut." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo crear tu perfil. Inténtalo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de créer votre profil. Réessayez." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Impossibile creare il tuo profilo. Riprova." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível criar seu perfil. Tente novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось создать профиль. Повторите попытку." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profiliniz oluşturulamadı. Tekrar deneyin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法创建你的个人资料。请重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法建立你的個人檔案。請再試一次。" } }
+      }
+    },
+    "Name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Name" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nombre" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nom" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Nome" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nome" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Имя" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Ad" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "名称" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "名稱" } }
+      }
+    },
+    "New profile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Profil" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo perfil" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau profil" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Nuovo profilo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Novo perfil" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый профиль" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yeni profil" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新个人资料" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新個人檔案" } }
+      }
+    },
+    "Profile avatar preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vorschau des Profilbilds" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Vista previa del avatar del perfil" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aperçu de l’avatar du profil" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Anteprima dell’avatar del profilo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Prévia do avatar do perfil" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпросмотр аватара профиля" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profil avatarı önizlemesi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人资料头像预览" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "個人檔案頭像預覽" } }
+      }
+    },
+    "Remove Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar entfernen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Eliminar avatar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer l’avatar" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Rimuovi avatar" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Remover avatar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить аватар" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarı kaldır" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除头像" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "移除頭像" } }
+      }
+    },
+    "Selected profile photo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausgewähltes Profilfoto" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Foto de perfil seleccionada" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Photo de profil sélectionnée" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Foto del profilo selezionata" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Foto de perfil selecionada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбранное фото профиля" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Seçilen profil fotoğrafı" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已选择的个人资料照片" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已選擇的個人檔案照片" } }
+      }
+    },
+    "Sign Up" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Registrieren" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Registrarse" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "S’inscrire" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Registrati" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Cadastrar-se" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зарегистрироваться" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kaydol" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "注册" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "註冊" } }
+      }
+    },
+    "Signing Up…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Registrierung läuft …" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Registrando…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Inscription…" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Registrazione…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Cadastrando…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Регистрация…" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kaydolunuyor…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在注册…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在註冊…" } }
+      }
+    },
+    "That photo can't be used. Choose a different photo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieses Foto kann nicht verwendet werden. Wähle ein anderes Foto." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se puede usar esa foto. Elige otra." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette photo ne peut pas être utilisée. Choisissez-en une autre." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Questa foto non può essere usata. Scegline un’altra." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Essa foto não pode ser usada. Escolha outra." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это фото нельзя использовать. Выберите другое." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu fotoğraf kullanılamıyor. Başka bir fotoğraf seçin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法使用这张照片。请选择其他照片。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法使用這張照片。請選擇其他照片。" } }
+      }
+    },
+    "That photo is too large. Choose a different photo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieses Foto ist zu groß. Wähle ein anderes Foto." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Esa foto es demasiado grande. Elige otra." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette photo est trop volumineuse. Choisissez-en une autre." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Questa foto è troppo grande. Scegline un’altra." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Essa foto é muito grande. Escolha outra." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это фото слишком большое. Выберите другое." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu fotoğraf çok büyük. Başka bir fotoğraf seçin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这张照片太大。请选择其他照片。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這張照片太大。請選擇其他照片。" } }
+      }
+    },
+    "Your avatar is public. The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Avatar ist öffentlich. Das Foto wird zu einem öffentlichen Dienst hochgeladen. Wenn du es aus deinem Profil entfernst, wird die hochgeladene Kopie möglicherweise nicht gelöscht." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu avatar es público. La foto se sube a un servicio público y eliminarla de tu perfil puede no borrar la copia subida." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre avatar est public. La photo est envoyée vers un service public et sa suppression de votre profil peut ne pas supprimer la copie envoyée." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Il tuo avatar è pubblico. La foto viene caricata su un servizio pubblico e rimuoverla dal profilo potrebbe non eliminare la copia caricata." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Seu avatar é público. A foto é enviada a um serviço público, e removê-la do perfil pode não excluir a cópia enviada." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ваш аватар общедоступен. Фото загружается в общедоступный сервис, и удаление его из профиля может не удалить загруженную копию." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarınız herkese açıktır. Fotoğraf herkese açık bir hizmete yüklenir ve profilinizden kaldırmanız yüklenen kopyayı silmeyebilir." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的头像是公开的。照片会上传到公共服务，从个人资料中移除照片可能不会删除已上传的副本。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的頭像是公開的。照片會上傳到公共服務，從個人檔案中移除照片可能不會刪除已上傳的副本。" } }
+      }
+    },
+    "Your profile was created, but some details couldn't be saved." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Profil wurde erstellt, aber einige Details konnten nicht gespeichert werden." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu perfil se creó, pero no se pudieron guardar algunos datos." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre profil a été créé, mais certains détails n’ont pas pu être enregistrés." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Il tuo profilo è stato creato, ma non è stato possibile salvare alcuni dettagli." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Seu perfil foi criado, mas alguns detalhes não puderam ser salvos." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Профиль создан, но некоторые данные не удалось сохранить." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profiliniz oluşturuldu ancak bazı ayrıntılar kaydedilemedi." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的个人资料已创建，但部分详细信息无法保存。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的個人檔案已建立，但部分詳細資料無法儲存。" } }
       }
     },
     "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it." : {

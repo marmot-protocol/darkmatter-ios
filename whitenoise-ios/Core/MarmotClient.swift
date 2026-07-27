@@ -738,6 +738,18 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.start()
     }
 
+    func recordHostPerformance(
+        operation: HostPerformanceOperationFfi,
+        durationMs: UInt64,
+        outcome: HostPerformanceOutcomeFfi
+    ) {
+        marmot.recordHostPerformance(
+            operation: operation,
+            durationMs: durationMs,
+            outcome: outcome
+        )
+    }
+
     func configureTelemetryRuntime() async throws {
         let installId = try await telemetryInstallId()
         try await marmot.setRelayTelemetryRuntimeConfig(

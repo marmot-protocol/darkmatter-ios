@@ -203,8 +203,52 @@ extension ChatListRowFfi {
             firstUnreadMessageIdHex: firstUnreadMessageIdHex,
             lastReadMessageIdHex: lastReadMessageIdHex,
             lastReadTimelineAt: lastReadTimelineAt,
+            conversationCreatedAt: updatedAt,
+            activitySortAt: updatedAt,
             updatedAt: updatedAt,
             selfMembership: .member
+        )
+    }
+
+    init(
+        groupIdHex: String,
+        archived: Bool,
+        pendingConfirmation: Bool,
+        title: String,
+        groupName: String,
+        avatarUrl: String?,
+        avatar: ChatListAvatarFfi?,
+        lastMessage: ChatListMessagePreviewFfi?,
+        unreadCount: UInt64,
+        hasUnread: Bool,
+        unreadMentionCount: UInt64,
+        unreadMention: Bool,
+        firstUnreadMessageIdHex: String?,
+        lastReadMessageIdHex: String?,
+        lastReadTimelineAt: UInt64?,
+        updatedAt: UInt64,
+        selfMembership: SelfMembershipFfi
+    ) {
+        self.init(
+            groupIdHex: groupIdHex,
+            archived: archived,
+            pendingConfirmation: pendingConfirmation,
+            title: title,
+            groupName: groupName,
+            avatarUrl: avatarUrl,
+            avatar: avatar,
+            lastMessage: lastMessage,
+            unreadCount: unreadCount,
+            hasUnread: hasUnread,
+            unreadMentionCount: unreadMentionCount,
+            unreadMention: unreadMention,
+            firstUnreadMessageIdHex: firstUnreadMessageIdHex,
+            lastReadMessageIdHex: lastReadMessageIdHex,
+            lastReadTimelineAt: lastReadTimelineAt,
+            conversationCreatedAt: updatedAt,
+            activitySortAt: updatedAt,
+            updatedAt: updatedAt,
+            selfMembership: selfMembership
         )
     }
 }
