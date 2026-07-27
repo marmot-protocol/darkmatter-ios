@@ -2714,7 +2714,10 @@ struct LocalizationCatalogTests {
             "New encrypted message",
             "That QR code isn't a White Noise profile.",
             "Couldn't create chat",
-            "Push registration failed"
+            "Push registration failed",
+            "Leave “%@”?",
+            "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it.",
+            "Leaving…"
         ]
 
         for key in expectedKeys {
