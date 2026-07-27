@@ -1,5 +1,7 @@
+import CryptoKit
 import Foundation
 import ImageIO
+import OSLog
 import UIKit
 import UniformTypeIdentifiers
 
@@ -116,6 +118,163 @@ nonisolated enum DecodedImageCost {
     }
 }
 
+actor RemoteAvatarDiskCache {
+    static let shared = RemoteAvatarDiskCache()
+
+    private let directoryURL: URL
+    private let maximumBytes: Int
+    private let maximumEntryBytes: Int
+    private let maximumAge: TimeInterval
+
+    init(
+        directoryURL: URL? = nil,
+        maximumBytes: Int = 50 * 1024 * 1024,
+        maximumEntryBytes: Int = RemoteImageFetch.maximumImageBytes,
+        maximumAge: TimeInterval = 7 * 24 * 60 * 60
+    ) {
+        let cacheRoot = directoryURL
+            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        self.directoryURL = cacheRoot.appendingPathComponent("ProfileAvatars", isDirectory: true)
+        self.maximumBytes = maximumBytes
+        self.maximumEntryBytes = maximumEntryBytes
+        self.maximumAge = maximumAge
+    }
+
+    func data(for url: URL, now: Date = Date()) -> Data? {
+        guard prepareDirectory() else { return nil }
+        let fileURL = cachedFileURL(for: url)
+        do {
+            let values = try fileURL.resourceValues(forKeys: [
+                .contentModificationDateKey,
+                .fileSizeKey,
+                .isRegularFileKey,
+            ])
+            guard values.isRegularFile == true,
+                  let fileSize = values.fileSize,
+                  fileSize > 0,
+                  fileSize <= maximumEntryBytes
+            else {
+                try? FileManager.default.removeItem(at: fileURL)
+                return nil
+            }
+            if let modifiedAt = values.contentModificationDate,
+               now.timeIntervalSince(modifiedAt) > maximumAge {
+                try? FileManager.default.removeItem(at: fileURL)
+                return nil
+            }
+            let data = try Data(contentsOf: fileURL, options: .mappedIfSafe)
+            guard !data.isEmpty, data.count <= maximumEntryBytes else {
+                try? FileManager.default.removeItem(at: fileURL)
+                return nil
+            }
+            // The modification date doubles as a bounded least-recently-used
+            // signal. Touch only after a complete, size-checked read.
+            try? FileManager.default.setAttributes(
+                [.modificationDate: now],
+                ofItemAtPath: fileURL.path
+            )
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    func store(_ data: Data, for url: URL, now: Date = Date()) {
+        guard !data.isEmpty,
+              data.count <= maximumEntryBytes,
+              prepareDirectory()
+        else { return }
+
+        let fileURL = cachedFileURL(for: url)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+            try FileManager.default.setAttributes(
+                [
+                    .protectionKey: FileProtectionType.complete,
+                    .modificationDate: now,
+                ],
+                ofItemAtPath: fileURL.path
+            )
+            pruneIfNeeded()
+        } catch {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    private func prepareDirectory() -> Bool {
+        do {
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.complete]
+            )
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutableDirectoryURL = directoryURL
+            try? mutableDirectoryURL.setResourceValues(values)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func cachedFileURL(for url: URL) -> URL {
+        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+        let name = digest.map { String(format: "%02x", $0) }.joined()
+        return directoryURL.appendingPathComponent(name, isDirectory: false)
+    }
+
+    private func pruneIfNeeded() {
+        let keys: Set<URLResourceKey> = [
+            .contentModificationDateKey,
+            .fileSizeKey,
+            .isRegularFileKey,
+        ]
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var entries: [(url: URL, modifiedAt: Date, size: Int)] = []
+        var totalBytes = 0
+        for file in files {
+            guard let values = try? file.resourceValues(forKeys: keys),
+                  values.isRegularFile == true,
+                  let size = values.fileSize,
+                  size > 0
+            else {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            totalBytes += size
+            entries.append((
+                url: file,
+                modifiedAt: values.contentModificationDate ?? .distantPast,
+                size: size
+            ))
+        }
+
+        guard totalBytes > maximumBytes else { return }
+        for entry in entries.sorted(by: { $0.modifiedAt < $1.modifiedAt }) {
+            try? FileManager.default.removeItem(at: entry.url)
+            totalBytes -= entry.size
+            if totalBytes <= maximumBytes { break }
+        }
+    }
+
+    #if DEBUG
+    func removeAllForTesting() {
+        try? FileManager.default.removeItem(at: directoryURL)
+    }
+
+    func cachedFileExistsForTesting(for url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: cachedFileURL(for: url).path)
+    }
+    #endif
+}
+
 @MainActor
 enum RemoteAvatarImageLoader {
     private final class CachedImage: NSObject {
@@ -159,6 +318,10 @@ enum RemoteAvatarImageLoader {
     }()
 
     private static var inFlightTasks: [String: Task<Data, Error>] = [:]
+    private static let cacheLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "avatar-cache"
+    )
 
     static func image(for url: URL, maxPixelSize: Int, scale: CGFloat) async throws -> UIImage {
         let targetPixelSize = max(maxPixelSize, 1)
@@ -195,9 +358,20 @@ enum RemoteAvatarImageLoader {
     }
 
     private static func imageData(for url: URL, keyString: String) async throws -> Data {
-        try await imageData(for: url, keyString: keyString) { url in
+        if let cached = await RemoteAvatarDiskCache.shared.data(for: url) {
+            cacheLog.debug("disk_hit bytes=\(cached.count, privacy: .public)")
+            return cached
+        }
+
+        let startedAt = ContinuousClock.now
+        let data = try await imageData(for: url, keyString: keyString) { url in
             try await RemoteImageFetch.imageData(for: url)
         }
+        await RemoteAvatarDiskCache.shared.store(data, for: url)
+        cacheLog.debug(
+            "network_fetch bytes=\(data.count, privacy: .public) duration_ms=\(elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)"
+        )
+        return data
     }
 
     private static func imageData(
@@ -251,6 +425,12 @@ enum RemoteAvatarImageLoader {
 
     private static func failureCacheKey(for url: URL) -> NSString {
         url.absoluteString as NSString
+    }
+
+    private static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Double {
+        let elapsed = start.duration(to: ContinuousClock.now).components
+        return Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
     }
 
     #if DEBUG

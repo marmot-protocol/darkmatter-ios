@@ -57,6 +57,38 @@ struct AppStateBootstrapTests {
         #expect(appState.accounts.isEmpty)
     }
 
+    @Test func coldBootstrapBecomesReadyBeforeUnreadSummaryRefreshCompletes() async throws {
+        resetPersistedActiveAccountRef()
+        let originalClient = try MarmotClient.testClient()
+        let original = AppState(client: originalClient, notifications: deniedNotifications())
+        await original.bootstrap()
+        _ = try await original.createIdentity()
+        await stopReadyRuntime(original)
+
+        let relaunched = AppState(
+            client: try originalClient.freshRuntime(),
+            notifications: deniedNotifications()
+        )
+        let checkpoint = AsyncTestCheckpoint()
+        relaunched.beforeUnreadSummaryRefreshForTesting = {
+            await checkpoint.pause()
+        }
+
+        let bootstrap = Task { @MainActor in
+            await relaunched.bootstrap()
+        }
+        await checkpoint.waitUntilPaused()
+
+        #expect(relaunched.phase == .ready)
+        #expect(!relaunched.accounts.isEmpty)
+
+        await checkpoint.release()
+        await bootstrap.value
+        await relaunched.drainUnreadSummaryRefresh()
+        relaunched.beforeUnreadSummaryRefreshForTesting = nil
+        await stopReadyRuntime(relaunched)
+    }
+
     @Test func telemetryExportSettingPersistsThroughAppState() async throws {
         let appState = try testAppState()
         await appState.bootstrap()

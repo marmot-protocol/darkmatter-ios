@@ -100,6 +100,10 @@ final class RuntimeLifecycle {
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
         category: "foreground-resume"
     )
+    private static let coldBootstrapLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "cold-bootstrap"
+    )
 
     init(
         client: MarmotClient,
@@ -215,18 +219,35 @@ final class RuntimeLifecycle {
     @MainActor
     private func performBootstrap() async {
         guard let appState else { return }
+        let bootstrapStartedAt = ContinuousClock.now
+        var runtimeStartMilliseconds = 0.0
+        var accountLoadMilliseconds = 0.0
         do {
+            let runtimeStartStartedAt = ContinuousClock.now
             try await startCurrentRuntime()
+            runtimeStartMilliseconds = Self.elapsedMilliseconds(since: runtimeStartStartedAt)
 #if DEBUG
             if let afterBootstrapRuntimeStartForTesting {
                 await afterBootstrapRuntimeStartForTesting()
             }
 #endif
             noteRuntimeForegroundReadyAfterSuspension()
-            try await appState.refreshAccounts()
+            let accountLoadStartedAt = ContinuousClock.now
+            // Routing needs the durable account list, but unread badges do not
+            // gate local conversation display. Refresh them after `.ready`.
+            try await appState.refreshAccounts(refreshUnreadSummaries: false)
+            accountLoadMilliseconds = Self.elapsedMilliseconds(since: accountLoadStartedAt)
             if appState.accounts.isEmpty {
                 appState.activeAccountRef = nil
                 appState.setPhase(.onboarding)
+                Self.coldBootstrapLog.info(
+                    """
+                    local_ready phase=onboarding \
+                    runtime_start_ms=\(runtimeStartMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+                    account_load_ms=\(accountLoadMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+                    total_ms=\(Self.elapsedMilliseconds(since: bootstrapStartedAt), format: .fixed(precision: 0), privacy: .public)
+                    """
+                )
                 // `.onboarding` now owns a live runtime; re-arm suspension if a
                 // background request landed while bootstrap was awaiting above.
                 reconcileBackgroundSuspensionAfterBootstrap()
@@ -236,6 +257,14 @@ final class RuntimeLifecycle {
                     appState.activeAccountRef = appState.accounts.first?.label
                 }
                 appState.setPhase(.ready)
+                Self.coldBootstrapLog.info(
+                    """
+                    local_ready phase=ready \
+                    runtime_start_ms=\(runtimeStartMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+                    account_load_ms=\(accountLoadMilliseconds, format: .fixed(precision: 0), privacy: .public) \
+                    total_ms=\(Self.elapsedMilliseconds(since: bootstrapStartedAt), format: .fixed(precision: 0), privacy: .public)
+                    """
+                )
                 // If the app was backgrounded during bootstrap, the suspension
                 // task that landed at `.bootstrapping` must be chained through
                 // bootstrap (or re-armed if it already bailed), so the started
@@ -248,6 +277,7 @@ final class RuntimeLifecycle {
                 if let activeId = appState.activeAccount?.accountIdHex {
                     appState.warmProfileProjection(forAccountIdHex: activeId, refreshAfterLoad: true)
                 }
+                appState.scheduleAccountUnreadSummaryRefresh()
                 appState.startReadyForegroundMaintenance()
             }
         } catch {
