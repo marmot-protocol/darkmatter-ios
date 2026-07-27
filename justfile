@@ -22,6 +22,13 @@ autofix:
 test:
     @./scripts/test.sh
 
+# Leaves Vendored/MarmotKit alone — that xcframework is tracked, not build output.
+# Remove local build output: build/ and this project's DerivedData
+clean:
+    @rm -rf build
+    @rm -rf ~/Library/Developer/Xcode/DerivedData/whitenoise-ios-*
+    @echo "✓ cleaned build/ and whitenoise-ios DerivedData"
+
 # Full pre-commit gate. Runs the exact same command CI runs.
 precommit:
     @./scripts/lint.sh
