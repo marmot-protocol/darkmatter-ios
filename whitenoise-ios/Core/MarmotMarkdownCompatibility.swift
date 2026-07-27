@@ -189,6 +189,58 @@ extension ChatListRowFfi {
         firstUnreadMessageIdHex: String?,
         lastReadMessageIdHex: String?,
         lastReadTimelineAt: UInt64?,
+        conversationCreatedAt: UInt64,
+        activitySortAt: UInt64,
+        updatedAt: UInt64,
+        selfMembership: SelfMembershipFfi,
+        leaveRequestPending: Bool = false,
+        leaveRequestedAtMs: UInt64? = nil
+    ) {
+        self.init(
+            groupIdHex: groupIdHex,
+            archived: archived,
+            pendingConfirmation: pendingConfirmation,
+            title: title,
+            groupName: groupName,
+            avatarUrl: avatarUrl,
+            avatar: avatar,
+            lastMessage: lastMessage,
+            unreadCount: unreadCount,
+            hasUnread: hasUnread,
+            manuallyMarkedUnread: false,
+            unreadMentionCount: unreadMentionCount,
+            unreadMention: unreadMention,
+            firstUnreadMessageIdHex: firstUnreadMessageIdHex,
+            lastReadMessageIdHex: lastReadMessageIdHex,
+            lastReadTimelineAt: lastReadTimelineAt,
+            conversationCreatedAt: conversationCreatedAt,
+            activitySortAt: activitySortAt,
+            updatedAt: updatedAt,
+            selfMembership: selfMembership,
+            conversationKind: .unknown,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs
+        )
+    }
+
+    init(
+        groupIdHex: String,
+        archived: Bool,
+        pendingConfirmation: Bool,
+        title: String,
+        groupName: String,
+        avatarUrl: String?,
+        avatar: ChatListAvatarFfi?,
+        lastMessage: ChatListMessagePreviewFfi?,
+        unreadCount: UInt64,
+        hasUnread: Bool,
+        unreadMentionCount: UInt64,
+        unreadMention: Bool,
+        firstUnreadMessageIdHex: String?,
+        lastReadMessageIdHex: String?,
+        lastReadTimelineAt: UInt64?,
         updatedAt: UInt64,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil
@@ -204,6 +256,7 @@ extension ChatListRowFfi {
             lastMessage: lastMessage,
             unreadCount: unreadCount,
             hasUnread: hasUnread,
+            manuallyMarkedUnread: false,
             unreadMentionCount: unreadMentionCount,
             unreadMention: unreadMention,
             firstUnreadMessageIdHex: firstUnreadMessageIdHex,
@@ -213,6 +266,9 @@ extension ChatListRowFfi {
             activitySortAt: updatedAt,
             updatedAt: updatedAt,
             selfMembership: .member,
+            conversationKind: .unknown,
+            muted: false,
+            mutedUntilMs: nil,
             leaveRequestPending: leaveRequestPending,
             leaveRequestedAtMs: leaveRequestedAtMs
         )
@@ -250,6 +306,7 @@ extension ChatListRowFfi {
             lastMessage: lastMessage,
             unreadCount: unreadCount,
             hasUnread: hasUnread,
+            manuallyMarkedUnread: false,
             unreadMentionCount: unreadMentionCount,
             unreadMention: unreadMention,
             firstUnreadMessageIdHex: firstUnreadMessageIdHex,
@@ -259,6 +316,9 @@ extension ChatListRowFfi {
             activitySortAt: updatedAt,
             updatedAt: updatedAt,
             selfMembership: selfMembership,
+            conversationKind: .unknown,
+            muted: false,
+            mutedUntilMs: nil,
             leaveRequestPending: leaveRequestPending,
             leaveRequestedAtMs: leaveRequestedAtMs
         )
@@ -440,6 +500,31 @@ extension ChatListMessagePreviewFfi {
         sender: String,
         senderDisplayName: String?,
         plaintext: String,
+        contentTokens: MarkdownDocumentFfi,
+        kind: UInt64,
+        timelineAt: UInt64,
+        deleted: Bool
+    ) {
+        self.init(
+            messageIdHex: messageIdHex,
+            sender: sender,
+            senderDisplayName: senderDisplayName,
+            plaintext: plaintext,
+            contentTokens: contentTokens,
+            kind: kind,
+            timelineAt: timelineAt,
+            deleted: deleted,
+            attachmentKind: nil,
+            attachmentCount: 0,
+            deliveryState: .notApplicable
+        )
+    }
+
+    init(
+        messageIdHex: String,
+        sender: String,
+        senderDisplayName: String?,
+        plaintext: String,
         kind: UInt64,
         timelineAt: UInt64,
         deleted: Bool
@@ -452,12 +537,66 @@ extension ChatListMessagePreviewFfi {
             contentTokens: .emptyDocument,
             kind: kind,
             timelineAt: timelineAt,
-            deleted: deleted
+            deleted: deleted,
+            attachmentKind: nil,
+            attachmentCount: 0,
+            deliveryState: .notApplicable
         )
     }
 }
 
 extension TimelineMessageRecordFfi {
+    init(
+        messageIdHex: String,
+        sourceMessageIdHex: String?,
+        direction: String,
+        groupIdHex: String,
+        sender: String,
+        plaintext: String,
+        contentTokens: MarkdownDocumentFfi,
+        kind: UInt64,
+        tags: [MessageTagFfi],
+        timelineAt: UInt64,
+        receivedAt: UInt64,
+        replyToMessageIdHex: String?,
+        replyPreview: TimelineReplyPreviewFfi?,
+        mediaJson: String?,
+        media: [MediaAttachmentReferenceFfi],
+        agentTextStreamJson: String?,
+        groupSystem: GroupSystemEventFfi?,
+        reactions: TimelineReactionSummaryFfi,
+        deleted: Bool,
+        deletedByMessageIdHex: String?,
+        invalidationStatus: String?
+    ) {
+        self.init(
+            messageIdHex: messageIdHex,
+            sourceMessageIdHex: sourceMessageIdHex,
+            sourceEpoch: nil,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
+            direction: direction,
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: plaintext,
+            contentTokens: contentTokens,
+            kind: kind,
+            tags: tags,
+            timelineAt: timelineAt,
+            receivedAt: receivedAt,
+            replyToMessageIdHex: replyToMessageIdHex,
+            replyPreview: replyPreview,
+            mediaJson: mediaJson,
+            media: media,
+            agentTextStreamJson: agentTextStreamJson,
+            groupSystem: groupSystem,
+            reactions: reactions,
+            deleted: deleted,
+            deletedByMessageIdHex: deletedByMessageIdHex,
+            invalidationStatus: invalidationStatus
+        )
+    }
+
     init(
         messageIdHex: String,
         sourceMessageIdHex: String?,
@@ -483,6 +622,9 @@ extension TimelineMessageRecordFfi {
         self.init(
             messageIdHex: messageIdHex,
             sourceMessageIdHex: sourceMessageIdHex,
+            sourceEpoch: nil,
+            retentionSeconds: nil,
+            retentionExpiresAt: nil,
             direction: direction,
             groupIdHex: groupIdHex,
             sender: sender,

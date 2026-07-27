@@ -166,6 +166,23 @@ struct MessageBubble: View {
         MessageMediaUploadPresentation.showsIndicator(status: status, items: mediaItems)
     }
 
+    private var standaloneEmoji: String? {
+        guard debugStyle == nil,
+              !isDeleted,
+              replyPreview == nil,
+              mediaItems.isEmpty
+        else { return nil }
+
+        return SingleEmojiMessagePresentation.emoji(in: sanitizedBodyText)
+    }
+
+    private var hasExpirationTimer: Bool {
+        MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: record.retentionSeconds,
+            expiresAt: record.retentionExpiresAt
+        )
+    }
+
     /// White-on-gradient text is only appropriate for our own user-visible bubbles.
     private var usesSentBubbleForeground: Bool {
         isFromMe && showsStandardBody
@@ -187,6 +204,19 @@ struct MessageBubble: View {
                     deletedBubble
                 } else if !mediaItems.isEmpty, showsStandardBody {
                     mediaMessageContent
+                } else if let standaloneEmoji {
+                    if status == .failed {
+                        standaloneEmojiContent(standaloneEmoji)
+                            .contentShape(.rect)
+                            .onTapGesture { onFailedTap?() }
+                    } else {
+                        standaloneEmojiContent(standaloneEmoji)
+                            .opacity(status == .sending ? 0.7 : 1)
+                    }
+
+                    if !reactions.isEmpty {
+                        reactionChips
+                    }
                 } else {
                     // The tap gesture exists only on failed rows — a
                     // recognizer on every bubble steals touches from the
@@ -243,6 +273,19 @@ struct MessageBubble: View {
         } message: {
             Text(pendingExternalLink?.displayText ?? "")
         }
+    }
+
+    private func standaloneEmojiContent(_ emoji: String) -> some View {
+        VStack(spacing: 1) {
+            Text(emoji)
+                .font(.system(size: SingleEmojiMessagePresentation.fontSize))
+                .lineLimit(1)
+                .fixedSize()
+
+            standaloneEmojiMetadataFooter
+        }
+        .padding(.horizontal, 6)
+        .accessibilityElement(children: .combine)
     }
 
     private var deletedBubble: some View {
@@ -718,6 +761,7 @@ struct MessageBubble: View {
             status: status,
             isFromMe: isFromMe,
             usesLightForeground: usesSentBubbleForeground,
+            showsExpirationTimer: hasExpirationTimer,
             onViewEditHistory: onViewEditHistory
         )
     }
@@ -729,6 +773,19 @@ struct MessageBubble: View {
             status: status,
             isFromMe: isFromMe,
             usesLightForeground: true,
+            showsExpirationTimer: hasExpirationTimer,
+            onViewEditHistory: onViewEditHistory
+        )
+    }
+
+    private var standaloneEmojiMetadataFooter: some View {
+        MessageMetadataFooter(
+            time: timeLabel,
+            isEdited: isEdited,
+            status: status,
+            isFromMe: isFromMe,
+            usesLightForeground: false,
+            showsExpirationTimer: hasExpirationTimer,
             onViewEditHistory: onViewEditHistory
         )
     }

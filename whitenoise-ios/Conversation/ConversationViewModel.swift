@@ -1355,6 +1355,9 @@ final class ConversationViewModel {
             contentTokens: record.contentTokens,
             kind: record.kind,
             tags: record.tags,
+            sourceEpoch: record.sourceEpoch,
+            retentionSeconds: record.retentionSeconds,
+            retentionExpiresAt: record.retentionExpiresAt,
             recordedAt: record.timelineAt,
             receivedAt: record.receivedAt
         )

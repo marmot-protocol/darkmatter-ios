@@ -128,6 +128,71 @@ struct ChatSurfacePresentationTests {
         #expect(!MessageBubbleTextLayout.usesInlineFooter(text: "Collapsed", isCollapsed: true))
     }
 
+    @Test func singleEmojiMessagesUseStickerPresentation() {
+        #expect(SingleEmojiMessagePresentation.emoji(in: "😀") == "😀")
+        #expect(SingleEmojiMessagePresentation.emoji(in: "  ❤️\n") == "❤️")
+        #expect(SingleEmojiMessagePresentation.emoji(in: "👨‍👩‍👧‍👦") == "👨‍👩‍👧‍👦")
+        #expect(SingleEmojiMessagePresentation.emoji(in: "👍🏽") == "👍🏽")
+        #expect(SingleEmojiMessagePresentation.emoji(in: "1️⃣") == "1️⃣")
+        #expect(SingleEmojiMessagePresentation.emoji(in: "🇮🇹") == "🇮🇹")
+        #expect(SingleEmojiMessagePresentation.fontSize >= 56)
+    }
+
+    @Test func stickerPresentationRejectsTextAndMultipleEmoji() {
+        #expect(SingleEmojiMessagePresentation.emoji(in: "") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "A") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "1") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "©") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "😀😀") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "😀 hello") == nil)
+        #expect(SingleEmojiMessagePresentation.emoji(in: "\u{FE0F}") == nil)
+    }
+
+    @Test func disappearingMessageIndicatorRequiresFiniteActiveExpiry() {
+        #expect(MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: 300,
+            expiresAt: 1_700_000_300
+        ))
+        #expect(!MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: nil,
+            expiresAt: 1_700_000_300
+        ))
+        #expect(!MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: 0,
+            expiresAt: nil
+        ))
+        #expect(!MessageExpirationPresentation.showsIndicator(
+            retentionSeconds: 300,
+            expiresAt: nil
+        ))
+        #expect(MessageExpirationPresentation.systemImage == "timer")
+    }
+
+    @Test func expirationDetailUsesRelativeTimeForTheNextDayThenAnExactDate() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let nearDate = now.addingTimeInterval(5 * 60)
+        let boundaryDate = now.addingTimeInterval(MessageExpirationPresentation.relativeTimeHorizon)
+        let farDate = now.addingTimeInterval(MessageExpirationPresentation.relativeTimeHorizon + 1)
+
+        #expect(MessageExpirationPresentation.detail(expiresAt: nil, now: now) == nil)
+        #expect(MessageExpirationPresentation.detail(
+            expiresAt: UInt64(now.timeIntervalSince1970),
+            now: now
+        ) == .expired)
+        #expect(MessageExpirationPresentation.detail(
+            expiresAt: UInt64(nearDate.timeIntervalSince1970),
+            now: now
+        ) == .relative(nearDate))
+        #expect(MessageExpirationPresentation.detail(
+            expiresAt: UInt64(boundaryDate.timeIntervalSince1970),
+            now: now
+        ) == .relative(boundaryDate))
+        #expect(MessageExpirationPresentation.detail(
+            expiresAt: UInt64(farDate.timeIntervalSince1970),
+            now: now
+        ) == .absolute(farDate))
+    }
+
     @Test func multiMessageSelectionUsesSharedForwardLimitAndStrictDeleteCapability() {
         #expect(MessageSelectionPolicy.canForward(selectedCount: 1, allForwardable: true))
         #expect(MessageSelectionPolicy.canForward(selectedCount: 30, allForwardable: true))

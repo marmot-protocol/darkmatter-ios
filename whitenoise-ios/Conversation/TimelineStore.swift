@@ -154,6 +154,9 @@ final class TimelineStore {
         let sender: String
         let plaintext: String
         let kind: UInt64
+        let sourceEpoch: UInt64?
+        let retentionSeconds: UInt64?
+        let retentionExpiresAt: UInt64?
         let recordedAt: UInt64
         let receivedAt: UInt64
         let tokenBlockCount: Int
@@ -169,6 +172,9 @@ final class TimelineStore {
             sender = record.sender
             plaintext = record.plaintext
             kind = record.kind
+            sourceEpoch = record.sourceEpoch
+            retentionSeconds = record.retentionSeconds
+            retentionExpiresAt = record.retentionExpiresAt
             recordedAt = record.recordedAt
             receivedAt = record.receivedAt
             tokenBlockCount = record.contentTokens.blocks.count
