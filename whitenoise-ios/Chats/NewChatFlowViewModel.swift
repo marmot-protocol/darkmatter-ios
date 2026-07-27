@@ -20,6 +20,12 @@ final class NewChatFlowViewModel {
     var groupCreateError: String?
 
 #if DEBUG
+    @ObservationIgnored var loadDirectoryForTesting: (
+        @MainActor (AppState, Bool) async -> Void
+    )?
+    @ObservationIgnored var existingDirectChatGroupIdForTesting: (
+        @MainActor (String) -> String?
+    )?
     @ObservationIgnored var createGroupForTesting: (
         @MainActor (String, String, [String], String?) async throws -> String
     )?
@@ -48,7 +54,18 @@ final class NewChatFlowViewModel {
         startPrompt = nil
         // Join any in-flight directory load so the reuse decision can't run
         // against an empty candidate list and create a duplicate direct chat.
+#if DEBUG
+        if let loadDirectoryForTesting {
+            await loadDirectoryForTesting(appState, true)
+        } else {
+            await directory.load(using: appState, force: true)
+        }
+#else
         await directory.load(using: appState, force: true)
+#endif
+        // A destination that disappeared while the directory was loading must
+        // not create a conversation after its task was cancelled.
+        guard !Task.isCancelled else { return }
         let existing = existingDirectChatGroupIdHex(accountIdHex: accountIdHex)
         await runStart(
             accountIdHex: accountIdHex,
@@ -96,6 +113,11 @@ final class NewChatFlowViewModel {
 
     private func existingDirectChatGroupIdHex(accountIdHex: String) -> String? {
         let normalized = accountIdHex.lowercased()
+#if DEBUG
+        if let existingDirectChatGroupIdForTesting {
+            return existingDirectChatGroupIdForTesting(normalized)
+        }
+#endif
         return directory.candidates
             .first { $0.accountIdHex == normalized }?
             .directChatGroupIdHex
