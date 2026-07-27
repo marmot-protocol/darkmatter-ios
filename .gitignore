@@ -6,3 +6,5 @@ build/
 ## Local build secrets
 Config/TelemetrySecrets.xcconfig
 trees/
+
+experiments/
