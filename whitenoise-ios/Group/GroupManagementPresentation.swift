@@ -11,6 +11,7 @@ nonisolated enum GroupMemberManagementAction: Equatable {
 nonisolated enum GroupManagementPresentation {
     static let inactiveGroupComposerMessage = L10n.string("This group is inactive. You can't send new messages.")
     static let leftGroupComposerMessage = L10n.string("You left the group")
+    static let leavingGroupComposerMessage = L10n.string("Leaving group…")
 
     static func isActiveChatListMember(_ membership: SelfMembershipFfi) -> Bool {
         membership == .member
@@ -42,10 +43,12 @@ nonisolated enum GroupManagementPresentation {
         guard isActiveChatListMember(fallbackSelfMembership) else { return false }
 
         if let state {
-            return state.isSelfAdmin
+            return !state.leaveRequestPending && (
+                state.isSelfAdmin
                 || state.canLeave
                 || state.requiresSelfDemoteBeforeLeave
                 || state.memberActions.contains { $0.isSelf }
+            )
         }
 
         if !groupMemberDetails.isEmpty {
@@ -66,6 +69,7 @@ nonisolated enum GroupManagementPresentation {
     static func canLeave(state: GroupManagementStateFfi?, fallbackIsLastAdmin: Bool) -> Bool {
         if state?.isLastAdmin == true || fallbackIsLastAdmin { return false }
         guard let state else { return !fallbackIsLastAdmin }
+        guard !state.leaveRequestPending else { return false }
         return state.canLeave || shouldSelfDemoteBeforeLeave(state: state)
     }
 
@@ -90,6 +94,9 @@ nonisolated enum GroupManagementPresentation {
         state: GroupManagementStateFfi?,
         fallbackIsLastAdmin: Bool
     ) -> String {
+        if state?.leaveRequestPending == true {
+            return leavingGroupComposerMessage
+        }
         if state?.isLastAdmin == true || fallbackIsLastAdmin {
             return L10n.string("You're the only admin. Make another member an admin before you leave.")
         }
@@ -97,6 +104,9 @@ nonisolated enum GroupManagementPresentation {
     }
 
     static func leaveFooter(state: GroupManagementStateFfi?, fallbackIsLastAdmin: Bool) -> String? {
+        if state?.leaveRequestPending == true {
+            return leavingGroupComposerMessage
+        }
         if state?.isLastAdmin == true || fallbackIsLastAdmin {
             return L10n.string("You're the only admin. Make another member an admin before you leave.")
         }

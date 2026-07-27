@@ -98,7 +98,6 @@ struct GroupDetailsView: View {
                 }
             }
         }
-        .trueBlackScaffoldBackground()
         .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
@@ -856,7 +855,14 @@ struct GroupDetailsView: View {
                 .disabled(!canSelfDemoteAction || model.membershipActionInFlight)
             }
 
-            if viewModel.canSendMessages {
+            if viewModel.leaveRequestPending {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(GroupManagementPresentation.leavingGroupComposerMessage)
+                        .foregroundStyle(.secondary)
+                }
+            } else if viewModel.canSendMessages {
                 Button(role: .destructive) {
                     model.pendingConfirmation = .leave
                 } label: {
@@ -886,7 +892,9 @@ struct GroupDetailsView: View {
                 .disabled(model.membershipActionInFlight)
             }
         } footer: {
-            if let leaveFooter = GroupManagementPresentation.leaveFooter(
+            if viewModel.leaveRequestPending {
+                Text(GroupManagementPresentation.leavingGroupComposerMessage)
+            } else if let leaveFooter = GroupManagementPresentation.leaveFooter(
                 state: viewModel.managementState,
                 fallbackIsLastAdmin: viewModel.isLastAdmin
             ), viewModel.canSendMessages {

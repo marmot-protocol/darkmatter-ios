@@ -5,12 +5,15 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
     case system
     case light
     case dark
-    case trueBlack
 
     static let storageKey = "appearance.theme"
+    static let legacyTrueBlackRawValue = "trueBlack"
 
     static func resolved(rawValue: String?) -> AppearanceTheme {
-        rawValue.flatMap(AppearanceTheme.init(rawValue:)) ?? .system
+        if rawValue == legacyTrueBlackRawValue {
+            return .dark
+        }
+        return rawValue.flatMap(AppearanceTheme.init(rawValue:)) ?? .system
     }
 
     var id: String { rawValue }
@@ -21,7 +24,7 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             nil
         case .light:
             .light
-        case .dark, .trueBlack:
+        case .dark:
             .dark
         }
     }
@@ -32,15 +35,9 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             .unspecified
         case .light:
             .light
-        case .dark, .trueBlack:
+        case .dark:
             .dark
         }
-    }
-
-    /// True black behaves as dark mode but repaints the main scaffold surfaces
-    /// pure black for OLED displays — component colors keep dark-mode semantics.
-    var usesTrueBlackSurfaces: Bool {
-        self == .trueBlack
     }
 
     var displayName: LocalizedStringKey {
@@ -51,8 +48,6 @@ enum AppearanceTheme: String, CaseIterable, Identifiable {
             "Light"
         case .dark:
             "Dark"
-        case .trueBlack:
-            "True Black"
         }
     }
 }

@@ -9,7 +9,7 @@ struct AppearanceThemeTests {
         #expect(AppearanceTheme.system.rawValue == "system")
         #expect(AppearanceTheme.light.rawValue == "light")
         #expect(AppearanceTheme.dark.rawValue == "dark")
-        #expect(AppearanceTheme.trueBlack.rawValue == "trueBlack")
+        #expect(AppearanceTheme.legacyTrueBlackRawValue == "trueBlack")
     }
 
     @Test func everyThemeRoundTripsThroughItsRawValue() {
@@ -23,6 +23,7 @@ struct AppearanceThemeTests {
         #expect(AppearanceTheme.resolved(rawValue: "") == .system)
         #expect(AppearanceTheme.resolved(rawValue: "amoled") == .system)
         #expect(AppearanceTheme.resolved(rawValue: "TrueBlack") == .system)
+        #expect(AppearanceTheme.resolved(rawValue: "trueBlack") == .dark)
     }
 
     @Test func everyThemeRoundTripsThroughUserDefaults() throws {
@@ -37,33 +38,25 @@ struct AppearanceThemeTests {
         }
     }
 
-    @Test func preferredColorSchemeTreatsTrueBlackAsDark() {
+    @Test func preferredColorSchemesMatchSupportedThemes() {
         #expect(AppearanceTheme.system.preferredColorScheme == nil)
         #expect(AppearanceTheme.light.preferredColorScheme == .light)
         #expect(AppearanceTheme.dark.preferredColorScheme == .dark)
-        #expect(AppearanceTheme.trueBlack.preferredColorScheme == .dark)
     }
 
-    @Test func userInterfaceStyleTreatsTrueBlackAsDark() {
+    @Test func userInterfaceStylesMatchSupportedThemes() {
         #expect(AppearanceTheme.system.userInterfaceStyle == .unspecified)
         #expect(AppearanceTheme.light.userInterfaceStyle == .light)
         #expect(AppearanceTheme.dark.userInterfaceStyle == .dark)
-        #expect(AppearanceTheme.trueBlack.userInterfaceStyle == .dark)
     }
 
-    @Test func onlyTrueBlackRepaintsScaffoldSurfaces() {
-        for theme in AppearanceTheme.allCases {
-            #expect(theme.usesTrueBlackSurfaces == (theme == .trueBlack))
-        }
+    @Test func pickerOffersOnlySystemLightAndDark() {
+        #expect(AppearanceTheme.allCases == [.system, .light, .dark])
     }
 
-    @Test func pickerOffersTrueBlackAfterDark() {
-        #expect(AppearanceTheme.allCases == [.system, .light, .dark, .trueBlack])
-    }
-
-    @Test func appearanceSelectionResolvesTrueBlackFromStoredRawValue() {
+    @Test func appearanceSelectionMigratesStoredTrueBlackToDark() {
         let selection = AppAppearanceSelection(themeRawValue: "trueBlack", languageRawValue: nil)
-        #expect(selection.theme == .trueBlack)
+        #expect(selection.theme == .dark)
         #expect(selection.preferredColorScheme == .dark)
     }
 }

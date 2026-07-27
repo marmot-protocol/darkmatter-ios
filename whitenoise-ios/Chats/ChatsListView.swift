@@ -15,7 +15,11 @@ struct ChatsListView: View {
     @State private var deletingChatIds = Set<String>()
     @State private var leaveActionState = ChatListLeaveActionState()
     @State private var bulkDeleteInProgress = false
+    @State private var isMarkingAllRead = false
+    @State private var isSearchHeaderHidden = false
+    @State private var searchMounted = false
     @State private var searchPresented = false
+    @FocusState private var searchFocused: Bool
 
     private struct LocalDeleteTarget: Equatable {
         let id: String
@@ -29,21 +33,23 @@ struct ChatsListView: View {
     }
 
     enum ChatScope: CaseIterable, Hashable {
-        case active, archived, unread
+        case active, unread, archived, left
 
         var title: LocalizedStringKey {
             switch self {
-            case .active: "Active"
-            case .archived: "Archived"
+            case .active: "Chats"
             case .unread: "Unread"
+            case .archived: "Archived"
+            case .left: "Left"
             }
         }
 
         var systemImage: String {
             switch self {
             case .active: "bubble.left.and.bubble.right"
+            case .unread: "message.badge"
             case .archived: "archivebox"
-            case .unread: "circle.fill"
+            case .left: "rectangle.portrait.and.arrow.right"
             }
         }
     }
@@ -85,61 +91,79 @@ struct ChatsListView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .searchable(
-                text: $searchText,
-                isPresented: $searchPresented,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: Text("Search chats")
-            )
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .trueBlackScaffoldBackground()
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if appState.isConnectivityCatchUpInProgress {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Syncing…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(.bar)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
             .safeAreaInset(edge: .bottom) {
                 if selectionMode, viewModel != nil {
                     chatSelectionBar(visibleRows: visibleRows)
                 }
             }
-            .animation(.smooth(duration: 0.2), value: appState.isConnectivityCatchUpInProgress)
+            .modifier(
+                ChatListReadAllBottomBar(
+                    isVisible: !selectionMode
+                        && scope == .unread
+                        && viewModel?.items.contains(where: \.hasUnread) == true,
+                    isLoading: isMarkingAllRead,
+                    action: { Task { await markAllChatsRead() } }
+                )
+            )
             .onChange(of: visibleRowsKey) { _, _ in
                 selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
             }
-            .navigationTitle(selectionMode ? "" : "Chats")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+            .toolbarVisibility(isSearchHeaderHidden ? .hidden : .visible, for: .navigationBar)
+            .modifier(
+                OnDemandChatSearch(
+                    searchText: $searchText,
+                    isHeaderHidden: $isSearchHeaderHidden,
+                    isMounted: $searchMounted,
+                    isPresented: $searchPresented,
+                    isFocused: $searchFocused
+                )
+            )
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    settingsButton
-                }
                 if #available(iOS 26.0, *) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        chatListActions
-                            .padding(.vertical, 4)
-                            .glassEffect(
-                                .clear.interactive(),
-                                in: Capsule(style: .continuous)
-                            )
+                    ToolbarItem(placement: .topBarLeading) {
+                        settingsButton
                     }
                     .sharedBackgroundVisibility(.hidden)
                 } else {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        chatListActions
+                    ToolbarItem(placement: .topBarLeading) {
+                        settingsButton
                     }
                 }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    filterMenu
+                        .tint(.primary)
+                    searchButton
+                        .tint(.primary)
+                    newChatButton
+                        .tint(.primary)
+                }
             }
+            .compatibleTopSafeAreaBar(spacing: 0) {
+                VStack(spacing: 0) {
+                    if appState.isConnectivityCatchUpInProgress {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Syncing…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(.bar)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
+                    Color.clear
+                        .frame(height: 6)
+                }
+            }
+            .animation(.smooth(duration: 0.2), value: appState.isConnectivityCatchUpInProgress)
             // Registered at a stable level so navigation works even when the
             // visible list is empty (e.g. just-created or deep-linked chats).
             .navigationDestination(for: ChatNavigationTarget.self) { target in
@@ -284,7 +308,11 @@ struct ChatsListView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
+            searchFocused = false
             searchPresented = false
+            searchMounted = false
+            isSearchHeaderHidden = false
+            searchText = ""
         }
     }
 
@@ -304,18 +332,33 @@ struct ChatsListView: View {
 
     // MARK: - Filter
 
-    private var chatListActions: some View {
-        HStack(spacing: 0) {
-            filterMenu
-            Button {
-                showNewChat = true
-            } label: {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 40, height: 44)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel("New message")
+    private var searchButton: some View {
+        Button {
+            withAnimation(
+                .easeOut(duration: 0.16),
+                completionCriteria: .logicallyComplete,
+                {
+                    isSearchHeaderHidden = true
+                },
+                completion: {
+                    guard isSearchHeaderHidden, !searchMounted else { return }
+                    searchMounted = true
+                }
+            )
+        } label: {
+            Label("Search Chats", systemImage: "magnifyingglass")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.primary)
+        }
+    }
+
+    private var newChatButton: some View {
+        Button {
+            showNewChat = true
+        } label: {
+            Label("New Message", systemImage: "plus.bubble")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -328,13 +371,30 @@ struct ChatsListView: View {
                 }
             }
         } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(scope == .active ? Color.primary : Color.accentColor)
-                .frame(width: 40, height: 44)
-                .contentShape(.rect)
+            if scope == .active {
+                Image(systemName: "line.3.horizontal.decrease")
+                    .frame(width: 34, height: 34)
+                    .contentShape(.rect)
+            } else {
+                HStack {
+                    Image(systemName: "line.3.horizontal.decrease")
+                    Text(scope.title)
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color(.systemBackground))
+                .padding(.trailing, 10)
+                .frame(height: 34)
+                .background {
+                    Capsule()
+                        .fill(Color.primary)
+                        .padding(.leading, -5)
+                }
+                .contentShape(.capsule)
+            }
         }
+        .menuIndicator(.hidden)
         .accessibilityLabel("Filter chats")
+        .accessibilityValue(Text(scope.title))
     }
 
     // MARK: - List
@@ -417,16 +477,12 @@ struct ChatsListView: View {
                             swipeActions(for: item)
                         }
                     }
-                    // Drop the separator above the very first row.
-                    .listRowSeparator(
-                        item.id == rows.first?.id ? .hidden : .automatic,
-                        edges: .top
-                    )
-                    .listRowSeparatorTint(Color(.separator).opacity(0.35))
+                    .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 }
             }
             .listStyle(.plain)
+            .compatibleAutomaticTopScrollEdgeEffect()
             .compatibleBottomScrollEdgeEffect()
             .overlay {
                 if rows.isEmpty { emptyState }
@@ -438,17 +494,35 @@ struct ChatsListView: View {
     @ViewBuilder
     private var emptyState: some View {
         if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            ContentUnavailableView.search(text: searchText)
+            ContentUnavailableView {
+                Label("No Results", systemImage: "magnifyingglass")
+            } description: {
+                Text("Check the spelling or try a different search.")
+            }
         } else if scope == .archived {
             ContentUnavailableView(
-                "No archived chats",
+                "No Archived Chats",
                 systemImage: "archivebox",
-                description: Text("Swipe a chat to archive it; archived chats stay active but stay out of unread and notification attention.")
+                description: Text("Chats you archive will appear here.")
             )
         } else if scope == .unread {
-            ContentUnavailableView("No unread chats", systemImage: "circle")
+            ContentUnavailableView(
+                "No Unread Chats",
+                systemImage: "message.badge",
+                description: Text("You’re all caught up.")
+            )
+        } else if scope == .left {
+            ContentUnavailableView(
+                "No Left Chats",
+                systemImage: "rectangle.portrait.and.arrow.right",
+                description: Text("Chats you leave or are removed from will appear here.")
+            )
         } else {
-            EmptyChatsState(action: { showNewChat = true })
+            ContentUnavailableView(
+                "No Chats",
+                systemImage: "bubble.left.and.bubble.right",
+                description: Text("Start a new chat to send a message.")
+            )
         }
     }
 
@@ -491,7 +565,8 @@ struct ChatsListView: View {
         let archiveAction = ChatListSelection.bulkArchiveAction(archivedFlags: items.map(\.isArchived))
         let willMute = ChatListSelection.bulkMuteMutes(mutedFlags: items.map(\.isMuted))
         let canDeleteLocally = ChatListSelection.canDeleteLocally(
-            activeMemberFlags: items.map(\.isActiveMember)
+            activeMemberFlags: items.map(\.isActiveMember),
+            pendingLeaveFlags: items.map(\.leaveRequestPending)
         )
 
         return VStack(spacing: 8) {
@@ -526,7 +601,7 @@ struct ChatsListView: View {
                     for id in items.map(\.id) { setMuted(groupIdHex: id, muted: willMute) }
                     selectedChatIds = []
                 }
-                .disabled(bulkDeleteInProgress)
+                .disabled(bulkDeleteInProgress || items.contains(where: \.leaveRequestPending))
 
                 if bulkDeleteInProgress {
                     VStack(spacing: 3) {
@@ -586,10 +661,12 @@ struct ChatsListView: View {
             base = viewModel.archivedItems
         case .unread:
             base = viewModel.items.filter(\.hasUnread)
+        case .left:
+            base = viewModel.items.filter { !$0.isActiveMember }
         }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).localizedLowercase
-        guard !query.isEmpty else { return base }
-        return base.filter { $0.searchHaystack.contains(query) }
+        return base.filter {
+            ChatListSearch.matches(query: searchText, in: $0.searchHaystack)
+        }
     }
 
     private func navigate(to item: ChatsListViewModel.Item) {
@@ -605,7 +682,26 @@ struct ChatsListView: View {
 
     @ViewBuilder
     private func leadingSwipeActions(for item: ChatsListViewModel.Item) -> some View {
-        let actions = ChatListSwipeActionsPresentation.leadingActions(isMuted: item.isMuted)
+        let actions = ChatListSwipeActionsPresentation.leadingActions(hasUnread: item.hasUnread)
+
+        if actions.contains(.read) {
+            Button {
+                Task { await markRead(item) }
+            } label: {
+                Label(L10n.string("Mark as read"), systemImage: "checkmark.message")
+            }
+            .tint(.blue)
+        }
+    }
+
+    @ViewBuilder
+    private func swipeActions(for item: ChatsListViewModel.Item) -> some View {
+        let actions = ChatListSwipeActionsPresentation.trailingActions(
+            isArchived: item.isArchived,
+            selfMembership: item.selfMembership,
+            leaveRequestPending: item.leaveRequestPending,
+            isMuted: item.isMuted
+        )
 
         if actions.contains(.unmute) {
             Button {
@@ -623,15 +719,6 @@ struct ChatsListView: View {
             }
             .tint(.indigo)
         }
-    }
-
-    @ViewBuilder
-    private func swipeActions(for item: ChatsListViewModel.Item) -> some View {
-        let actions = ChatListSwipeActionsPresentation.trailingActions(
-            isArchived: item.isArchived,
-            selfMembership: item.selfMembership
-        )
-
         if actions.contains(.unarchive) {
             Button {
                 Task { await setArchived(groupIdHex: item.id, archived: false) }
@@ -682,17 +769,77 @@ struct ChatsListView: View {
                     title: appState.displayName(forAccountIdHex: active.accountIdHex),
                     pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
                 )
-                .frame(width: 34, height: 34)
-                .shadow(color: .black.opacity(0.18), radius: 2.5, y: 1)
+                .frame(width: 44, height: 44)
             } else {
                 Image(systemName: "person.crop.circle")
             }
         }
-        // Plain style so the avatar fills the tap target edge-to-edge instead
-        // of sitting inside a glass capsule with padding; the shadow above
-        // preserves the raised, tappable affordance.
         .buttonStyle(.plain)
         .accessibilityLabel("Settings")
+    }
+
+    @MainActor
+    private func markRead(_ item: ChatsListViewModel.Item) async {
+        guard let messageIdHex = item.lastMessage?.messageIdHex else { return }
+        let succeeded = await markRead(
+            groupIdHex: item.id,
+            messageIdHex: messageIdHex
+        )
+        if !succeeded {
+            presentMarkReadFailure()
+        }
+    }
+
+    @MainActor
+    private func markAllChatsRead() async {
+        guard !isMarkingAllRead, let viewModel else { return }
+        isMarkingAllRead = true
+        defer { isMarkingAllRead = false }
+
+        var hadFailure = false
+        for item in viewModel.items where item.hasUnread {
+            guard let messageIdHex = item.lastMessage?.messageIdHex else {
+                hadFailure = true
+                continue
+            }
+            if !(await markRead(groupIdHex: item.id, messageIdHex: messageIdHex)) {
+                hadFailure = true
+            }
+        }
+        if hadFailure {
+            presentMarkReadFailure()
+        }
+    }
+
+    @MainActor
+    private func markRead(groupIdHex: String, messageIdHex: String) async -> Bool {
+        guard let ref = appState.activeAccountRef else { return false }
+        do {
+            let client = try appState.currentMarmotClient()
+            guard let result = await client.markTimelineMessagesRead(
+                accountRef: ref,
+                groupIdHex: groupIdHex,
+                messageIdHexes: [messageIdHex]
+            ).first, result.succeeded else {
+                return false
+            }
+            if let row = result.row {
+                viewModel?.applyChatListRow(row)
+            } else {
+                await viewModel?.refreshRows()
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func presentMarkReadFailure() {
+        Haptics.error()
+        appState.present(.error(
+            L10n.string("Couldn't mark as read"),
+            message: L10n.string("Try again.")
+        ))
     }
 
     @MainActor
@@ -759,6 +906,11 @@ struct ChatsListView: View {
                 leaveActionState.finishPreparation(for: target, canPresentConfirmation: false)
                 return
             }
+            if managementState.leaveRequestPending {
+                viewModel?.markGroupLeft(groupIdHex: target.groupIdHex)
+                leaveActionState.finishPreparation(for: target, canPresentConfirmation: false)
+                return
+            }
             guard GroupManagementPresentation.canLeave(
                 state: managementState,
                 fallbackIsLastAdmin: false
@@ -795,6 +947,10 @@ struct ChatsListView: View {
                 accountRef: ref,
                 groupIdHex: groupIdHex
             )
+            if managementState.leaveRequestPending {
+                viewModel?.markGroupLeft(groupIdHex: groupIdHex)
+                return
+            }
             guard GroupManagementPresentation.canLeave(
                 state: managementState,
                 fallbackIsLastAdmin: false
@@ -817,8 +973,35 @@ struct ChatsListView: View {
             viewModel?.markGroupLeft(groupIdHex: groupIdHex)
             Haptics.warning()
         } catch {
+            let leaveIsPending = isLeaveAlreadyRequested(error)
+                ? true
+                : await refreshPendingLeave(groupIdHex: groupIdHex, accountRef: ref)
+            if leaveIsPending {
+                viewModel?.markGroupLeft(groupIdHex: groupIdHex)
+                Haptics.warning()
+                return
+            }
             presentLeaveFailure()
         }
+    }
+
+    @MainActor
+    private func refreshPendingLeave(groupIdHex: String, accountRef: String) async -> Bool {
+        do {
+            let state = try await appState.currentMarmotClient().groupManagementState(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex
+            )
+            return state.leaveRequestPending
+        } catch {
+            return false
+        }
+    }
+
+    private func isLeaveAlreadyRequested(_ error: Error) -> Bool {
+        guard let error = error as? MarmotKitError else { return false }
+        if case .LeaveAlreadyRequested = error { return true }
+        return false
     }
 
     private func presentCannotLeave(_ managementState: GroupManagementStateFfi) {
@@ -936,24 +1119,101 @@ private struct ChatDestination: View {
     }
 }
 
-private struct EmptyChatsState: View {
+private struct ChatListReadAllBottomBar: ViewModifier {
+    let isVisible: Bool
+    let isLoading: Bool
     let action: () -> Void
 
-    var body: some View {
-        ContentUnavailableView {
-            Label("No chats yet", systemImage: "bubble.left.and.bubble.right")
-        } description: {
-            Text("Search for someone you know, paste their npub, or scan their QR code.")
-                .multilineTextAlignment(.center)
-        } actions: {
-            Button {
-                action()
-            } label: {
-                Label("New Message", systemImage: "square.and.pencil")
-                    .padding(.horizontal, 12)
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isVisible {
+            if #available(iOS 26.0, *) {
+                content
+                    .toolbar {
+                        ToolbarItem(placement: .bottomBar) {
+                            readAllButton
+                        }
+                        ToolbarSpacer(.flexible, placement: .bottomBar)
+                    }
+            } else {
+                content
+                    .toolbar {
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            readAllButton
+                            Spacer()
+                        }
+                    }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+        } else {
+            content
         }
+    }
+
+    private var readAllButton: some View {
+        Button(action: action) {
+            if isLoading {
+                ProgressView()
+                    .accessibilityLabel("Marking chats as read…")
+            } else {
+                Text("Read All")
+            }
+        }
+        .disabled(isLoading)
+    }
+}
+
+private struct OnDemandChatSearch: ViewModifier {
+    @Binding var searchText: String
+    @Binding var isHeaderHidden: Bool
+    @Binding var isMounted: Bool
+    @Binding var isPresented: Bool
+    let isFocused: FocusState<Bool>.Binding
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isMounted {
+            content
+                .searchable(
+                    text: $searchText,
+                    isPresented: $isPresented,
+                    prompt: Text("Search chats")
+                )
+                .searchFocused(isFocused)
+                .task {
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    isPresented = true
+                    await Task.yield()
+                    guard !Task.isCancelled, isPresented else { return }
+                    isFocused.wrappedValue = true
+                }
+                .onChange(of: isPresented) { _, presented in
+                    guard !presented else { return }
+                    isFocused.wrappedValue = false
+                    searchText = ""
+                    isMounted = false
+                    withAnimation(.easeOut(duration: 0.16)) {
+                        isHeaderHidden = false
+                    }
+                }
+        } else {
+            content
+        }
+    }
+}
+
+nonisolated enum ChatListSearch {
+    static func matches(
+        query: String,
+        in haystack: String,
+        locale: Locale = .current
+    ) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        return haystack.range(
+            of: trimmed,
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: locale
+        ) != nil
     }
 }

@@ -96,6 +96,8 @@ extension AppGroupRecordFfi {
         archived: Bool,
         pendingConfirmation: Bool,
         selfMembership: SelfMembershipFfi = .member,
+        leaveRequestPending: Bool = false,
+        leaveRequestedAtMs: UInt64? = nil,
         welcomerAccountIdHex: String?,
         viaWelcomeMessageIdHex: String?
     ) {
@@ -119,6 +121,8 @@ extension AppGroupRecordFfi {
             pendingConfirmation: pendingConfirmation,
             unrecoverable: false,
             selfMembership: selfMembership,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs,
             welcomerAccountIdHex: welcomerAccountIdHex,
             viaWelcomeMessageIdHex: viaWelcomeMessageIdHex
         )
@@ -185,7 +189,9 @@ extension ChatListRowFfi {
         firstUnreadMessageIdHex: String?,
         lastReadMessageIdHex: String?,
         lastReadTimelineAt: UInt64?,
-        updatedAt: UInt64
+        updatedAt: UInt64,
+        leaveRequestPending: Bool = false,
+        leaveRequestedAtMs: UInt64? = nil
     ) {
         self.init(
             groupIdHex: groupIdHex,
@@ -206,7 +212,9 @@ extension ChatListRowFfi {
             conversationCreatedAt: updatedAt,
             activitySortAt: updatedAt,
             updatedAt: updatedAt,
-            selfMembership: .member
+            selfMembership: .member,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs
         )
     }
 
@@ -227,7 +235,9 @@ extension ChatListRowFfi {
         lastReadMessageIdHex: String?,
         lastReadTimelineAt: UInt64?,
         updatedAt: UInt64,
-        selfMembership: SelfMembershipFfi
+        selfMembership: SelfMembershipFfi,
+        leaveRequestPending: Bool = false,
+        leaveRequestedAtMs: UInt64? = nil
     ) {
         self.init(
             groupIdHex: groupIdHex,
@@ -248,7 +258,33 @@ extension ChatListRowFfi {
             conversationCreatedAt: updatedAt,
             activitySortAt: updatedAt,
             updatedAt: updatedAt,
-            selfMembership: selfMembership
+            selfMembership: selfMembership,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs
+        )
+    }
+}
+
+extension GroupManagementStateFfi {
+    init(
+        myAccountIdHex: String,
+        isSelfAdmin: Bool,
+        isLastAdmin: Bool,
+        canInvite: Bool,
+        canLeave: Bool,
+        requiresSelfDemoteBeforeLeave: Bool,
+        memberActions: [GroupMemberActionStateFfi]
+    ) {
+        self.init(
+            myAccountIdHex: myAccountIdHex,
+            isSelfAdmin: isSelfAdmin,
+            isLastAdmin: isLastAdmin,
+            canInvite: canInvite,
+            canLeave: canLeave,
+            requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil,
+            memberActions: memberActions
         )
     }
 }

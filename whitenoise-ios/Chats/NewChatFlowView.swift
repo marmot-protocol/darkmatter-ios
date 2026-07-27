@@ -174,7 +174,6 @@ struct NewMessageScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .trueBlackScaffoldBackground()
         .navigationTitle("New Message")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

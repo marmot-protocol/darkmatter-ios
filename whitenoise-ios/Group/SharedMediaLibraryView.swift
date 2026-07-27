@@ -165,7 +165,6 @@ struct SharedMediaLibraryView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .trueBlackScaffoldBackground()
         .navigationTitle("Shared Media")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)

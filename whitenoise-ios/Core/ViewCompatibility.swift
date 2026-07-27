@@ -79,6 +79,39 @@ extension View {
         }
     }
 
+    /// Uses a crisp boundary below top chrome instead of the default soft fade.
+    @ViewBuilder
+    func compatibleTopScrollEdgeEffect() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectStyle(.hard, for: .top)
+        } else {
+            self
+        }
+    }
+
+    /// Uses the platform's context-sensitive treatment beneath top navigation chrome.
+    @ViewBuilder
+    func compatibleAutomaticTopScrollEdgeEffect() -> some View {
+        if #available(iOS 26.0, *) {
+            scrollEdgeEffectStyle(.automatic, for: .top)
+        } else {
+            self
+        }
+    }
+
+    /// Extends the native top scroll-edge treatment through inset content on iOS 26.
+    @ViewBuilder
+    func compatibleTopSafeAreaBar<BarContent: View>(
+        spacing: CGFloat? = nil,
+        @ViewBuilder content: () -> BarContent
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            safeAreaBar(edge: .top, spacing: spacing, content: content)
+        } else {
+            safeAreaInset(edge: .top, spacing: spacing, content: content)
+        }
+    }
+
     /// Keeps custom bottom input surfaces from adding a scroll-edge fade on iOS 26.
     @ViewBuilder
     func compatibleBottomScrollEdgeEffectHidden() -> some View {

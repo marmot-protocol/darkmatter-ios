@@ -34,6 +34,31 @@ enum RelativeTime {
         return formatted(date, sameYear ? "d MMM" : "d MMM yyyy", locale: locale)
     }
 
+    static func chatList(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String {
+        let seconds = now.timeIntervalSince(date)
+        if seconds < 60 { return L10n.string("now") }
+        if seconds < 3600 {
+            return abbreviatedDuration(Int(seconds / 60), unit: .minute, locale: locale)
+        }
+        if calendar.isDate(date, inSameDayAs: now) {
+            return formatted(date, "jm", locale: locale)
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return L10n.string("Yesterday")
+        }
+        if seconds < 7 * 24 * 3600 {
+            return formatted(date, "EEEE", locale: locale)
+        }
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        return formatted(date, sameYear ? "d MMM" : "d MMM yyyy", locale: locale)
+    }
+
     static func shortTime(_ date: Date, locale: Locale = AppLanguage.currentLocale) -> String {
         // Bubble times always carry the 12-hour day period ("9:41 PM"),
         // regardless of the device's 24-hour setting; the localized template

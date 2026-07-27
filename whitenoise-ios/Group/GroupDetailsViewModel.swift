@@ -642,12 +642,25 @@ final class GroupDetailsViewModel {
             onGroupLeft(groupIdHex)
         } catch {
             await refreshAfterFailedMutation(using: appState)
+            if conversation.leaveRequestPending || isLeaveAlreadyRequested(error) {
+                conversation.markLeaveRequested()
+                onGroupChanged(conversation.group)
+                Haptics.warning()
+                appState.present(.warning(L10n.string("Leaving group…")))
+                dismiss()
+                onGroupLeft(conversation.group.groupIdHex)
+                return
+            }
             handleActionError(error, title: L10n.string("Couldn't leave group"), using: appState)
         }
     }
 
     func deleteLocal(using appState: AppState, dismiss: () -> Void) async {
         guard let conversation, let accountRef = appState.activeAccountRef else { return }
+        guard !conversation.leaveRequestPending else {
+            actionError = GroupManagementPresentation.leavingGroupComposerMessage
+            return
+        }
         guard !conversation.canSendMessages else {
             actionError = L10n.string("Leave this group before deleting the local copy.")
             return
@@ -700,6 +713,8 @@ final class GroupDetailsViewModel {
             return error.localizedDescription
         }
         switch marmotError {
+        case .LeaveAlreadyRequested:
+            return GroupManagementPresentation.leavingGroupComposerMessage
         case .NotGroupAdmin:
             return L10n.string("Only admins can manage group members.")
         case .AdminCannotSelfRemove:
@@ -720,6 +735,12 @@ final class GroupDetailsViewModel {
         default:
             return marmotError.localizedDescription
         }
+    }
+
+    private func isLeaveAlreadyRequested(_ error: Error) -> Bool {
+        guard let error = error as? MarmotKitError else { return false }
+        if case .LeaveAlreadyRequested = error { return true }
+        return false
     }
 
     private func publishMessage(for summary: SendSummaryFfi) -> String {

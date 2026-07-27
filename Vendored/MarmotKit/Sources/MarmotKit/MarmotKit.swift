@@ -6501,6 +6501,20 @@ public struct AppGroupRecordFfi {
      * whether it left voluntarily or was removed.
      */
     public var selfMembership: SelfMembershipFfi
+    /**
+     * The local account asked to leave this group and the request has not
+     * resolved yet. Orthogonal to `self_membership`, which records the locally
+     * classified departure rather than whether the request resolved — see
+     * `ChatListRowFfi::leave_request_pending` for the full state table.
+     *
+     * Always equal to `leave_requested_at_ms != null`.
+     */
+    public var leaveRequestPending: Bool
+    /**
+     * When the local account asked to leave, in milliseconds since the Unix
+     * epoch; `null` when no leave is pending.
+     */
+    public var leaveRequestedAtMs: UInt64?
     public var welcomerAccountIdHex: String?
     public var viaWelcomeMessageIdHex: String?
 
@@ -6530,7 +6544,19 @@ public struct AppGroupRecordFfi {
         /**
          * Whether the local account is still a member of this group, and if not,
          * whether it left voluntarily or was removed.
-         */selfMembership: SelfMembershipFfi, welcomerAccountIdHex: String?, viaWelcomeMessageIdHex: String?) {
+         */selfMembership: SelfMembershipFfi,
+        /**
+         * The local account asked to leave this group and the request has not
+         * resolved yet. Orthogonal to `self_membership`, which records the locally
+         * classified departure rather than whether the request resolved — see
+         * `ChatListRowFfi::leave_request_pending` for the full state table.
+         *
+         * Always equal to `leave_requested_at_ms != null`.
+         */leaveRequestPending: Bool,
+        /**
+         * When the local account asked to leave, in milliseconds since the Unix
+         * epoch; `null` when no leave is pending.
+         */leaveRequestedAtMs: UInt64?, welcomerAccountIdHex: String?, viaWelcomeMessageIdHex: String?) {
         self.groupIdHex = groupIdHex
         self.protocolProfile = protocolProfile
         self.endpoint = endpoint
@@ -6550,6 +6576,8 @@ public struct AppGroupRecordFfi {
         self.pendingConfirmation = pendingConfirmation
         self.unrecoverable = unrecoverable
         self.selfMembership = selfMembership
+        self.leaveRequestPending = leaveRequestPending
+        self.leaveRequestedAtMs = leaveRequestedAtMs
         self.welcomerAccountIdHex = welcomerAccountIdHex
         self.viaWelcomeMessageIdHex = viaWelcomeMessageIdHex
     }
@@ -6616,6 +6644,12 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         if lhs.selfMembership != rhs.selfMembership {
             return false
         }
+        if lhs.leaveRequestPending != rhs.leaveRequestPending {
+            return false
+        }
+        if lhs.leaveRequestedAtMs != rhs.leaveRequestedAtMs {
+            return false
+        }
         if lhs.welcomerAccountIdHex != rhs.welcomerAccountIdHex {
             return false
         }
@@ -6645,6 +6679,8 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         hasher.combine(pendingConfirmation)
         hasher.combine(unrecoverable)
         hasher.combine(selfMembership)
+        hasher.combine(leaveRequestPending)
+        hasher.combine(leaveRequestedAtMs)
         hasher.combine(welcomerAccountIdHex)
         hasher.combine(viaWelcomeMessageIdHex)
     }
@@ -6677,6 +6713,8 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
                 pendingConfirmation: FfiConverterBool.read(from: &buf),
                 unrecoverable: FfiConverterBool.read(from: &buf),
                 selfMembership: FfiConverterTypeSelfMembershipFfi.read(from: &buf),
+                leaveRequestPending: FfiConverterBool.read(from: &buf),
+                leaveRequestedAtMs: FfiConverterOptionUInt64.read(from: &buf),
                 welcomerAccountIdHex: FfiConverterOptionString.read(from: &buf),
                 viaWelcomeMessageIdHex: FfiConverterOptionString.read(from: &buf)
         )
@@ -6702,6 +6740,8 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
         FfiConverterBool.write(value.pendingConfirmation, into: &buf)
         FfiConverterBool.write(value.unrecoverable, into: &buf)
         FfiConverterTypeSelfMembershipFfi.write(value.selfMembership, into: &buf)
+        FfiConverterBool.write(value.leaveRequestPending, into: &buf)
+        FfiConverterOptionUInt64.write(value.leaveRequestedAtMs, into: &buf)
         FfiConverterOptionString.write(value.welcomerAccountIdHex, into: &buf)
         FfiConverterOptionString.write(value.viaWelcomeMessageIdHex, into: &buf)
     }
@@ -7820,6 +7860,38 @@ public struct ChatListRowFfi {
      * whether it left voluntarily or was removed.
      */
     public var selfMembership: SelfMembershipFfi
+    /**
+     * The local account asked to leave this group and the request has not
+     * resolved yet. Render the conversation as leaving, and do not offer Leave
+     * again — see `GroupManagementStateFfi::can_leave`.
+     *
+     * Durable unresolved *intent*, which survives a failed publish and app
+     * termination — so a cold launch can rediscover it. Read this rather than
+     * `self_membership` to decide whether to show a leave in progress.
+     *
+     * This is orthogonal to `self_membership`, not a precursor to it. The two
+     * answer different questions and combine freely:
+     *
+     * | `self_membership` | this flag | meaning |
+     * |---|---|---|
+     * | `Member` | `true`  | leave requested, publish failed or was interrupted |
+     * | `Left`   | `true`  | leave published, still waiting for a member to commit it |
+     * | `Left`   | `false` | leave resolved |
+     * | `Removed`| `false` | removed by someone else |
+     *
+     * `self_membership` is the locally *classified departure* — `Left` is
+     * recorded as soon as the SelfRemove proposal publishes, so it does **not**
+     * imply a commit removed the member, and `Removed` marks an involuntary
+     * removal. This flag is about whether the request is still outstanding.
+     *
+     * Always equal to `leave_requested_at_ms != null`.
+     */
+    public var leaveRequestPending: Bool
+    /**
+     * When the local account asked to leave, in milliseconds since the Unix
+     * epoch; `null` when no leave is pending.
+     */
+    public var leaveRequestedAtMs: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -7827,7 +7899,37 @@ public struct ChatListRowFfi {
         /**
          * Whether the local account is still a member of this group, and if not,
          * whether it left voluntarily or was removed.
-         */selfMembership: SelfMembershipFfi) {
+         */selfMembership: SelfMembershipFfi,
+        /**
+         * The local account asked to leave this group and the request has not
+         * resolved yet. Render the conversation as leaving, and do not offer Leave
+         * again — see `GroupManagementStateFfi::can_leave`.
+         *
+         * Durable unresolved *intent*, which survives a failed publish and app
+         * termination — so a cold launch can rediscover it. Read this rather than
+         * `self_membership` to decide whether to show a leave in progress.
+         *
+         * This is orthogonal to `self_membership`, not a precursor to it. The two
+         * answer different questions and combine freely:
+         *
+         * | `self_membership` | this flag | meaning |
+         * |---|---|---|
+         * | `Member` | `true`  | leave requested, publish failed or was interrupted |
+         * | `Left`   | `true`  | leave published, still waiting for a member to commit it |
+         * | `Left`   | `false` | leave resolved |
+         * | `Removed`| `false` | removed by someone else |
+         *
+         * `self_membership` is the locally *classified departure* — `Left` is
+         * recorded as soon as the SelfRemove proposal publishes, so it does **not**
+         * imply a commit removed the member, and `Removed` marks an involuntary
+         * removal. This flag is about whether the request is still outstanding.
+         *
+         * Always equal to `leave_requested_at_ms != null`.
+         */leaveRequestPending: Bool,
+        /**
+         * When the local account asked to leave, in milliseconds since the Unix
+         * epoch; `null` when no leave is pending.
+         */leaveRequestedAtMs: UInt64?) {
         self.groupIdHex = groupIdHex
         self.archived = archived
         self.pendingConfirmation = pendingConfirmation
@@ -7847,6 +7949,8 @@ public struct ChatListRowFfi {
         self.activitySortAt = activitySortAt
         self.updatedAt = updatedAt
         self.selfMembership = selfMembership
+        self.leaveRequestPending = leaveRequestPending
+        self.leaveRequestedAtMs = leaveRequestedAtMs
     }
 }
 
@@ -7911,6 +8015,12 @@ extension ChatListRowFfi: Equatable, Hashable {
         if lhs.selfMembership != rhs.selfMembership {
             return false
         }
+        if lhs.leaveRequestPending != rhs.leaveRequestPending {
+            return false
+        }
+        if lhs.leaveRequestedAtMs != rhs.leaveRequestedAtMs {
+            return false
+        }
         return true
     }
 
@@ -7934,6 +8044,8 @@ extension ChatListRowFfi: Equatable, Hashable {
         hasher.combine(activitySortAt)
         hasher.combine(updatedAt)
         hasher.combine(selfMembership)
+        hasher.combine(leaveRequestPending)
+        hasher.combine(leaveRequestedAtMs)
     }
 }
 
@@ -7963,7 +8075,9 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
                 conversationCreatedAt: FfiConverterUInt64.read(from: &buf),
                 activitySortAt: FfiConverterUInt64.read(from: &buf),
                 updatedAt: FfiConverterUInt64.read(from: &buf),
-                selfMembership: FfiConverterTypeSelfMembershipFfi.read(from: &buf)
+                selfMembership: FfiConverterTypeSelfMembershipFfi.read(from: &buf),
+                leaveRequestPending: FfiConverterBool.read(from: &buf),
+                leaveRequestedAtMs: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -7987,6 +8101,8 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
         FfiConverterUInt64.write(value.activitySortAt, into: &buf)
         FfiConverterUInt64.write(value.updatedAt, into: &buf)
         FfiConverterTypeSelfMembershipFfi.write(value.selfMembership, into: &buf)
+        FfiConverterBool.write(value.leaveRequestPending, into: &buf)
+        FfiConverterOptionUInt64.write(value.leaveRequestedAtMs, into: &buf)
     }
 }
 
@@ -8421,19 +8537,59 @@ public struct GroupManagementStateFfi {
     public var isSelfAdmin: Bool
     public var isLastAdmin: Bool
     public var canInvite: Bool
+    /**
+     * Whether a Leave action would do anything: the local account is a member,
+     * is not an admin, and has no leave already in flight.
+     *
+     * When this is `false`, the reason is one of
+     * `requires_self_demote_before_leave` (demote first) or
+     * `leave_request_pending` (already leaving) — or the account is not a member
+     * at all. Check those before reporting an error to the user.
+     */
     public var canLeave: Bool
     public var requiresSelfDemoteBeforeLeave: Bool
+    /**
+     * A leave is already in flight for this group; `Marmot::leave_group` would
+     * return `MarmotKitError::LeaveAlreadyRequested`. Render progress rather
+     * than a Leave affordance.
+     */
+    public var leaveRequestPending: Bool
+    /**
+     * When the local account asked to leave, in milliseconds since the Unix
+     * epoch; `null` when no leave is pending.
+     */
+    public var leaveRequestedAtMs: UInt64?
     public var memberActions: [GroupMemberActionStateFfi]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(myAccountIdHex: String, isSelfAdmin: Bool, isLastAdmin: Bool, canInvite: Bool, canLeave: Bool, requiresSelfDemoteBeforeLeave: Bool, memberActions: [GroupMemberActionStateFfi]) {
+    public init(myAccountIdHex: String, isSelfAdmin: Bool, isLastAdmin: Bool, canInvite: Bool,
+        /**
+         * Whether a Leave action would do anything: the local account is a member,
+         * is not an admin, and has no leave already in flight.
+         *
+         * When this is `false`, the reason is one of
+         * `requires_self_demote_before_leave` (demote first) or
+         * `leave_request_pending` (already leaving) — or the account is not a member
+         * at all. Check those before reporting an error to the user.
+         */canLeave: Bool, requiresSelfDemoteBeforeLeave: Bool,
+        /**
+         * A leave is already in flight for this group; `Marmot::leave_group` would
+         * return `MarmotKitError::LeaveAlreadyRequested`. Render progress rather
+         * than a Leave affordance.
+         */leaveRequestPending: Bool,
+        /**
+         * When the local account asked to leave, in milliseconds since the Unix
+         * epoch; `null` when no leave is pending.
+         */leaveRequestedAtMs: UInt64?, memberActions: [GroupMemberActionStateFfi]) {
         self.myAccountIdHex = myAccountIdHex
         self.isSelfAdmin = isSelfAdmin
         self.isLastAdmin = isLastAdmin
         self.canInvite = canInvite
         self.canLeave = canLeave
         self.requiresSelfDemoteBeforeLeave = requiresSelfDemoteBeforeLeave
+        self.leaveRequestPending = leaveRequestPending
+        self.leaveRequestedAtMs = leaveRequestedAtMs
         self.memberActions = memberActions
     }
 }
@@ -8460,6 +8616,12 @@ extension GroupManagementStateFfi: Equatable, Hashable {
         if lhs.requiresSelfDemoteBeforeLeave != rhs.requiresSelfDemoteBeforeLeave {
             return false
         }
+        if lhs.leaveRequestPending != rhs.leaveRequestPending {
+            return false
+        }
+        if lhs.leaveRequestedAtMs != rhs.leaveRequestedAtMs {
+            return false
+        }
         if lhs.memberActions != rhs.memberActions {
             return false
         }
@@ -8473,6 +8635,8 @@ extension GroupManagementStateFfi: Equatable, Hashable {
         hasher.combine(canInvite)
         hasher.combine(canLeave)
         hasher.combine(requiresSelfDemoteBeforeLeave)
+        hasher.combine(leaveRequestPending)
+        hasher.combine(leaveRequestedAtMs)
         hasher.combine(memberActions)
     }
 }
@@ -8491,6 +8655,8 @@ public struct FfiConverterTypeGroupManagementStateFfi: FfiConverterRustBuffer {
                 canInvite: FfiConverterBool.read(from: &buf),
                 canLeave: FfiConverterBool.read(from: &buf),
                 requiresSelfDemoteBeforeLeave: FfiConverterBool.read(from: &buf),
+                leaveRequestPending: FfiConverterBool.read(from: &buf),
+                leaveRequestedAtMs: FfiConverterOptionUInt64.read(from: &buf),
                 memberActions: FfiConverterSequenceTypeGroupMemberActionStateFfi.read(from: &buf)
         )
     }
@@ -8502,6 +8668,8 @@ public struct FfiConverterTypeGroupManagementStateFfi: FfiConverterRustBuffer {
         FfiConverterBool.write(value.canInvite, into: &buf)
         FfiConverterBool.write(value.canLeave, into: &buf)
         FfiConverterBool.write(value.requiresSelfDemoteBeforeLeave, into: &buf)
+        FfiConverterBool.write(value.leaveRequestPending, into: &buf)
+        FfiConverterOptionUInt64.write(value.leaveRequestedAtMs, into: &buf)
         FfiConverterSequenceTypeGroupMemberActionStateFfi.write(value.memberActions, into: &buf)
     }
 }
@@ -16768,6 +16936,14 @@ public enum MarmotKitError {
     )
     case AdminCannotSelfRemove(groupIdHex: String
     )
+    /**
+     * A leave is already in flight for this group. The durable request survives
+     * restarts and the engine keeps re-proposing until a commit removes us, so
+     * this is not a failure to retry — surface progress instead. Check
+     * `GroupManagementStateFfi::leave_request_pending` before offering Leave.
+     */
+    case LeaveAlreadyRequested(groupIdHex: String
+    )
     case WouldRemoveLastAdmin(groupIdHex: String
     )
     case MemberNotInGroup(groupIdHex: String, memberIdHex: String
@@ -16901,43 +17077,46 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 15: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 16: return .WouldRemoveLastAdmin(
+        case 16: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .MemberNotInGroup(
+        case 17: return .WouldRemoveLastAdmin(
+            groupIdHex: try FfiConverterString.read(from: &buf)
+            )
+        case 18: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 18: return .AlreadyAdmin(
+        case 19: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 19: return .NotAdmin(
+        case 20: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 20: return .StorageBusy(
+        case 21: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 21: return .SecretNotFound(
+        case 22: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .KeystoreUnavailable(
+        case 23: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 23: return .EmptyPassphrase
-        case 24: return .EncryptionFailed(
+        case 24: return .EmptyPassphrase
+        case 25: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 25: return .Io(
+        case 26: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 26: return .ExternalSignerUnavailable(
+        case 27: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .ExternalSignerMismatch
-        case 28: return .ExternalSignerRejected
-        case 29: return .Runtime(
+        case 28: return .ExternalSignerMismatch
+        case 29: return .ExternalSignerRejected
+        case 30: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -17025,73 +17204,78 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .WouldRemoveLastAdmin(groupIdHex):
+        case let .LeaveAlreadyRequested(groupIdHex):
             writeInt(&buf, Int32(16))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .WouldRemoveLastAdmin(groupIdHex):
             writeInt(&buf, Int32(17))
             FfiConverterString.write(groupIdHex, into: &buf)
-            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .AlreadyAdmin(groupIdHex,memberIdHex):
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(18))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .NotAdmin(groupIdHex,memberIdHex):
+        case let .AlreadyAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(19))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageBusy(details):
+        case let .NotAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(20))
-            FfiConverterString.write(details, into: &buf)
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .SecretNotFound(details):
+        case let .StorageBusy(details):
             writeInt(&buf, Int32(21))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .KeystoreUnavailable(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(22))
             FfiConverterString.write(details, into: &buf)
 
 
-        case .EmptyPassphrase:
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(23))
-
-
-        case let .EncryptionFailed(details):
-            writeInt(&buf, Int32(24))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(24))
+
+
+        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .Io(details):
             writeInt(&buf, Int32(26))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(27))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(27))
-
-
-        case .ExternalSignerRejected:
             writeInt(&buf, Int32(28))
 
 
-        case let .Runtime(details):
+        case .ExternalSignerRejected:
             writeInt(&buf, Int32(29))
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(30))
             FfiConverterString.write(details, into: &buf)
 
         }

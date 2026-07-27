@@ -45,7 +45,6 @@ struct NewGroupPickerView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .trueBlackScaffoldBackground()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)

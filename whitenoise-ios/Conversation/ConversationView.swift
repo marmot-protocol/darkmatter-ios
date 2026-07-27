@@ -963,7 +963,6 @@ struct ConversationView: View {
 
     var body: some View {
         timeline
-            .trueBlackScaffoldBackground()
             .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
             .bottomInputChromeAccessory {
                 composerArea
