@@ -120,7 +120,13 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
+            Section("Support") {
+                NavigationLink {
+                    SupportChatView()
+                } label: {
+                    Label("Chat with support", systemImage: "message.fill")
+                }
+
                 NavigationLink {
                     DonateView()
                 } label: {

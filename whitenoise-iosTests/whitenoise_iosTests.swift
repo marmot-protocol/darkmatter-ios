@@ -2747,6 +2747,11 @@ struct LocalizationCatalogTests {
             "That QR code isn't a White Noise profile.",
             "Couldn't create chat",
             "Push registration failed",
+            "Support",
+            "Chat with support",
+            "Connecting to support…",
+            "Couldn't connect to support",
+            "Please check your connection and try again.",
             "Leave “%@”?",
             "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it.",
             "Leaving…"
