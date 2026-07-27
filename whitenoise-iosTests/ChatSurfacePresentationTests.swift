@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+import UIKit
 @testable import whitenoise_ios
 
 @MainActor
@@ -156,6 +157,50 @@ struct ChatSurfacePresentationTests {
             for: String(repeating: "a", count: ComposerExpandedEditorPresentation.minimumExpandCharacterCount)
         ))
         #expect(ComposerExpandedEditorPresentation.shouldShowExpandButton(for: "one\ntwo\nthree\nfour"))
+    }
+
+    @Test func cappedComposerTextInputEnablesInternalScrollingForLongDrafts() {
+        let textView = ImagePasteTextView(
+            frame: CGRect(x: 0, y: 0, width: 240, height: 112)
+        )
+        textView.font = .systemFont(ofSize: 18)
+        textView.textContainerInset = UIEdgeInsets(top: 9, left: 0, bottom: 9, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
+        textView.isScrollEnabled = false
+
+        textView.text = "Short"
+        let shortHeight = textView.updateScrollability(
+            maximumHeight: 112,
+            fittingWidth: textView.bounds.width,
+            revealSelection: false
+        )
+        #expect(shortHeight < 112)
+        #expect(!textView.isScrollEnabled)
+
+        textView.text = (1 ... 8).map { "Line \($0)" }.joined(separator: "\n")
+        let longHeight = textView.updateScrollability(
+            maximumHeight: 112,
+            fittingWidth: textView.bounds.width,
+            revealSelection: true
+        )
+        #expect(longHeight > 112)
+        #expect(textView.isScrollEnabled)
+
+        let repeatedLongHeight = textView.updateScrollability(
+            maximumHeight: 112,
+            fittingWidth: textView.bounds.width,
+            revealSelection: false
+        )
+        #expect(repeatedLongHeight > 112)
+        #expect(textView.isScrollEnabled)
+
+        textView.text = "Short again"
+        _ = textView.updateScrollability(
+            maximumHeight: 112,
+            fittingWidth: textView.bounds.width,
+            revealSelection: false
+        )
+        #expect(!textView.isScrollEnabled)
     }
 
     @Test func sharedLocationUsesCanonicalGoogleMapsURLCoordinates() {

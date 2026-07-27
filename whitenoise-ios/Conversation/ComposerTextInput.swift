@@ -37,6 +37,7 @@ struct ComposerTextInput: UIViewRepresentable {
         textView.keyboardDismissMode = .interactive
         textView.returnKeyType = .default
         textView.accessibilityLabel = L10n.string("Message")
+        textView.isScrollEnabled = false
         return textView
     }
 
@@ -46,6 +47,11 @@ struct ComposerTextInput: UIViewRepresentable {
         if uiView.text != text {
             uiView.text = text
             uiView.invalidateIntrinsicContentSize()
+            uiView.updateScrollability(
+                maximumHeight: maximumHeight,
+                fittingWidth: uiView.bounds.width,
+                revealSelection: uiView.isFirstResponder
+            )
         }
 
         if focusRequest > context.coordinator.lastFocusRequest {
@@ -74,9 +80,12 @@ struct ComposerTextInput: UIViewRepresentable {
         context: Context
     ) -> CGSize? {
         guard let width = proposal.width else { return nil }
-        let fitting = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        let height = min(maximumHeight, max(minimumHeight, fitting.height))
-        uiView.isScrollEnabled = fitting.height > maximumHeight
+        let fittingHeight = uiView.updateScrollability(
+            maximumHeight: maximumHeight,
+            fittingWidth: width,
+            revealSelection: false
+        )
+        let height = min(maximumHeight, max(minimumHeight, fittingHeight))
         return CGSize(width: width, height: height)
     }
 
@@ -112,6 +121,12 @@ struct ComposerTextInput: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
+            guard let textView = textView as? ImagePasteTextView else { return }
+            textView.updateScrollability(
+                maximumHeight: parent.maximumHeight,
+                fittingWidth: textView.bounds.width,
+                revealSelection: true
+            )
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -127,6 +142,26 @@ struct ComposerTextInput: UIViewRepresentable {
 
 final class ImagePasteTextView: UITextView {
     var onPasteImage: ((UIImage) -> Void)?
+
+    @discardableResult
+    func updateScrollability(
+        maximumHeight: CGFloat,
+        fittingWidth: CGFloat,
+        revealSelection: Bool
+    ) -> CGFloat {
+        guard fittingWidth > 0 else { return contentSize.height }
+        let fittingHeight = sizeThatFits(
+            CGSize(width: fittingWidth, height: .greatestFiniteMagnitude)
+        ).height
+        let shouldScroll = fittingHeight > maximumHeight
+        if isScrollEnabled != shouldScroll {
+            isScrollEnabled = shouldScroll
+        }
+        if shouldScroll, revealSelection {
+            scrollRangeToVisible(selectedRange)
+        }
+        return fittingHeight
+    }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == #selector(paste(_:)), UIPasteboard.general.hasImages {

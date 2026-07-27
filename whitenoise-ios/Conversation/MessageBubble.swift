@@ -65,6 +65,10 @@ nonisolated enum MessageBodyCollapsePresentation {
         text.count > maxCollapsedCharacters || lineCount(text) > maxCollapsedLines
     }
 
+    static func isCollapsed(_ text: String, isExpanded: Bool) -> Bool {
+        shouldCollapse(text) && !isExpanded
+    }
+
     static func lineCount(_ text: String) -> Int {
         guard !text.isEmpty else { return 0 }
         return text.split(separator: "\n", omittingEmptySubsequences: false).count
@@ -98,7 +102,7 @@ struct MessageBubble: View {
     var onFailedTap: (() -> Void)? = nil
 
     @State private var mediaGallery: MessageMediaGallery?
-    @State private var fullBodyPresentation: MessageFullBodyPresentation?
+    @State private var isBodyExpanded = false
     @State private var pendingExternalLink: PendingMessageExternalLink?
     @State private var replyHeaderHeight: CGFloat = 0
     @State private var replyHeaderWidth: CGFloat = 0
@@ -226,13 +230,6 @@ struct MessageBubble: View {
             ) {
                 mediaGallery = nil
             }
-        }
-        .fullScreenCover(item: $fullBodyPresentation) { presentation in
-            MessageFullBodyView(
-                presentation: presentation,
-                onClose: { fullBodyPresentation = nil }
-            )
-            .environment(\.openURL, OpenURLAction(handler: handleMessageLink))
         }
         .alert(L10n.string("Open link?"), isPresented: externalLinkConfirmationPresented) {
             Button(L10n.string("Open")) {
@@ -502,10 +499,14 @@ struct MessageBubble: View {
     }
 
     private func messageBodyText(hasReply: Bool) -> some View {
-        let shouldCollapse = MessageBodyCollapsePresentation.shouldCollapse(sanitizedBodyText)
+        let isLongBody = MessageBodyCollapsePresentation.shouldCollapse(sanitizedBodyText)
+        let isCollapsed = MessageBodyCollapsePresentation.isCollapsed(
+            sanitizedBodyText,
+            isExpanded: isBodyExpanded
+        )
         let usesInlineFooter = MessageBubbleTextLayout.usesInlineFooter(
             text: sanitizedBodyText,
-            isCollapsed: shouldCollapse
+            isCollapsed: isLongBody
         )
         let replyContentWidth = hasReply && replyHeaderWidth > 0
             ? max(0, replyHeaderWidth - (MessageBubbleReplyLayout.bodyHorizontalInset * 2))
@@ -548,21 +549,32 @@ struct MessageBubble: View {
                         }
                         .frame(width: bodyLayoutWidth, alignment: .leading)
                         .frame(
-                            maxHeight: shouldCollapse ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
+                            maxHeight: isCollapsed ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
                             alignment: .topLeading
                         )
                         .clipped()
+                        .mask {
+                            if isCollapsed {
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .black, location: 0),
+                                        .init(color: .black, location: 0.88),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            } else {
+                                Rectangle()
+                            }
+                        }
 
-                    if shouldCollapse {
+                    if isCollapsed {
                         HStack(alignment: .lastTextBaseline, spacing: 8) {
                             Button {
-                                fullBodyPresentation = MessageFullBodyPresentation(
-                                    id: record.messageIdHex.isEmpty
-                                        ? "pending-\(record.recordedAt)"
-                                        : record.messageIdHex,
-                                    text: sanitizedBodyText,
-                                    blocks: markdownBlocks
-                                )
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    isBodyExpanded = true
+                                }
                             } label: {
                                 Text(L10n.string("Read more"))
                                     .font(.footnote.weight(.semibold))
@@ -763,42 +775,6 @@ struct MessageBubble: View {
     static func timeLabel(recordedAt: UInt64, locale: Locale = .autoupdatingCurrent) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(recordedAt))
         return RelativeTime.shortTime(date, locale: locale)
-    }
-}
-
-private struct MessageFullBodyPresentation: Identifiable {
-    let id: String
-    let text: String
-    let blocks: [MarkdownDisplayBlock]?
-}
-
-private struct MessageFullBodyView: View {
-    let presentation: MessageFullBodyPresentation
-    let onClose: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                if let blocks = presentation.blocks {
-                    MarkdownMessageView(blocks: blocks)
-                        .tint(.accentColor)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                } else {
-                    Text(presentation.text)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .textSelection(.enabled)
-                }
-            }
-            .navigationTitle(L10n.string("Full message"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.string("Done"), action: onClose)
-                }
-            }
-        }
     }
 }
 
