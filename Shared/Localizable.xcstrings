@@ -22867,6 +22867,65 @@
         }
       }
     },
+    "Leave “%@”?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ verlassen?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Salir de “%@”?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitter « %@ » ?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uscire da “%@”?"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sair de “%@”?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Покинуть «%@»?"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” sohbetinden ayrıl?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离开“%@”？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離開「%@」？"
+          }
+        }
+      }
+    },
     "Leave Group" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23046,6 +23105,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "請先退出此群組，再刪除本機副本。"
+          }
+        }
+      }
+    },
+    "Leaving…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird verlassen …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saliendo…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Départ…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uscita…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saindo…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выход…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrılınıyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在离开…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在離開…"
           }
         }
       }
@@ -50220,6 +50338,65 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du erhältst keine neuen Nachrichten mehr. Dieser Chat bleibt als schreibgeschützter Verlauf auf diesem Gerät, bis du ihn löschst."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dejarás de recibir mensajes nuevos. Este chat permanecerá en este dispositivo como historial de solo lectura hasta que lo elimines."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous ne recevrez plus de nouveaux messages. Cette discussion restera sur cet appareil en lecture seule jusqu’à ce que vous la supprimiez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non riceverai più nuovi messaggi. Questa chat rimarrà su questo dispositivo come cronologia di sola lettura finché non la eliminerai."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você deixará de receber novas mensagens. Esta conversa permanecerá neste dispositivo como histórico somente leitura até que você a exclua."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы перестанете получать новые сообщения. Этот чат останется на устройстве как история только для чтения, пока вы его не удалите."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni mesajları almayı bırakacaksınız. Bu sohbet, siz silene kadar bu cihazda salt okunur geçmiş olarak kalacak."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将不再收到新消息。此聊天将作为只读历史记录保留在此设备上，直到你将其删除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將不再收到新訊息。此聊天會以唯讀記錄保留在此裝置上，直到你將其刪除。"
           }
         }
       }

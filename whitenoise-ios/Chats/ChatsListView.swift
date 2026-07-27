@@ -13,6 +13,7 @@ struct ChatsListView: View {
     @State private var showBulkDeleteConfirmation = false
     @State private var pendingSingleDelete: LocalDeleteTarget?
     @State private var deletingChatIds = Set<String>()
+    @State private var leaveActionState = ChatListLeaveActionState()
     @State private var bulkDeleteInProgress = false
     @State private var searchPresented = false
 
@@ -197,6 +198,22 @@ struct ChatsListView: View {
             } message: {
                 Text("This permanently removes the chat and its messages from this device. Signing in again won’t restore them.")
             }
+            .confirmationDialog(
+                leaveConfirmationTitle,
+                isPresented: leaveConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                if let target = leaveActionState.pendingConfirmation {
+                    Button("Leave Chat", role: .destructive) {
+                        startConfirmedLeave(target)
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    leaveActionState.cancelConfirmation()
+                }
+            } message: {
+                Text(ChatListLeavePresentation.confirmationMessage)
+            }
         }
         // Warm path: a chat created / deep-linked while the list is on screen.
         .onChange(of: appState.pendingChatId) { _, _ in consumePendingChat() }
@@ -322,6 +339,10 @@ struct ChatsListView: View {
         } else {
             List {
                 ForEach(rows) { item in
+                    let isDeleting = deletingChatIds.contains(item.id)
+                    let isPreparingLeave = leaveActionState.preparingGroupIds.contains(item.id)
+                    let isLeaving = leaveActionState.leavingGroupIds.contains(item.id)
+                    let rowActionInProgress = isDeleting || isPreparingLeave || isLeaving
                     // A plain row (not a Button) keeps tap and long-press
                     // mutually exclusive — a Button's action would also fire
                     // on the release of the long press that just entered
@@ -341,14 +362,23 @@ struct ChatsListView: View {
                                 )
                         }
                         ChatRow(item: item)
-                        if deletingChatIds.contains(item.id) {
+                        if isDeleting {
                             ProgressView()
                                 .accessibilityLabel("Deleting…")
+                        } else if isLeaving {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                Text("Leaving…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else if isPreparingLeave {
+                            ProgressView()
                         }
                     }
                     .contentShape(.rect)
                     .onTapGesture {
-                        guard !deletingChatIds.contains(item.id) else { return }
+                        guard !rowActionInProgress else { return }
                         if selectionMode {
                             selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
                         } else {
@@ -356,16 +386,20 @@ struct ChatsListView: View {
                         }
                     }
                     .onLongPressGesture {
-                        if !selectionMode, !deletingChatIds.contains(item.id) {
+                        if !selectionMode, !rowActionInProgress {
                             selectedChatIds = [item.id]
                         }
                     }
                     .accessibilityAddTraits(.isButton)
                     .swipeActions(edge: .leading) {
-                        if !selectionMode { leadingSwipeActions(for: item) }
+                        if !selectionMode, !rowActionInProgress {
+                            leadingSwipeActions(for: item)
+                        }
                     }
                     .swipeActions(edge: .trailing) {
-                        if !selectionMode { swipeActions(for: item) }
+                        if !selectionMode, !rowActionInProgress {
+                            swipeActions(for: item)
+                        }
                     }
                     // Drop the separator above the very first row.
                     .listRowSeparator(
@@ -416,6 +450,24 @@ struct ChatsListView: View {
     private var singleDeleteConfirmationTitle: String {
         guard let target = pendingSingleDelete else { return L10n.string("Delete chat from this device?") }
         return L10n.formatted("Delete “%@” from this device?", target.title)
+    }
+
+    private var leaveConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { leaveActionState.pendingConfirmation != nil },
+            set: { presented in
+                if !presented {
+                    leaveActionState.cancelConfirmation()
+                }
+            }
+        )
+    }
+
+    private var leaveConfirmationTitle: String {
+        guard let target = leaveActionState.pendingConfirmation else {
+            return L10n.string("Leave this chat?")
+        }
+        return ChatListLeavePresentation.confirmationTitle(for: target)
     }
 
     private func chatSelectionBar(visibleRows: [ChatsListViewModel.Item]) -> some View {
@@ -581,7 +633,11 @@ struct ChatsListView: View {
         }
         if actions.contains(.leave) {
             Button(role: .destructive) {
-                Task { await leave(groupIdHex: item.id) }
+                let target = ChatListLeavePresentation.Target(
+                    groupIdHex: item.id,
+                    title: item.title
+                )
+                Task { await prepareLeave(target) }
             } label: {
                 Label("Leave", systemImage: "person.crop.circle.badge.minus")
             }
@@ -670,8 +726,49 @@ struct ChatsListView: View {
     }
 
     @MainActor
-    private func leave(groupIdHex: String) async {
-        guard let ref = appState.activeAccountRef else { return }
+    private func prepareLeave(_ target: ChatListLeavePresentation.Target) async {
+        guard let ref = appState.activeAccountRef,
+              leaveActionState.beginPreparation(for: target)
+        else { return }
+        do {
+            let managementState = try await appState.currentMarmotClient().groupManagementState(
+                accountRef: ref,
+                groupIdHex: target.groupIdHex
+            )
+            guard viewModel?.item(groupIdHex: target.groupIdHex)?.isActiveMember == true else {
+                leaveActionState.finishPreparation(for: target, canPresentConfirmation: false)
+                return
+            }
+            guard GroupManagementPresentation.canLeave(
+                state: managementState,
+                fallbackIsLastAdmin: false
+            ) else {
+                leaveActionState.finishPreparation(for: target, canPresentConfirmation: false)
+                presentCannotLeave(managementState)
+                return
+            }
+            leaveActionState.finishPreparation(for: target, canPresentConfirmation: true)
+        } catch {
+            leaveActionState.finishPreparation(for: target, canPresentConfirmation: false)
+            presentLeaveFailure()
+        }
+    }
+
+    @MainActor
+    private func startConfirmedLeave(_ target: ChatListLeavePresentation.Target) {
+        guard leaveActionState.beginConfirmedLeave(for: target) else { return }
+        Task { @MainActor in
+            await leaveConfirmed(groupIdHex: target.groupIdHex)
+            leaveActionState.finishLeave(groupIdHex: target.groupIdHex)
+        }
+    }
+
+    @MainActor
+    private func leaveConfirmed(groupIdHex: String) async {
+        guard let ref = appState.activeAccountRef else {
+            presentLeaveFailure()
+            return
+        }
         do {
             let client = try appState.currentMarmotClient()
             let managementState = try await client.groupManagementState(
@@ -682,24 +779,10 @@ struct ChatsListView: View {
                 state: managementState,
                 fallbackIsLastAdmin: false
             ) else {
-                Haptics.error()
-                appState.present(.error(
-                    L10n.string("Couldn't leave chat"),
-                    message: GroupManagementPresentation.leaveFooter(
-                        state: managementState,
-                        fallbackIsLastAdmin: false
-                    ) ?? GroupManagementPresentation.leaveHelpMessage(
-                        state: managementState,
-                        fallbackIsLastAdmin: false
-                    )
-                ))
+                presentCannotLeave(managementState)
                 return
             }
             if GroupManagementPresentation.shouldSelfDemoteBeforeLeave(state: managementState) {
-                appState.present(.warning(
-                    L10n.string("Stepping down before leaving…"),
-                    message: L10n.string("Publishing group update.")
-                ))
                 _ = try await client.selfDemoteAdminDetailed(
                     accountRef: ref,
                     groupIdHex: groupIdHex
@@ -714,9 +797,30 @@ struct ChatsListView: View {
             viewModel?.markGroupLeft(groupIdHex: groupIdHex)
             Haptics.warning()
         } catch {
-            Haptics.error()
-            appState.present(.error(L10n.string("Couldn't leave chat"), message: error.localizedDescription))
+            presentLeaveFailure()
         }
+    }
+
+    private func presentCannotLeave(_ managementState: GroupManagementStateFfi) {
+        Haptics.error()
+        appState.present(.error(
+            ChatListLeavePresentation.failureTitle,
+            message: GroupManagementPresentation.leaveFooter(
+                state: managementState,
+                fallbackIsLastAdmin: false
+            ) ?? GroupManagementPresentation.leaveHelpMessage(
+                state: managementState,
+                fallbackIsLastAdmin: false
+            )
+        ))
+    }
+
+    private func presentLeaveFailure() {
+        Haptics.error()
+        appState.present(.error(
+            ChatListLeavePresentation.failureTitle,
+            message: ChatListLeavePresentation.failureMessage
+        ))
     }
 
     /// Mute is a local, per-device preference: no Marmot publish, so the row
