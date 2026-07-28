@@ -1248,6 +1248,47 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    @Test func liveChatListUnreadChangesSynchronizeApplicationBadge() async throws {
+        var appliedBadgeCounts: [Int] = []
+        let notifications = AppNotifications(
+            requestAuthorizationHandler: { false },
+            authorizationStatusProvider: { .denied },
+            remoteNotificationRegistrar: {},
+            applicationBadgeCountSetter: { count in
+                appliedBadgeCounts.append(count)
+            }
+        )
+        let seeded = try await readyAppStateWithCreatedIdentities(
+            accountCount: 1,
+            notifications: notifications
+        )
+        let appState = seeded.appState
+        await notifications.drainApplicationBadgeUpdates()
+        appliedBadgeCounts.removeAll()
+
+        appState.updateAccountUnreadSummary(
+            accountIdHex: seeded.accounts[0].accountIdHex,
+            chatListRows: [
+                chatListRow(
+                    groupIdHex: "unread-chat",
+                    title: "Unread chat",
+                    unreadCount: 4
+                ),
+            ]
+        )
+        await notifications.drainApplicationBadgeUpdates()
+        #expect(appliedBadgeCounts.last == 4)
+
+        appState.updateAccountUnreadSummary(
+            accountIdHex: seeded.accounts[0].accountIdHex,
+            chatListRows: []
+        )
+        await notifications.drainApplicationBadgeUpdates()
+        #expect(appliedBadgeCounts.last == 0)
+
+        await stopReadyRuntime(appState)
+    }
+
     @Test func suspensionWaitsForForegroundMutationLeaseBeforeShutdown() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
@@ -9472,13 +9513,43 @@ struct MessageSemanticsTests {
 @MainActor
 struct MediaComposerAvailabilityTests {
 
-    @Test func mediaComponentEnablesAttachments() throws {
+    @Test func v2MediaComponentEnablesAttachments() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: group(name: "media-ready")
         )
 
         #expect(viewModel.canSendMediaAttachments)
+    }
+
+    @Test func v1MediaComponentStillEnablesAttachments() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(
+                name: "legacy-media-ready",
+                encryptedMedia: encryptedMediaComponent(version: .v1)
+            )
+        )
+
+        #expect(viewModel.canSendMediaAttachments)
+    }
+
+    @Test func untypedMediaComponentDoesNotEnableAttachmentsFromLegacyString() throws {
+        let component = AppGroupEncryptedMediaComponentFfi(
+            componentId: 0x800b,
+            component: "marmot.group.encrypted-media.v2",
+            required: true,
+            version: nil,
+            mediaFormat: EncryptedMediaVersionFfi.v2.wireValue,
+            allowedLocatorKinds: ["blossom-v1"],
+            defaultBlobEndpoints: []
+        )
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "unknown-media", encryptedMedia: component)
+        )
+
+        #expect(!viewModel.canSendMediaAttachments)
     }
 
     @Test func legacyGroupWithoutMediaComponentDisablesAttachments() throws {
@@ -9852,7 +9923,7 @@ struct MediaAttachmentPolicyTests {
             nonceHex: String(repeating: "c", count: 24),
             fileName: attachment.fileName,
             mediaType: attachment.mediaType,
-            version: "encrypted-media-v1",
+            version: .v1,
             sourceEpoch: 7,
             dim: attachment.dim,
             thumbhash: thumbhash
@@ -11030,8 +11101,88 @@ struct TimelineKeyboardDismissControllerTests {
     }
 }
 
+private struct TimelineSemanticPositionHarness: View {
+    let target: TimelineInitialPositionTarget
+    let onViewportChanged: (TimelineBottomViewport) -> Void
+    @State private var requestGeneration = 0
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    Section {
+                        ForEach(0..<80, id: \.self) { index in
+                            Text("Row \(index)")
+                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .id("row-\(index)")
+                        }
+                    }
+                    ForEach(["bottom"], id: \.self) { _ in
+                        Color.clear
+                            .frame(height: 1)
+                            .id("bottom")
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .onScrollGeometryChange(for: TimelineBottomViewport.self) { geometry in
+                TimelineBottomViewport(
+                    contentHeight: geometry.contentSize.height,
+                    visibleBottomY: geometry.visibleRect.maxY,
+                    bottomContentInset: geometry.contentInsets.bottom
+                )
+            } action: { _, viewport in
+                onViewportChanged(viewport)
+                requestGeneration &+= 1
+            }
+            .task(id: requestGeneration) {
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                requestTarget(proxy: proxy)
+            }
+        }
+    }
+
+    private func requestTarget(proxy: ScrollViewProxy) {
+        switch target {
+        case .item(let id, let anchor):
+            proxy.scrollTo(id, anchor: anchor.unitPoint)
+        case .bottom:
+            proxy.scrollTo("bottom", anchor: .bottom)
+        }
+    }
+}
+
 @MainActor
 struct TimelineBottomTests {
+
+    @Test func swiftUILazyTimelineResolvesSemanticBottomTarget() async throws {
+        let target = TimelineInitialPositionTarget.bottom
+        var didReachTarget = false
+        var lastViewport: TimelineBottomViewport?
+        let controller = UIHostingController(
+            rootView: TimelineSemanticPositionHarness(target: target) {
+                lastViewport = $0
+                didReachTarget = $0.isSettledAtBottom
+            }
+        )
+        let windowScene = try #require(
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first
+        )
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        for _ in 0..<100 where !didReachTarget {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(didReachTarget, "Last viewport: \(String(describing: lastViewport))")
+        window.isHidden = true
+    }
 
     @Test func initialEntryStartsAtBottomWhenMessagesExist() {
         #expect(TimelineInitialScroll.shouldStartAtBottom(hasItems: true, didPerformInitialScroll: false))
@@ -11044,26 +11195,47 @@ struct TimelineBottomTests {
             hasItems: true,
             didPerformInitialScroll: false,
             targetMessageIdHex: "message-target",
-            targetItemId: "msg-target"
-        ) == .item("msg-target"))
+            targetItemId: "msg-target",
+            unreadMessageIdHex: nil
+        ) == .target(.item(id: "msg-target", anchor: .center)))
         #expect(TimelineInitialScroll.destination(
             hasItems: true,
             didPerformInitialScroll: false,
             targetMessageIdHex: nil,
-            targetItemId: nil
-        ) == .bottom)
+            targetItemId: nil,
+            unreadMessageIdHex: nil
+        ) == .target(.bottom))
         #expect(TimelineInitialScroll.destination(
             hasItems: true,
             didPerformInitialScroll: false,
             targetMessageIdHex: "message-target",
-            targetItemId: nil
+            targetItemId: nil,
+            unreadMessageIdHex: nil
         ) == .none)
         #expect(TimelineInitialScroll.destination(
             hasItems: true,
             didPerformInitialScroll: true,
             targetMessageIdHex: "message-target",
-            targetItemId: "msg-target"
+            targetItemId: "msg-target",
+            unreadMessageIdHex: nil
         ) == .none)
+    }
+
+    @Test func unreadAndLatestEntriesUseSemanticAnchors() {
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: false,
+            targetMessageIdHex: "message-target",
+            targetItemId: "unread:message-target",
+            unreadMessageIdHex: "message-target"
+        ) == .target(.item(id: "unread:message-target", anchor: .top)))
+        #expect(TimelineInitialScroll.destination(
+            hasItems: true,
+            didPerformInitialScroll: false,
+            targetMessageIdHex: nil,
+            targetItemId: nil,
+            unreadMessageIdHex: nil
+        ) == .target(.bottom))
     }
 
     @Test func initialTimelineConcealsOnlyWhilePositioningCanRun() {
@@ -11132,33 +11304,66 @@ struct TimelineBottomTests {
         ) == .fallbackToBottom)
     }
 
-    @Test func unreadTargetPositioningRejectsAutomaticBottomScrolls() {
+    @Test func semanticTargetPositioningRejectsAutomaticBottomScrolls() {
         for reason in [
             TimelineBottomScrollReason.contentGrowth,
             .timelineChange,
             .viewportChange,
         ] {
             #expect(TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
-                hasTargetMessage: true,
+                hasPositionIntent: true,
                 didFinishPositioning: false,
                 reason: reason
             ))
         }
 
         #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
-            hasTargetMessage: true,
+            hasPositionIntent: true,
             didFinishPositioning: false,
             reason: .buttonTap
         ))
         #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
-            hasTargetMessage: false,
+            hasPositionIntent: false,
             didFinishPositioning: false,
             reason: .viewportChange
         ))
         #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
-            hasTargetMessage: true,
+            hasPositionIntent: true,
             didFinishPositioning: true,
             reason: .contentGrowth
+        ))
+    }
+
+    @Test func initialPositionSettlesOnlyWhenItsSemanticTargetIsVisible() {
+        let target = TimelineInitialPositionTarget.item(
+            id: "unread:message-target",
+            anchor: .top
+        )
+
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: target,
+            visibleTargetIDs: ["msg:older", "msg:newer"],
+            isViewportAtBottom: false
+        ))
+        #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: target,
+            visibleTargetIDs: ["msg:older", "unread:message-target"],
+            isViewportAtBottom: false
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: nil,
+            visibleTargetIDs: ["unread:message-target"],
+            isViewportAtBottom: false
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .bottom,
+            visibleTargetIDs: [],
+            isViewportAtBottom: false
+        ))
+        #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .bottom,
+            visibleTargetIDs: [],
+            isViewportAtBottom: true
         ))
     }
 
@@ -11197,11 +11402,6 @@ struct TimelineBottomTests {
             before: unread,
             firstUnreadMessageIdHex: nil
         ))
-    }
-
-    @Test func initialBottomSettleWaitsForPendingMediaRefresh() {
-        #expect(!TimelineInitialScroll.shouldSettleBottom(isMediaRecordsRefreshPending: true))
-        #expect(TimelineInitialScroll.shouldSettleBottom(isMediaRecordsRefreshPending: false))
     }
 
     @Test func bottomStateAllowsSmallLayoutDrift() {
@@ -11250,11 +11450,13 @@ struct TimelineBottomTests {
         )
 
         #expect(validBottom.overscrollPastBottom == 0)
+        #expect(validBottom.isSettledAtBottom)
         #expect(!TimelineBottom.shouldRepairBottomOverscroll(
             validBottom,
             isUserScrolling: false
         ))
         #expect(belowContent.overscrollPastBottom == 70)
+        #expect(!belowContent.isSettledAtBottom)
         #expect(TimelineBottom.shouldRepairBottomOverscroll(
             belowContent,
             isUserScrolling: false
@@ -11852,11 +12054,12 @@ private func encryptedMediaTag(
     fileName: String,
     plaintextByte: String,
     ciphertextByte: String,
-    nonce: String = String(repeating: "22", count: 12)
+    nonce: String = String(repeating: "22", count: 12),
+    version: EncryptedMediaVersionFfi = .v1
 ) -> MessageTagFfi {
     MessageTagFfi(values: [
         MessageSemantics.imetaTag,
-        "v encrypted-media-v1",
+        "v \(version.wireValue)",
         "locator blossom-v1 https://media.example/\(fileName)",
         "ciphertext_sha256 \(hex(ciphertextByte))",
         "plaintext_sha256 \(hex(plaintextByte))",
@@ -11883,7 +12086,7 @@ private func encryptedMediaReference(
         nonceHex: nonce,
         fileName: fileName,
         mediaType: mediaType,
-        version: MessageSemantics.encryptedMediaVersion,
+        version: .v1,
         sourceEpoch: sourceEpoch,
         dim: dim,
         thumbhash: nil
@@ -11924,12 +12127,17 @@ private actor MediaDownloadProbe {
     }
 }
 
-private func encryptedMediaComponent() -> AppGroupEncryptedMediaComponentFfi {
+private func encryptedMediaComponent(
+    version: EncryptedMediaVersionFfi = .v2
+) -> AppGroupEncryptedMediaComponentFfi {
     AppGroupEncryptedMediaComponentFfi(
-        componentId: 0x8008,
-        component: "marmot.group.encrypted-media.v1",
+        componentId: version == .v1 ? 0x8008 : 0x800b,
+        component: version == .v1
+            ? "marmot.group.encrypted-media.v1"
+            : "marmot.group.encrypted-media.v2",
         required: true,
-        mediaFormat: MessageSemantics.encryptedMediaVersion,
+        version: version,
+        mediaFormat: version.wireValue,
         allowedLocatorKinds: ["blossom-v1"],
         defaultBlobEndpoints: [
             AppBlobEndpointFfi(locatorKind: "blossom-v1", baseUrl: "https://blossom.primal.net")
@@ -11942,6 +12150,7 @@ private func legacyEncryptedMediaComponent() -> AppGroupEncryptedMediaComponentF
         componentId: 0,
         component: "",
         required: false,
+        version: nil,
         mediaFormat: "",
         allowedLocatorKinds: [],
         defaultBlobEndpoints: []

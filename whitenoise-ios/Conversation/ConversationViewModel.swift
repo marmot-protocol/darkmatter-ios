@@ -172,7 +172,6 @@ final class ConversationViewModel {
     private(set) var isLoadingOlder = false
     private(set) var isLoadingNewer = false
     private(set) var error: String?
-    private(set) var isMediaRecordsRefreshPending = false
     private(set) var inviteActionInFlight: ConversationInviteAction?
 
     // Composer surface forwarded from `composer`.
@@ -418,7 +417,7 @@ final class ConversationViewModel {
     var canSendMediaAttachments: Bool {
         canSendMessages
             && group.encryptedMedia.required
-            && group.encryptedMedia.mediaFormat == MessageSemantics.encryptedMediaVersion
+            && MessageSemantics.supportsEncryptedMediaVersion(group.encryptedMedia.version)
             && group.encryptedMedia.allowedLocatorKinds.contains("blossom-v1")
     }
 

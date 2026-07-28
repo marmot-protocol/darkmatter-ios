@@ -152,7 +152,7 @@ private func sweepTestGroup(groupIdHex: String, retentionSeconds: UInt64) -> App
             componentId: 0x8008,
             component: "marmot.group.encrypted-media.v1",
             required: true,
-            mediaFormat: MessageSemantics.encryptedMediaVersion,
+            mediaFormat: EncryptedMediaVersionFfi.v1.wireValue,
             allowedLocatorKinds: ["blossom-v1"],
             defaultBlobEndpoints: []
         ),
@@ -176,7 +176,7 @@ private func sweepTestReference(
         nonceHex: String(repeating: "2", count: 24),
         fileName: "photo.jpg",
         mediaType: "image/jpeg",
-        version: MessageSemantics.encryptedMediaVersion,
+        version: .v1,
         sourceEpoch: 1,
         dim: nil,
         thumbhash: nil

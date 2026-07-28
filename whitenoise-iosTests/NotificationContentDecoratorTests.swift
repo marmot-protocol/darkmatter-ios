@@ -37,7 +37,10 @@ struct NotificationContentDecoratorTests {
     }
 
     @Test func makeContentAppliesSameDecorationOnFreshContent() {
-        let content = NotificationContentDecorator.makeContent(for: presentation())
+        let content = NotificationContentDecorator.makeContent(
+            for: presentation(),
+            applicationBadgeCount: 7
+        )
 
         #expect(content.title == "Alice")
         #expect(content.body == "hello")
@@ -45,6 +48,34 @@ struct NotificationContentDecoratorTests {
         #expect(content.targetContentIdentifier == "id-1")
         #expect(content.sound == UNNotificationSound.default)
         #expect(content.userInfo["k"] as? String == "v")
+        #expect(content.badge == 7)
+    }
+
+    @Test func zeroApplicationBadgeClearsTheIconCount() {
+        let content = UNMutableNotificationContent()
+        content.badge = 9
+
+        NotificationContentDecorator.applyApplicationBadgeCount(0, to: content)
+
+        #expect(content.badge == 0)
+    }
+
+    @Test func communicationDecorationPreservesApplicationBadge() {
+        var notification = presentation()
+        notification.senderName = "Alice"
+        notification.senderAccountIdHex = "alice-id"
+        let content = NotificationContentDecorator.makeContent(
+            for: notification,
+            applicationBadgeCount: 6
+        )
+
+        let decorated = NotificationCommunicationDecorator.decorated(
+            content,
+            presentation: notification,
+            avatarData: nil
+        )
+
+        #expect(decorated.badge == 6)
     }
 
     @Test func timeoutFallbackAppliesOnlyWhenNoRenderDecisionWasApplied() {

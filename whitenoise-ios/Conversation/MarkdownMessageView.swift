@@ -26,6 +26,7 @@ struct MarkdownMessageView: View {
                 blockView(blocks[index])
             }
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -33,9 +34,11 @@ struct MarkdownMessageView: View {
         switch block {
         case .paragraph(let text), .heading(let text):
             Text(text)
+                .fixedSize(horizontal: false, vertical: true)
 
         case .codeBlock(let code):
             Text(code)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(8)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
@@ -61,6 +64,7 @@ struct MarkdownMessageView: View {
                         indentDepth: indentDepth + 1,
                         spacing: spacing
                     )
+                    .layoutPriority(1)
                 }
                 // Width-only Capsule is greedy vertically without this, same
                 // constraint as the reply quote bar in MessageBubble.
@@ -73,6 +77,7 @@ struct MarkdownMessageView: View {
                     listRow(items[index])
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
 
         case .thematicBreak:
             RoundedRectangle(cornerRadius: 0.5)
@@ -85,13 +90,16 @@ struct MarkdownMessageView: View {
     private func listRow(_ item: MarkdownDisplayListItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             markerView(item.marker)
+                .fixedSize()
             MarkdownMessageView(
                 blocks: item.blocks,
                 quoteBar: quoteBar,
                 indentDepth: indentDepth + 1,
                 spacing: 2
             )
+            .layoutPriority(1)
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder

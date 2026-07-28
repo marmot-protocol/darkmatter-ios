@@ -165,9 +165,11 @@ nonisolated enum MessageSemantics {
         return streamId
     }
 
-    static let encryptedMediaVersion = "encrypted-media-v1"
+    static func supportsEncryptedMediaVersion(_ version: EncryptedMediaVersionFfi?) -> Bool {
+        version == .v1 || version == .v2
+    }
 
-    /// Parse all encrypted-media-v1 `imeta` tags, preserving tag order.
+    /// Parse all supported encrypted-media `imeta` tags, preserving tag order.
     ///
     /// `sourceEpoch` is not encoded in the public `imeta` fields; Marmot carries
     /// it as record metadata and now projects resolved timeline-row media with
@@ -223,7 +225,7 @@ nonisolated enum MessageSemantics {
         var plaintextSha256 = ""
         var nonce = ""
         var mediaType = ""
-        var version = ""
+        var version: EncryptedMediaVersionFfi?
         var name = ""
         var dim: String?
         var thumbhash: String?
@@ -244,7 +246,7 @@ nonisolated enum MessageSemantics {
             } else if let value = field.dropPrefix("filename ") {
                 name = value
             } else if let value = field.dropPrefix("v ") {
-                version = value
+                version = EncryptedMediaVersionFfi(wireValue: value)
             } else if let value = field.dropPrefix("dim ") {
                 let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
                 if isValidMediaDim(candidate) {
@@ -269,7 +271,8 @@ nonisolated enum MessageSemantics {
               isWithinByteLimit(fileName, maxImetaFileNameBytes),
               !mediaType.isEmpty,
               isWithinByteLimit(mediaType, maxImetaMediaTypeBytes),
-              version == encryptedMediaVersion
+              let version,
+              supportsEncryptedMediaVersion(version)
         else { return nil }
 
         return MediaAttachmentReferenceFfi(

@@ -47,7 +47,7 @@ struct AccountsView: View {
     /// badge should be hidden — no summary yet, or nothing unread.
     static func unreadBadgeCount(for summary: AccountUnreadFfi?) -> UInt64? {
         guard let summary, summary.hasUnread else { return nil }
-        return summary.unreadCount
+        return max(summary.unreadCount, 1)
     }
 }
 

@@ -118,14 +118,50 @@ struct ChatSurfacePresentationTests {
         #expect(ChatBubbleMetrics.regularMaximumWidth == 560)
     }
 
-    @Test func allVisibleMessageBodiesPlaceMetadataOnTheirLastLine() {
-        #expect(MessageBubbleTextLayout.usesInlineFooter(text: "Short", isCollapsed: false))
-        #expect(MessageBubbleTextLayout.usesInlineFooter(
-            text: "This is a longer message that should wrap naturally",
-            isCollapsed: false
+    @Test func onlySingleLineParagraphsAttemptAnInlineMetadataFooter() {
+        #expect(MessageBubbleTextLayout.canAttemptInlineFooter(
+            text: "Short",
+            isCollapsed: false,
+            isSingleParagraph: true
         ))
-        #expect(MessageBubbleTextLayout.usesInlineFooter(text: "First\nSecond", isCollapsed: false))
-        #expect(!MessageBubbleTextLayout.usesInlineFooter(text: "Collapsed", isCollapsed: true))
+        #expect(MessageBubbleTextLayout.canAttemptInlineFooter(
+            text: "This is a longer message that should wrap naturally",
+            isCollapsed: false,
+            isSingleParagraph: true
+        ))
+        #expect(!MessageBubbleTextLayout.canAttemptInlineFooter(
+            text: "First\nSecond",
+            isCollapsed: false,
+            isSingleParagraph: true
+        ))
+        #expect(!MessageBubbleTextLayout.canAttemptInlineFooter(
+            text: "Collapsed",
+            isCollapsed: true,
+            isSingleParagraph: true
+        ))
+        #expect(!MessageBubbleTextLayout.canAttemptInlineFooter(
+            text: "List item",
+            isCollapsed: false,
+            isSingleParagraph: false
+        ))
+    }
+
+    @Test func stackedMessageBodiesGrowOnlyAsWideAsTheirContentNeeds() {
+        #expect(MessageBubbleTextLayout.stackedWidth(
+            proposedWidth: 320,
+            bodyWidth: 140,
+            footerWidth: 72
+        ) == 140)
+        #expect(MessageBubbleTextLayout.stackedWidth(
+            proposedWidth: 320,
+            bodyWidth: 480,
+            footerWidth: 72
+        ) == 320)
+        #expect(MessageBubbleTextLayout.stackedWidth(
+            proposedWidth: nil,
+            bodyWidth: 140,
+            footerWidth: 180
+        ) == 180)
     }
 
     @Test func singleEmojiMessagesUseStickerPresentation() {

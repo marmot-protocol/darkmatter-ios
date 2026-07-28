@@ -262,7 +262,7 @@ struct IOSParityBatchTests {
     @Test func optimisticImetaParserRejectsUnsafeLocator() {
         let values = [
             MessageSemantics.imetaTag,
-            "v \(MessageSemantics.encryptedMediaVersion)",
+            "v \(EncryptedMediaVersionFfi.v1.wireValue)",
             "locator blossom-v1 https://192.168.1.1/blob",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
             "plaintext_sha256 \(String(repeating: "b", count: 64))",
@@ -276,7 +276,7 @@ struct IOSParityBatchTests {
     @Test func optimisticImetaParserRetainsUnsupportedLocatorWithSafeBlossomFallback() throws {
         let values = [
             MessageSemantics.imetaTag,
-            "v \(MessageSemantics.encryptedMediaVersion)",
+            "v \(EncryptedMediaVersionFfi.v1.wireValue)",
             "locator ipfs-v1 ipfs://bafy-test",
             "locator blossom-v1 https://media.example/blob",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
@@ -294,7 +294,7 @@ struct IOSParityBatchTests {
 
     @Test func optimisticImetaParserRejectsOversizedFieldAndLocatorCollections() {
         let requiredFields = [
-            "v \(MessageSemantics.encryptedMediaVersion)",
+            "v \(EncryptedMediaVersionFfi.v1.wireValue)",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
             "plaintext_sha256 \(String(repeating: "b", count: 64))",
             "nonce \(String(repeating: "c", count: 24))",

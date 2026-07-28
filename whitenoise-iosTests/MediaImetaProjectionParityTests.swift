@@ -88,6 +88,29 @@ struct MediaImetaProjectionParityTests {
             sourceEpoch: 3,
             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 3, dim: nil)]
         ),
+        Case(
+            name: "encrypted-media-v2 is accepted and remains typed v2",
+            imeta: [imetaValues(
+                file: "v2.png",
+                ciphertext: c,
+                plaintext: p,
+                nonce: n,
+                mediaType: "image/png",
+                dim: nil,
+                version: EncryptedMediaVersionFfi.v2.wireValue
+            )],
+            sourceEpoch: 4,
+            expected: [ref(
+                file: "v2.png",
+                ciphertext: c,
+                plaintext: p,
+                nonce: n,
+                mediaType: "image/png",
+                sourceEpoch: 4,
+                dim: nil,
+                version: .v2
+            )]
+        ),
 
         // --- Malformed required fields degrade that attachment to nil ---
         Case(name: "missing locator -> nil",
@@ -275,7 +298,7 @@ private func imetaValues(
     nonce: String,
     mediaType: String,
     dim: String?,
-    version: String = MessageSemantics.encryptedMediaVersion,
+    version: String = EncryptedMediaVersionFfi.v1.wireValue,
     extra: [String] = [],
     omitLocator: Bool = false
 ) -> [String] {
@@ -303,7 +326,8 @@ private func ref(
     mediaType: String,
     sourceEpoch: UInt64,
     dim: String?,
-    thumbhash: String? = nil
+    thumbhash: String? = nil,
+    version: EncryptedMediaVersionFfi = .v1
 ) -> MediaAttachmentReferenceFfi {
     MediaAttachmentReferenceFfi(
         locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(file)")],
@@ -312,7 +336,7 @@ private func ref(
         nonceHex: nonce.lowercased(),
         fileName: file,
         mediaType: mediaType,
-        version: MessageSemantics.encryptedMediaVersion,
+        version: version,
         sourceEpoch: sourceEpoch,
         dim: dim,
         thumbhash: thumbhash

@@ -90,6 +90,7 @@ final class ChatsListViewModel {
                     componentId: 0,
                     component: "",
                     required: false,
+                    version: nil,
                     mediaFormat: "",
                     allowedLocatorKinds: [],
                     defaultBlobEndpoints: []

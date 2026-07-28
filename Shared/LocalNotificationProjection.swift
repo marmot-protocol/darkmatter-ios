@@ -27,6 +27,24 @@ struct LocalNotificationPresentation: Equatable {
     var isGroupConversation: Bool = false
 }
 
+/// Projects Marmot's per-account unread aggregates into the single numeric
+/// badge iOS can render on the app icon. A manual-only reminder contributes one
+/// so an account that still needs attention never clears the badge entirely.
+nonisolated enum ApplicationBadgeCountProjection {
+    static func count<S: Sequence>(for summaries: S) -> Int
+    where S.Element == AccountUnreadFfi {
+        var total: UInt64 = 0
+        for summary in summaries {
+            let contribution = summary.unreadCount == 0 && summary.hasUnread
+                ? UInt64(1)
+                : summary.unreadCount
+            let (sum, overflow) = total.addingReportingOverflow(contribution)
+            total = overflow ? UInt64.max : sum
+        }
+        return Int(min(total, UInt64(Int.max)))
+    }
+}
+
 nonisolated enum LocalNotificationProjection {
     static let accountRefKey = "dm_account_ref"
     static let groupIdHexKey = "dm_group_id_hex"
