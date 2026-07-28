@@ -11542,8 +11542,8 @@ struct TimelineBottomTests {
         ) == .target(.latest(id: "msg-latest")))
     }
 
-    @Test func initialTimelineConcealsOnlyWhilePositioningCanRun() {
-        #expect(TimelineInitialScroll.shouldConcealContent(
+    @Test func initialTimelineConcealsOnlyExplicitMessageTargets() {
+        #expect(!TimelineInitialScroll.shouldConcealContent(
             hasItems: true,
             didFinishInitialPositioning: false,
             targetMessageIdHex: nil,
@@ -11664,58 +11664,9 @@ struct TimelineBottomTests {
             target: .latest(id: "msg-latest"),
             visibleTargetIDs: ["msg:older"]
         ))
-    }
-
-    @Test func latestInitialPositionWaitsForStableInsetGeometry() {
-        let stableBottom = TimelineBottomViewport(
-            contentHeight: 1_900,
-            visibleBottomY: 1_976,
-            bottomContentInset: 76
-        )
-        let correctingSameHeight = TimelineBottomViewport(
-            contentHeight: 1_900,
-            visibleBottomY: 2_300,
-            bottomContentInset: 76
-        )
-        let growingBottom = TimelineBottomViewport(
-            contentHeight: 2_100,
-            visibleBottomY: 2_176,
-            bottomContentInset: 76
-        )
-        let overscrolledBottom = TimelineBottomViewport(
-            contentHeight: 1_200,
-            visibleBottomY: 1_976,
-            bottomContentInset: 76
-        )
-        let beforeComposerInset = TimelineBottomViewport(
-            contentHeight: 1_900,
-            visibleBottomY: 1_900,
-            bottomContentInset: 0
-        )
-
         #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
             target: .latest(id: "msg-latest"),
-            visibleTargetIDs: ["msg-latest"],
-            previousViewport: correctingSameHeight,
-            currentViewport: stableBottom
-        ))
-        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
-            target: .latest(id: "msg-latest"),
-            visibleTargetIDs: ["msg-latest"],
-            previousViewport: stableBottom,
-            currentViewport: growingBottom
-        ))
-        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
-            target: .latest(id: "msg-latest"),
-            visibleTargetIDs: ["msg-latest"],
-            previousViewport: overscrolledBottom,
-            currentViewport: overscrolledBottom
-        ))
-        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
-            target: .latest(id: "msg-latest"),
-            visibleTargetIDs: ["msg-latest"],
-            previousViewport: beforeComposerInset,
-            currentViewport: beforeComposerInset
+            visibleTargetIDs: ["msg-latest"]
         ))
     }
 
