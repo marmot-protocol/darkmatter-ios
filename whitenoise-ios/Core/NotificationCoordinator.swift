@@ -479,7 +479,7 @@ final class NotificationCoordinator {
             },
             clearPushRegistration: { [weak host] in
                 guard let host else { throw CancellationError() }
-                try await host.marmot.clearPushRegistration(accountRef: accountRef)
+                _ = try await host.marmot.clearPushRegistration(accountRef: accountRef)
             }
         )
         return try await coordinator.disable()

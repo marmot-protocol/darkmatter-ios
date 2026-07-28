@@ -736,8 +736,27 @@ public func FfiConverterTypeAgentStreamSubscription_lower(_ value: AgentStreamSu
 
 public protocol ChatListSubscriptionProtocol : AnyObject {
 
+    /**
+     * Legacy row-only update stream.
+     *
+     * Atomic replacement snapshots are flattened into every visible row in
+     * authoritative order so existing clients can observe changed pin fields.
+     * This can yield many rows for one pin or archive operation and cannot
+     * express the replacement boundary or removals. New clients that need
+     * correct manual ordering and archive removals should use `next_update`.
+     *
+     * `next` and `next_update` consume the same stream and must not be mixed
+     * for the lifetime of one subscription.
+     */
     func next() async  -> ChatListRowFfi?
 
+    /**
+     * Typed update stream, including atomic full-list replacement snapshots.
+     *
+     * Do not mix this with `next` on the same subscription: both consume the
+     * same underlying stream, while `next` may also hold flattened snapshot
+     * rows in its compatibility buffer.
+     */
     func nextUpdate() async  -> ChatListSubscriptionUpdateFfi?
 
     func snapshot()  -> [ChatListRowFfi]
@@ -794,6 +813,18 @@ open class ChatListSubscription:
 
 
 
+    /**
+     * Legacy row-only update stream.
+     *
+     * Atomic replacement snapshots are flattened into every visible row in
+     * authoritative order so existing clients can observe changed pin fields.
+     * This can yield many rows for one pin or archive operation and cannot
+     * express the replacement boundary or removals. New clients that need
+     * correct manual ordering and archive removals should use `next_update`.
+     *
+     * `next` and `next_update` consume the same stream and must not be mixed
+     * for the lifetime of one subscription.
+     */
 open func next()async  -> ChatListRowFfi? {
     return
         try!  await uniffiRustCallAsync(
@@ -812,6 +843,13 @@ open func next()async  -> ChatListRowFfi? {
         )
 }
 
+    /**
+     * Typed update stream, including atomic full-list replacement snapshots.
+     *
+     * Do not mix this with `next` on the same subscription: both consume the
+     * same underlying stream, while `next` may also hold flattened snapshot
+     * rows in its compatibility buffer.
+     */
 open func nextUpdate()async  -> ChatListSubscriptionUpdateFfi? {
     return
         try!  await uniffiRustCallAsync(
@@ -2298,6 +2336,12 @@ public protocol MarmotProtocol : AnyObject {
     func setChatMuted(accountRef: String, groupIdHex: String, mutedUntilMs: Int64?) throws  -> ChatNotificationSettingsFfi
 
     /**
+     * Pin or unpin one local chat. Newly pinned chats enter at the top of the
+     * manually ordered pinned section.
+     */
+    func setChatPinned(accountRef: String, groupIdHex: String, pinned: Bool) throws  -> ChatPinStateFfi
+
+    /**
      * Flag a group archived (or restore it). Local-only projection state —
      * it does not change membership or publish anything. The chats list
      * filters archived groups unless `include_archived` is set.
@@ -2309,6 +2353,12 @@ public protocol MarmotProtocol : AnyObject {
     func setNativePushEnabled(accountRef: String, enabled: Bool) async throws  -> NotificationSettingsFfi
 
     func setPeriodicMaintenancePolicy(accountRef: String, policy: PeriodicMaintenancePolicyFfi) async throws
+
+    /**
+     * Atomically replace the order of the current pinned set. The input must
+     * contain every currently pinned group exactly once.
+     */
+    func setPinnedChatOrder(accountRef: String, orderedGroupIds: [String]) throws  -> ChatPinStateFfi
 
     /**
      * Supply non-persisted OTLP runtime metadata: optional metrics URL
@@ -4426,6 +4476,20 @@ open func setChatMuted(accountRef: String, groupIdHex: String, mutedUntilMs: Int
 }
 
     /**
+     * Pin or unpin one local chat. Newly pinned chats enter at the top of the
+     * manually ordered pinned section.
+     */
+open func setChatPinned(accountRef: String, groupIdHex: String, pinned: Bool)throws  -> ChatPinStateFfi {
+    return try  FfiConverterTypeChatPinStateFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_marmot_set_chat_pinned(self.uniffiClonePointer(),
+        FfiConverterString.lower(accountRef),
+        FfiConverterString.lower(groupIdHex),
+        FfiConverterBool.lower(pinned),$0
+    )
+})
+}
+
+    /**
      * Flag a group archived (or restore it). Local-only projection state —
      * it does not change membership or publish anything. The chats list
      * filters archived groups unless `include_archived` is set.
@@ -4488,6 +4552,19 @@ open func setPeriodicMaintenancePolicy(accountRef: String, policy: PeriodicMaint
             liftFunc: { $0 },
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
+}
+
+    /**
+     * Atomically replace the order of the current pinned set. The input must
+     * contain every currently pinned group exactly once.
+     */
+open func setPinnedChatOrder(accountRef: String, orderedGroupIds: [String])throws  -> ChatPinStateFfi {
+    return try  FfiConverterTypeChatPinStateFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError.lift) {
+    uniffi_marmot_uniffi_fn_method_marmot_set_pinned_chat_order(self.uniffiClonePointer(),
+        FfiConverterString.lower(accountRef),
+        FfiConverterSequenceString.lower(orderedGroupIds),$0
+    )
+})
 }
 
     /**
@@ -7965,6 +8042,8 @@ public func FfiConverterTypeChatListMessagePreviewFfi_lower(_ value: ChatListMes
 
 public struct ChatListRowFfi {
     public var groupIdHex: String
+    public var pinned: Bool
+    public var pinnedPosition: UInt32?
     public var archived: Bool
     public var pendingConfirmation: Bool
     public var title: String
@@ -8037,7 +8116,7 @@ public struct ChatListRowFfi {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(groupIdHex: String, archived: Bool, pendingConfirmation: Bool, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool,
+    public init(groupIdHex: String, pinned: Bool, pinnedPosition: UInt32?, archived: Bool, pendingConfirmation: Bool, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool,
         /**
          * User-created unread reminder independent of unread incoming messages.
          */manuallyMarkedUnread: Bool, unreadMentionCount: UInt64, unreadMention: Bool, firstUnreadMessageIdHex: String?, lastReadMessageIdHex: String?, lastReadTimelineAt: UInt64?, conversationCreatedAt: UInt64, activitySortAt: UInt64, updatedAt: UInt64,
@@ -8084,6 +8163,8 @@ public struct ChatListRowFfi {
          * epoch; `null` when no leave is pending.
          */leaveRequestedAtMs: UInt64?) {
         self.groupIdHex = groupIdHex
+        self.pinned = pinned
+        self.pinnedPosition = pinnedPosition
         self.archived = archived
         self.pendingConfirmation = pendingConfirmation
         self.title = title
@@ -8116,6 +8197,12 @@ public struct ChatListRowFfi {
 extension ChatListRowFfi: Equatable, Hashable {
     public static func ==(lhs: ChatListRowFfi, rhs: ChatListRowFfi) -> Bool {
         if lhs.groupIdHex != rhs.groupIdHex {
+            return false
+        }
+        if lhs.pinned != rhs.pinned {
+            return false
+        }
+        if lhs.pinnedPosition != rhs.pinnedPosition {
             return false
         }
         if lhs.archived != rhs.archived {
@@ -8195,6 +8282,8 @@ extension ChatListRowFfi: Equatable, Hashable {
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(groupIdHex)
+        hasher.combine(pinned)
+        hasher.combine(pinnedPosition)
         hasher.combine(archived)
         hasher.combine(pendingConfirmation)
         hasher.combine(title)
@@ -8231,6 +8320,8 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
         return
             try ChatListRowFfi(
                 groupIdHex: FfiConverterString.read(from: &buf),
+                pinned: FfiConverterBool.read(from: &buf),
+                pinnedPosition: FfiConverterOptionUInt32.read(from: &buf),
                 archived: FfiConverterBool.read(from: &buf),
                 pendingConfirmation: FfiConverterBool.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
@@ -8260,6 +8351,8 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
 
     public static func write(_ value: ChatListRowFfi, into buf: inout [UInt8]) {
         FfiConverterString.write(value.groupIdHex, into: &buf)
+        FfiConverterBool.write(value.pinned, into: &buf)
+        FfiConverterOptionUInt32.write(value.pinnedPosition, into: &buf)
         FfiConverterBool.write(value.archived, into: &buf)
         FfiConverterBool.write(value.pendingConfirmation, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
@@ -8398,6 +8491,73 @@ public func FfiConverterTypeChatNotificationSettingsFfi_lift(_ buf: RustBuffer) 
 #endif
 public func FfiConverterTypeChatNotificationSettingsFfi_lower(_ value: ChatNotificationSettingsFfi) -> RustBuffer {
     return FfiConverterTypeChatNotificationSettingsFfi.lower(value)
+}
+
+
+/**
+ * Authoritative device-local order of every currently pinned chat.
+ */
+public struct ChatPinStateFfi {
+    /**
+     * Group ids in normalized zero-based display order.
+     */
+    public var orderedGroupIds: [String]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Group ids in normalized zero-based display order.
+         */orderedGroupIds: [String]) {
+        self.orderedGroupIds = orderedGroupIds
+    }
+}
+
+
+
+extension ChatPinStateFfi: Equatable, Hashable {
+    public static func ==(lhs: ChatPinStateFfi, rhs: ChatPinStateFfi) -> Bool {
+        if lhs.orderedGroupIds != rhs.orderedGroupIds {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(orderedGroupIds)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChatPinStateFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChatPinStateFfi {
+        return
+            try ChatPinStateFfi(
+                orderedGroupIds: FfiConverterSequenceString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChatPinStateFfi, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.orderedGroupIds, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPinStateFfi_lift(_ buf: RustBuffer) throws -> ChatPinStateFfi {
+    return try FfiConverterTypeChatPinStateFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChatPinStateFfi_lower(_ value: ChatPinStateFfi) -> RustBuffer {
+    return FfiConverterTypeChatPinStateFfi.lower(value)
 }
 
 
@@ -15689,6 +15849,14 @@ public enum ChatListSubscriptionUpdateFfi {
     )
     case removeRow(trigger: ChatListUpdateTriggerFfi, groupIdHex: String
     )
+    /**
+     * Full replacement for the subscribed visible chat list.
+     *
+     * Swift and Kotlin hosts must atomically replace their locally held rows
+     * with `rows` and drop any prior row absent from this value.
+     */
+    case snapshot(trigger: ChatListUpdateTriggerFfi, rows: [ChatListRowFfi]
+    )
 }
 
 
@@ -15706,6 +15874,9 @@ public struct FfiConverterTypeChatListSubscriptionUpdateFfi: FfiConverterRustBuf
         )
 
         case 2: return .removeRow(trigger: try FfiConverterTypeChatListUpdateTriggerFfi.read(from: &buf), groupIdHex: try FfiConverterString.read(from: &buf)
+        )
+
+        case 3: return .snapshot(trigger: try FfiConverterTypeChatListUpdateTriggerFfi.read(from: &buf), rows: try FfiConverterSequenceTypeChatListRowFfi.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -15726,6 +15897,12 @@ public struct FfiConverterTypeChatListSubscriptionUpdateFfi: FfiConverterRustBuf
             writeInt(&buf, Int32(2))
             FfiConverterTypeChatListUpdateTriggerFfi.write(trigger, into: &buf)
             FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .snapshot(trigger,rows):
+            writeInt(&buf, Int32(3))
+            FfiConverterTypeChatListUpdateTriggerFfi.write(trigger, into: &buf)
+            FfiConverterSequenceTypeChatListRowFfi.write(rows, into: &buf)
 
         }
     }
@@ -15768,6 +15945,7 @@ public enum ChatListUpdateTriggerFfi {
     case muteChanged
     case conversationKindChanged
     case latestMessageDeliveryChanged
+    case pinOrderChanged
     case snapshotRefresh
     case removed
 }
@@ -15805,9 +15983,11 @@ public struct FfiConverterTypeChatListUpdateTriggerFfi: FfiConverterRustBuffer {
 
         case 11: return .latestMessageDeliveryChanged
 
-        case 12: return .snapshotRefresh
+        case 12: return .pinOrderChanged
 
-        case 13: return .removed
+        case 13: return .snapshotRefresh
+
+        case 14: return .removed
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -15861,12 +16041,16 @@ public struct FfiConverterTypeChatListUpdateTriggerFfi: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
 
 
-        case .snapshotRefresh:
+        case .pinOrderChanged:
             writeInt(&buf, Int32(12))
 
 
-        case .removed:
+        case .snapshotRefresh:
             writeInt(&buf, Int32(13))
+
+
+        case .removed:
+            writeInt(&buf, Int32(14))
 
         }
     }
@@ -17640,6 +17824,8 @@ public enum MarmotKitError {
     )
     case UnknownGroup(groupIdHex: String
     )
+    case InvalidChatPin(details: String
+    )
     /**
      * Host-supplied draft attachment metadata is malformed.
      */
@@ -17790,78 +17976,81 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 3: return .UnknownGroup(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 4: return .InvalidMessageDraft(
+        case 4: return .InvalidChatPin(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 5: return .InvalidMediaReference(
+        case 5: return .InvalidMessageDraft(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 6: return .InvalidHex(
+        case 6: return .InvalidMediaReference(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 7: return .InvalidIdentity(
+        case 7: return .InvalidHex(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 8: return .InvalidKeyPackageEvent(
+        case 8: return .InvalidIdentity(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 9: return .MissingKeyPackage(
+        case 9: return .InvalidKeyPackageEvent(
+            details: try FfiConverterString.read(from: &buf)
+            )
+        case 10: return .MissingKeyPackage(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 10: return .Publish(
+        case 11: return .Publish(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 11: return .TransportClosed
-        case 12: return .RuntimeStopping
-        case 13: return .AccountCatchUp(
+        case 12: return .TransportClosed
+        case 13: return .RuntimeStopping
+        case 14: return .AccountCatchUp(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 14: return .NotGroupAdmin(
+        case 15: return .NotGroupAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 15: return .AdminCannotSelfRemove(
+        case 16: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 16: return .LeaveAlreadyRequested(
+        case 17: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .WouldRemoveLastAdmin(
+        case 18: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 18: return .MemberNotInGroup(
+        case 19: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 19: return .AlreadyAdmin(
+        case 20: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 20: return .NotAdmin(
+        case 21: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 21: return .StorageBusy(
+        case 22: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .SecretNotFound(
+        case 23: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 23: return .KeystoreUnavailable(
+        case 24: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 24: return .EmptyPassphrase
-        case 25: return .EncryptionFailed(
+        case 25: return .EmptyPassphrase
+        case 26: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 26: return .Io(
+        case 27: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .ExternalSignerUnavailable(
+        case 28: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .ExternalSignerMismatch
-        case 29: return .ExternalSignerRejected
-        case 30: return .Runtime(
+        case 29: return .ExternalSignerMismatch
+        case 30: return .ExternalSignerRejected
+        case 31: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -17891,136 +18080,141 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .InvalidMessageDraft(details):
+        case let .InvalidChatPin(details):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidMediaReference(details):
+        case let .InvalidMessageDraft(details):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidHex(details):
+        case let .InvalidMediaReference(details):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidIdentity(details):
+        case let .InvalidHex(details):
             writeInt(&buf, Int32(7))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidKeyPackageEvent(details):
+        case let .InvalidIdentity(details):
             writeInt(&buf, Int32(8))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .MissingKeyPackage(account):
+        case let .InvalidKeyPackageEvent(details):
             writeInt(&buf, Int32(9))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .MissingKeyPackage(account):
+            writeInt(&buf, Int32(10))
             FfiConverterString.write(account, into: &buf)
 
 
         case let .Publish(details):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(11))
             FfiConverterString.write(details, into: &buf)
 
 
         case .TransportClosed:
-            writeInt(&buf, Int32(11))
-
-
-        case .RuntimeStopping:
             writeInt(&buf, Int32(12))
 
 
-        case let .AccountCatchUp(details):
+        case .RuntimeStopping:
             writeInt(&buf, Int32(13))
+
+
+        case let .AccountCatchUp(details):
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .NotGroupAdmin(groupIdHex):
-            writeInt(&buf, Int32(14))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(15))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .LeaveAlreadyRequested(groupIdHex):
+        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(16))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .WouldRemoveLastAdmin(groupIdHex):
+        case let .LeaveAlreadyRequested(groupIdHex):
             writeInt(&buf, Int32(17))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .WouldRemoveLastAdmin(groupIdHex):
             writeInt(&buf, Int32(18))
             FfiConverterString.write(groupIdHex, into: &buf)
-            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .AlreadyAdmin(groupIdHex,memberIdHex):
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(19))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .NotAdmin(groupIdHex,memberIdHex):
+        case let .AlreadyAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(20))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageBusy(details):
+        case let .NotAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(21))
-            FfiConverterString.write(details, into: &buf)
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .SecretNotFound(details):
+        case let .StorageBusy(details):
             writeInt(&buf, Int32(22))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .KeystoreUnavailable(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(details, into: &buf)
 
 
-        case .EmptyPassphrase:
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(24))
-
-
-        case let .EncryptionFailed(details):
-            writeInt(&buf, Int32(25))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(25))
+
+
+        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .Io(details):
             writeInt(&buf, Int32(27))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(28))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(28))
-
-
-        case .ExternalSignerRejected:
             writeInt(&buf, Int32(29))
 
 
-        case let .Runtime(details):
+        case .ExternalSignerRejected:
             writeInt(&buf, Int32(30))
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(31))
             FfiConverterString.write(details, into: &buf)
 
         }
@@ -21146,10 +21340,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_agentstreamsubscription_stream_id_hex() != 57056) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_chatlistsubscription_next() != 4327) {
+    if (uniffi_marmot_uniffi_checksum_method_chatlistsubscription_next() != 41564) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_chatlistsubscription_next_update() != 33027) {
+    if (uniffi_marmot_uniffi_checksum_method_chatlistsubscription_next_update() != 32887) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_chatlistsubscription_snapshot() != 64263) {
@@ -21485,6 +21679,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_chat_muted() != 63462) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_set_chat_pinned() != 60031) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_group_archived() != 17316) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21495,6 +21692,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_periodic_maintenance_policy() != 1720) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_set_pinned_chat_order() != 64195) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_set_relay_telemetry_runtime_config() != 6820) {

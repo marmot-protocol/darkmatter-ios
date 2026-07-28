@@ -141,6 +141,8 @@ struct MessageMutationPolicyTests {
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: id,
+            pinned: false,
+            pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pending,
             title: title,
@@ -150,13 +152,21 @@ struct MessageMutationPolicyTests {
             lastMessage: nil,
             unreadCount: 0,
             hasUnread: false,
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
+            conversationCreatedAt: 1,
+            activitySortAt: 1,
             updatedAt: 1,
-            selfMembership: membership
+            selfMembership: membership,
+            conversationKind: .group,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil
         )
     }
 

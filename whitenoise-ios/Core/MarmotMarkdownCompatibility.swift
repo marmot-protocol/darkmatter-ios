@@ -170,6 +170,8 @@ extension ChatListRowFfi {
     ) {
         self.init(
             groupIdHex: groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
             title: title,
@@ -219,6 +221,8 @@ extension ChatListRowFfi {
     ) {
         self.init(
             groupIdHex: groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
             title: title,
@@ -269,6 +273,8 @@ extension ChatListRowFfi {
     ) {
         self.init(
             groupIdHex: groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
             title: title,

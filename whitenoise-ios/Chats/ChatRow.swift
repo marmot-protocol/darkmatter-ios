@@ -62,6 +62,13 @@ struct ChatRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     Spacer(minLength: 8)
+                    if item.isPinned {
+                        Image(systemName: PinBadgePresentation.systemImageName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(PinBadgePresentation.rotationDegrees))
+                            .accessibilityLabel(Text(L10n.string("Pinned")))
+                    }
                     if item.hasUnread {
                         UnreadCountBadge(count: item.unreadCount)
                     }
@@ -191,6 +198,11 @@ nonisolated enum MentionBadgePresentation {
 
 nonisolated enum MuteBadgePresentation {
     static let systemImageName = "bell.slash.fill"
+}
+
+nonisolated enum PinBadgePresentation {
+    static let systemImageName = "pin.fill"
+    static let rotationDegrees = 45.0
 }
 
 /// Circular avatar. Renders the profile picture when a URL is provided,

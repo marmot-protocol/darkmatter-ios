@@ -1,7 +1,7 @@
 import Foundation
 import MarmotKit
 
-enum NotificationServiceRenderDecision: Equatable {
+nonisolated enum NotificationServiceRenderDecision: Equatable {
     case decorate(LocalNotificationPresentation, additionalPresentations: [LocalNotificationPresentation])
     /// Every presentable record in the wake belongs to a muted chat. The alert
     /// that woke the extension must still be delivered, but with generic

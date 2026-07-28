@@ -4,7 +4,7 @@ import Foundation
 
 /// #298 — group relay strings come from `AppGroupRecordFfi.relays`, which is
 /// MLS-propagated group metadata controlled by a (possibly malicious) group
-/// admin. The Relays disclosure in `GroupDetailsView` must strip bidi /
+/// admin. The Relays section in `GroupDetailsView` must strip bidi /
 /// zero-width characters so a relay URL can't visually spoof a trusted host
 /// (Trojan-Source-style), matching the defense `KeyPackagesView` already
 /// applies to relay strings.

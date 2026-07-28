@@ -81,6 +81,7 @@ struct GroupDetailsView: View {
                 sharedGroupsSection
             } else {
                 membersSection
+                relaysSection
             }
             technicalDetailsSection
             destructiveActionsSection
@@ -666,13 +667,6 @@ struct GroupDetailsView: View {
             }
             .buttonStyle(.plain)
 
-            settingsRow(title: "Chat Lock", systemImage: "lock") {
-                Text("Coming soon")
-                    .font(.footnote)
-            }
-            .foregroundStyle(.secondary)
-            .accessibilityHint(L10n.string("Not available yet"))
-
             Button {
                 Task { await model.setArchived(!viewModel.group.archived, using: appState) }
             } label: {
@@ -816,23 +810,30 @@ struct GroupDetailsView: View {
 
     // MARK: - Technical details
 
+    private var relaysSection: some View {
+        Section {
+            // Stable per-row identity by position. Sanitized display strings can
+            // collide, so using the rendered URL itself can duplicate identities.
+            ForEach(
+                Array(GroupRelaysPresentation.rows(for: viewModel.group.relays).enumerated()),
+                id: \.offset
+            ) { _, relay in
+                Text(relay)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .foregroundStyle(
+                        relay == GroupRelaysPresentation.emptyMessage ? .secondary : .primary
+                    )
+                    .textSelection(.enabled)
+            }
+        } header: {
+            Text("Relays")
+        }
+    }
+
     private var technicalDetailsSection: some View {
         Section {
             DisclosureGroup(isExpanded: $showTechnicalDetails) {
                 copyableDeveloperValueRow(title: "Group ID", value: viewModel.group.groupIdHex)
-                LabeledContent("Relays") {
-                    Text(GroupRelaysPresentation.countLabel(for: viewModel.group.relays))
-                        .foregroundStyle(.secondary)
-                }
-                // Stable per-row identity by position. Sanitized display strings can
-                // collide (distinct raw relays sanitize to the same line), so id: \.self
-                // would produce duplicate SwiftUI identities on hostile relay input.
-                ForEach(Array(GroupRelaysPresentation.rows(for: viewModel.group.relays).enumerated()), id: \.offset) { _, relay in
-                    Text(relay)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(relay == GroupRelaysPresentation.emptyMessage ? .secondary : .primary)
-                        .textSelection(.enabled)
-                }
             } label: {
                 Text("Group Details")
             }

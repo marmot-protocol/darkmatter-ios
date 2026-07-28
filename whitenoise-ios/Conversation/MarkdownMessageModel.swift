@@ -69,7 +69,7 @@ enum MarkdownMessageBuilder {
 
     static let maxCharacters = ContentSanitizer.maxMessageLength
     static let maxNodes = 2000
-    static let maxRenderDepth = 24
+    nonisolated static let maxRenderDepth = 24
     /// Visual indentation stops deepening past this; rendering depth continues
     /// up to `maxRenderDepth` so content isn't lost, it just stops marching
     /// rightward in narrow bubbles.
@@ -162,7 +162,7 @@ enum MarkdownMessageBuilder {
         return out
     }
 
-    static func truncatedBech32(_ bech32: String) -> String {
+    nonisolated static func truncatedBech32(_ bech32: String) -> String {
         let clean = boundedTextRun(bech32, maxCharacters: 64)
         guard clean.count > 16 else { return clean }
         return "\(clean.prefix(8))…\(clean.suffix(4))"
@@ -572,7 +572,7 @@ enum MarkdownMessageBuilder {
         return true
     }
 
-    private static func boundedTextRun(_ raw: String, maxCharacters: Int) -> String {
+    nonisolated private static func boundedTextRun(_ raw: String, maxCharacters: Int) -> String {
         guard maxCharacters > 0, !raw.isEmpty else { return "" }
         let maxScalars = max(maxCharacters, maxCharacters * 8)
         let scalarPrefix = String(String.UnicodeScalarView(raw.unicodeScalars.prefix(maxScalars)))

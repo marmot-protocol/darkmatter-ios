@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var showAccountActions = false
     @State private var presentWipeAfterActionsDismiss = false
     @State private var wipeModel = SignOutAndWipeModel()
+    @State private var supportChatModel = SupportChatViewModel()
+    @State private var supportChatRequestID: UUID?
 
     var body: some View {
         Form {
@@ -121,11 +123,23 @@ struct SettingsView: View {
             }
 
             Section("Support") {
-                NavigationLink {
-                    SupportChatView()
+                Button {
+                    supportChatRequestID = UUID()
                 } label: {
-                    Label("Chat with support", systemImage: "message.fill")
+                    HStack {
+                        Label("Chat with support", systemImage: "message.fill")
+                        Spacer()
+                        if supportChatModel.phase == .loading
+                            || supportChatModel.phase == .routing {
+                            ProgressView()
+                        }
+                    }
                 }
+                .disabled(
+                    supportChatModel.phase == .loading
+                        || supportChatModel.phase == .routing
+                )
+                .buttonStyle(.plain)
 
                 NavigationLink {
                     DonateView()
@@ -176,6 +190,26 @@ struct SettingsView: View {
             guard let id = appState.activeAccount?.accountIdHex else { return }
             await appState.reloadProfileProjection(forAccountIdHex: id)
         }
+        .task(id: supportChatRequestID) {
+            guard supportChatRequestID != nil else { return }
+            await supportChatModel.start(using: appState) {
+                appState.presentChat(groupIdHex: $0)
+            }
+        }
+        .alert(
+            SupportChatPresentation.failureTitle,
+            isPresented: supportFailureBinding
+        ) {
+            Button("Try Again") {
+                supportChatRequestID = UUID()
+            }
+            Button("Cancel", role: .cancel) {
+                supportChatModel.dismissFailure()
+            }
+        } message: {
+            Text(SupportChatPresentation.failureMessage)
+        }
+        .interactiveDismissDisabled(supportChatModel.isCreatingChat)
         .navigationDestination(isPresented: $showProfileEdit) {
             ProfileEditView()
         }
@@ -229,6 +263,17 @@ struct SettingsView: View {
         let version = dict?["CFBundleShortVersionString"] as? String ?? "—"
         let build = dict?["CFBundleVersion"] as? String ?? "—"
         return "\(version) (\(build))"
+    }
+
+    private var supportFailureBinding: Binding<Bool> {
+        Binding(
+            get: { supportChatModel.phase == .failed },
+            set: { isPresented in
+                if !isPresented {
+                    supportChatModel.dismissFailure()
+                }
+            }
+        )
     }
 
     private var marmotBuildLabel: String {

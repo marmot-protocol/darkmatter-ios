@@ -10,7 +10,7 @@ enum MessagePreview {
     // Reply-preview media JSON is peer-controlled. Keep the raw byte budget
     // small because JSONSerialization materializes the whole blob before the
     // tag/field scan budgets apply.
-    static let timelineMediaPreviewMaxJsonBytes = 64 * 1024
+    nonisolated static let timelineMediaPreviewMaxJsonBytes = 64 * 1024
     // Match the app's normal outgoing attachment ceiling so legitimate media
     // messages keep accurate reply-preview counts while hostile extras clip.
     static let timelineMediaPreviewMaxTags = MediaDraftProcessor.maxAttachmentCount + 2

@@ -10,11 +10,15 @@ struct ChatsListView: View {
     @State private var searchText = ""
     @State private var scope: ChatScope = .active
     @State private var selectedChatIds = Set<String>()
+    @State private var chatListEditMode: EditMode = .inactive
     @State private var showBulkDeleteConfirmation = false
     @State private var pendingSingleDelete: LocalDeleteTarget?
     @State private var deletingChatIds = Set<String>()
+    @State private var updatingChatIds = Set<String>()
     @State private var leaveActionState = ChatListLeaveActionState()
     @State private var bulkDeleteInProgress = false
+    @State private var isUpdatingPinnedOrder = false
+    @State private var isPinMutationInProgress = false
     @State private var isMarkingAllRead = false
     @State private var isSearchHeaderHidden = false
     @State private var searchMounted = false
@@ -413,74 +417,31 @@ struct ChatsListView: View {
                 description: Text(error)
             )
         } else {
+            let canReorderPinnedRows = selectionMode
+                && scope == .active
+                && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let pinnedRows = canReorderPinnedRows ? rows.filter(\.isPinned) : []
+            let otherRows = canReorderPinnedRows ? rows.filter { !$0.isPinned } : []
+
             List {
-                ForEach(rows) { item in
-                    let isDeleting = deletingChatIds.contains(item.id)
-                    let isPreparingLeave = leaveActionState.preparingGroupIds.contains(item.id)
-                    let isLeaving = leaveActionState.leavingGroupIds.contains(item.id)
-                    let rowActionInProgress = isDeleting || isPreparingLeave || isLeaving
-                    // A plain row (not a Button) keeps tap and long-press
-                    // mutually exclusive — a Button's action would also fire
-                    // on the release of the long press that just entered
-                    // selection mode, instantly clearing it. The explicit
-                    // content shape is required: without it the transparent
-                    // Spacer gap between a short title/preview and the
-                    // timestamp swallows taps.
-                    HStack(spacing: 12) {
-                        if selectionMode {
-                            Image(systemName: selectedChatIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selectedChatIds.contains(item.id) ? Color.accentColor : .secondary)
-                                .imageScale(.large)
-                                .accessibilityLabel(
-                                    selectedChatIds.contains(item.id)
-                                        ? L10n.string("Deselect chat")
-                                        : L10n.string("Select chat")
-                                )
-                        }
-                        ChatRow(item: item)
-                        if isDeleting {
-                            ProgressView()
-                                .accessibilityLabel("Deleting…")
-                        } else if isLeaving {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                Text("Leaving…")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } else if isPreparingLeave {
-                            ProgressView()
-                        }
+                if canReorderPinnedRows {
+                    ForEach(pinnedRows) { item in
+                        chatListRow(item)
                     }
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        guard !rowActionInProgress else { return }
-                        if selectionMode {
-                            selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
-                        } else {
-                            navigate(to: item)
-                        }
+                    .onMove { source, destination in
+                        movePinnedRows(pinnedRows, from: source, to: destination)
                     }
-                    .onLongPressGesture {
-                        if !selectionMode, !rowActionInProgress {
-                            selectedChatIds = [item.id]
-                        }
+
+                    ForEach(otherRows) { item in
+                        chatListRow(item)
                     }
-                    .accessibilityAddTraits(.isButton)
-                    .swipeActions(edge: .leading) {
-                        if !selectionMode, !rowActionInProgress {
-                            leadingSwipeActions(for: item)
-                        }
+                } else {
+                    ForEach(rows) { item in
+                        chatListRow(item)
                     }
-                    .swipeActions(edge: .trailing) {
-                        if !selectionMode, !rowActionInProgress {
-                            swipeActions(for: item)
-                        }
-                    }
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 }
             }
+            .environment(\.editMode, $chatListEditMode)
             .listStyle(.plain)
             .compatibleAutomaticTopScrollEdgeEffect()
             .compatibleBottomScrollEdgeEffect()
@@ -489,6 +450,70 @@ struct ChatsListView: View {
             }
             .refreshable { await viewModel.refreshRows() }
         }
+    }
+
+    private func chatListRow(_ item: ChatsListViewModel.Item) -> some View {
+        let isDeleting = deletingChatIds.contains(item.id)
+        let isUpdating = updatingChatIds.contains(item.id)
+        let isPreparingLeave = leaveActionState.preparingGroupIds.contains(item.id)
+        let isLeaving = leaveActionState.leavingGroupIds.contains(item.id)
+        let rowActionInProgress = isDeleting || isUpdating || isPreparingLeave || isLeaving
+
+        return HStack(spacing: 12) {
+            if selectionMode {
+                Image(systemName: selectedChatIds.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedChatIds.contains(item.id) ? Color.accentColor : .secondary)
+                    .imageScale(.large)
+                    .accessibilityLabel(
+                        selectedChatIds.contains(item.id)
+                            ? L10n.string("Deselect chat")
+                            : L10n.string("Select chat")
+                    )
+            }
+            ChatRow(item: item)
+            if isDeleting {
+                ProgressView()
+                    .accessibilityLabel("Deleting…")
+            } else if isLeaving {
+                HStack(spacing: 6) {
+                    ProgressView()
+                    Text("Leaving…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if isPreparingLeave {
+                ProgressView()
+            }
+        }
+        .contentShape(.rect)
+        .onTapGesture {
+            guard !rowActionInProgress else { return }
+            if selectionMode {
+                selectedChatIds = ChatListSelection.toggling(selectedChatIds, id: item.id)
+            } else {
+                navigate(to: item)
+            }
+        }
+        .onLongPressGesture {
+            if !selectionMode, !rowActionInProgress {
+                Haptics.selection()
+                selectedChatIds = [item.id]
+                chatListEditMode = .active
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        .swipeActions(edge: .leading) {
+            if !selectionMode, !rowActionInProgress {
+                leadingSwipeActions(for: item)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            if !selectionMode, !rowActionInProgress {
+                swipeActions(for: item)
+            }
+        }
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
     }
 
     @ViewBuilder
@@ -526,7 +551,12 @@ struct ChatsListView: View {
         }
     }
 
-    private var selectionMode: Bool { !selectedChatIds.isEmpty }
+    private var selectionMode: Bool { chatListEditMode.isEditing }
+
+    private func endSelectionMode() {
+        selectedChatIds = []
+        chatListEditMode = .inactive
+    }
 
     private var singleDeleteConfirmationPresented: Binding<Bool> {
         Binding(
@@ -571,7 +601,7 @@ struct ChatsListView: View {
 
         return VStack(spacing: 8) {
             HStack {
-                Button("Cancel") { selectedChatIds = [] }
+                Button("Done") { endSelectionMode() }
                     .disabled(bulkDeleteInProgress)
                 Spacer()
                 Text(L10n.plural("%lld selected", Int64(items.count)))
@@ -590,7 +620,7 @@ struct ChatsListView: View {
                     for id in items.map(\.id) {
                         await setArchived(groupIdHex: id, archived: archived)
                     }
-                    selectedChatIds = []
+                    endSelectionMode()
                 }
                 .disabled(bulkDeleteInProgress)
 
@@ -599,7 +629,7 @@ struct ChatsListView: View {
                     systemImage: willMute ? "bell.slash" : "bell"
                 ) {
                     for id in items.map(\.id) { setMuted(groupIdHex: id, muted: willMute) }
-                    selectedChatIds = []
+                    endSelectionMode()
                 }
                 .disabled(bulkDeleteInProgress || items.contains(where: \.leaveRequestPending))
 
@@ -669,6 +699,44 @@ struct ChatsListView: View {
         }
     }
 
+    @MainActor
+    private func movePinnedRows(
+        _ pinnedRows: [ChatsListViewModel.Item],
+        from source: IndexSet,
+        to destination: Int
+    ) {
+        guard !isUpdatingPinnedOrder else { return }
+        var orderedGroupIds = pinnedRows.map(\.id)
+        let previousOrder = orderedGroupIds
+        orderedGroupIds.move(fromOffsets: source, toOffset: destination)
+        guard orderedGroupIds != previousOrder else { return }
+
+        isUpdatingPinnedOrder = true
+        viewModel?.applyPinnedOrder(orderedGroupIds)
+        Task { await persistPinnedOrder(orderedGroupIds) }
+    }
+
+    @MainActor
+    private func persistPinnedOrder(_ orderedGroupIds: [String]) async {
+        defer { isUpdatingPinnedOrder = false }
+        guard let ref = appState.activeAccountRef, let viewModel else {
+            presentChatMutationFailure(title: L10n.string("Couldn't update pin"))
+            return
+        }
+
+        do {
+            let client = try appState.currentMarmotClient()
+            let state = try await client.setPinnedChatOrder(
+                accountRef: ref,
+                orderedGroupIds: orderedGroupIds
+            )
+            viewModel.applyPinnedOrder(state.orderedGroupIds)
+        } catch {
+            await viewModel.refreshRows()
+            presentChatMutationFailure(title: L10n.string("Couldn't update pin"))
+        }
+    }
+
     private func navigate(to item: ChatsListViewModel.Item) {
         dismissSearchKeyboard()
         path.append(
@@ -682,7 +750,11 @@ struct ChatsListView: View {
 
     @ViewBuilder
     private func leadingSwipeActions(for item: ChatsListViewModel.Item) -> some View {
-        let actions = ChatListSwipeActionsPresentation.leadingActions(hasUnread: item.hasUnread)
+        let actions = ChatListSwipeActionsPresentation.leadingActions(
+            hasUnread: item.hasUnread,
+            isPinned: item.isPinned,
+            isArchived: item.isArchived
+        )
 
         if actions.contains(.read) {
             Button {
@@ -691,6 +763,30 @@ struct ChatsListView: View {
                 Label(L10n.string("Mark as read"), systemImage: "checkmark.message")
             }
             .tint(.blue)
+        }
+        if actions.contains(.unread) {
+            Button {
+                Task { await markUnread(item) }
+            } label: {
+                Label(L10n.string("Mark as unread"), systemImage: "envelope.badge")
+            }
+            .tint(.blue)
+        }
+        if actions.contains(.unpin) {
+            Button {
+                Task { await setPinned(item, pinned: false) }
+            } label: {
+                Label(L10n.string("Unpin"), systemImage: "pin.slash")
+            }
+            .tint(.orange)
+        }
+        if actions.contains(.pin) {
+            Button {
+                Task { await setPinned(item, pinned: true) }
+            } label: {
+                Label(L10n.string("Pin"), systemImage: "pin")
+            }
+            .tint(.orange)
         }
     }
 
@@ -780,13 +876,104 @@ struct ChatsListView: View {
 
     @MainActor
     private func markRead(_ item: ChatsListViewModel.Item) async {
-        guard let messageIdHex = item.lastMessage?.messageIdHex else { return }
-        let succeeded = await markRead(
-            groupIdHex: item.id,
-            messageIdHex: messageIdHex
-        )
+        guard updatingChatIds.insert(item.id).inserted else { return }
+        defer { updatingChatIds.remove(item.id) }
+        let succeeded: Bool
+        if let messageIdHex = item.lastMessage?.messageIdHex {
+            succeeded = await markRead(
+                groupIdHex: item.id,
+                messageIdHex: messageIdHex
+            )
+        } else if item.row.manuallyMarkedUnread {
+            succeeded = await setManuallyUnread(item, manuallyUnread: false)
+        } else {
+            succeeded = false
+        }
         if !succeeded {
             presentMarkReadFailure()
+        }
+    }
+
+    @MainActor
+    private func markUnread(_ item: ChatsListViewModel.Item) async {
+        guard updatingChatIds.insert(item.id).inserted else { return }
+        defer { updatingChatIds.remove(item.id) }
+        guard await setManuallyUnread(item, manuallyUnread: true) else {
+            presentChatMutationFailure(title: L10n.string("Couldn't mark as unread"))
+            return
+        }
+    }
+
+    @MainActor
+    private func setManuallyUnread(
+        _ item: ChatsListViewModel.Item,
+        manuallyUnread: Bool
+    ) async -> Bool {
+        guard let ref = appState.activeAccountRef else { return false }
+        do {
+            let client = try appState.currentMarmotClient()
+            if let row = try await client.setChatManuallyUnread(
+                accountRef: ref,
+                groupIdHex: item.id,
+                manuallyUnread: manuallyUnread
+            ) {
+                viewModel?.applyChatListRow(row)
+            } else {
+                await viewModel?.refreshRows()
+            }
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    @MainActor
+    private func setPinned(_ item: ChatsListViewModel.Item, pinned: Bool) async {
+        guard !isPinMutationInProgress, updatingChatIds.insert(item.id).inserted else { return }
+        isPinMutationInProgress = true
+        defer {
+            isPinMutationInProgress = false
+            updatingChatIds.remove(item.id)
+        }
+        guard let ref = appState.activeAccountRef, let viewModel else {
+            presentChatMutationFailure(title: L10n.string("Couldn't update pin"))
+            return
+        }
+        let transitionID = viewModel.beginPinOrderUITransition()
+        // SwiftUI exposes no completion callback for the system swipe drawer.
+        let swipeDrawerCloseTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        do {
+            let client = try appState.currentMarmotClient()
+            let state = try await client.setChatPinned(
+                accountRef: ref,
+                groupIdHex: item.id,
+                pinned: pinned
+            )
+            await swipeDrawerCloseTask.value
+            await Task.yield()
+            withAnimation(.smooth(duration: 0.25)) {
+                _ = viewModel.finishPinOrderUITransition(
+                    transitionID: transitionID,
+                    orderedGroupIds: state.orderedGroupIds
+                )
+            }
+        } catch {
+            await swipeDrawerCloseTask.value
+            var appliedDeferredSnapshot = false
+            var transaction = Transaction(animation: nil)
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                appliedDeferredSnapshot = viewModel.finishPinOrderUITransition(
+                    transitionID: transitionID,
+                    orderedGroupIds: nil
+                )
+            }
+            if !appliedDeferredSnapshot {
+                await viewModel.refreshRows()
+            }
+            presentChatMutationFailure(title: L10n.string("Couldn't update pin"))
         }
     }
 
@@ -798,11 +985,15 @@ struct ChatsListView: View {
 
         var hadFailure = false
         for item in viewModel.items where item.hasUnread {
-            guard let messageIdHex = item.lastMessage?.messageIdHex else {
-                hadFailure = true
-                continue
-            }
-            if !(await markRead(groupIdHex: item.id, messageIdHex: messageIdHex)) {
+            if let messageIdHex = item.lastMessage?.messageIdHex {
+                if !(await markRead(groupIdHex: item.id, messageIdHex: messageIdHex)) {
+                    hadFailure = true
+                }
+            } else if item.row.manuallyMarkedUnread {
+                if !(await setManuallyUnread(item, manuallyUnread: false)) {
+                    hadFailure = true
+                }
+            } else {
                 hadFailure = true
             }
         }
@@ -835,9 +1026,13 @@ struct ChatsListView: View {
     }
 
     private func presentMarkReadFailure() {
+        presentChatMutationFailure(title: L10n.string("Couldn't mark as read"))
+    }
+
+    private func presentChatMutationFailure(title: String) {
         Haptics.error()
         appState.present(.error(
-            L10n.string("Couldn't mark as read"),
+            title,
             message: L10n.string("Try again.")
         ))
     }
@@ -854,8 +1049,11 @@ struct ChatsListView: View {
                 let deleted = await deleteLocal(groupIdHex: target.id, presentsFailure: false)
                 if !deleted { failedIds.insert(target.id) }
             }
+            guard !failedIds.isEmpty else {
+                endSelectionMode()
+                return
+            }
             selectedChatIds = failedIds
-            guard !failedIds.isEmpty else { return }
             Haptics.error()
             appState.present(.error(
                 L10n.string("Some chats couldn’t be deleted"),

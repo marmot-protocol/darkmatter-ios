@@ -1570,7 +1570,7 @@ struct ConversationView: View {
     /// is the single way into the details page for
     /// both direct messages and groups.
     private var conversationHeaderBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Button {
                 // Resign the composer before popping so the keyboard animates
                 // down first instead of flashing mid-screen during the pop.
@@ -1578,9 +1578,17 @@ struct ConversationView: View {
                 dismiss()
             } label: {
                 Image(systemName: "chevron.backward")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 28, height: 28)
-                    .contentShape(.rect)
+                    .font(.system(size: 20, weight: .semibold))
+                    .frame(width: 44, height: 44)
+                    .background {
+                        Circle()
+                            .fill(Color(.secondarySystemBackground))
+                    }
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                    }
+                    .contentShape(.circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.string("Back"))
@@ -1594,7 +1602,7 @@ struct ConversationView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             LinearGradient(
@@ -1637,7 +1645,7 @@ struct ConversationView: View {
                             ? nil
                             : GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
                     )
-                    .frame(width: 34, height: 34)
+                    .frame(width: 40, height: 40)
                 }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(chrome.title)

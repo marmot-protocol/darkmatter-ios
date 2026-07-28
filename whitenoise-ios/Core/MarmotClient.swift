@@ -347,6 +347,53 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
+    /// Sets or clears a manual unread reminder without blocking MainActor on
+    /// the synchronous storage-backed FFI command.
+    func setChatManuallyUnread(
+        accountRef: String,
+        groupIdHex: String,
+        manuallyUnread: Bool
+    ) async throws -> ChatListRowFfi? {
+        try await Task.detached(priority: .utility) {
+            [marmot, accountRef, groupIdHex, manuallyUnread] in
+            try marmot.setChatManuallyUnread(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                manuallyUnread: manuallyUnread
+            )
+        }.value
+    }
+
+    /// Updates the device-local pinned section off MainActor. Marmot returns
+    /// the complete authoritative order and publishes a full chat-list
+    /// subscription snapshot for row projection updates.
+    func setChatPinned(
+        accountRef: String,
+        groupIdHex: String,
+        pinned: Bool
+    ) async throws -> ChatPinStateFfi {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, groupIdHex, pinned] in
+            try marmot.setChatPinned(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                pinned: pinned
+            )
+        }.value
+    }
+
+    /// Reorders the complete device-local pinned section off MainActor.
+    func setPinnedChatOrder(
+        accountRef: String,
+        orderedGroupIds: [String]
+    ) async throws -> ChatPinStateFfi {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, orderedGroupIds] in
+            try marmot.setPinnedChatOrder(
+                accountRef: accountRef,
+                orderedGroupIds: orderedGroupIds
+            )
+        }.value
+    }
+
     func initializeChatReadState(
         accountRef: String,
         groupIdHex: String

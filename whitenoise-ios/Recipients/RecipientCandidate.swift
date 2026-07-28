@@ -31,6 +31,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
     let avatarUrl: String?
     let imageHashHex: String?
     let isSelfMember: Bool
+    let conversationKind: ChatConversationKindFfi
     let lastActivityAt: UInt64
     let memberIdsHex: [String]
     let lastSenderIdHex: String?
@@ -48,6 +49,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
             avatarUrl: details?.group.avatarUrl ?? row.avatarUrl,
             imageHashHex: details?.group.imageHashHex ?? row.avatar?.imageHashHex,
             isSelfMember: GroupManagementPresentation.isActiveChatListMember(row.selfMembership),
+            conversationKind: row.conversationKind,
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
             memberIdsHex: details?.members.map(GroupMemberDetailsPresentation.profileAccountIdHex) ?? [],
             lastSenderIdHex: row.lastMessage?.sender,
@@ -63,6 +65,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         avatarUrl: String?,
         imageHashHex: String? = nil,
         isSelfMember: Bool,
+        conversationKind: ChatConversationKindFfi = .unknown,
         lastActivityAt: UInt64,
         memberIdsHex: [String],
         lastSenderIdHex: String?,
@@ -75,6 +78,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         self.avatarUrl = avatarUrl
         self.imageHashHex = imageHashHex
         self.isSelfMember = isSelfMember
+        self.conversationKind = conversationKind
         self.lastActivityAt = lastActivityAt
         self.memberIdsHex = memberIdsHex
         self.lastSenderIdHex = lastSenderIdHex
@@ -86,9 +90,39 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
     /// reuse. Renamed or left conversations don't count, matching how the
     /// chats list renders direct messages.
     func isDirectChat(withMember targetIdHex: String, myAccountIdHex: String) -> Bool {
-        guard sanitizedName == nil, isSelfMember, memberIdsHex.count == 2 else { return false }
+        guard conversationKind != .group,
+              sanitizedName == nil,
+              isSelfMember,
+              memberIdsHex.count == 2
+        else { return false }
         let normalized = Set(memberIdsHex.map { $0.lowercased() })
         return normalized == [targetIdHex.lowercased(), myAccountIdHex.lowercased()]
+    }
+}
+
+nonisolated enum DirectChatReuseLookup {
+    static func shouldInspect(
+        conversationKind: ChatConversationKindFfi,
+        selfMembership: SelfMembershipFfi
+    ) -> Bool {
+        GroupManagementPresentation.isActiveChatListMember(selfMembership)
+            && conversationKind != .group
+    }
+
+    static func existingGroupId(
+        in snapshots: [RecipientGroupSnapshot],
+        targetAccountIdHex: String,
+        myAccountIdHex: String
+    ) -> String? {
+        snapshots
+            .filter {
+                $0.isDirectChat(
+                    withMember: targetAccountIdHex,
+                    myAccountIdHex: myAccountIdHex
+                )
+            }
+            .max { $0.lastActivityAt < $1.lastActivityAt }?
+            .groupIdHex
     }
 }
 

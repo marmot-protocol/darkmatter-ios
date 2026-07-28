@@ -13,10 +13,21 @@ nonisolated enum ChatListSwipeActionsPresentation: Equatable {
         static let mute = Actions(rawValue: 1 << 4)
         static let unmute = Actions(rawValue: 1 << 5)
         static let read = Actions(rawValue: 1 << 6)
+        static let unread = Actions(rawValue: 1 << 7)
+        static let pin = Actions(rawValue: 1 << 8)
+        static let unpin = Actions(rawValue: 1 << 9)
     }
 
-    static func leadingActions(hasUnread: Bool) -> Actions {
-        hasUnread ? [.read] : []
+    static func leadingActions(
+        hasUnread: Bool,
+        isPinned: Bool,
+        isArchived: Bool
+    ) -> Actions {
+        var actions: Actions = [hasUnread ? .read : .unread]
+        if !isArchived {
+            actions.insert(isPinned ? .unpin : .pin)
+        }
+        return actions
     }
 
     static func trailingActions(
