@@ -7772,6 +7772,87 @@ struct GroupManagementPresentationTests {
         ) == GroupManagementPresentation.leavingGroupComposerMessage)
     }
 
+    @Test func adminCanEndGroupWhenLifecycleCanBeEnabledOrIsAlreadyEnabled() {
+        let canEnable = managementState(
+            isSelfAdmin: true,
+            isLastAdmin: true,
+            canEnableDisbanding: true
+        )
+        let enabled = managementState(
+            isSelfAdmin: true,
+            isLastAdmin: true,
+            disbandingEnabled: true,
+            canDisband: true
+        )
+
+        #expect(GroupManagementPresentation.shouldShowEndGroup(state: canEnable))
+        #expect(GroupManagementPresentation.canEndGroup(state: canEnable))
+        #expect(GroupManagementPresentation.shouldShowEndGroup(state: enabled))
+        #expect(GroupManagementPresentation.canEndGroup(state: enabled))
+    }
+
+    @Test func incompatibleMembersDisableEndGroupWithUpdateGuidance() {
+        let state = managementState(
+            isSelfAdmin: true,
+            isLastAdmin: true,
+            disbandingBlockers: [hex("22"), hex("33")]
+        )
+
+        #expect(GroupManagementPresentation.shouldShowEndGroup(state: state))
+        #expect(!GroupManagementPresentation.canEndGroup(state: state))
+        #expect(
+            GroupManagementPresentation.disbandBlockerMessage(state: state)
+                == "2 members must update White Noise before you can end this group."
+        )
+    }
+
+    @Test func pendingAndTerminalDisbandStatesDisableTheComposer() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let pending = group(
+            name: "Ending",
+            disbanding: true,
+            disbandRequest: .pending(requestedAtMs: 1_000)
+        )
+        let pendingConversation = ConversationViewModel(appState: appState, group: pending)
+        let terminal = group(name: "Ended", disbanded: true)
+        let terminalConversation = ConversationViewModel(appState: appState, group: terminal)
+
+        #expect(!pendingConversation.canSendMessages)
+        #expect(
+            pendingConversation.inactiveGroupMessage
+                == GroupManagementPresentation.disbandingComposerMessage
+        )
+        #expect(
+            GroupManagementPresentation.disbandStatus(group: pending, state: nil)
+                == .pending
+        )
+        #expect(!terminalConversation.canSendMessages)
+        #expect(
+            terminalConversation.inactiveGroupMessage
+                == GroupManagementPresentation.disbandedComposerMessage
+        )
+        #expect(
+            GroupManagementPresentation.disbandStatus(group: terminal, state: nil)
+                == .disbanded
+        )
+    }
+
+    @Test func failedDisbandRequestExplainsWhyItStopped() {
+        let failed = group(
+            name: "Not Ended",
+            disbandRequest: .failed(requestedAtMs: 1_000, reason: .noLongerAdmin)
+        )
+
+        #expect(
+            GroupManagementPresentation.disbandStatus(group: failed, state: nil)
+                == .failed(.noLongerAdmin)
+        )
+        #expect(
+            GroupManagementPresentation.disbandFailureMessage(.noLongerAdmin)
+                == "The group wasn't ended because you're no longer an admin."
+        )
+    }
+
     @Test func relaySectionShowsUrls() {
         let relays = ["wss://relay.example", "wss://relay.two"]
 
@@ -11296,7 +11377,18 @@ struct TimelineKeyboardDismissControllerTests {
 private struct TimelineSemanticPositionHarness: View {
     let target: TimelineInitialPositionTarget
     let onViewportChanged: (TimelineBottomViewport) -> Void
+    let onVisibleTargetsChanged: (Set<String>) -> Void
     @State private var requestGeneration = 0
+
+    init(
+        target: TimelineInitialPositionTarget,
+        onViewportChanged: @escaping (TimelineBottomViewport) -> Void,
+        onVisibleTargetsChanged: @escaping (Set<String>) -> Void = { _ in }
+    ) {
+        self.target = target
+        self.onViewportChanged = onViewportChanged
+        self.onVisibleTargetsChanged = onVisibleTargetsChanged
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -11332,6 +11424,12 @@ private struct TimelineSemanticPositionHarness: View {
                 guard !Task.isCancelled else { return }
                 requestTarget(proxy: proxy)
             }
+            .onScrollTargetVisibilityChange(
+                idType: String.self,
+                threshold: TimelineViewportVisibility.minimumVisibleFraction
+            ) { visibleIDs in
+                onVisibleTargetsChanged(Set(visibleIDs))
+            }
         }
     }
 
@@ -11339,8 +11437,8 @@ private struct TimelineSemanticPositionHarness: View {
         switch target {
         case .item(let id, let anchor):
             proxy.scrollTo(id, anchor: anchor.unitPoint)
-        case .bottom:
-            proxy.scrollTo("bottom", anchor: .bottom)
+        case .latest(let id):
+            proxy.scrollTo(id, anchor: .bottom)
         }
     }
 }
@@ -11349,14 +11447,21 @@ private struct TimelineSemanticPositionHarness: View {
 struct TimelineBottomTests {
 
     @Test func swiftUILazyTimelineResolvesSemanticBottomTarget() async throws {
-        let target = TimelineInitialPositionTarget.bottom
+        let target = TimelineInitialPositionTarget.latest(id: "row-79")
         var didReachTarget = false
+        var didSeeBottomTarget = false
         var lastViewport: TimelineBottomViewport?
         let controller = UIHostingController(
-            rootView: TimelineSemanticPositionHarness(target: target) {
-                lastViewport = $0
-                didReachTarget = $0.isSettledAtBottom
-            }
+            rootView: TimelineSemanticPositionHarness(
+                target: target,
+                onViewportChanged: {
+                    lastViewport = $0
+                    didReachTarget = $0.isSettledAtBottom
+                },
+                onVisibleTargetsChanged: {
+                    didSeeBottomTarget = $0.contains("row-79")
+                }
+            )
         )
         let windowScene = try #require(
             UIApplication.shared.connectedScenes
@@ -11368,11 +11473,12 @@ struct TimelineBottomTests {
         window.rootViewController = controller
         window.makeKeyAndVisible()
 
-        for _ in 0..<100 where !didReachTarget {
+        for _ in 0..<100 where !didReachTarget || !didSeeBottomTarget {
             try await Task.sleep(for: .milliseconds(10))
         }
 
         #expect(didReachTarget, "Last viewport: \(String(describing: lastViewport))")
+        #expect(didSeeBottomTarget)
         window.isHidden = true
     }
 
@@ -11388,6 +11494,7 @@ struct TimelineBottomTests {
             didPerformInitialScroll: false,
             targetMessageIdHex: "message-target",
             targetItemId: "msg-target",
+            latestItemId: "msg-latest",
             unreadMessageIdHex: nil
         ) == .target(.item(id: "msg-target", anchor: .center)))
         #expect(TimelineInitialScroll.destination(
@@ -11395,13 +11502,15 @@ struct TimelineBottomTests {
             didPerformInitialScroll: false,
             targetMessageIdHex: nil,
             targetItemId: nil,
+            latestItemId: "msg-latest",
             unreadMessageIdHex: nil
-        ) == .target(.bottom))
+        ) == .target(.latest(id: "msg-latest")))
         #expect(TimelineInitialScroll.destination(
             hasItems: true,
             didPerformInitialScroll: false,
             targetMessageIdHex: "message-target",
             targetItemId: nil,
+            latestItemId: "msg-latest",
             unreadMessageIdHex: nil
         ) == .none)
         #expect(TimelineInitialScroll.destination(
@@ -11409,6 +11518,7 @@ struct TimelineBottomTests {
             didPerformInitialScroll: true,
             targetMessageIdHex: "message-target",
             targetItemId: "msg-target",
+            latestItemId: "msg-latest",
             unreadMessageIdHex: nil
         ) == .none)
     }
@@ -11419,6 +11529,7 @@ struct TimelineBottomTests {
             didPerformInitialScroll: false,
             targetMessageIdHex: "message-target",
             targetItemId: "unread:message-target",
+            latestItemId: "msg-latest",
             unreadMessageIdHex: "message-target"
         ) == .target(.item(id: "unread:message-target", anchor: .top)))
         #expect(TimelineInitialScroll.destination(
@@ -11426,8 +11537,9 @@ struct TimelineBottomTests {
             didPerformInitialScroll: false,
             targetMessageIdHex: nil,
             targetItemId: nil,
+            latestItemId: "msg-latest",
             unreadMessageIdHex: nil
-        ) == .target(.bottom))
+        ) == .target(.latest(id: "msg-latest")))
     }
 
     @Test func initialTimelineConcealsOnlyWhilePositioningCanRun() {
@@ -11534,28 +11646,76 @@ struct TimelineBottomTests {
 
         #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
             target: target,
-            visibleTargetIDs: ["msg:older", "msg:newer"],
-            isViewportAtBottom: false
+            visibleTargetIDs: ["msg:older", "msg:newer"]
         ))
         #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
             target: target,
-            visibleTargetIDs: ["msg:older", "unread:message-target"],
-            isViewportAtBottom: false
+            visibleTargetIDs: ["msg:older", "unread:message-target"]
         ))
         #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
             target: nil,
-            visibleTargetIDs: ["unread:message-target"],
-            isViewportAtBottom: false
+            visibleTargetIDs: ["unread:message-target"]
         ))
         #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
-            target: .bottom,
-            visibleTargetIDs: [],
-            isViewportAtBottom: false
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: []
         ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: ["msg:older"]
+        ))
+    }
+
+    @Test func latestInitialPositionWaitsForStableInsetGeometry() {
+        let stableBottom = TimelineBottomViewport(
+            contentHeight: 1_900,
+            visibleBottomY: 1_976,
+            bottomContentInset: 76
+        )
+        let correctingSameHeight = TimelineBottomViewport(
+            contentHeight: 1_900,
+            visibleBottomY: 2_300,
+            bottomContentInset: 76
+        )
+        let growingBottom = TimelineBottomViewport(
+            contentHeight: 2_100,
+            visibleBottomY: 2_176,
+            bottomContentInset: 76
+        )
+        let overscrolledBottom = TimelineBottomViewport(
+            contentHeight: 1_200,
+            visibleBottomY: 1_976,
+            bottomContentInset: 76
+        )
+        let beforeComposerInset = TimelineBottomViewport(
+            contentHeight: 1_900,
+            visibleBottomY: 1_900,
+            bottomContentInset: 0
+        )
+
         #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
-            target: .bottom,
-            visibleTargetIDs: [],
-            isViewportAtBottom: true
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: ["msg-latest"],
+            previousViewport: correctingSameHeight,
+            currentViewport: stableBottom
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: ["msg-latest"],
+            previousViewport: stableBottom,
+            currentViewport: growingBottom
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: ["msg-latest"],
+            previousViewport: overscrolledBottom,
+            currentViewport: overscrolledBottom
+        ))
+        #expect(!TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: .latest(id: "msg-latest"),
+            visibleTargetIDs: ["msg-latest"],
+            previousViewport: beforeComposerInset,
+            currentViewport: beforeComposerInset
         ))
     }
 
@@ -12358,6 +12518,9 @@ private func group(
     pendingConfirmation: Bool = false,
     selfMembership: SelfMembershipFfi = .member,
     leaveRequestPending: Bool = false,
+    disbanding: Bool = false,
+    disbandRequest: DisbandRequestFfi? = nil,
+    disbanded: Bool = false,
     welcomerAccountIdHex: String? = nil,
     encryptedMedia: AppGroupEncryptedMediaComponentFfi = encryptedMediaComponent()
 ) -> AppGroupRecordFfi {
@@ -12378,6 +12541,9 @@ private func group(
         selfMembership: selfMembership,
         leaveRequestPending: leaveRequestPending,
         leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
+        disbanding: disbanding,
+        disbandRequest: disbandRequest,
+        disbanded: disbanded,
         welcomerAccountIdHex: welcomerAccountIdHex,
         viaWelcomeMessageIdHex: nil
     )
@@ -12605,7 +12771,14 @@ private func managementState(
     isLastAdmin: Bool,
     canLeave: Bool? = nil,
     requiresSelfDemoteBeforeLeave: Bool? = nil,
-    leaveRequestPending: Bool = false
+    leaveRequestPending: Bool = false,
+    lifecycleState: GroupLifecycleStateFfi = .stable,
+    disbandingEnabled: Bool = false,
+    disbanding: Bool = false,
+    canEnableDisbanding: Bool = false,
+    canDisband: Bool = false,
+    disbandingBlockers: [String] = [],
+    disbandRequest: DisbandRequestFfi? = nil
 ) -> GroupManagementStateFfi {
     GroupManagementStateFfi(
         myAccountIdHex: hex("11"),
@@ -12616,6 +12789,13 @@ private func managementState(
         requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave ?? isSelfAdmin,
         leaveRequestPending: leaveRequestPending,
         leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
+        lifecycleState: lifecycleState,
+        disbandingEnabled: disbandingEnabled,
+        disbanding: disbanding,
+        canEnableDisbanding: canEnableDisbanding,
+        canDisband: canDisband,
+        disbandingBlockers: disbandingBlockers,
+        disbandRequest: disbandRequest,
         memberActions: []
     )
 }

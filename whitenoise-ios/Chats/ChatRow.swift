@@ -32,7 +32,17 @@ struct ChatRow: View {
                             .foregroundStyle(.secondary)
                             .accessibilityLabel(Text(L10n.string("Muted")))
                     }
-                    if item.leaveRequestPending {
+                    if item.isDisbanding {
+                        Image(systemName: "hourglass")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(L10n.string("Ending group…")))
+                    } else if item.isDisbanded {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(L10n.string("Group ended")))
+                    } else if item.leaveRequestPending {
                         Image(systemName: "hourglass")
                             .font(.caption)
                             .foregroundStyle(.secondary)

@@ -620,6 +620,18 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.selfDemoteAdminDetailed(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func enableGroupDisbanding(accountRef: String, groupIdHex: String) async throws -> GroupMutationResultFfi {
+        try await marmot.enableGroupDisbanding(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func disbandGroup(accountRef: String, groupIdHex: String) async throws -> DisbandRequestFfi {
+        try await marmot.disbandGroup(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func acknowledgeDisbandFailure(accountRef: String, groupIdHex: String) async throws -> Bool {
+        try await marmot.acknowledgeDisbandFailure(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
     func updateGroupProfile(accountRef: String, groupIdHex: String, name: String?, description: String?) async throws -> SendSummaryFfi {
         try await marmot.updateGroupProfile(accountRef: accountRef, groupIdHex: groupIdHex, name: name, description: description)
     }

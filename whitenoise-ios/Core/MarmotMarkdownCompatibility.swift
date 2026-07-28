@@ -70,6 +70,9 @@ extension AppGroupRecordFfi {
         selfMembership: SelfMembershipFfi = .member,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil,
+        disbanding: Bool = false,
+        disbandRequest: DisbandRequestFfi? = nil,
+        disbanded: Bool = false,
         welcomerAccountIdHex: String?,
         viaWelcomeMessageIdHex: String?
     ) {
@@ -95,6 +98,9 @@ extension AppGroupRecordFfi {
             selfMembership: selfMembership,
             leaveRequestPending: leaveRequestPending,
             leaveRequestedAtMs: leaveRequestedAtMs,
+            disbanding: disbanding,
+            disbandRequest: disbandRequest,
+            disbanded: disbanded,
             welcomerAccountIdHex: welcomerAccountIdHex,
             viaWelcomeMessageIdHex: viaWelcomeMessageIdHex
         )
@@ -144,7 +150,92 @@ extension NotificationUpdateFfi {
     }
 }
 
+extension GroupDetailsFfi {
+    init(group: AppGroupRecordFfi, members: [GroupMemberDetailsFfi]) {
+        self.init(
+            group: group,
+            members: members,
+            mlsState: AppGroupMlsStateFfi(
+                groupIdHex: group.groupIdHex,
+                protocolProfile: group.protocolProfile,
+                lifecycleState: group.disbanded ? .disbanded : .stable,
+                epoch: 0,
+                memberCount: UInt32(clamping: members.count),
+                unrecoverable: group.unrecoverable,
+                requiredAppComponents: [],
+                disbandingEnabled: false,
+                disbanding: group.disbanding,
+                disbandingBlockers: [],
+                disbandRequest: group.disbandRequest
+            )
+        )
+    }
+}
+
 extension ChatListRowFfi {
+    init(
+        groupIdHex: String,
+        pinned: Bool,
+        pinnedPosition: UInt32?,
+        archived: Bool,
+        pendingConfirmation: Bool,
+        title: String,
+        groupName: String,
+        avatarUrl: String?,
+        avatar: ChatListAvatarFfi?,
+        lastMessage: ChatListMessagePreviewFfi?,
+        unreadCount: UInt64,
+        hasUnread: Bool,
+        manuallyMarkedUnread: Bool,
+        unreadMentionCount: UInt64,
+        unreadMention: Bool,
+        firstUnreadMessageIdHex: String?,
+        lastReadMessageIdHex: String?,
+        lastReadTimelineAt: UInt64?,
+        conversationCreatedAt: UInt64,
+        activitySortAt: UInt64,
+        updatedAt: UInt64,
+        selfMembership: SelfMembershipFfi,
+        conversationKind: ChatConversationKindFfi,
+        muted: Bool,
+        mutedUntilMs: Int64?,
+        leaveRequestPending: Bool,
+        leaveRequestedAtMs: UInt64?
+    ) {
+        self.init(
+            groupIdHex: groupIdHex,
+            pinned: pinned,
+            pinnedPosition: pinnedPosition,
+            archived: archived,
+            pendingConfirmation: pendingConfirmation,
+            lifecycleState: .stable,
+            disbanding: false,
+            disbandRequest: nil,
+            title: title,
+            groupName: groupName,
+            avatarUrl: avatarUrl,
+            avatar: avatar,
+            lastMessage: lastMessage,
+            unreadCount: unreadCount,
+            hasUnread: hasUnread,
+            manuallyMarkedUnread: manuallyMarkedUnread,
+            unreadMentionCount: unreadMentionCount,
+            unreadMention: unreadMention,
+            firstUnreadMessageIdHex: firstUnreadMessageIdHex,
+            lastReadMessageIdHex: lastReadMessageIdHex,
+            lastReadTimelineAt: lastReadTimelineAt,
+            conversationCreatedAt: conversationCreatedAt,
+            activitySortAt: activitySortAt,
+            updatedAt: updatedAt,
+            selfMembership: selfMembership,
+            conversationKind: conversationKind,
+            muted: muted,
+            mutedUntilMs: mutedUntilMs,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs
+        )
+    }
+
     init(
         groupIdHex: String,
         archived: Bool,
@@ -165,6 +256,9 @@ extension ChatListRowFfi {
         activitySortAt: UInt64,
         updatedAt: UInt64,
         selfMembership: SelfMembershipFfi,
+        lifecycleState: GroupLifecycleStateFfi = .stable,
+        disbanding: Bool = false,
+        disbandRequest: DisbandRequestFfi? = nil,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil
     ) {
@@ -174,6 +268,9 @@ extension ChatListRowFfi {
             pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            lifecycleState: lifecycleState,
+            disbanding: disbanding,
+            disbandRequest: disbandRequest,
             title: title,
             groupName: groupName,
             avatarUrl: avatarUrl,
@@ -216,6 +313,9 @@ extension ChatListRowFfi {
         lastReadMessageIdHex: String?,
         lastReadTimelineAt: UInt64?,
         updatedAt: UInt64,
+        lifecycleState: GroupLifecycleStateFfi = .stable,
+        disbanding: Bool = false,
+        disbandRequest: DisbandRequestFfi? = nil,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil
     ) {
@@ -225,6 +325,9 @@ extension ChatListRowFfi {
             pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            lifecycleState: lifecycleState,
+            disbanding: disbanding,
+            disbandRequest: disbandRequest,
             title: title,
             groupName: groupName,
             avatarUrl: avatarUrl,
@@ -268,6 +371,9 @@ extension ChatListRowFfi {
         lastReadTimelineAt: UInt64?,
         updatedAt: UInt64,
         selfMembership: SelfMembershipFfi,
+        lifecycleState: GroupLifecycleStateFfi = .stable,
+        disbanding: Bool = false,
+        disbandRequest: DisbandRequestFfi? = nil,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil
     ) {
@@ -277,6 +383,9 @@ extension ChatListRowFfi {
             pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
+            lifecycleState: lifecycleState,
+            disbanding: disbanding,
+            disbandRequest: disbandRequest,
             title: title,
             groupName: groupName,
             avatarUrl: avatarUrl,
@@ -311,6 +420,8 @@ extension GroupManagementStateFfi {
         canInvite: Bool,
         canLeave: Bool,
         requiresSelfDemoteBeforeLeave: Bool,
+        leaveRequestPending: Bool = false,
+        leaveRequestedAtMs: UInt64? = nil,
         memberActions: [GroupMemberActionStateFfi]
     ) {
         self.init(
@@ -320,8 +431,15 @@ extension GroupManagementStateFfi {
             canInvite: canInvite,
             canLeave: canLeave,
             requiresSelfDemoteBeforeLeave: requiresSelfDemoteBeforeLeave,
-            leaveRequestPending: false,
-            leaveRequestedAtMs: nil,
+            leaveRequestPending: leaveRequestPending,
+            leaveRequestedAtMs: leaveRequestedAtMs,
+            lifecycleState: .stable,
+            disbandingEnabled: false,
+            disbanding: false,
+            canEnableDisbanding: false,
+            canDisband: false,
+            disbandingBlockers: [],
+            disbandRequest: nil,
             memberActions: memberActions
         )
     }

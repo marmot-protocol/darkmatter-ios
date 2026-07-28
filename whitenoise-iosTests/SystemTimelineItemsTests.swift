@@ -144,6 +144,18 @@ struct SystemTimelineItemsTests {
             previousAdmins: admins,
             next: testGroup(admins: ["admin-a", "admin-b"])
         ))
+        #expect(ConversationViewModel.groupSnapshotNeedsTimelineTailRefresh(
+            previousName: "Test Group",
+            previousArchived: false,
+            previousAdmins: admins,
+            next: testGroup(admins: ["admin-a"], disbanding: true)
+        ))
+        #expect(ConversationViewModel.groupSnapshotNeedsTimelineTailRefresh(
+            previousName: "Test Group",
+            previousArchived: false,
+            previousAdmins: admins,
+            next: testGroup(admins: ["admin-a"], disbanded: true)
+        ))
     }
 
     @Test func groupMembershipChangesRefreshDurableTimelineRows() {
@@ -165,7 +177,9 @@ struct SystemTimelineItemsTests {
 private func testGroup(
     name: String = "Test Group",
     admins: [String] = [],
-    archived: Bool = false
+    archived: Bool = false,
+    disbanding: Bool = false,
+    disbanded: Bool = false
 ) -> AppGroupRecordFfi {
     AppGroupRecordFfi(
         groupIdHex: String(repeating: "bb", count: 32),
@@ -190,6 +204,8 @@ private func testGroup(
         ),
         archived: archived,
         pendingConfirmation: false,
+        disbanding: disbanding,
+        disbanded: disbanded,
         welcomerAccountIdHex: nil,
         viaWelcomeMessageIdHex: nil
     )
