@@ -446,7 +446,7 @@ struct ReactionTargetTallyTests {
                 componentId: 0x8008,
                 component: "marmot.group.encrypted-media.v1",
                 required: true,
-                mediaFormat: MessageSemantics.encryptedMediaVersion,
+                mediaFormat: EncryptedMediaVersionFfi.v1.wireValue,
                 allowedLocatorKinds: ["blossom-v1"],
                 defaultBlobEndpoints: [
                     AppBlobEndpointFfi(locatorKind: "blossom-v1", baseUrl: "https://blossom.primal.net")

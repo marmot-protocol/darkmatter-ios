@@ -26,6 +26,10 @@ struct AccountsViewTests {
         #expect(AccountsView.unreadBadgeCount(for: summary(unreadCount: 0, hasUnread: false)) == nil)
     }
 
+    @Test func manualOnlyUnreadShowsAttentionInsteadOfZero() {
+        #expect(AccountsView.unreadBadgeCount(for: summary(unreadCount: 0, hasUnread: true)) == 1)
+    }
+
     @Test func hidesBadgeWhenNoSummaryYet() {
         #expect(AccountsView.unreadBadgeCount(for: nil) == nil)
     }

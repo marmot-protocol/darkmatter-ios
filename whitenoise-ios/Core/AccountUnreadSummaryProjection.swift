@@ -21,7 +21,7 @@ enum AccountUnreadSummaryProjection {
         var unreadCount: UInt64 = 0
         var unreadConversations: UInt64 = 0
 
-        for row in rows where !row.archived && row.unreadCount > 0 {
+        for row in rows where !row.archived && row.hasUnread {
             unreadCount = saturatedSum(unreadCount, row.unreadCount)
             if unreadConversations < UInt64.max {
                 unreadConversations += 1
@@ -32,7 +32,7 @@ enum AccountUnreadSummaryProjection {
             accountIdHex: accountIdHex,
             unreadCount: unreadCount,
             unreadConversations: unreadConversations,
-            hasUnread: unreadCount > 0
+            hasUnread: unreadConversations > 0
         )
     }
 

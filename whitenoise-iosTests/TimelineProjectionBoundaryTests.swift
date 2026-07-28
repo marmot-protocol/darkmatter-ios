@@ -492,7 +492,7 @@ struct TimelineProjectionBoundaryTests {
             nonceHex: String(repeating: "22", count: 12),
             fileName: "a.png",
             mediaType: "image/png",
-            version: MessageSemantics.encryptedMediaVersion,
+            version: .v1,
             sourceEpoch: sourceEpoch,
             dim: nil,
             thumbhash: nil
@@ -521,7 +521,7 @@ struct TimelineProjectionBoundaryTests {
                 componentId: 0x8008,
                 component: "marmot.group.encrypted-media.v1",
                 required: true,
-                mediaFormat: MessageSemantics.encryptedMediaVersion,
+                mediaFormat: EncryptedMediaVersionFfi.v1.wireValue,
                 allowedLocatorKinds: ["blossom-v1"],
                 defaultBlobEndpoints: [
                     AppBlobEndpointFfi(locatorKind: "blossom-v1", baseUrl: "https://blossom.primal.net")

@@ -68,10 +68,24 @@ nonisolated enum ChatBubbleMetrics {
 }
 
 nonisolated enum MessageBubbleTextLayout {
-    static func usesInlineFooter(text: String, isCollapsed: Bool) -> Bool {
-        guard !isCollapsed else { return false }
+    static func canAttemptInlineFooter(
+        text: String,
+        isCollapsed: Bool,
+        isSingleParagraph: Bool
+    ) -> Bool {
+        guard !isCollapsed, isSingleParagraph, !text.contains("\n") else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty
+    }
+
+    static func stackedWidth(
+        proposedWidth: CGFloat?,
+        bodyWidth: CGFloat,
+        footerWidth: CGFloat
+    ) -> CGFloat {
+        let contentWidth = max(bodyWidth, footerWidth)
+        guard let proposedWidth, proposedWidth.isFinite else { return contentWidth }
+        return min(max(0, proposedWidth), contentWidth)
     }
 }
 

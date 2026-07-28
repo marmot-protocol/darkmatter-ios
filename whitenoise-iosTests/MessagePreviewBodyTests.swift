@@ -229,7 +229,7 @@ private func previewRecord(
 private func encryptedMediaTag() -> MessageTagFfi {
     MessageTagFfi(values: [
         MessageSemantics.imetaTag,
-        "v \(MessageSemantics.encryptedMediaVersion)",
+        "v \(EncryptedMediaVersionFfi.v1.wireValue)",
         "locator blossom-v1 https://media.example/a.jpg",
         "ciphertext_sha256 \(hex("44"))",
         "plaintext_sha256 \(hex("33"))",

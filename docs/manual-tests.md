@@ -53,6 +53,15 @@ before every release tag.
 - [ ] Reverse direction works too.
 - [ ] Force-quit + relaunch device A; conversation history reappears
       from local SQLCipher storage.
+- [ ] Send a message long enough to wrap and expand it with **Read more**:
+      body text uses the bubble's available width, metadata remains trailing
+      below it, and the visible timeline position does not jump.
+- [ ] Reopen a long conversation containing multiple wrapped messages and
+      media rows: the latest messages are visible immediately at the bottom;
+      the timeline never opens blank or requires a scroll gesture to recover.
+- [ ] Open a chat with unread history: the unread divider is aligned at the
+      top. Open a fully-read chat: the latest-message sentinel is aligned at
+      the bottom. Neither entry path flashes or later jumps to another anchor.
 
 ## Markdown rendering
 
@@ -62,6 +71,8 @@ before every release tag.
 - [ ] Send a fenced code block, a `> quote`, a bulleted + numbered list,
       and a `- [x]` task list: block chrome renders (code background,
       quote bar, markers) and the bubble does not balloon to full width.
+- [ ] Make list items and formatted lines long enough to wrap: no text is
+      clipped at the trailing edge before or after expanding the message.
 - [ ] Send `[label](https://example.com)`: link is underlined; tapping
       opens Safari; long-press on the bubble still opens the actions
       sheet.
@@ -212,6 +223,14 @@ the test device.
 - [ ] While device B is outside the app, sending a message from device A
       causes device B to receive a generic APNS wake that is rewritten by the
       Notification Service Extension into sender/message text.
+- [ ] The app-icon badge increases to the locally computed unread total after
+      that background push; the generic Transponder/APNS payload contains no
+      account identifiers or unread count.
+- [ ] Reading the message in-app, or using the notification's Mark as read
+      action, decrements or clears the app-icon badge without requiring a
+      relaunch.
+- [ ] With two signed-in accounts, the app-icon badge reflects their combined
+      unread total and foreground account switching does not reset it.
 - [ ] Tapping that notification opens the matching chat for the matching
       account.
 - [ ] Sending a message in a chat that device B is already viewing does not

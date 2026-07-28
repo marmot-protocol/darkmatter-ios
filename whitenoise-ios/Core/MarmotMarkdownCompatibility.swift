@@ -8,7 +8,7 @@ extension MarkdownDocumentFfi {
 }
 
 extension EncryptedMediaVersionFfi {
-    init?(wireValue: String) {
+    nonisolated init?(wireValue: String) {
         switch wireValue {
         case "encrypted-media-v1":
             self = .v1
@@ -19,7 +19,7 @@ extension EncryptedMediaVersionFfi {
         }
     }
 
-    var wireValue: String {
+    nonisolated var wireValue: String {
         switch self {
         case .v1:
             return "encrypted-media-v1"
@@ -46,34 +46,6 @@ extension AppGroupEncryptedMediaComponentFfi {
             mediaFormat: mediaFormat,
             allowedLocatorKinds: allowedLocatorKinds,
             defaultBlobEndpoints: defaultBlobEndpoints
-        )
-    }
-}
-
-extension MediaAttachmentReferenceFfi {
-    init(
-        locators: [MediaLocatorFfi],
-        ciphertextSha256: String,
-        plaintextSha256: String,
-        nonceHex: String,
-        fileName: String,
-        mediaType: String,
-        version: String,
-        sourceEpoch: UInt64,
-        dim: String?,
-        thumbhash: String?
-    ) {
-        self.init(
-            locators: locators,
-            ciphertextSha256: ciphertextSha256,
-            plaintextSha256: plaintextSha256,
-            nonceHex: nonceHex,
-            fileName: fileName,
-            mediaType: mediaType,
-            version: EncryptedMediaVersionFfi(wireValue: version) ?? .v1,
-            sourceEpoch: sourceEpoch,
-            dim: dim,
-            thumbhash: thumbhash
         )
     }
 }

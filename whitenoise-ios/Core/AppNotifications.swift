@@ -11,10 +11,12 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     private let requestAuthorizationHandler: (() async throws -> Bool)?
     private let authorizationStatusProvider: (() async -> UNAuthorizationStatus)?
     private let remoteNotificationRegistrar: (() -> Void)?
+    private let applicationBadgeCountSetter: ((Int) async throws -> Void)?
     private weak var appState: AppState?
     private var pendingRoutes: [LocalNotificationRoute] = []
     private var pendingActionOperations: [NotificationActionOperation] = []
     private var actionOperationTask: Task<Void, Never>?
+    private var applicationBadgeUpdateTask: Task<Void, Never>?
     private var languageChangeObserver: (any NSObjectProtocol)?
 
     private(set) var apnsTokenHex: String?
@@ -24,12 +26,14 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         center: UNUserNotificationCenter = .current(),
         requestAuthorizationHandler: (() async throws -> Bool)? = nil,
         authorizationStatusProvider: (() async -> UNAuthorizationStatus)? = nil,
-        remoteNotificationRegistrar: (() -> Void)? = nil
+        remoteNotificationRegistrar: (() -> Void)? = nil,
+        applicationBadgeCountSetter: ((Int) async throws -> Void)? = nil
     ) {
         self.center = center
         self.requestAuthorizationHandler = requestAuthorizationHandler
         self.authorizationStatusProvider = authorizationStatusProvider
         self.remoteNotificationRegistrar = remoteNotificationRegistrar
+        self.applicationBadgeCountSetter = applicationBadgeCountSetter
         super.init()
     }
 
@@ -110,6 +114,39 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
         UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    /// Serializes app-icon badge writes so an older asynchronous system call
+    /// can never land after a newer unread projection and restore a stale count.
+    @discardableResult
+    func scheduleApplicationBadgeCount(_ count: Int) -> Task<Void, Never> {
+        let previous = applicationBadgeUpdateTask
+        let center = center
+        let applicationBadgeCountSetter = applicationBadgeCountSetter
+        let boundedCount = max(count, 0)
+        let task = Task { @MainActor in
+            await previous?.value
+            do {
+                if let applicationBadgeCountSetter {
+                    try await applicationBadgeCountSetter(boundedCount)
+                } else {
+                    try await center.setBadgeCount(boundedCount)
+                }
+            } catch {
+                // A disabled system Badges setting is not an application error.
+                // The next unread-state mutation retries the authoritative count.
+            }
+        }
+        applicationBadgeUpdateTask = task
+        return task
+    }
+
+    func setApplicationBadgeCount(_ count: Int) async {
+        await scheduleApplicationBadgeCount(count).value
+    }
+
+    func drainApplicationBadgeUpdates() async {
+        await applicationBadgeUpdateTask?.value
     }
 
     @discardableResult

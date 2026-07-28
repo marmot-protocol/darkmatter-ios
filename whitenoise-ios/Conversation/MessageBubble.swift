@@ -48,11 +48,54 @@ private struct ReplyHeaderWidthPreferenceKey: PreferenceKey {
     }
 }
 
-private struct MessageBodyContentWidthPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+private struct MessageBodyFooterLayout: Layout {
+    let spacing: CGFloat
 
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+
+        let widthProposal = ProposedViewSize(width: proposal.width, height: nil)
+        let bodySize = subviews[0].sizeThatFits(widthProposal)
+        let footerIdealSize = subviews[1].sizeThatFits(.unspecified)
+        let width = MessageBubbleTextLayout.stackedWidth(
+            proposedWidth: proposal.width,
+            bodyWidth: bodySize.width,
+            footerWidth: footerIdealSize.width
+        )
+        let resolvedProposal = ProposedViewSize(width: width, height: nil)
+        let resolvedBodySize = subviews[0].sizeThatFits(resolvedProposal)
+        let resolvedFooterSize = subviews[1].sizeThatFits(resolvedProposal)
+
+        return CGSize(
+            width: width,
+            height: resolvedBodySize.height + spacing + resolvedFooterSize.height
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+
+        let resolvedProposal = ProposedViewSize(width: bounds.width, height: nil)
+        let bodySize = subviews[0].sizeThatFits(resolvedProposal)
+        subviews[0].place(
+            at: bounds.origin,
+            anchor: .topLeading,
+            proposal: resolvedProposal
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + bodySize.height + spacing),
+            anchor: .topLeading,
+            proposal: resolvedProposal
+        )
     }
 }
 
@@ -106,7 +149,6 @@ struct MessageBubble: View {
     @State private var pendingExternalLink: PendingMessageExternalLink?
     @State private var replyHeaderHeight: CGFloat = 0
     @State private var replyHeaderWidth: CGFloat = 0
-    @State private var measuredBodyContentWidth: CGFloat = 0
 
     private var isFromMe: Bool { record.direction == "sent" }
 
@@ -249,6 +291,7 @@ struct MessageBubble: View {
                 }
             }
             .frame(maxWidth: bubbleMaxWidth, alignment: isFromMe ? .trailing : .leading)
+            .layoutPriority(1)
 
             if !isFromMe { Spacer(minLength: oppositeInset) }
         }
@@ -542,28 +585,24 @@ struct MessageBubble: View {
     }
 
     private func messageBodyText(hasReply: Bool) -> some View {
-        let isLongBody = MessageBodyCollapsePresentation.shouldCollapse(sanitizedBodyText)
         let isCollapsed = MessageBodyCollapsePresentation.isCollapsed(
             sanitizedBodyText,
             isExpanded: isBodyExpanded
         )
-        let usesInlineFooter = MessageBubbleTextLayout.usesInlineFooter(
+        let canAttemptInlineFooter = MessageBubbleTextLayout.canAttemptInlineFooter(
             text: sanitizedBodyText,
-            isCollapsed: isLongBody
+            isCollapsed: isCollapsed,
+            isSingleParagraph: isSingleParagraphBody
         )
         let replyContentWidth = hasReply && replyHeaderWidth > 0
             ? max(0, replyHeaderWidth - (MessageBubbleReplyLayout.bodyHorizontalInset * 2))
             : 0
-        let bodyLayoutWidth: CGFloat? = max(replyContentWidth, measuredBodyContentWidth) > 0
-            ? max(replyContentWidth, measuredBodyContentWidth)
-            : nil
         return Group {
-            if usesInlineFooter {
-                if hasReply {
-                    HStack(alignment: .lastTextBaseline, spacing: 0) {
+            if canAttemptInlineFooter {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .lastTextBaseline, spacing: 7) {
                         messageBodyContent
-                            .layoutPriority(1)
-                        Spacer(minLength: 7)
+                            .fixedSize(horizontal: true, vertical: true)
                         messageMetadataFooter
                             .fixedSize()
                     }
@@ -571,87 +610,84 @@ struct MessageBubble: View {
                         minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
                         alignment: .leading
                     )
-                } else {
-                    HStack(alignment: .lastTextBaseline, spacing: 7) {
-                        messageBodyContent
-                            .layoutPriority(1)
-                        messageMetadataFooter
-                            .fixedSize()
-                    }
+
+                    stackedMessageBody(
+                        isCollapsed: isCollapsed,
+                        replyContentWidth: replyContentWidth
+                    )
                 }
             } else {
-                VStack(alignment: .leading, spacing: 5) {
-                    messageBodyContent
-                        .background {
-                            GeometryReader { geometry in
-                                Color.clear.preference(
-                                    key: MessageBodyContentWidthPreferenceKey.self,
-                                    value: geometry.size.width
-                                )
-                            }
-                        }
-                        .frame(width: bodyLayoutWidth, alignment: .leading)
-                        .frame(
-                            maxHeight: isCollapsed ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
-                            alignment: .topLeading
-                        )
-                        .clipped()
-                        .mask {
-                            if isCollapsed {
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .black, location: 0),
-                                        .init(color: .black, location: 0.88),
-                                        .init(color: .clear, location: 1)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            } else {
-                                Rectangle()
-                            }
-                        }
-
-                    if isCollapsed {
-                        HStack(alignment: .lastTextBaseline, spacing: 8) {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isBodyExpanded = true
-                                }
-                            } label: {
-                                Text(L10n.string("Read more"))
-                                    .font(.footnote.weight(.semibold))
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
-
-                            Spacer(minLength: 8)
-                            messageMetadataFooter
-                                .fixedSize()
-                        }
-                        .frame(width: bodyLayoutWidth, alignment: .leading)
-                    } else {
-                        messageMetadataFooter
-                            .background {
-                                GeometryReader { geometry in
-                                    Color.clear.preference(
-                                        key: MessageBodyContentWidthPreferenceKey.self,
-                                        value: geometry.size.width
-                                    )
-                                }
-                            }
-                            .frame(width: bodyLayoutWidth, alignment: .trailing)
-                    }
-                }
+                stackedMessageBody(
+                    isCollapsed: isCollapsed,
+                    replyContentWidth: replyContentWidth
+                )
             }
         }
         .foregroundStyle(isFromMe ? Color.white : Color.primary)
         .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
         .padding(.top, hasReply ? MessageBubbleReplyLayout.bodyTopInsetAfterReply : MessageBubbleReplyLayout.bodyTopInset)
         .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
-        .onPreferenceChange(MessageBodyContentWidthPreferenceKey.self) {
-            measuredBodyContentWidth = $0
+    }
+
+    private var isSingleParagraphBody: Bool {
+        guard let markdownBlocks else { return true }
+        guard markdownBlocks.count == 1, case .paragraph = markdownBlocks[0] else { return false }
+        return true
+    }
+
+    private func stackedMessageBody(
+        isCollapsed: Bool,
+        replyContentWidth: CGFloat
+    ) -> some View {
+        MessageBodyFooterLayout(spacing: 5) {
+            messageBodyContent
+                .frame(
+                    minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
+                    alignment: .leading
+                )
+                .frame(
+                    maxHeight: isCollapsed ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
+                    alignment: .topLeading
+                )
+                .clipped()
+                .mask {
+                    if isCollapsed {
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.88),
+                                .init(color: .clear, location: 1)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    } else {
+                        Rectangle()
+                    }
+                }
+
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                if isCollapsed {
+                    Button {
+                        isBodyExpanded = true
+                    } label: {
+                        Text(L10n.string("Read more"))
+                            .font(.footnote.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
+                }
+
+                Spacer(minLength: 8)
+                messageMetadataFooter
+                    .fixedSize()
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
+        .frame(
+            minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
+            alignment: .leading
+        )
     }
 
     @ViewBuilder

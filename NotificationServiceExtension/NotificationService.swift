@@ -16,6 +16,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var avatarFetchTask: Task<[String: Data], Never>?
     private var activeMarmot: Marmot?
     private var activeMarmotNeedsShutdown = false
+    private var applicationBadgeCount: Int?
     private var didApplyRenderDecision = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
 
@@ -29,6 +30,7 @@ final class NotificationService: UNNotificationServiceExtension {
         activeMarmotNeedsShutdown = false
         additionalPresentationTask = nil
         avatarFetchTask = nil
+        applicationBadgeCount = nil
         didApplyRenderDecision = false
         decoratedContent = nil
 
@@ -89,6 +91,12 @@ final class NotificationService: UNNotificationServiceExtension {
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
                 )
+                if result.status != .failed,
+                   let summaries = try? marmot.accountUnreadSummary() {
+                    let count = ApplicationBadgeCountProjection.count(for: summaries)
+                    applicationBadgeCount = count
+                    NotificationContentDecorator.applyApplicationBadgeCount(count, to: content)
+                }
                 // One shared-defaults read per wake; per-record lookups hit the
                 // in-memory snapshots. A nil mode snapshot means the shared suite
                 // couldn't be resolved, so delivery fails safe (all suppressed).
@@ -223,11 +231,15 @@ final class NotificationService: UNNotificationServiceExtension {
         avatarsByUrl: @escaping @Sendable () async -> [String: Data]
     ) -> Task<Void, Never>? {
         guard !additionalPresentations.isEmpty else { return nil }
-        let task = Task { [additionalPresentations] in
+        let applicationBadgeCount = applicationBadgeCount
+        let task = Task { [additionalPresentations, applicationBadgeCount] in
             let avatars = await avatarsByUrl()
             for presentation in additionalPresentations {
                 let content = NotificationCommunicationDecorator.decorated(
-                    NotificationContentDecorator.makeContent(for: presentation),
+                    NotificationContentDecorator.makeContent(
+                        for: presentation,
+                        applicationBadgeCount: applicationBadgeCount
+                    ),
                     presentation: presentation,
                     avatarData: presentation.senderPictureUrl.flatMap { avatars[$0] }
                 )
@@ -313,6 +325,7 @@ final class NotificationService: UNNotificationServiceExtension {
         self.collectionTask = nil
         self.expirationTask = nil
         self.additionalPresentationTask = nil
+        self.applicationBadgeCount = nil
         self.didApplyRenderDecision = false
         self.decoratedContent = nil
         contentHandler(deliverable)

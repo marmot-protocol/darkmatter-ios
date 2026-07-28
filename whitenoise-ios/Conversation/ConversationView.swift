@@ -87,6 +87,10 @@ struct TimelineBottomViewport: Equatable {
     var isPinned: Bool {
         !shouldShowScrollToBottomButton
     }
+
+    var isSettledAtBottom: Bool {
+        isPinned && overscrollPastBottom <= TimelineBottom.overscrollRepairThreshold
+    }
 }
 
 enum MessageActionsPlacement: Equatable {
@@ -126,19 +130,33 @@ enum TimelineBottomScrollReason: Equatable {
 }
 
 enum TimelineInitialTargetScrollPolicy {
-    static func isPositioning(hasTargetMessage: Bool, didFinishPositioning: Bool) -> Bool {
-        hasTargetMessage && !didFinishPositioning
+    static func isPositioning(hasPositionIntent: Bool, didFinishPositioning: Bool) -> Bool {
+        hasPositionIntent && !didFinishPositioning
     }
 
     static func shouldSuppressBottomScroll(
-        hasTargetMessage: Bool,
+        hasPositionIntent: Bool,
         didFinishPositioning: Bool,
         reason: TimelineBottomScrollReason
     ) -> Bool {
         isPositioning(
-            hasTargetMessage: hasTargetMessage,
+            hasPositionIntent: hasPositionIntent,
             didFinishPositioning: didFinishPositioning
         ) && !reason.isUserInitiated
+    }
+
+    static func shouldSettle(
+        target: TimelineInitialPositionTarget?,
+        visibleTargetIDs: Set<String>,
+        isViewportAtBottom: Bool
+    ) -> Bool {
+        guard let target else { return false }
+        switch target {
+        case .item(let id, _):
+            return visibleTargetIDs.contains(id)
+        case .bottom:
+            return isViewportAtBottom
+        }
     }
 }
 
@@ -284,29 +302,31 @@ enum ConversationSendPreparation {
 }
 
 enum TimelineInitialScroll {
-    static let bottomStabilizationDelayNanoseconds: UInt64 = 120_000_000
-
     static func shouldStartAtBottom(hasItems: Bool, didPerformInitialScroll: Bool) -> Bool {
         destination(
             hasItems: hasItems,
             didPerformInitialScroll: didPerformInitialScroll,
             targetMessageIdHex: nil,
-            targetItemId: nil
-        ) == .bottom
+            targetItemId: nil,
+            unreadMessageIdHex: nil
+        ) == .target(.bottom)
     }
 
     static func destination(
         hasItems: Bool,
         didPerformInitialScroll: Bool,
         targetMessageIdHex: String?,
-        targetItemId: String?
+        targetItemId: String?,
+        unreadMessageIdHex: String?
     ) -> TimelineInitialDestination {
         guard hasItems, !didPerformInitialScroll else { return .none }
         if targetMessageIdHex?.isEmpty == false {
             guard let targetItemId, !targetItemId.isEmpty else { return .none }
-            return .item(targetItemId)
+            let anchor: TimelineInitialPositionAnchor =
+                targetMessageIdHex == unreadMessageIdHex ? .top : .center
+            return .target(.item(id: targetItemId, anchor: anchor))
         }
-        return .bottom
+        return .target(.bottom)
     }
 
     static func shouldConcealContent(
@@ -322,15 +342,32 @@ enum TimelineInitialScroll {
         return true
     }
 
-    static func shouldSettleBottom(isMediaRecordsRefreshPending: Bool) -> Bool {
-        !isMediaRecordsRefreshPending
-    }
 }
 
 enum TimelineInitialDestination: Equatable {
     case none
+    case target(TimelineInitialPositionTarget)
+}
+
+enum TimelineInitialPositionTarget: Equatable {
+    case item(id: String, anchor: TimelineInitialPositionAnchor)
     case bottom
-    case item(String)
+
+    var isBottom: Bool {
+        self == .bottom
+    }
+}
+
+enum TimelineInitialPositionAnchor: Equatable {
+    case top
+    case center
+
+    var unitPoint: UnitPoint {
+        switch self {
+        case .top: .top
+        case .center: .center
+        }
+    }
 }
 
 enum TimelineInitialTargetResolution: Equatable {
@@ -490,75 +527,6 @@ enum ConversationInvitePresentation {
             && !hasError
             && !isLoading
             && !hasMessage(in: timeline)
-    }
-}
-
-private struct InitialBottomScrollClamp: UIViewRepresentable {
-    let isEnabled: Bool
-
-    func makeUIView(context: Context) -> InitialBottomScrollClampView {
-        let view = InitialBottomScrollClampView()
-        view.isClampEnabled = isEnabled
-        return view
-    }
-
-    func updateUIView(_ uiView: InitialBottomScrollClampView, context: Context) {
-        uiView.isClampEnabled = isEnabled
-        uiView.clampToBottomIfNeeded()
-    }
-}
-
-private final class InitialBottomScrollClampView: UIView {
-    var isClampEnabled = false {
-        didSet {
-            guard isClampEnabled else { return }
-            clampToBottomIfNeeded()
-        }
-    }
-
-    private weak var resolvedScrollView: UIScrollView?
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        resolvedScrollView = enclosingScrollView()
-        clampToBottomIfNeeded()
-    }
-
-    override func didMoveToSuperview() {
-        super.didMoveToSuperview()
-        resolvedScrollView = enclosingScrollView()
-        clampToBottomIfNeeded()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        clampToBottomIfNeeded()
-    }
-
-    func clampToBottomIfNeeded() {
-        guard isClampEnabled else { return }
-        guard let scrollView = resolvedScrollView ?? enclosingScrollView() else { return }
-        resolvedScrollView = scrollView
-        scrollView.layoutIfNeeded()
-        let targetY = ScrollViewBottomClamp.legalBottomOffsetY(
-            contentHeight: scrollView.contentSize.height,
-            boundsHeight: scrollView.bounds.height,
-            adjustedTopInset: scrollView.adjustedContentInset.top,
-            adjustedBottomInset: scrollView.adjustedContentInset.bottom
-        )
-        guard abs(scrollView.contentOffset.y - targetY) > ScrollViewBottomClamp.tolerance else { return }
-        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetY), animated: false)
-    }
-
-    private func enclosingScrollView() -> UIScrollView? {
-        var candidate = superview
-        while let view = candidate {
-            if let scrollView = view as? UIScrollView {
-                return scrollView
-            }
-            candidate = view.superview
-        }
-        return nil
     }
 }
 
@@ -806,15 +774,16 @@ struct ConversationView: View {
     @State private var isAtTimelineBottom = true
     @State private var isUserScrollingTimeline = false
     @State private var userMovedAwayFromTimelineBottom = false
-    @State private var didPerformInitialBottomScroll = false
+    @State private var didRequestInitialTimelinePosition = false
     @State private var isInitialTimelinePositionSettled = false
-    @State private var initialScrollFollowUpTask: Task<Void, Never>?
+    @State private var pendingInitialPositionTarget: TimelineInitialPositionTarget?
+    @State private var visibleTimelineTargetIDs = Set<String>()
+    @State private var initialTimelinePositionRequestGeneration = 0
     @State private var pendingBottomScrollRequest: TimelineBottomScrollRequest?
     @State private var pendingBottomScrollTask: Task<Void, Never>?
     @State private var isOlderTimelineTriggerVisible = false
     @State private var isNewerTimelineTriggerVisible = false
     @State private var lastAutomaticBottomScrollTargetID: String?
-    @State private var isInitialBottomStabilizationScheduled = false
     @State private var pendingSearchMatchScrollTask: Task<Void, Never>?
     @State private var replyNavigationTargetItemId: String?
     @State private var replyNavigationTask: Task<Void, Never>?
@@ -1809,17 +1778,14 @@ struct ConversationView: View {
                                     }
                                     .padding(.bottom, 4)
                                     newerTimelineTrigger(viewModel: viewModel)
+                                    ForEach([Self.timelineBottomID], id: \.self) { _ in
+                                        timelineBottomSentinel
+                                    }
                                 }
-                                timelineBottomSentinel
+                                .scrollTargetLayout()
                             }
                             .padding(.top, 8)
                             .padding(.bottom, BottomInputChromeLayout.timelineComposerSpacing)
-                            .background {
-                                InitialBottomScrollClamp(
-                                    isEnabled: isInitialBottomPositioning(viewModel: viewModel)
-                                )
-                                .frame(width: 0, height: 0)
-                            }
                             .background {
                                 TimelineKeyboardDismissInstaller(onTap: dismissKeyboard)
                                     .frame(width: 0, height: 0)
@@ -1843,8 +1809,17 @@ struct ConversationView: View {
                                 ProgressView()
                             }
                         }
-                        .defaultScrollAnchor(.bottom)
-                        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+                        // Row expansion keeps the current viewport; the custom
+                        // geometry policy below follows growth only when pinned.
+                        .defaultScrollAnchor(.bottom, for: .initialOffset)
+                        .defaultScrollAnchor(.bottom, for: .alignment)
+                        .task(id: initialTimelinePositionRequestGeneration) {
+                            await Task.yield()
+                            guard !Task.isCancelled,
+                                  let target = pendingInitialPositionTarget
+                            else { return }
+                            scrollToInitialTimelineTarget(target, proxy: proxy)
+                        }
                         // Only scroll/bounce when the messages actually exceed
                         // the viewport; with a few messages the timeline stays
                         // put instead of rubber-banding under the pinned day
@@ -1862,6 +1837,13 @@ struct ConversationView: View {
                             }
                         }
                         .onPreferenceChange(RowFramesKey.self) { rowFrames.replace(with: $0) }
+                        .onScrollTargetVisibilityChange(
+                            idType: String.self,
+                            threshold: TimelineViewportVisibility.minimumVisibleFraction
+                        ) { visibleIDs in
+                            visibleTimelineTargetIDs = Set(visibleIDs)
+                            settleInitialTimelinePositionIfTargetVisible(viewModel: viewModel)
+                        }
                         .onScrollGeometryChange(for: TimelineBottomViewport.self) { geometry in
                             TimelineBottomViewport(
                                 contentHeight: geometry.contentSize.height,
@@ -1869,15 +1851,12 @@ struct ConversationView: View {
                                 bottomContentInset: geometry.contentInsets.bottom
                             )
                         } action: { previous, current in
-                            if isInitialTargetPositioning {
-                                // The scroll view initially reports its default
-                                // bottom anchor before the unread-divider jump
-                                // has landed. Do not let that transient geometry
-                                // re-arm bottom following.
-                                isAtTimelineBottom = false
-                            } else if isInitialBottomPositioning(viewModel: viewModel) {
-                                isAtTimelineBottom = true
-                                scheduleInitialBottomStabilization(proxy: proxy, viewModel: viewModel)
+                            if isInitialTimelinePositioning {
+                                isAtTimelineBottom = current.isPinned
+                                maintainInitialTimelinePosition(
+                                    viewModel: viewModel,
+                                    isViewportAtBottom: current.isSettledAtBottom
+                                )
                             } else if TimelineBottom.shouldRepairBottomOverscroll(
                                 current,
                                 isUserScrolling: isUserScrollingTimeline
@@ -1896,7 +1875,7 @@ struct ConversationView: View {
                                 isAtTimelineBottom = true
                                 scheduleScrollToBottom(
                                     proxy: proxy,
-                                    animated: true,
+                                    animated: false,
                                     reason: .contentGrowth,
                                     targetID: viewModel.timeline.last?.id
                                 )
@@ -1911,10 +1890,10 @@ struct ConversationView: View {
                         }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
                             guard newId != nil else { return }
-                            if performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel) {
+                            if performInitialScrollIfNeeded(viewModel: viewModel) {
                                 return
                             }
-                            settleInitialTimelinePositionIfNoScrollNeeded(viewModel: viewModel)
+                            guard !isInitialTimelinePositioning else { return }
                             if !userMovedAwayFromTimelineBottom {
                                 isAtTimelineBottom = true
                                 scheduleScrollToBottom(
@@ -1948,14 +1927,9 @@ struct ConversationView: View {
                         .onAppear {
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
-                            if !performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel) {
-                                settleInitialTimelinePositionIfNoScrollNeeded(viewModel: viewModel)
-                            }
+                            _ = performInitialScrollIfNeeded(viewModel: viewModel)
                         }
                         .onDisappear {
-                            initialScrollFollowUpTask?.cancel()
-                            initialScrollFollowUpTask = nil
-                            isInitialBottomStabilizationScheduled = false
                             cancelPendingBottomScroll()
                             cancelPendingSearchMatchScroll()
                         }
@@ -2305,7 +2279,7 @@ struct ConversationView: View {
         targetID: String? = nil
     ) {
         guard !TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
-            hasTargetMessage: initialTargetMessageIdHex != nil,
+            hasPositionIntent: didRequestInitialTimelinePosition || initialTargetMessageIdHex != nil,
             didFinishPositioning: isInitialTimelinePositionSettled,
             reason: reason
         ) else { return }
@@ -2365,14 +2339,16 @@ struct ConversationView: View {
         )
     }
 
-    private func performInitialScrollIfNeeded(proxy: ScrollViewProxy, viewModel: ConversationViewModel) -> Bool {
+    private func performInitialScrollIfNeeded(viewModel: ConversationViewModel) -> Bool {
+        guard !didRequestInitialTimelinePosition else { return false }
         let targetItemId = initialTargetItemId(viewModel: viewModel)
-        switch TimelineInitialTargetPolicy.resolve(
+        let targetResolution = TimelineInitialTargetPolicy.resolve(
             targetMessageIdHex: initialTargetMessageIdHex,
             targetItemId: targetItemId,
             hasMoreBefore: viewModel.hasMoreBefore,
             canLoadOlder: viewModel.canLoadOlderTimelinePage
-        ) {
+        )
+        switch targetResolution {
         case .ready:
             break
         case .loadOlder:
@@ -2384,57 +2360,40 @@ struct ConversationView: View {
             // A notification can point at a message that was deleted or aged
             // out. Once the complete local history has been searched, fall back
             // to the latest message instead of leaving the timeline concealed.
-            didPerformInitialBottomScroll = true
-            isInitialTimelinePositionSettled = false
-            isAtTimelineBottom = true
-            scheduleInitialBottomStabilization(proxy: proxy, viewModel: viewModel)
+            requestInitialTimelinePosition(
+                .bottom,
+                viewModel: viewModel
+            )
             return true
         }
         let destination = TimelineInitialScroll.destination(
             hasItems: !viewModel.timeline.isEmpty,
-            didPerformInitialScroll: didPerformInitialBottomScroll,
+            didPerformInitialScroll: didRequestInitialTimelinePosition,
             targetMessageIdHex: initialTargetMessageIdHex,
-            targetItemId: targetItemId
+            targetItemId: targetItemId,
+            unreadMessageIdHex: initialUnreadMessageIdHex
         )
         switch destination {
         case .none:
             return false
-        case .bottom:
-            didPerformInitialBottomScroll = true
-            isInitialTimelinePositionSettled = false
-            isAtTimelineBottom = true
-            scheduleInitialBottomStabilization(proxy: proxy, viewModel: viewModel)
-        case .item(let itemId):
-            cancelPendingBottomScroll()
-            didPerformInitialBottomScroll = true
-            isInitialTimelinePositionSettled = false
-            isAtTimelineBottom = false
-            let anchor = initialUnreadMessageIdHex == initialTargetMessageIdHex
-                ? UnitPoint.top
-                : UnitPoint.center
-            scrollTo(itemId, proxy: proxy, anchor: anchor)
-            scheduleInitialScrollFollowUp(
-                .item(itemId),
-                itemAnchor: anchor,
-                proxy: proxy,
-                viewModel: viewModel
-            )
+        case .target(let target):
+            requestInitialTimelinePosition(target, viewModel: viewModel)
         }
         return true
     }
 
     private func handleTimelineProjectionChange(proxy: ScrollViewProxy, viewModel: ConversationViewModel) {
         guard !viewModel.timeline.isEmpty else { return }
-        if performInitialScrollIfNeeded(proxy: proxy, viewModel: viewModel) {
+        if performInitialScrollIfNeeded(viewModel: viewModel) {
             return
         }
-        guard !isInitialTargetPositioning else {
-            isAtTimelineBottom = false
+        guard !isInitialTimelinePositioning else {
+            maintainInitialTimelinePosition(viewModel: viewModel)
             return
         }
         let shouldFollow = TimelineBottom.shouldFollowProjectionChange(
             isPinned: !userMovedAwayFromTimelineBottom,
-            isInitialBottomPositioning: didPerformInitialBottomScroll && !isInitialTimelinePositionSettled,
+            isInitialBottomPositioning: false,
             hasTargetMessage: initialTargetMessageIdHex != nil
         )
         guard shouldFollow else { return }
@@ -2447,71 +2406,52 @@ struct ConversationView: View {
         )
     }
 
-    private func scheduleInitialScrollFollowUp(
-        _ destination: TimelineInitialDestination,
-        itemAnchor: UnitPoint = .center,
-        proxy: ScrollViewProxy,
+    private func requestInitialTimelinePosition(
+        _ target: TimelineInitialPositionTarget,
         viewModel: ConversationViewModel
     ) {
-        initialScrollFollowUpTask?.cancel()
-        initialScrollFollowUpTask = Task { @MainActor in
-            await Task.yield()
-            guard !Task.isCancelled else { return }
+        cancelPendingBottomScroll()
+        didRequestInitialTimelinePosition = true
+        isInitialTimelinePositionSettled = false
+        pendingInitialPositionTarget = target
+        isAtTimelineBottom = target.isBottom
+        userMovedAwayFromTimelineBottom = !target.isBottom
+        initialTimelinePositionRequestGeneration &+= 1
+    }
 
-            switch destination {
-            case .none:
-                break
-            case .bottom:
-                scrollToBottom(proxy: proxy, animated: false, targetID: nil)
-            case .item(let itemId):
-                scrollTo(itemId, proxy: proxy, anchor: itemAnchor)
-            }
-
-            await Task.yield()
-            guard !Task.isCancelled else { return }
+    private func maintainInitialTimelinePosition(
+        viewModel: ConversationViewModel,
+        isViewportAtBottom: Bool = false
+    ) {
+        guard let target = pendingInitialPositionTarget else { return }
+        if TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: target,
+            visibleTargetIDs: visibleTimelineTargetIDs,
+            isViewportAtBottom: isViewportAtBottom
+        ) {
             settleInitialTimelinePosition(viewModel: viewModel)
+        } else {
+            initialTimelinePositionRequestGeneration &+= 1
         }
     }
 
-    private func isInitialBottomPositioning(viewModel: ConversationViewModel) -> Bool {
-        didPerformInitialBottomScroll
-            && !isInitialTimelinePositionSettled
-            && initialTargetMessageIdHex == nil
-            && !viewModel.timeline.isEmpty
+    private func scrollToInitialTimelineTarget(
+        _ target: TimelineInitialPositionTarget,
+        proxy: ScrollViewProxy
+    ) {
+        switch target {
+        case .item(let id, let anchor):
+            proxy.scrollTo(id, anchor: anchor.unitPoint)
+        case .bottom:
+            proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
+        }
     }
 
-    private var isInitialTargetPositioning: Bool {
+    private var isInitialTimelinePositioning: Bool {
         TimelineInitialTargetScrollPolicy.isPositioning(
-            hasTargetMessage: initialTargetMessageIdHex != nil,
+            hasPositionIntent: didRequestInitialTimelinePosition || initialTargetMessageIdHex != nil,
             didFinishPositioning: isInitialTimelinePositionSettled
         )
-    }
-
-    private func scheduleInitialBottomStabilization(proxy: ScrollViewProxy, viewModel: ConversationViewModel) {
-        guard !isInitialBottomStabilizationScheduled else { return }
-        isInitialBottomStabilizationScheduled = true
-        initialScrollFollowUpTask?.cancel()
-        initialScrollFollowUpTask = Task { @MainActor in
-            defer { isInitialBottomStabilizationScheduled = false }
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: TimelineInitialScroll.bottomStabilizationDelayNanoseconds)
-                } catch {
-                    return
-                }
-                guard !Task.isCancelled else { return }
-                scrollToBottom(proxy: proxy, animated: false, targetID: nil)
-                isAtTimelineBottom = true
-                guard TimelineInitialScroll.shouldSettleBottom(
-                    isMediaRecordsRefreshPending: viewModel.isMediaRecordsRefreshPending
-                ) else {
-                    continue
-                }
-                settleInitialTimelinePosition(viewModel: viewModel)
-                lastAutomaticBottomScrollTargetID = viewModel.timeline.last?.id
-                return
-            }
-        }
     }
 
     private func shouldConcealInitialTimelineContent(viewModel: ConversationViewModel) -> Bool {
@@ -2523,8 +2463,12 @@ struct ConversationView: View {
         )
     }
 
-    private func settleInitialTimelinePositionIfNoScrollNeeded(viewModel: ConversationViewModel) {
-        guard !shouldConcealInitialTimelineContent(viewModel: viewModel) else { return }
+    private func settleInitialTimelinePositionIfTargetVisible(viewModel: ConversationViewModel) {
+        guard TimelineInitialTargetScrollPolicy.shouldSettle(
+            target: pendingInitialPositionTarget,
+            visibleTargetIDs: visibleTimelineTargetIDs,
+            isViewportAtBottom: false
+        ) else { return }
         settleInitialTimelinePosition(viewModel: viewModel)
     }
 
@@ -2550,7 +2494,9 @@ struct ConversationView: View {
     }
 
     private func settleInitialTimelinePosition(viewModel: ConversationViewModel) {
+        guard !isInitialTimelinePositionSettled else { return }
         isInitialTimelinePositionSettled = true
+        pendingInitialPositionTarget = nil
         markCurrentlyVisibleMessagesRead(viewModel: viewModel)
     }
 
@@ -3092,8 +3038,6 @@ struct ConversationView: View {
     }
 
     private func cancelPendingTimelineFollowUpWork() {
-        initialScrollFollowUpTask?.cancel()
-        initialScrollFollowUpTask = nil
         replyNavigationGeneration &+= 1
         replyNavigationTask?.cancel()
         replyNavigationTask = nil

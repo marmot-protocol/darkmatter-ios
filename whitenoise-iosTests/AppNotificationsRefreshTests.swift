@@ -5,6 +5,22 @@ import UserNotifications
 
 @MainActor
 struct AppNotificationsRefreshTests {
+    @Test func applicationBadgeWritesRemainInUnreadProjectionOrder() async {
+        var appliedCounts: [Int] = []
+        let notifications = AppNotifications(
+            applicationBadgeCountSetter: { count in
+                appliedCounts.append(count)
+            }
+        )
+
+        notifications.scheduleApplicationBadgeCount(3)
+        notifications.scheduleApplicationBadgeCount(8)
+        notifications.scheduleApplicationBadgeCount(0)
+        await notifications.drainApplicationBadgeUpdates()
+
+        #expect(appliedCounts == [3, 8, 0])
+    }
+
     @Test func refreshClearsCachedTokenBeforeReregistering() async throws {
         var clearedBeforeRegister = false
         var notifications: AppNotifications?

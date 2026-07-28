@@ -61,6 +61,68 @@ struct AccountUnreadSummaryProjectionTests {
         #expect(summary.hasUnread)
     }
 
+    @Test func summaryPreservesManualOnlyUnreadReminder() {
+        let summary = AccountUnreadSummaryProjection.summary(
+            accountIdHex: "account-a",
+            rows: [
+                row(
+                    groupIdHex: "manual-reminder",
+                    archived: false,
+                    unreadCount: 0,
+                    hasUnread: true
+                ),
+            ]
+        )
+
+        #expect(summary.unreadCount == 0)
+        #expect(summary.unreadConversations == 1)
+        #expect(summary.hasUnread)
+    }
+
+    @Test func applicationBadgeSumsAccountsAndKeepsManualOnlyAttentionVisible() {
+        let count = ApplicationBadgeCountProjection.count(for: [
+            AccountUnreadFfi(
+                accountIdHex: "account-a",
+                unreadCount: 4,
+                unreadConversations: 1,
+                hasUnread: true
+            ),
+            AccountUnreadFfi(
+                accountIdHex: "account-b",
+                unreadCount: 0,
+                unreadConversations: 1,
+                hasUnread: true
+            ),
+            AccountUnreadFfi(
+                accountIdHex: "account-c",
+                unreadCount: 0,
+                unreadConversations: 0,
+                hasUnread: false
+            ),
+        ])
+
+        #expect(count == 5)
+    }
+
+    @Test func applicationBadgeSaturatesAtPlatformIntegerMaximum() {
+        let count = ApplicationBadgeCountProjection.count(for: [
+            AccountUnreadFfi(
+                accountIdHex: "account-a",
+                unreadCount: .max,
+                unreadConversations: 1,
+                hasUnread: true
+            ),
+            AccountUnreadFfi(
+                accountIdHex: "account-b",
+                unreadCount: 1,
+                unreadConversations: 1,
+                hasUnread: true
+            ),
+        ])
+
+        #expect(count == Int.max)
+    }
+
     @Test func byAccountIdDropsSummariesForUnknownAccounts() {
         let account = AccountSummaryFfi(
             label: "account-a",
@@ -95,7 +157,8 @@ struct AccountUnreadSummaryProjectionTests {
     private func row(
         groupIdHex: String,
         archived: Bool,
-        unreadCount: UInt64
+        unreadCount: UInt64,
+        hasUnread: Bool? = nil
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
@@ -107,7 +170,7 @@ struct AccountUnreadSummaryProjectionTests {
             avatar: nil,
             lastMessage: nil,
             unreadCount: unreadCount,
-            hasUnread: unreadCount > 0,
+            hasUnread: hasUnread ?? (unreadCount > 0),
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: unreadCount > 0 ? "message-\(groupIdHex)" : nil,

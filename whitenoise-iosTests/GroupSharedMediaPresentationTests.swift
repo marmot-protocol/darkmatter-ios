@@ -97,7 +97,7 @@ private func mediaRecord(
             nonceHex: String(repeating: "2", count: 24),
             fileName: fileName,
             mediaType: mediaType,
-            version: MessageSemantics.encryptedMediaVersion,
+            version: .v1,
             sourceEpoch: 1,
             dim: nil,
             thumbhash: nil

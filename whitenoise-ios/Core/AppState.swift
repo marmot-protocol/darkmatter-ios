@@ -647,6 +647,7 @@ final class AppState {
                 accountStore.accounts.removeAll { $0.label == removedRef }
             }
             accountUnreadStore.pruneToCurrentAccounts(accounts)
+            scheduleApplicationBadgeSynchronization()
             if destructive {
                 localCleanupFailures.append(WipeFailureItem(
                     subject: nil,
@@ -1055,6 +1056,7 @@ final class AppState {
     func refreshAccountUnreadSummaries(using leasedClient: MarmotClient? = nil) async {
         guard !accounts.isEmpty else {
             accountUnreadStore.refreshed(from: [], accounts: [])
+            await synchronizeApplicationBadge()
             return
         }
 #if DEBUG
@@ -1080,9 +1082,11 @@ final class AppState {
                 accounts: accounts,
                 preservingUpdatesAfter: incrementalBaseline
             )
+            await synchronizeApplicationBadge()
         } catch {
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.pruneToCurrentAccounts(accounts)
+            await synchronizeApplicationBadge()
         }
     }
 
@@ -1097,6 +1101,22 @@ final class AppState {
         chatListRows: [ChatListRowFfi]
     ) {
         accountUnreadStore.update(accountIdHex: accountIdHex, chatListRows: chatListRows, accounts: accounts)
+        scheduleApplicationBadgeSynchronization()
+    }
+
+    @MainActor
+    private func applicationBadgeCount() -> Int {
+        ApplicationBadgeCountProjection.count(for: accountUnreadStore.byAccountId.values)
+    }
+
+    @MainActor
+    private func scheduleApplicationBadgeSynchronization() {
+        notifications.scheduleApplicationBadgeCount(applicationBadgeCount())
+    }
+
+    @MainActor
+    private func synchronizeApplicationBadge() async {
+        await notifications.setApplicationBadgeCount(applicationBadgeCount())
     }
 
     // MARK: - Identity management
