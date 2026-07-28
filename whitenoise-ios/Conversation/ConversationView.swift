@@ -3,7 +3,6 @@ import UIKit
 import MarmotKit
 import Contacts
 import CoreLocation
-import OSLog
 
 enum TimelineBottom {
     static let pinnedThreshold: CGFloat = 44
@@ -131,8 +130,6 @@ enum TimelineBottomScrollReason: Equatable {
 }
 
 enum TimelineInitialTargetScrollPolicy {
-    static let geometryStabilityTolerance: CGFloat = 0.5
-
     static func isPositioning(hasPositionIntent: Bool, didFinishPositioning: Bool) -> Bool {
         hasPositionIntent && !didFinishPositioning
     }
@@ -150,25 +147,12 @@ enum TimelineInitialTargetScrollPolicy {
 
     static func shouldSettle(
         target: TimelineInitialPositionTarget?,
-        visibleTargetIDs: Set<String>,
-        previousViewport: TimelineBottomViewport? = nil,
-        currentViewport: TimelineBottomViewport? = nil
+        visibleTargetIDs: Set<String>
     ) -> Bool {
         guard let target else { return false }
         switch target {
-        case .item(let id, _):
+        case .item(let id, _), .latest(let id):
             return visibleTargetIDs.contains(id)
-        case .latest(let id):
-            guard visibleTargetIDs.contains(id),
-                  let previousViewport,
-                  let currentViewport
-            else { return false }
-            // The provisional bottom layout can expose the latest row before
-            // the composer inset and lazy-stack content size have settled.
-            return currentViewport.bottomContentInset > geometryStabilityTolerance
-                && currentViewport.isSettledAtBottom
-                && abs(currentViewport.contentHeight - previousViewport.contentHeight)
-                    <= geometryStabilityTolerance
         }
     }
 }
@@ -352,10 +336,7 @@ enum TimelineInitialScroll {
         targetItemId: String?
     ) -> Bool {
         guard hasItems, !didFinishInitialPositioning else { return false }
-        if targetMessageIdHex?.isEmpty == false {
-            return true
-        }
-        return true
+        return targetMessageIdHex?.isEmpty == false
     }
 
 }
@@ -732,11 +713,6 @@ final class TimelineKeyboardBottomFollowerView: UIView {
 }
 
 struct ConversationView: View {
-    private static let timelineScrollLog = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise",
-        category: "timeline-scroll"
-    )
-
     @Environment(AppState.self) private var appState
     let chat: AppGroupRecordFfi
     let draftAccountRef: String?
@@ -803,7 +779,6 @@ struct ConversationView: View {
     @State private var pendingInitialPositionTarget: TimelineInitialPositionTarget?
     @State private var visibleTimelineTargetIDs = Set<String>()
     @State private var initialTimelinePositionRequestGeneration = 0
-    @State private var timelineScrollDiagnosticSessionID = UUID()
     @State private var pendingBottomScrollRequest: TimelineBottomScrollRequest?
     @State private var pendingBottomScrollTask: Task<Void, Never>?
     @State private var isOlderTimelineTriggerVisible = false
@@ -1851,10 +1826,6 @@ struct ConversationView: View {
                             guard !Task.isCancelled,
                                   let target = pendingInitialPositionTarget
                             else { return }
-                            logTimelineScroll(
-                                "scroll-request",
-                                details: initialTargetDiagnosticDetails(target, viewModel: viewModel)
-                            )
                             scrollToInitialTimelineTarget(target, proxy: proxy)
                         }
                         // Only scroll/bounce when the messages actually exceed
@@ -1864,13 +1835,7 @@ struct ConversationView: View {
                         .scrollBounceBehavior(.basedOnSize)
                         .compatibleBottomScrollEdgeEffectHidden()
                         .scrollDismissesKeyboard(.interactively)
-                        .onScrollPhaseChange { previousPhase, phase in
-                            if isInitialTimelinePositioning {
-                                logTimelineScroll(
-                                    "phase",
-                                    details: "from=\(previousPhase) to=\(phase)"
-                                )
-                            }
+                        .onScrollPhaseChange { _, phase in
                             isUserScrollingTimeline = phase == .interacting || phase == .decelerating
                             if isUserScrollingTimeline {
                                 cancelPendingBottomScroll()
@@ -1885,15 +1850,6 @@ struct ConversationView: View {
                             threshold: TimelineViewportVisibility.minimumVisibleFraction
                         ) { visibleIDs in
                             visibleTimelineTargetIDs = Set(visibleIDs)
-                            if isInitialTimelinePositioning {
-                                logTimelineScroll(
-                                    "target-visibility",
-                                    details: visibleTargetDiagnosticDetails(
-                                        visibleIDs: visibleTimelineTargetIDs,
-                                        viewModel: viewModel
-                                    )
-                                )
-                            }
                             settleInitialTimelinePositionIfTargetVisible(viewModel: viewModel)
                         }
                         .onScrollGeometryChange(for: TimelineBottomViewport.self) { geometry in
@@ -1903,25 +1859,9 @@ struct ConversationView: View {
                                 bottomContentInset: geometry.contentInsets.bottom
                             )
                         } action: { previous, current in
-                            if isInitialTimelinePositioning
-                                || abs(current.contentHeight - previous.contentHeight) > 0.5
-                                || current.overscrollPastBottom > TimelineBottom.overscrollRepairThreshold
-                            {
-                                logTimelineScroll(
-                                    "geometry",
-                                    details: timelineGeometryDiagnosticDetails(
-                                        previous: previous,
-                                        current: current
-                                    )
-                                )
-                            }
                             if isInitialTimelinePositioning {
                                 isAtTimelineBottom = current.isPinned
-                                maintainInitialTimelinePosition(
-                                    viewModel: viewModel,
-                                    previousViewport: previous,
-                                    currentViewport: current
-                                )
+                                maintainInitialTimelinePosition(viewModel: viewModel)
                             } else if TimelineBottom.shouldRepairBottomOverscroll(
                                 current,
                                 isUserScrolling: isUserScrollingTimeline
@@ -1970,9 +1910,6 @@ struct ConversationView: View {
                             }
                         }
                         .onChange(of: viewModel.timelineProjectionGeneration) { _, _ in
-                            if isInitialTimelinePositioning {
-                                logTimelineSnapshot("projection-change", viewModel: viewModel)
-                            }
                             viewModel.search.refreshAfterTimelineChange()
                             pruneMessageSelection(viewModel: viewModel)
                             handleTimelineProjectionChange(proxy: proxy, viewModel: viewModel)
@@ -1995,7 +1932,6 @@ struct ConversationView: View {
                         .onAppear {
                             contentTopY = outer.frame(in: .global).minY
                             contentBottomY = outer.frame(in: .global).maxY
-                            logTimelineSnapshot("appear", viewModel: viewModel)
                             _ = performInitialScrollIfNeeded(viewModel: viewModel)
                         }
                         .onDisappear {
@@ -2486,34 +2422,20 @@ struct ConversationView: View {
         isAtTimelineBottom = target.isBottom
         userMovedAwayFromTimelineBottom = !target.isBottom
         initialTimelinePositionRequestGeneration &+= 1
-        logTimelineScroll(
-            "position-requested",
-            details: initialTargetDiagnosticDetails(target, viewModel: viewModel)
-        )
     }
 
-    private func maintainInitialTimelinePosition(
-        viewModel: ConversationViewModel,
-        previousViewport: TimelineBottomViewport? = nil,
-        currentViewport: TimelineBottomViewport? = nil
-    ) {
+    private func maintainInitialTimelinePosition(viewModel: ConversationViewModel) {
         guard let target = pendingInitialPositionTarget else { return }
         if case .latest = target,
            let latestItemId = viewModel.timeline.last?.id,
            target != .latest(id: latestItemId) {
             pendingInitialPositionTarget = .latest(id: latestItemId)
             initialTimelinePositionRequestGeneration &+= 1
-            logTimelineScroll(
-                "latest-target-updated",
-                details: initialTargetDiagnosticDetails(.latest(id: latestItemId), viewModel: viewModel)
-            )
             return
         }
         if TimelineInitialTargetScrollPolicy.shouldSettle(
             target: target,
-            visibleTargetIDs: visibleTimelineTargetIDs,
-            previousViewport: previousViewport,
-            currentViewport: currentViewport
+            visibleTargetIDs: visibleTimelineTargetIDs
         ) {
             settleInitialTimelinePosition(viewModel: viewModel)
         } else {
@@ -2580,118 +2502,9 @@ struct ConversationView: View {
 
     private func settleInitialTimelinePosition(viewModel: ConversationViewModel) {
         guard !isInitialTimelinePositionSettled else { return }
-        logTimelineScroll(
-            "position-settled",
-            details: visibleTargetDiagnosticDetails(
-                visibleIDs: visibleTimelineTargetIDs,
-                viewModel: viewModel
-            )
-        )
         isInitialTimelinePositionSettled = true
         pendingInitialPositionTarget = nil
         markCurrentlyVisibleMessagesRead(viewModel: viewModel)
-    }
-
-    private func logTimelineSnapshot(_ event: String, viewModel: ConversationViewModel) {
-        var messageCount = 0
-        var systemEventCount = 0
-        var streamDebugCount = 0
-
-        for item in viewModel.timeline {
-            switch item.kind {
-            case .message:
-                messageCount += 1
-            case .systemEvent:
-                systemEventCount += 1
-            case .streamDebugEvent:
-                streamDebugCount += 1
-            }
-        }
-
-        logTimelineScroll(
-            event,
-            details: [
-                "rows=\(viewModel.timeline.count)",
-                "messages=\(messageCount)",
-                "system=\(systemEventCount)",
-                "streamDebug=\(streamDebugCount)",
-                "hasMoreBefore=\(viewModel.hasMoreBefore)",
-                "hasMoreAfter=\(viewModel.hasMoreAfter)",
-                "projectionGeneration=\(viewModel.timelineProjectionGeneration)",
-            ].joined(separator: " ")
-        )
-    }
-
-    private func initialTargetDiagnosticDetails(
-        _ target: TimelineInitialPositionTarget,
-        viewModel: ConversationViewModel
-    ) -> String {
-        let targetID: String
-        let kind: String
-        let anchor: String
-        switch target {
-        case .item(let id, let itemAnchor):
-            targetID = id
-            kind = "item"
-            anchor = String(describing: itemAnchor)
-        case .latest(let id):
-            targetID = id
-            kind = "latest"
-            anchor = "bottom"
-        }
-        let index = viewModel.timeline.firstIndex { $0.id == targetID } ?? -1
-        return "kind=\(kind) anchor=\(anchor) index=\(index) rows=\(viewModel.timeline.count)"
-    }
-
-    private func visibleTargetDiagnosticDetails(
-        visibleIDs: Set<String>,
-        viewModel: ConversationViewModel
-    ) -> String {
-        let visibleIndices = viewModel.timeline.indices.filter {
-            visibleIDs.contains(viewModel.timeline[$0].id)
-        }
-        let firstVisibleIndex = visibleIndices.first ?? -1
-        let lastVisibleIndex = visibleIndices.last ?? -1
-        let targetVisible: Bool
-        if let pendingInitialPositionTarget {
-            switch pendingInitialPositionTarget {
-            case .item(let id, _), .latest(let id):
-                targetVisible = visibleIDs.contains(id)
-            }
-        } else {
-            targetVisible = false
-        }
-        return [
-            "visibleTargets=\(visibleIDs.count)",
-            "firstIndex=\(firstVisibleIndex)",
-            "lastIndex=\(lastVisibleIndex)",
-            "targetVisible=\(targetVisible)",
-            "rows=\(viewModel.timeline.count)",
-        ].joined(separator: " ")
-    }
-
-    private func timelineGeometryDiagnosticDetails(
-        previous: TimelineBottomViewport,
-        current: TimelineBottomViewport
-    ) -> String {
-        [
-            "contentHeight=\(current.contentHeight)",
-            "contentDelta=\(current.contentHeight - previous.contentHeight)",
-            "visibleBottom=\(current.visibleBottomY)",
-            "bottomInset=\(current.bottomContentInset)",
-            "distanceToBottom=\(current.distanceToBottom)",
-            "overscroll=\(current.overscrollPastBottom)",
-            "pinned=\(current.isPinned)",
-            "settled=\(current.isSettledAtBottom)",
-            "userScrolling=\(isUserScrollingTimeline)",
-        ].joined(separator: " ")
-    }
-
-    private func logTimelineScroll(_ event: String, details: String) {
-        let session = String(timelineScrollDiagnosticSessionID.uuidString.prefix(8))
-        Self.timelineScrollLog.notice(
-            "session=\(session, privacy: .public) group=\(chat.groupIdHex, privacy: .private(mask: .hash)) event=\(event, privacy: .public) \(details, privacy: .public)"
-        )
     }
 
     private func markCurrentlyVisibleMessagesRead(viewModel: ConversationViewModel) {
