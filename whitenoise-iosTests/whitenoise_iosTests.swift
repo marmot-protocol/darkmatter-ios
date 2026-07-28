@@ -1281,6 +1281,47 @@ struct AppStateBootstrapTests {
 
         appState.updateAccountUnreadSummary(
             accountIdHex: seeded.accounts[0].accountIdHex,
+            chatListRows: [
+                chatListRow(
+                    groupIdHex: "unread-chat",
+                    title: "Unread chat",
+                    unreadCount: 4
+                ),
+                chatListRow(
+                    groupIdHex: "manual-reminder",
+                    title: "Manual reminder",
+                    manuallyMarkedUnread: true
+                ),
+            ]
+        )
+        await notifications.drainApplicationBadgeUpdates()
+        #expect(appliedBadgeCounts.last == 5)
+
+        appState.updateAccountUnreadSummary(
+            accountIdHex: seeded.accounts[0].accountIdHex,
+            chatListRows: [
+                chatListRow(
+                    groupIdHex: "unread-chat",
+                    title: "Unread chat",
+                    unreadCount: 4
+                ),
+                chatListRow(
+                    groupIdHex: "manual-reminder",
+                    title: "Manual reminder",
+                    manuallyMarkedUnread: true
+                ),
+                chatListRow(
+                    groupIdHex: "pending-invite",
+                    pendingConfirmation: true,
+                    title: "Pending invite"
+                ),
+            ]
+        )
+        await notifications.drainApplicationBadgeUpdates()
+        #expect(appliedBadgeCounts.last == 6)
+
+        appState.updateAccountUnreadSummary(
+            accountIdHex: seeded.accounts[0].accountIdHex,
             chatListRows: []
         )
         await notifications.drainApplicationBadgeUpdates()

@@ -1075,11 +1075,13 @@ final class AppState {
         let generation = unreadSummaryRefreshGeneration
         let incrementalBaseline = accountUnreadStore.incrementalRevisionSnapshot()
         do {
-            let summaries = try await summaryClient.accountUnreadSummary()
+            let badgeState = try await summaryClient.accountUnreadBadgeState()
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(
-                from: summaries,
+                from: badgeState.summaries,
                 accounts: accounts,
+                supplementalUnreadConversationCounts:
+                    badgeState.supplementalUnreadConversationCounts,
                 preservingUpdatesAfter: incrementalBaseline
             )
             await synchronizeApplicationBadge()
@@ -1096,6 +1098,11 @@ final class AppState {
     }
 
     @MainActor
+    func accountUnreadBadgeCount(forAccountIdHex accountIdHex: String) -> UInt64? {
+        accountUnreadStore.badgeCount(forAccountIdHex: accountIdHex)
+    }
+
+    @MainActor
     func updateAccountUnreadSummary(
         accountIdHex: String,
         chatListRows: [ChatListRowFfi]
@@ -1106,7 +1113,7 @@ final class AppState {
 
     @MainActor
     private func applicationBadgeCount() -> Int {
-        ApplicationBadgeCountProjection.count(for: accountUnreadStore.byAccountId.values)
+        accountUnreadStore.applicationBadgeCount()
     }
 
     @MainActor

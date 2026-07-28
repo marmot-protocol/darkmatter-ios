@@ -1,6 +1,11 @@
 import Foundation
 import MarmotKit
 
+nonisolated struct AccountUnreadBadgeState {
+    let summaries: [AccountUnreadFfi]
+    let supplementalUnreadConversationCounts: [String: UInt64]
+}
+
 enum AccountUnreadSummaryProjection {
     static func byAccountId(
         _ summaries: [AccountUnreadFfi],

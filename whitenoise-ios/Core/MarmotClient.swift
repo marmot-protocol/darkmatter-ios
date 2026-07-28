@@ -149,12 +149,29 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
-    /// Reads the per-account unread aggregate off the main actor. The generated
-    /// `Marmot.accountUnreadSummary` binding is a synchronous storage aggregate
-    /// over each account's materialized chat-list projection.
-    func accountUnreadSummary() async throws -> [AccountUnreadFfi] {
+    /// Reads the per-account unread aggregate and row-level supplemental
+    /// contributions off the main actor. The aggregate intentionally counts
+    /// messages, so chat-list rows supply pending invites and manual-only
+    /// reminders needed by iOS badge presentation.
+    func accountUnreadBadgeState() async throws -> AccountUnreadBadgeState {
         try await Task.detached(priority: .utility) { [marmot] in
-            try marmot.accountUnreadSummary()
+            let summaries = try marmot.accountUnreadSummary()
+            var supplementalUnreadConversationCounts: [String: UInt64] = [:]
+            if let accounts = try? marmot.listAccounts() {
+                for account in accounts {
+                    guard let rows = try? marmot.chatList(
+                        accountRef: account.label,
+                        includeArchived: false
+                    ) else { continue }
+                    supplementalUnreadConversationCounts[account.accountIdHex] =
+                        ApplicationBadgeCountProjection
+                        .supplementalUnreadConversationCount(in: rows)
+                }
+            }
+            return AccountUnreadBadgeState(
+                summaries: summaries,
+                supplementalUnreadConversationCounts: supplementalUnreadConversationCounts
+            )
         }.value
     }
 

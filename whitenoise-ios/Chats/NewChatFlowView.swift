@@ -95,6 +95,31 @@ struct NewChatFlowView: View {
                     .appAppearance()
             }
         }
+        .sheet(item: $model.conversationChooser) { chooser in
+            ConversationChooserView(
+                presentation: chooser,
+                onOpen: { choice in
+                    Task {
+                        await model.openConversation(
+                            choice,
+                            using: appState,
+                            onOpen: open
+                        )
+                    }
+                },
+                onStartNew: {
+                    Task {
+                        await model.startNewConversation(
+                            using: appState,
+                            onOpen: open
+                        )
+                    }
+                },
+                onCancel: { model.conversationChooser = nil }
+            )
+            .interactiveDismissDisabled(model.starter.isCreating)
+            .appAppearance()
+        }
     }
 
     private func open(_ groupIdHex: String) {
@@ -160,7 +185,7 @@ struct NewMessageScreen: View {
                     onRetry: { model.messageQuery.queryChanged(using: appState) },
                     onSelect: { resolved in
                         Task {
-                            await model.startChat(
+                            await model.chooseConversation(
                                 accountIdHex: resolved.accountIdHex,
                                 memberRef: resolved.memberRef,
                                 using: appState,
@@ -277,7 +302,7 @@ struct NewMessageScreen: View {
     private func personRow(_ candidate: RecipientCandidate) -> some View {
         Button {
             Task {
-                await model.startChat(
+                await model.chooseConversation(
                     accountIdHex: candidate.accountIdHex,
                     memberRef: candidate.npub,
                     using: appState,
@@ -286,7 +311,8 @@ struct NewMessageScreen: View {
             }
         } label: {
             RecipientRow(accountIdHex: candidate.accountIdHex, npub: candidate.npub) {
-                if model.starter.creatingAccountIdHex == candidate.accountIdHex {
+                if model.choosingAccountIdHex == candidate.accountIdHex
+                    || model.starter.creatingAccountIdHex == candidate.accountIdHex {
                     ProgressView()
                 }
             }
@@ -294,6 +320,118 @@ struct NewMessageScreen: View {
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
+    }
+}
+
+/// Lightweight chooser for all active or archived two-person conversations
+/// shared with one person. It stays outside a navigation container because the
+/// sheet has no nested navigation state.
+struct ConversationChooserView: View {
+    @Environment(AppState.self) private var appState
+
+    let presentation: ConversationChooserPresentation
+    let onOpen: (ConversationChoice) -> Void
+    let onStartNew: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(L10n.formatted(
+                        "Conversations with %@",
+                        presentation.recipientName
+                    ))
+                    .font(.title3.weight(.semibold))
+                    Text("Choose a conversation to continue, or start a new one.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 12)
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Close")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
+
+            List {
+                Section {
+                    ForEach(presentation.choices) { choice in
+                        Button {
+                            onOpen(choice)
+                        } label: {
+                            conversationRow(choice)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Section {
+                    Button(action: onStartNew) {
+                        Label("Start new conversation", systemImage: "square.and.pencil")
+                            .font(.body.weight(.medium))
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func conversationRow(_ choice: ConversationChoice) -> some View {
+        let isNamed = choice.name != nil
+        let title = choice.name ?? L10n.string("Conversation")
+        let groupAvatarURL = ContentSanitizer.imageURL(choice.avatarUrl)
+        let pictureURL = groupAvatarURL
+            ?? (isNamed
+                ? nil
+                : appState.avatarURL(forAccountIdHex: presentation.targetAccountIdHex))
+
+        return HStack(spacing: 12) {
+            GroupAvatarBubble(
+                groupIdHex: choice.groupIdHex,
+                imageHashHex: choice.imageHashHex,
+                seed: isNamed ? choice.groupIdHex : presentation.targetAccountIdHex,
+                title: isNamed ? title : presentation.recipientName,
+                pictureURL: pictureURL
+            )
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    if choice.isArchived {
+                        Text("Archived")
+                    }
+                    if choice.isArchived && choice.lastActivityAt > 0 {
+                        Text(verbatim: "•")
+                    }
+                    if choice.lastActivityAt > 0 {
+                        Text(RelativeTime.chatList(
+                            Date(timeIntervalSince1970: TimeInterval(choice.lastActivityAt))
+                        ))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .contentShape(.rect)
+        .padding(.vertical, 2)
     }
 }
 

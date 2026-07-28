@@ -10,8 +10,7 @@ nonisolated struct RecipientCandidate: Equatable, Identifiable {
     /// Newest activity timestamp across every group this person appears in.
     let lastActivityAt: UInt64
     /// Group id of the most recent open unnamed two-person chat with this
-    /// person, when one exists. Tapping the person reopens it instead of
-    /// creating a duplicate.
+    /// person, when one exists. Canonical single-chat surfaces can reuse it.
     let directChatGroupIdHex: String?
     /// How many chats this person appears in (identity context).
     let sharedChatCount: Int
@@ -30,6 +29,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
     let title: String
     let avatarUrl: String?
     let imageHashHex: String?
+    let isArchived: Bool
     let isSelfMember: Bool
     let conversationKind: ChatConversationKindFfi
     let lastActivityAt: UInt64
@@ -48,6 +48,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
                 ?? IdentityFormatter.short(row.groupIdHex),
             avatarUrl: details?.group.avatarUrl ?? row.avatarUrl,
             imageHashHex: details?.group.imageHashHex ?? row.avatar?.imageHashHex,
+            isArchived: row.archived,
             isSelfMember: GroupManagementPresentation.isActiveChatListMember(row.selfMembership),
             conversationKind: row.conversationKind,
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
@@ -64,6 +65,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         title: String,
         avatarUrl: String?,
         imageHashHex: String? = nil,
+        isArchived: Bool = false,
         isSelfMember: Bool,
         conversationKind: ChatConversationKindFfi = .unknown,
         lastActivityAt: UInt64,
@@ -77,6 +79,7 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         self.title = title
         self.avatarUrl = avatarUrl
         self.imageHashHex = imageHashHex
+        self.isArchived = isArchived
         self.isSelfMember = isSelfMember
         self.conversationKind = conversationKind
         self.lastActivityAt = lastActivityAt
@@ -97,6 +100,67 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
         else { return false }
         let normalized = Set(memberIdsHex.map { $0.lowercased() })
         return normalized == [targetIdHex.lowercased(), myAccountIdHex.lowercased()]
+    }
+}
+
+/// One existing two-person conversation offered when starting a chat with a
+/// person. The match intentionally ignores MDK's derived conversation kind so
+/// named two-person groups remain reachable while direct/group semantics are
+/// still tied to the group name.
+nonisolated struct ConversationChoice: Equatable, Identifiable {
+    let groupIdHex: String
+    let name: String?
+    let avatarUrl: String?
+    let imageHashHex: String?
+    let isArchived: Bool
+    let lastActivityAt: UInt64
+
+    var id: String { groupIdHex }
+}
+
+nonisolated struct ConversationChooserPresentation: Equatable, Identifiable {
+    let targetAccountIdHex: String
+    let memberRef: String
+    let recipientName: String
+    let choices: [ConversationChoice]
+
+    var id: String { targetAccountIdHex }
+}
+
+nonisolated enum ConversationChoiceProjection {
+    static func choices(
+        in snapshots: [RecipientGroupSnapshot],
+        targetAccountIdHex: String,
+        myAccountIdHex: String
+    ) -> [ConversationChoice] {
+        let expectedMembers = Set([
+            targetAccountIdHex.lowercased(),
+            myAccountIdHex.lowercased()
+        ])
+
+        return snapshots
+            .filter { snapshot in
+                guard snapshot.isSelfMember, snapshot.memberIdsHex.count == 2 else {
+                    return false
+                }
+                return Set(snapshot.memberIdsHex.map { $0.lowercased() }) == expectedMembers
+            }
+            .map { snapshot in
+                ConversationChoice(
+                    groupIdHex: snapshot.groupIdHex,
+                    name: snapshot.sanitizedName,
+                    avatarUrl: snapshot.avatarUrl,
+                    imageHashHex: snapshot.imageHashHex,
+                    isArchived: snapshot.isArchived,
+                    lastActivityAt: snapshot.lastActivityAt
+                )
+            }
+            .sorted {
+                if $0.lastActivityAt != $1.lastActivityAt {
+                    return $0.lastActivityAt > $1.lastActivityAt
+                }
+                return $0.groupIdHex < $1.groupIdHex
+            }
     }
 }
 
