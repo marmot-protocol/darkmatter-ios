@@ -62,24 +62,29 @@ struct AccountUnreadSummaryProjectionTests {
     }
 
     @Test func summaryPreservesManualOnlyUnreadReminder() {
+        let rows = [
+            row(
+                groupIdHex: "manual-reminder",
+                archived: false,
+                unreadCount: 0,
+                manuallyMarkedUnread: true
+            ),
+        ]
         let summary = AccountUnreadSummaryProjection.summary(
             accountIdHex: "account-a",
-            rows: [
-                row(
-                    groupIdHex: "manual-reminder",
-                    archived: false,
-                    unreadCount: 0,
-                    hasUnread: true
-                ),
-            ]
+            rows: rows
         )
 
         #expect(summary.unreadCount == 0)
         #expect(summary.unreadConversations == 1)
         #expect(summary.hasUnread)
+        #expect(
+            ApplicationBadgeCountProjection
+                .supplementalUnreadConversationCount(in: rows) == 1
+        )
     }
 
-    @Test func applicationBadgeSumsAccountsAndKeepsManualOnlyAttentionVisible() {
+    @Test func applicationBadgeAddsEverySupplementalConversationToMessageTotal() {
         let count = ApplicationBadgeCountProjection.count(for: [
             AccountUnreadFfi(
                 accountIdHex: "account-a",
@@ -99,9 +104,133 @@ struct AccountUnreadSummaryProjectionTests {
                 unreadConversations: 0,
                 hasUnread: false
             ),
+        ], supplementalUnreadConversationCounts: [
+            "account-a": 2,
+            "account-b": 1,
         ])
 
-        #expect(count == 5)
+        #expect(count == 7)
+    }
+
+    @Test func aggregateOnlyManualUnreadStillContributesOne() {
+        let count = ApplicationBadgeCountProjection.count(for: [
+            AccountUnreadFfi(
+                accountIdHex: "account-a",
+                unreadCount: 0,
+                unreadConversations: 1,
+                hasUnread: true
+            ),
+        ])
+
+        #expect(count == 1)
+    }
+
+    @Test func manualProjectionDoesNotDoubleCountChatsThatHaveUnreadMessages() {
+        let rows = [
+            row(
+                groupIdHex: "manual-only",
+                archived: false,
+                unreadCount: 0,
+                manuallyMarkedUnread: true
+            ),
+            row(
+                groupIdHex: "already-unread",
+                archived: false,
+                unreadCount: 3,
+                manuallyMarkedUnread: true
+            ),
+            row(
+                groupIdHex: "archived-manual",
+                archived: true,
+                unreadCount: 0,
+                manuallyMarkedUnread: true
+            ),
+        ]
+
+        #expect(
+            ApplicationBadgeCountProjection
+                .supplementalUnreadConversationCount(in: rows) == 1
+        )
+    }
+
+    @Test func pendingInvitesContributeWithoutDoubleCountingUnreadMessages() {
+        let rows = [
+            row(
+                groupIdHex: "pending-invite",
+                archived: false,
+                unreadCount: 0,
+                pendingConfirmation: true
+            ),
+            row(
+                groupIdHex: "invite-with-unread-message",
+                archived: false,
+                unreadCount: 2,
+                pendingConfirmation: true
+            ),
+            row(
+                groupIdHex: "archived-invite",
+                archived: true,
+                unreadCount: 0,
+                pendingConfirmation: true
+            ),
+        ]
+
+        let summary = AccountUnreadSummaryProjection.summary(
+            accountIdHex: "account-a",
+            rows: rows
+        )
+        let supplementalCount = ApplicationBadgeCountProjection
+            .supplementalUnreadConversationCount(in: rows)
+
+        #expect(summary.unreadCount == 2)
+        #expect(supplementalCount == 1)
+        #expect(
+            ApplicationBadgeCountProjection.contribution(
+                for: summary,
+                supplementalUnreadConversationCount: supplementalCount
+            ) == 3
+        )
+    }
+
+    @MainActor
+    @Test func storeKeepsSupplementalContributionAcrossDurableSummaryRefresh() {
+        let account = AccountSummaryFfi(
+            label: "account-a",
+            accountIdHex: "account-a-id",
+            localSigning: true,
+            signedOut: false,
+            running: true
+        )
+        let store = AccountUnreadStore()
+        store.update(
+            accountIdHex: account.accountIdHex,
+            chatListRows: [
+                row(groupIdHex: "message", archived: false, unreadCount: 4),
+                row(
+                    groupIdHex: "manual",
+                    archived: false,
+                    unreadCount: 0,
+                    manuallyMarkedUnread: true
+                ),
+            ],
+            accounts: [account]
+        )
+
+        #expect(store.badgeCount(forAccountIdHex: account.accountIdHex) == 5)
+
+        store.refreshed(
+            from: [
+                AccountUnreadFfi(
+                    accountIdHex: account.accountIdHex,
+                    unreadCount: 6,
+                    unreadConversations: 2,
+                    hasUnread: true
+                ),
+            ],
+            accounts: [account]
+        )
+
+        #expect(store.badgeCount(forAccountIdHex: account.accountIdHex) == 7)
     }
 
     @Test func applicationBadgeSaturatesAtPlatformIntegerMaximum() {
@@ -158,22 +287,23 @@ struct AccountUnreadSummaryProjectionTests {
         groupIdHex: String,
         archived: Bool,
         unreadCount: UInt64,
-        hasUnread: Bool? = nil
+        manuallyMarkedUnread: Bool = false,
+        pendingConfirmation: Bool = false
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
             pinned: false,
             pinnedPosition: nil,
             archived: archived,
-            pendingConfirmation: false,
+            pendingConfirmation: pendingConfirmation,
             title: groupIdHex,
             groupName: groupIdHex,
             avatarUrl: nil,
             avatar: nil,
             lastMessage: nil,
             unreadCount: unreadCount,
-            hasUnread: hasUnread ?? (unreadCount > 0),
-            manuallyMarkedUnread: false,
+            hasUnread: unreadCount > 0 || manuallyMarkedUnread,
+            manuallyMarkedUnread: manuallyMarkedUnread,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: unreadCount > 0 ? "message-\(groupIdHex)" : nil,

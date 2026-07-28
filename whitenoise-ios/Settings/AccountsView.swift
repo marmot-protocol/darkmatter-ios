@@ -73,8 +73,8 @@ struct AccountSummaryRow: View {
             }
             Spacer()
             HStack(spacing: 8) {
-                if let unreadCount = Self.unreadBadgeCount(
-                    for: appState.accountUnreadSummary(forAccountIdHex: account.accountIdHex)
+                if let unreadCount = appState.accountUnreadBadgeCount(
+                    forAccountIdHex: account.accountIdHex
                 ) {
                     UnreadCountBadge(count: unreadCount)
                 }

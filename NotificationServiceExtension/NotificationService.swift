@@ -93,7 +93,23 @@ final class NotificationService: UNNotificationServiceExtension {
                 )
                 if result.status != .failed,
                    let summaries = try? marmot.accountUnreadSummary() {
-                    let count = ApplicationBadgeCountProjection.count(for: summaries)
+                    var supplementalUnreadConversationCounts: [String: UInt64] = [:]
+                    if let accounts = try? marmot.listAccounts() {
+                        for account in accounts {
+                            guard let rows = try? marmot.chatList(
+                                accountRef: account.label,
+                                includeArchived: false
+                            ) else { continue }
+                            supplementalUnreadConversationCounts[account.accountIdHex] =
+                                ApplicationBadgeCountProjection
+                                .supplementalUnreadConversationCount(in: rows)
+                        }
+                    }
+                    let count = ApplicationBadgeCountProjection.count(
+                        for: summaries,
+                        supplementalUnreadConversationCounts:
+                            supplementalUnreadConversationCounts
+                    )
                     applicationBadgeCount = count
                     NotificationContentDecorator.applyApplicationBadgeCount(count, to: content)
                 }

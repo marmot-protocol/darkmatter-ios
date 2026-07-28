@@ -11,6 +11,8 @@ import MarmotKit
 final class ProfileViewModel {
     var hex: String?
     var startPrompt: StartChatPrompt?
+    var conversationChooser: ConversationChooserPresentation?
+    private(set) var isPreparingConversationChoices = false
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var verifiedNip05: String?
@@ -28,6 +30,7 @@ final class ProfileViewModel {
         // client lookup would also keep its trust and shared-group state.
         applyResolvedAccount(nil)
         startPrompt = nil
+        conversationChooser = nil
         sharedGroups = []
         addableGroups = []
         guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
@@ -65,6 +68,7 @@ final class ProfileViewModel {
             verifiedNip05 = nil
             attemptedNip05Verification = nil
             startPrompt = nil
+            conversationChooser = nil
         }
         hex = resolvedHex
     }
@@ -105,16 +109,90 @@ final class ProfileViewModel {
     }
 
     func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {
-        guard let hex else { return }
+        guard let hex, !isPreparingConversationChoices else { return }
         startPrompt = nil
-        // The reuse decision needs the directory; join any in-flight load so
-        // a fast tap can't create a duplicate direct chat.
+        conversationChooser = nil
+        isPreparingConversationChoices = true
+        defer { isPreparingConversationChoices = false }
+
         await directory.load(using: appState, force: true)
+        guard !Task.isCancelled else { return }
         let memberRef = ProfileReferenceResolution.referenceForResolution(npub) ?? hex
+        if let loadError = directory.loadError {
+            Haptics.error()
+            startPrompt = StartChatPrompt(
+                kind: .error(message: loadError),
+                recipientName: appState.knownDisplayName(forAccountIdHex: hex),
+                accountIdHex: hex,
+                memberRef: memberRef,
+                existingGroupIdHex: nil
+            )
+            return
+        }
+
+        guard let myAccountIdHex = appState.activeAccount?.accountIdHex else {
+            Haptics.error()
+            startPrompt = StartChatPrompt(
+                kind: .error(message: L10n.string("No active account is selected.")),
+                recipientName: appState.knownDisplayName(forAccountIdHex: hex),
+                accountIdHex: hex,
+                memberRef: memberRef,
+                existingGroupIdHex: nil
+            )
+            return
+        }
+        let choices = ConversationChoiceProjection.choices(
+            in: directory.snapshots,
+            targetAccountIdHex: hex,
+            myAccountIdHex: myAccountIdHex
+        )
+        if !choices.isEmpty {
+            conversationChooser = ConversationChooserPresentation(
+                targetAccountIdHex: hex,
+                memberRef: memberRef,
+                recipientName: appState.knownDisplayName(forAccountIdHex: hex)
+                    ?? IdentityFormatter.short(memberRef),
+                choices: choices
+            )
+            Haptics.selection()
+            return
+        }
+
         await runStart(
             accountIdHex: hex,
             memberRef: memberRef,
-            existingGroupIdHex: existingDirectChatGroupIdHex(accountIdHex: hex),
+            existingGroupIdHex: nil,
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    func openConversation(
+        _ choice: ConversationChoice,
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        guard let chooser = conversationChooser else { return }
+        conversationChooser = nil
+        await runStart(
+            accountIdHex: chooser.targetAccountIdHex,
+            memberRef: chooser.memberRef,
+            existingGroupIdHex: choice.groupIdHex,
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    func startNewConversation(
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        guard let chooser = conversationChooser else { return }
+        conversationChooser = nil
+        await runStart(
+            accountIdHex: chooser.targetAccountIdHex,
+            memberRef: chooser.memberRef,
+            existingGroupIdHex: nil,
             using: appState,
             onOpen: onOpen
         )
@@ -155,10 +233,4 @@ final class ProfileViewModel {
         }
     }
 
-    private func existingDirectChatGroupIdHex(accountIdHex: String) -> String? {
-        let normalized = accountIdHex.lowercased()
-        return directory.candidates
-            .first { $0.accountIdHex == normalized }?
-            .directChatGroupIdHex
-    }
 }

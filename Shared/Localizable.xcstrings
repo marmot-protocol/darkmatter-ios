@@ -4,31 +4,6 @@
     "" : {
 
     },
-    "Couldn't mark as unread" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chat konnte nicht als ungelesen markiert werden"}},"es":{"stringUnit":{"state":"translated","value":"No se pudo marcar el chat como no leído"}},"fr":{"stringUnit":{"state":"translated","value":"Impossible de marquer la discussion comme non lue"}},"it":{"stringUnit":{"state":"translated","value":"Impossibile contrassegnare la chat come non letta"}},"pt":{"stringUnit":{"state":"translated","value":"Não foi possível marcar a conversa como não lida"}},"ru":{"stringUnit":{"state":"translated","value":"Не удалось отметить чат как непрочитанный"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbet okunmamış olarak işaretlenemedi"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"无法将聊天标为未读"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"無法將聊天標示為未讀"}}}},
-    "Couldn't update pin" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Anheftung konnte nicht aktualisiert werden"}},"es":{"stringUnit":{"state":"translated","value":"No se pudo actualizar la fijación"}},"fr":{"stringUnit":{"state":"translated","value":"Impossible de modifier l’épinglage"}},"it":{"stringUnit":{"state":"translated","value":"Impossibile aggiornare il fissaggio"}},"pt":{"stringUnit":{"state":"translated","value":"Não foi possível atualizar a fixação"}},"ru":{"stringUnit":{"state":"translated","value":"Не удалось изменить закрепление"}},"tr":{"stringUnit":{"state":"translated","value":"Sabitleme güncellenemedi"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"无法更新置顶状态"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"無法更新置頂狀態"}}}},
-    "Mark as unread" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Als ungelesen markieren"}},"es":{"stringUnit":{"state":"translated","value":"Marcar como no leído"}},"fr":{"stringUnit":{"state":"translated","value":"Marquer comme non lue"}},"it":{"stringUnit":{"state":"translated","value":"Segna come non letta"}},"pt":{"stringUnit":{"state":"translated","value":"Marcar como não lida"}},"ru":{"stringUnit":{"state":"translated","value":"Отметить как непрочитанное"}},"tr":{"stringUnit":{"state":"translated","value":"Okunmamış olarak işaretle"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"标为未读"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"標示為未讀"}}}},
-    "Pin" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Anheften"}},"es":{"stringUnit":{"state":"translated","value":"Fijar"}},"fr":{"stringUnit":{"state":"translated","value":"Épingler"}},"it":{"stringUnit":{"state":"translated","value":"Fissa"}},"pt":{"stringUnit":{"state":"translated","value":"Fixar"}},"ru":{"stringUnit":{"state":"translated","value":"Закрепить"}},"tr":{"stringUnit":{"state":"translated","value":"Sabitle"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"置顶"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"置頂"}}}},
-    "Pinned" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Angeheftet"}},"es":{"stringUnit":{"state":"translated","value":"Fijado"}},"fr":{"stringUnit":{"state":"translated","value":"Épinglé"}},"it":{"stringUnit":{"state":"translated","value":"Fissata"}},"pt":{"stringUnit":{"state":"translated","value":"Fixada"}},"ru":{"stringUnit":{"state":"translated","value":"Закреплено"}},"tr":{"stringUnit":{"state":"translated","value":"Sabitlendi"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已置顶"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"已置頂"}}}},
-    "Unpin" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Lösen"}},"es":{"stringUnit":{"state":"translated","value":"Desfijar"}},"fr":{"stringUnit":{"state":"translated","value":"Désépingler"}},"it":{"stringUnit":{"state":"translated","value":"Rimuovi"}},"pt":{"stringUnit":{"state":"translated","value":"Desafixar"}},"ru":{"stringUnit":{"state":"translated","value":"Открепить"}},"tr":{"stringUnit":{"state":"translated","value":"Sabitlemeyi kaldır"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"取消置顶"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"取消置頂"}}}},
-    "Updating chat…" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chat wird aktualisiert …"}},"es":{"stringUnit":{"state":"translated","value":"Actualizando chat…"}},"fr":{"stringUnit":{"state":"translated","value":"Mise à jour de la discussion…"}},"it":{"stringUnit":{"state":"translated","value":"Aggiornamento della chat…"}},"pt":{"stringUnit":{"state":"translated","value":"Atualizando conversa…"}},"ru":{"stringUnit":{"state":"translated","value":"Чат обновляется…"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbet güncelleniyor…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"正在更新聊天…"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"正在更新聊天…"}}}},
-    "Chats you archive will appear here." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Archivierte Chats werden hier angezeigt."}},"es":{"stringUnit":{"state":"translated","value":"Los chats que archives aparecerán aquí."}},"fr":{"stringUnit":{"state":"translated","value":"Les discussions que vous archivez apparaîtront ici."}},"it":{"stringUnit":{"state":"translated","value":"Le chat che archivi verranno visualizzate qui."}},"pt":{"stringUnit":{"state":"translated","value":"As conversas arquivadas aparecerão aqui."}},"ru":{"stringUnit":{"state":"translated","value":"Архивированные чаты появятся здесь."}},"tr":{"stringUnit":{"state":"translated","value":"Arşivlediğiniz sohbetler burada görünür."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你归档的聊天会显示在这里。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"你封存的聊天會顯示在這裡。"}}}},
-    "Chats you leave or are removed from will appear here." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chats, die du verlässt oder aus denen du entfernt wirst, werden hier angezeigt."}},"es":{"stringUnit":{"state":"translated","value":"Los chats que abandones o de los que te eliminen aparecerán aquí."}},"fr":{"stringUnit":{"state":"translated","value":"Les discussions que vous quittez ou dont vous êtes retiré apparaîtront ici."}},"it":{"stringUnit":{"state":"translated","value":"Le chat che abbandoni o da cui vieni rimosso verranno visualizzate qui."}},"pt":{"stringUnit":{"state":"translated","value":"As conversas que sair ou das quais for removido aparecerão aqui."}},"ru":{"stringUnit":{"state":"translated","value":"Чаты, которые вы покинете или из которых вас удалят, появятся здесь."}},"tr":{"stringUnit":{"state":"translated","value":"Ayrıldığınız veya çıkarıldığınız sohbetler burada görünür."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你退出或被移除的聊天会显示在这里。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"你退出或遭移除的聊天會顯示在這裡。"}}}},
-    "Check the spelling or try a different search." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Überprüfe die Schreibweise oder versuche eine andere Suche."}},"es":{"stringUnit":{"state":"translated","value":"Comprueba la ortografía o prueba con otra búsqueda."}},"fr":{"stringUnit":{"state":"translated","value":"Vérifiez l’orthographe ou essayez une autre recherche."}},"it":{"stringUnit":{"state":"translated","value":"Controlla l’ortografia o prova una ricerca diversa."}},"pt":{"stringUnit":{"state":"translated","value":"Verifique a ortografia ou tente outra pesquisa."}},"ru":{"stringUnit":{"state":"translated","value":"Проверьте написание или попробуйте другой запрос."}},"tr":{"stringUnit":{"state":"translated","value":"Yazımı kontrol edin veya farklı bir arama deneyin."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"检查拼写或尝试其他搜索。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"檢查拼字或嘗試其他搜尋。"}}}},
-    "Left" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Verlassen"}},"es":{"stringUnit":{"state":"translated","value":"Abandonados"}},"fr":{"stringUnit":{"state":"translated","value":"Quittées"}},"it":{"stringUnit":{"state":"translated","value":"Abbandonate"}},"pt":{"stringUnit":{"state":"translated","value":"Saídas"}},"ru":{"stringUnit":{"state":"translated","value":"Покинутые"}},"tr":{"stringUnit":{"state":"translated","value":"Ayrılınan"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已退出"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"已退出"}}}},
-    "Left chat" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chat verlassen"}},"es":{"stringUnit":{"state":"translated","value":"Chat abandonado"}},"fr":{"stringUnit":{"state":"translated","value":"Discussion quittée"}},"it":{"stringUnit":{"state":"translated","value":"Chat abbandonata"}},"pt":{"stringUnit":{"state":"translated","value":"Conversa abandonada"}},"ru":{"stringUnit":{"state":"translated","value":"Чат покинут"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbetten ayrıldınız"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已退出聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"已退出聊天"}}}},
-    "Marking chats as read…" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chats werden als gelesen markiert …"}},"es":{"stringUnit":{"state":"translated","value":"Marcando los chats como leídos…"}},"fr":{"stringUnit":{"state":"translated","value":"Marquage des discussions comme lues…"}},"it":{"stringUnit":{"state":"translated","value":"Contrassegno delle chat come lette…"}},"pt":{"stringUnit":{"state":"translated","value":"Marcando conversas como lidas…"}},"ru":{"stringUnit":{"state":"translated","value":"Чаты отмечаются как прочитанные…"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbetler okundu olarak işaretleniyor…"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"正在将聊天标为已读…"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"正在將聊天標示為已讀…"}}}},
-    "No Archived Chats" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine archivierten Chats"}},"es":{"stringUnit":{"state":"translated","value":"No hay chats archivados"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune discussion archivée"}},"it":{"stringUnit":{"state":"translated","value":"Nessuna chat archiviata"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma conversa arquivada"}},"ru":{"stringUnit":{"state":"translated","value":"Нет архивированных чатов"}},"tr":{"stringUnit":{"state":"translated","value":"Arşivlenmiş sohbet yok"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有已归档的聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有已封存的聊天"}}}},
-    "No Chats" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine Chats"}},"es":{"stringUnit":{"state":"translated","value":"No hay chats"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune discussion"}},"it":{"stringUnit":{"state":"translated","value":"Nessuna chat"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma conversa"}},"ru":{"stringUnit":{"state":"translated","value":"Нет чатов"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbet yok"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有聊天"}}}},
-    "No Left Chats" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine verlassenen Chats"}},"es":{"stringUnit":{"state":"translated","value":"No hay chats abandonados"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune discussion quittée"}},"it":{"stringUnit":{"state":"translated","value":"Nessuna chat abbandonata"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma conversa abandonada"}},"ru":{"stringUnit":{"state":"translated","value":"Нет покинутых чатов"}},"tr":{"stringUnit":{"state":"translated","value":"Ayrıldığınız sohbet yok"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有已退出的聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有已退出的聊天"}}}},
-    "No Results" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine Ergebnisse"}},"es":{"stringUnit":{"state":"translated","value":"Sin resultados"}},"fr":{"stringUnit":{"state":"translated","value":"Aucun résultat"}},"it":{"stringUnit":{"state":"translated","value":"Nessun risultato"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhum resultado"}},"ru":{"stringUnit":{"state":"translated","value":"Нет результатов"}},"tr":{"stringUnit":{"state":"translated","value":"Sonuç yok"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"无结果"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有結果"}}}},
-    "No Unread Chats" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine ungelesenen Chats"}},"es":{"stringUnit":{"state":"translated","value":"No hay chats sin leer"}},"fr":{"stringUnit":{"state":"translated","value":"Aucune discussion non lue"}},"it":{"stringUnit":{"state":"translated","value":"Nessuna chat non letta"}},"pt":{"stringUnit":{"state":"translated","value":"Nenhuma conversa não lida"}},"ru":{"stringUnit":{"state":"translated","value":"Нет непрочитанных чатов"}},"tr":{"stringUnit":{"state":"translated","value":"Okunmamış sohbet yok"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有未读聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"沒有未讀聊天"}}}},
-    "Read All" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Alle als gelesen markieren"}},"es":{"stringUnit":{"state":"translated","value":"Marcar todo como leído"}},"fr":{"stringUnit":{"state":"translated","value":"Tout marquer comme lu"}},"it":{"stringUnit":{"state":"translated","value":"Segna tutto come letto"}},"pt":{"stringUnit":{"state":"translated","value":"Marcar tudo como lido"}},"ru":{"stringUnit":{"state":"translated","value":"Прочитать всё"}},"tr":{"stringUnit":{"state":"translated","value":"Tümünü okundu işaretle"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"全部标为已读"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"全部標示為已讀"}}}},
-    "Removed from chat" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus dem Chat entfernt"}},"es":{"stringUnit":{"state":"translated","value":"Eliminado del chat"}},"fr":{"stringUnit":{"state":"translated","value":"Retiré de la discussion"}},"it":{"stringUnit":{"state":"translated","value":"Rimosso dalla chat"}},"pt":{"stringUnit":{"state":"translated","value":"Removido da conversa"}},"ru":{"stringUnit":{"state":"translated","value":"Удалён из чата"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbetten çıkarıldınız"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已从聊天中移除"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"已從聊天中移除"}}}},
-    "Search Chats" : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Chats durchsuchen"}},"es":{"stringUnit":{"state":"translated","value":"Buscar chats"}},"fr":{"stringUnit":{"state":"translated","value":"Rechercher des discussions"}},"it":{"stringUnit":{"state":"translated","value":"Cerca chat"}},"pt":{"stringUnit":{"state":"translated","value":"Pesquisar conversas"}},"ru":{"stringUnit":{"state":"translated","value":"Поиск чатов"}},"tr":{"stringUnit":{"state":"translated","value":"Sohbetlerde ara"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"搜索聊天"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"搜尋聊天"}}}},
-    "Start a new chat to send a message." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Starte einen neuen Chat, um eine Nachricht zu senden."}},"es":{"stringUnit":{"state":"translated","value":"Inicia un chat nuevo para enviar un mensaje."}},"fr":{"stringUnit":{"state":"translated","value":"Démarrez une nouvelle discussion pour envoyer un message."}},"it":{"stringUnit":{"state":"translated","value":"Avvia una nuova chat per inviare un messaggio."}},"pt":{"stringUnit":{"state":"translated","value":"Inicie uma nova conversa para enviar uma mensagem."}},"ru":{"stringUnit":{"state":"translated","value":"Начните новый чат, чтобы отправить сообщение."}},"tr":{"stringUnit":{"state":"translated","value":"Mesaj göndermek için yeni bir sohbet başlatın."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"发起新聊天以发送消息。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"開始新聊天以傳送訊息。"}}}},
-    "You left this chat." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Du hast diesen Chat verlassen."}},"es":{"stringUnit":{"state":"translated","value":"Has abandonado este chat."}},"fr":{"stringUnit":{"state":"translated","value":"Vous avez quitté cette discussion."}},"it":{"stringUnit":{"state":"translated","value":"Hai abbandonato questa chat."}},"pt":{"stringUnit":{"state":"translated","value":"Você saiu desta conversa."}},"ru":{"stringUnit":{"state":"translated","value":"Вы покинули этот чат."}},"tr":{"stringUnit":{"state":"translated","value":"Bu sohbetten ayrıldınız."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你已退出此聊天。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"你已退出此聊天。"}}}},
-    "You were removed from this chat." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Du wurdest aus diesem Chat entfernt."}},"es":{"stringUnit":{"state":"translated","value":"Te eliminaron de este chat."}},"fr":{"stringUnit":{"state":"translated","value":"Vous avez été retiré de cette discussion."}},"it":{"stringUnit":{"state":"translated","value":"Sei stato rimosso da questa chat."}},"pt":{"stringUnit":{"state":"translated","value":"Você foi removido desta conversa."}},"ru":{"stringUnit":{"state":"translated","value":"Вас удалили из этого чата."}},"tr":{"stringUnit":{"state":"translated","value":"Bu sohbetten çıkarıldınız."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你已从此聊天中移除。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"你已從此聊天中移除。"}}}},
-    "You’re all caught up." : {"extractionState":"manual","localizations":{"de":{"stringUnit":{"state":"translated","value":"Du bist auf dem neuesten Stand."}},"es":{"stringUnit":{"state":"translated","value":"Estás al día."}},"fr":{"stringUnit":{"state":"translated","value":"Vous êtes à jour."}},"it":{"stringUnit":{"state":"translated","value":"Sei al passo con tutto."}},"pt":{"stringUnit":{"state":"translated","value":"Está tudo em dia."}},"ru":{"stringUnit":{"state":"translated","value":"Всё прочитано."}},"tr":{"stringUnit":{"state":"translated","value":"Her şeyi okudunuz."}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你已全部查看。"}},"zh-Hant":{"stringUnit":{"state":"translated","value":"你已全部查看。"}}}},
     "·" : {
       "comment" : "A period.",
       "isCommentAutoGenerated" : true,
@@ -4271,6 +4246,65 @@
         }
       }
     },
+    "About (Optional)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über mich (optional)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Acerca de (opcional)"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos (facultatif)"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Info (facoltativo)"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sobre (opcional)"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "О себе (необязательно)"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hakkında (İsteğe bağlı)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "简介（可选）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "簡介（選填）"
+          }
+        }
+      }
+    },
     "Accept" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7953,6 +7987,65 @@
         }
       }
     },
+    "Change Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar ändern"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar avatar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer l’avatar"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambia avatar"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alterar avatar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Изменить аватар"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatarı değiştir"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改头像"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改頭像"
+          }
+        }
+      }
+    },
     "Change quick reaction %lld" : {
       "comment" : "A description of an action that can be performed when tapping a quick reaction.",
       "isCommentAutoGenerated" : true
@@ -8388,6 +8481,65 @@
         }
       }
     },
+    "Chat with support" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit dem Support chatten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chatear con soporte"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contacter l’assistance"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chatta con il supporto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversar com o suporte"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чат с поддержкой"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destekle sohbet et"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与支持人员聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "與支援人員聊天"
+          }
+        }
+      }
+    },
     "Chats" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8447,9 +8599,249 @@
         }
       }
     },
+    "Chats you archive will appear here." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archivierte Chats werden hier angezeigt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los chats que archives aparecerán aquí."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les discussions que vous archivez apparaîtront ici."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le chat che archivi verranno visualizzate qui."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "As conversas arquivadas aparecerão aqui."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Архивированные чаты появятся здесь."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arşivlediğiniz sohbetler burada görünür."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你归档的聊天会显示在这里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你封存的聊天會顯示在這裡。"
+          }
+        }
+      }
+    },
+    "Chats you leave or are removed from will appear here." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chats, die du verlässt oder aus denen du entfernt wirst, werden hier angezeigt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los chats que abandones o de los que te eliminen aparecerán aquí."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les discussions que vous quittez ou dont vous êtes retiré apparaîtront ici."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le chat che abbandoni o da cui vieni rimosso verranno visualizzate qui."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "As conversas que sair ou das quais for removido aparecerão aqui."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чаты, которые вы покинете или из которых вас удалят, появятся здесь."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrıldığınız veya çıkarıldığınız sohbetler burada görünür."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你退出或被移除的聊天会显示在这里。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你退出或遭移除的聊天會顯示在這裡。"
+          }
+        }
+      }
+    },
+    "Check the spelling or try a different search." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überprüfe die Schreibweise oder versuche eine andere Suche."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprueba la ortografía o prueba con otra búsqueda."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vérifiez l’orthographe ou essayez une autre recherche."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controlla l’ortografia o prova una ricerca diversa."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifique a ortografia ou tente outra pesquisa."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверьте написание или попробуйте другой запрос."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yazımı kontrol edin veya farklı bir arama deneyin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查拼写或尝试其他搜索。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檢查拼字或嘗試其他搜尋。"
+          }
+        }
+      }
+    },
+    "Choose a conversation to continue, or start a new one." : {
+      "comment" : "A description of the content of the conversation chooser.",
+      "isCommentAutoGenerated" : true
+    },
     "Choose a profile" : {
       "comment" : "A title displayed above the list of profiles.",
       "isCommentAutoGenerated" : true
+    },
+    "Choose Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar auswählen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir avatar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir un avatar"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scegli avatar"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escolher avatar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбрать аватар"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar seç"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择头像"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇頭像"
+          }
+        }
+      }
     },
     "Choose from your device" : {
       "comment" : "A section that allows the user to choose an image from their device.",
@@ -9130,6 +9522,65 @@
         }
       }
     },
+    "Connecting to support…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zum Support wird hergestellt …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectando con soporte…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connexion à l’assistance…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connessione al supporto…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectando ao suporte…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключение к поддержке…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desteğe bağlanılıyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在连接支持人员…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在連線支援人員…"
+          }
+        }
+      }
+    },
     "Connecting…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9257,6 +9708,73 @@
           }
         }
       }
+    },
+    "Continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fortfahren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuer"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continua"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Продолжить"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Devam et"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續"
+          }
+        }
+      }
+    },
+    "Conversation" : {
+      "comment" : "Title of a conversation row in the conversation chooser.",
+      "isCommentAutoGenerated" : true
+    },
+    "Conversations with %@" : {
+      "comment" : "A localized string that takes a single name as a parameter.",
+      "isCommentAutoGenerated" : true
     },
     "Copied" : {
       "extractionState" : "manual",
@@ -10251,6 +10769,65 @@
         }
       }
     },
+    "Couldn't connect to support" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zum Support nicht möglich"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo conectar con soporte"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de contacter l’assistance"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile connettersi al supporto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível conectar ao suporte"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось подключиться к поддержке"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desteğe bağlanılamadı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接支持人员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法連線支援人員"
+          }
+        }
+      }
+    },
     "Couldn't create chat" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10306,6 +10883,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法建立聊天"
+          }
+        }
+      }
+    },
+    "Couldn't create your profile. Try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Profil konnte nicht erstellt werden. Versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo crear tu perfil. Inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de créer votre profil. Réessayez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile creare il tuo profilo. Riprova."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível criar seu perfil. Tente novamente."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось создать профиль. Повторите попытку."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profiliniz oluşturulamadı. Tekrar deneyin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建你的个人资料。请重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法建立你的個人檔案。請再試一次。"
           }
         }
       }
@@ -10967,6 +11603,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法標為已讀"
+          }
+        }
+      }
+    },
+    "Couldn't mark as unread" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat konnte nicht als ungelesen markiert werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo marcar el chat como no leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de marquer la discussion comme non lue"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile contrassegnare la chat come non letta"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível marcar a conversa como não lida"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось отметить чат как непрочитанный"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbet okunmamış olarak işaretlenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将聊天标为未读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法將聊天標示為未讀"
           }
         }
       }
@@ -11992,6 +12687,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法更新群組圖片"
+          }
+        }
+      }
+    },
+    "Couldn't update pin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anheftung konnte nicht aktualisiert werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo actualizar la fijación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de modifier l’épinglage"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile aggiornare il fissaggio"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível atualizar a fixação"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось изменить закрепление"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sabitleme güncellenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法更新置顶状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法更新置頂狀態"
           }
         }
       }
@@ -22957,6 +23711,65 @@
         }
       }
     },
+    "Leave “%@”?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ verlassen?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Salir de “%@”?"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitter « %@ » ?"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uscire da “%@”?"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sair de “%@”?"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Покинуть «%@»?"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” sohbetinden ayrıl?"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离开“%@”？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "離開「%@」？"
+          }
+        }
+      }
+    },
     "Leave Chat" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23018,65 +23831,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出聊天"
-          }
-        }
-      }
-    },
-    "Leave “%@”?" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ verlassen?"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "¿Salir de “%@”?"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Quitter « %@ » ?"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Uscire da “%@”?"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sair de “%@”?"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Покинуть «%@»?"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” sohbetinden ayrıl?"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "离开“%@”？"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "離開「%@」？"
           }
         }
       }
@@ -23260,65 +24014,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "請先退出此群組，再刪除本機副本。"
-          }
-        }
-      }
-    },
-    "Leaving…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wird verlassen …"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saliendo…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Départ…"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Uscita…"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saindo…"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Выход…"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ayrılınıyor…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在离开…"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在離開…"
           }
         }
       }
@@ -23555,6 +24250,183 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "離開將首先讓您辭去管理員職務。"
+          }
+        }
+      }
+    },
+    "Leaving…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird verlassen …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saliendo…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Départ…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uscita…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saindo…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выход…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrılınıyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在离开…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在離開…"
+          }
+        }
+      }
+    },
+    "Left" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlassen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abandonados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quittées"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbandonate"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saídas"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Покинутые"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrılınan"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出"
+          }
+        }
+      }
+    },
+    "Left chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat verlassen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat abandonado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discussion quittée"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat abbandonata"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversa abandonada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чат покинут"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbetten ayrıldınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已退出聊天"
           }
         }
       }
@@ -25183,6 +26055,124 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "標為已讀"
+          }
+        }
+      }
+    },
+    "Mark as unread" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als ungelesen markieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar como no leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marquer comme non lue"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segna come non letta"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar como não lida"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Отметить как непрочитанное"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Okunmamış olarak işaretle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "标为未读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "標示為未讀"
+          }
+        }
+      }
+    },
+    "Marking chats as read…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chats werden als gelesen markiert …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcando los chats como leídos…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marquage des discussions comme lues…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrassegno delle chat come lette…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcando conversas como lidas…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чаты отмечаются как прочитанные…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbetler okundu olarak işaretleniyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在将聊天标为已读…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在將聊天標示為已讀…"
           }
         }
       }
@@ -27042,6 +28032,65 @@
         }
       }
     },
+    "Name" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nombre"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nom"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nome"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nome"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Имя"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ad"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名称"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "名稱"
+          }
+        }
+      }
+    },
     "Name from profile: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -27951,6 +29000,65 @@
         }
       }
     },
+    "New profile" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neues Profil"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuevo perfil"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouveau profil"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuovo profilo"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novo perfil"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Новый профиль"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni profil"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新个人资料"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新個人檔案"
+          }
+        }
+      }
+    },
     "Next" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28434,6 +29542,65 @@
         }
       }
     },
+    "No Archived Chats" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine archivierten Chats"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay chats archivados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune discussion archivée"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessuna chat archiviata"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhuma conversa arquivada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет архивированных чатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Arşivlenmiş sohbet yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已归档的聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有已封存的聊天"
+          }
+        }
+      }
+    },
     "No audit logs on this device." : {
       "comment" : "A message displayed when there are no audit logs on the device.",
       "isCommentAutoGenerated" : true,
@@ -28549,6 +29716,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此設備上沒有可用的相機。"
+          }
+        }
+      }
+    },
+    "No Chats" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Chats"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay chats"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune discussion"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessuna chat"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhuma conversa"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет чатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbet yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有聊天"
           }
         }
       }
@@ -28787,6 +30013,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未找到關鍵包。"
+          }
+        }
+      }
+    },
+    "No Left Chats" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine verlassenen Chats"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay chats abandonados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune discussion quittée"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessuna chat abbandonata"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhuma conversa abandonada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет покинутых чатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayrıldığınız sohbet yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有已退出的聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有已退出的聊天"
           }
         }
       }
@@ -29346,6 +30631,65 @@
         }
       }
     },
+    "No Results" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Ergebnisse"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin resultados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun résultat"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessun risultato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhum resultado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет результатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonuç yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无结果"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有結果"
+          }
+        }
+      }
+    },
     "No unread chats" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29377,6 +30721,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nenhum bate-papo não lido"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет непрочитанных чатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Okunmamış sohbet yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有未读聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有未讀聊天"
+          }
+        }
+      }
+    },
+    "No Unread Chats" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine ungelesenen Chats"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay chats sin leer"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune discussion non lue"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessuna chat non letta"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhuma conversa não lida"
           }
         },
         "ru" : {
@@ -32899,6 +34302,124 @@
         }
       }
     },
+    "Pin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anheften"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fijar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Épingler"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fissa"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fixar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закрепить"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sabitle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置顶"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "置頂"
+          }
+        }
+      }
+    },
+    "Pinned" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angeheftet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fijado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Épinglé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fissata"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fixada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Закреплено"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sabitlendi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已置顶"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已置頂"
+          }
+        }
+      }
+    },
     "Play audio message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -33090,6 +34611,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Playback speed"
+          }
+        }
+      }
+    },
+    "Please check your connection and try again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitte überprüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Comprueba tu conexión e inténtalo de nuevo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vérifiez votre connexion et réessayez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controlla la connessione e riprova."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifique sua conexão e tente novamente."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверьте подключение и повторите попытку."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lütfen bağlantınızı kontrol edip tekrar deneyin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查网络连接，然后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請檢查網路連線，然後再試一次。"
           }
         }
       }
@@ -33567,6 +35147,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "個人檔案"
+          }
+        }
+      }
+    },
+    "Profile avatar preview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschau des Profilbilds"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista previa del avatar del perfil"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aperçu de l’avatar du profil"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anteprima dell’avatar del profilo"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prévia do avatar do perfil"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Предпросмотр аватара профиля"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil avatarı önizlemesi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人资料头像预览"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人檔案頭像預覽"
           }
         }
       }
@@ -35407,6 +37046,65 @@
         }
       }
     },
+    "Read All" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle als gelesen markieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar todo como leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout marquer comme lu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segna tutto come letto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar tudo como lido"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Прочитать всё"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tümünü okundu işaretle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部标为已读"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部標示為已讀"
+          }
+        }
+      }
+    },
     "Read from Marmot's account relay lists. Edits are published through Marmot to your NIP-65 and inbox relay lists." : {
       "comment" : "A description of how the relays feature works.",
       "isCommentAutoGenerated" : true,
@@ -36501,6 +38199,65 @@
         }
       }
     },
+    "Remove Avatar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatar entfernen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar avatar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supprimer l’avatar"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rimuovi avatar"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remover avatar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалить аватар"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatarı kaldır"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除头像"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除頭像"
+          }
+        }
+      }
+    },
     "Remove from Group" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -36802,6 +38559,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刪除該成員？"
+          }
+        }
+      }
+    },
+    "Removed from chat" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus dem Chat entfernt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminado del chat"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retiré de la discussion"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rimosso dalla chat"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removido da conversa"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Удалён из чата"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbetten çıkarıldınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已从聊天中移除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已從聊天中移除"
           }
         }
       }
@@ -38676,6 +40492,65 @@
         }
       }
     },
+    "Search Chats" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chats durchsuchen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buscar chats"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher des discussions"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerca chat"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pesquisar conversas"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поиск чатов"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbetlerde ara"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索聊天"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜尋聊天"
+          }
+        }
+      }
+    },
     "Search emoji" : {
       "comment" : "Label for a text field used to search for emojis.",
       "isCommentAutoGenerated" : true
@@ -39673,6 +41548,65 @@
     "Selected location" : {
       "comment" : "Label for a marker that indicates the selected location.",
       "isCommentAutoGenerated" : true
+    },
+    "Selected profile photo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgewähltes Profilfoto"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto de perfil seleccionada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photo de profil sélectionnée"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto del profilo selezionata"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Foto de perfil selecionada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выбранное фото профиля"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seçilen profil fotoğrafı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择的个人资料照片"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已選擇的個人檔案照片"
+          }
+        }
+      }
     },
     "Send" : {
       "extractionState" : "manual",
@@ -41725,6 +43659,65 @@
         }
       }
     },
+    "Sign Up" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrarse"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "S’inscrire"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrati"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cadastrar-se"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зарегистрироваться"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydol"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注册"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "註冊"
+          }
+        }
+      }
+    },
     "Signed out" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -42016,6 +44009,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登出會從此裝置移除此個人資料及其本機金鑰材料。"
+          }
+        }
+      }
+    },
+    "Signing Up…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrierung läuft …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inscription…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrazione…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cadastrando…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Регистрация…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydolunuyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在注册…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在註冊…"
           }
         }
       }
@@ -42530,6 +44582,69 @@
           }
         }
       }
+    },
+    "Start a new chat to send a message." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starte einen neuen Chat, um eine Nachricht zu senden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicia un chat nuevo para enviar un mensaje."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Démarrez une nouvelle discussion pour envoyer un message."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avvia una nuova chat per inviare un messaggio."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inicie uma nova conversa para enviar uma mensagem."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Начните новый чат, чтобы отправить сообщение."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mesaj göndermek için yeni bir sohbet başlatın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发起新聊天以发送消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始新聊天以傳送訊息。"
+          }
+        }
+      }
+    },
+    "Start new conversation" : {
+      "comment" : "A label for a button that starts a new conversation.",
+      "isCommentAutoGenerated" : true
     },
     "Starts dictation in search." : {
       "comment" : "A hint for the dictation button in the search bar.",
@@ -43243,6 +45358,65 @@
         }
       }
     },
+    "Support" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützung"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayuda"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Assistance"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supporto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suporte"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поддержка"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destek"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "支持"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "支援"
+          }
+        }
+      }
+    },
     "Swipe a chat to archive it; archived chats stay active but stay out of unread and notification attention." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -43424,65 +45598,6 @@
         }
       }
     },
-    "Syncing…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Synchronisieren…"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sincronizando…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Synchronisation…"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sincronizzazione…"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sincronizando…"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Синхронизация…"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Senkronize ediliyor…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在同步…"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在同步…"
-          }
-        }
-      }
-    },
     "Synced" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -43538,6 +45653,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已同步"
+          }
+        }
+      }
+    },
+    "Syncing…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisieren…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizando…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisation…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizzazione…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sincronizando…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Синхронизация…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Senkronize ediliyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在同步…"
           }
         }
       }
@@ -44540,6 +46714,124 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "該成員不是管理員。"
+          }
+        }
+      }
+    },
+    "That photo can't be used. Choose a different photo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Foto kann nicht verwendet werden. Wähle ein anderes Foto."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede usar esa foto. Elige otra."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette photo ne peut pas être utilisée. Choisissez-en une autre."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questa foto non può essere usata. Scegline un’altra."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essa foto não pode ser usada. Escolha outra."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это фото нельзя использовать. Выберите другое."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu fotoğraf kullanılamıyor. Başka bir fotoğraf seçin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法使用这张照片。请选择其他照片。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法使用這張照片。請選擇其他照片。"
+          }
+        }
+      }
+    },
+    "That photo is too large. Choose a different photo." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Foto ist zu groß. Wähle ein anderes Foto."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esa foto es demasiado grande. Elige otra."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette photo est trop volumineuse. Choisissez-en une autre."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questa foto è troppo grande. Scegline un’altra."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essa foto é muito grande. Escolha outra."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это фото слишком большое. Выберите другое."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu fotoğraf çok büyük. Başka bir fotoğraf seçin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这张照片太大。请选择其他照片。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這張照片太大。請選擇其他照片。"
           }
         }
       }
@@ -46962,6 +49254,65 @@
         }
       }
     },
+    "Unpin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lösen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desfijar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désépingler"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rimuovi"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desafixar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Открепить"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sabitlemeyi kaldır"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消置顶"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消置頂"
+          }
+        }
+      }
+    },
     "Unread" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -47017,6 +49368,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未讀"
+          }
+        }
+      }
+    },
+    "Updating chat…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat wird aktualisiert …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualizando chat…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mise à jour de la discussion…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggiornamento della chat…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atualizando conversa…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Чат обновляется…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sohbet güncelleniyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新聊天…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新聊天…"
           }
         }
       }
@@ -49729,6 +52139,65 @@
         }
       }
     },
+    "You left this chat." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast diesen Chat verlassen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Has abandonado este chat."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez quitté cette discussion."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai abbandonato questa chat."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você saiu desta conversa."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы покинули этот чат."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu sohbetten ayrıldınız."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已退出此聊天。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已退出此聊天。"
+          }
+        }
+      }
+    },
     "You sent a message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -49843,6 +52312,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您辭去管理者職務"
+          }
+        }
+      }
+    },
+    "You were removed from this chat." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du wurdest aus diesem Chat entfernt."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te eliminaron de este chat."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez été retiré de cette discussion."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sei stato rimosso da questa chat."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você foi removido desta conversa."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вас удалили из этого чата."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu sohbetten çıkarıldınız."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已从此聊天中移除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已從此聊天中移除。"
           }
         }
       }
@@ -50148,6 +52676,124 @@
         }
       }
     },
+    "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du erhältst keine neuen Nachrichten mehr. Dieser Chat bleibt als schreibgeschützter Verlauf auf diesem Gerät, bis du ihn löschst."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dejarás de recibir mensajes nuevos. Este chat permanecerá en este dispositivo como historial de solo lectura hasta que lo elimines."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous ne recevrez plus de nouveaux messages. Cette discussion restera sur cet appareil en lecture seule jusqu’à ce que vous la supprimiez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non riceverai più nuovi messaggi. Questa chat rimarrà su questo dispositivo come cronologia di sola lettura finché non la eliminerai."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você deixará de receber novas mensagens. Esta conversa permanecerá neste dispositivo como histórico somente leitura até que você a exclua."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы перестанете получать новые сообщения. Этот чат останется на устройстве как история только для чтения, пока вы его не удалите."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeni mesajları almayı bırakacaksınız. Bu sohbet, siz silene kadar bu cihazda salt okunur geçmiş olarak kalacak."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将不再收到新消息。此聊天将作为只读历史记录保留在此设备上，直到你将其删除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將不再收到新訊息。此聊天會以唯讀記錄保留在此裝置上，直到你將其刪除。"
+          }
+        }
+      }
+    },
+    "You’re all caught up." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du bist auf dem neuesten Stand."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estás al día."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous êtes à jour."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sei al passo con tutto."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Está tudo em dia."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Всё прочитано."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Her şeyi okudunuz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已全部查看。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已全部查看。"
+          }
+        }
+      }
+    },
     "You're offline. Try again once you're connected." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -50268,6 +52914,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您是唯一的管理員。在您離開之前讓另一位成員成為管理員。"
+          }
+        }
+      }
+    },
+    "Your avatar is public. The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Avatar ist öffentlich. Das Foto wird zu einem öffentlichen Dienst hochgeladen. Wenn du es aus deinem Profil entfernst, wird die hochgeladene Kopie möglicherweise nicht gelöscht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu avatar es público. La foto se sube a un servicio público y eliminarla de tu perfil puede no borrar la copia subida."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre avatar est public. La photo est envoyée vers un service public et sa suppression de votre profil peut ne pas supprimer la copie envoyée."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il tuo avatar è pubblico. La foto viene caricata su un servizio pubblico e rimuoverla dal profilo potrebbe non eliminare la copia caricata."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seu avatar é público. A foto é enviada a um serviço público, e removê-la do perfil pode não excluir a cópia enviada."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ваш аватар общедоступен. Фото загружается в общедоступный сервис, и удаление его из профиля может не удалить загруженную копию."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avatarınız herkese açıktır. Fotoğraf herkese açık bir hizmete yüklenir ve profilinizden kaldırmanız yüklenen kopyayı silmeyebilir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的头像是公开的。照片会上传到公共服务，从个人资料中移除照片可能不会删除已上传的副本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的頭像是公開的。照片會上傳到公共服務，從個人檔案中移除照片可能不會刪除已上傳的副本。"
           }
         }
       }
@@ -50556,584 +53261,6 @@
         }
       }
     },
-    "Chat with support" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mit dem Support chatten"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chatear con soporte"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contacter l’assistance"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chatta con il supporto"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conversar com o suporte"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Чат с поддержкой"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Destekle sohbet et"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "与支持人员聊天"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "與支援人員聊天"
-          }
-        }
-      }
-    },
-    "Connecting to support…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbindung zum Support wird hergestellt …"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectando con soporte…"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connexion à l’assistance…"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connessione al supporto…"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Conectando ao suporte…"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Подключение к поддержке…"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desteğe bağlanılıyor…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在连接支持人员…"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在連線支援人員…"
-          }
-        }
-      }
-    },
-    "Couldn't connect to support" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbindung zum Support nicht möglich"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No se pudo conectar con soporte"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Impossible de contacter l’assistance"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Impossibile connettersi al supporto"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Não foi possível conectar ao suporte"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Не удалось подключиться к поддержке"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Desteğe bağlanılamadı"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法连接支持人员"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無法連線支援人員"
-          }
-        }
-      }
-    },
-    "Please check your connection and try again." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bitte überprüfe deine Verbindung und versuche es erneut."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Comprueba tu conexión e inténtalo de nuevo."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vérifiez votre connexion et réessayez."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Controlla la connessione e riprova."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verifique sua conexão e tente novamente."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Проверьте подключение и повторите попытку."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lütfen bağlantınızı kontrol edip tekrar deneyin."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请检查网络连接，然后重试。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請檢查網路連線，然後再試一次。"
-          }
-        }
-      }
-    },
-    "Support" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unterstützung"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ayuda"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Assistance"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Supporto"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suporte"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Поддержка"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Destek"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "支持"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "支援"
-          }
-        }
-      }
-    },
-    "About (Optional)" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Über mich (optional)" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Acerca de (opcional)" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "À propos (facultatif)" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Info (facoltativo)" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Sobre (opcional)" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "О себе (необязательно)" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Hakkında (İsteğe bağlı)" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "简介（可选）" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "簡介（選填）" } }
-      }
-    },
-    "Change Avatar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar ändern" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cambiar avatar" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Changer l’avatar" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Cambia avatar" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Alterar avatar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Изменить аватар" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarı değiştir" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改头像" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "更改頭像" } }
-      }
-    },
-    "Choose Avatar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar auswählen" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Elegir avatar" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Choisir un avatar" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Scegli avatar" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Escolher avatar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать аватар" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatar seç" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择头像" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇頭像" } }
-      }
-    },
-    "Continue" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fortfahren" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Continuer" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Continua" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Continuar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Продолжить" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Devam et" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "繼續" } }
-      }
-    },
-    "Couldn't create your profile. Try again." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Profil konnte nicht erstellt werden. Versuche es erneut." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo crear tu perfil. Inténtalo de nuevo." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de créer votre profil. Réessayez." } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Impossibile creare il tuo profilo. Riprova." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível criar seu perfil. Tente novamente." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось создать профиль. Повторите попытку." } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profiliniz oluşturulamadı. Tekrar deneyin." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法创建你的个人资料。请重试。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法建立你的個人檔案。請再試一次。" } }
-      }
-    },
-    "Name" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Name" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nombre" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nom" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Nome" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nome" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Имя" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Ad" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "名称" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "名稱" } }
-      }
-    },
-    "New profile" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Profil" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo perfil" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau profil" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Nuovo profilo" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Novo perfil" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый профиль" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yeni profil" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新个人资料" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "新個人檔案" } }
-      }
-    },
-    "Profile avatar preview" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vorschau des Profilbilds" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Vista previa del avatar del perfil" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aperçu de l’avatar du profil" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Anteprima dell’avatar del profilo" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Prévia do avatar do perfil" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предпросмотр аватара профиля" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profil avatarı önizlemesi" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "个人资料头像预览" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "個人檔案頭像預覽" } }
-      }
-    },
-    "Remove Avatar" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Avatar entfernen" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Eliminar avatar" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer l’avatar" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Rimuovi avatar" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Remover avatar" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить аватар" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarı kaldır" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除头像" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "移除頭像" } }
-      }
-    },
-    "Selected profile photo" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ausgewähltes Profilfoto" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Foto de perfil seleccionada" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Photo de profil sélectionnée" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Foto del profilo selezionata" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Foto de perfil selecionada" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбранное фото профиля" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Seçilen profil fotoğrafı" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已选择的个人资料照片" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已選擇的個人檔案照片" } }
-      }
-    },
-    "Sign Up" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Registrieren" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Registrarse" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "S’inscrire" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Registrati" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Cadastrar-se" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зарегистрироваться" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kaydol" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "注册" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "註冊" } }
-      }
-    },
-    "Signing Up…" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Registrierung läuft …" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Registrando…" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Inscription…" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Registrazione…" } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Cadastrando…" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Регистрация…" } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kaydolunuyor…" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在注册…" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在註冊…" } }
-      }
-    },
-    "That photo can't be used. Choose a different photo." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieses Foto kann nicht verwendet werden. Wähle ein anderes Foto." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se puede usar esa foto. Elige otra." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette photo ne peut pas être utilisée. Choisissez-en une autre." } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Questa foto non può essere usata. Scegline un’altra." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Essa foto não pode ser usada. Escolha outra." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это фото нельзя использовать. Выберите другое." } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu fotoğraf kullanılamıyor. Başka bir fotoğraf seçin." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法使用这张照片。请选择其他照片。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法使用這張照片。請選擇其他照片。" } }
-      }
-    },
-    "That photo is too large. Choose a different photo." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieses Foto ist zu groß. Wähle ein anderes Foto." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Esa foto es demasiado grande. Elige otra." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette photo est trop volumineuse. Choisissez-en une autre." } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Questa foto è troppo grande. Scegline un’altra." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Essa foto é muito grande. Escolha outra." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Это фото слишком большое. Выберите другое." } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu fotoğraf çok büyük. Başka bir fotoğraf seçin." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这张照片太大。请选择其他照片。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "這張照片太大。請選擇其他照片。" } }
-      }
-    },
-    "Your avatar is public. The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Avatar ist öffentlich. Das Foto wird zu einem öffentlichen Dienst hochgeladen. Wenn du es aus deinem Profil entfernst, wird die hochgeladene Kopie möglicherweise nicht gelöscht." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu avatar es público. La foto se sube a un servicio público y eliminarla de tu perfil puede no borrar la copia subida." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre avatar est public. La photo est envoyée vers un service public et sa suppression de votre profil peut ne pas supprimer la copie envoyée." } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Il tuo avatar è pubblico. La foto viene caricata su un servizio pubblico e rimuoverla dal profilo potrebbe non eliminare la copia caricata." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Seu avatar é público. A foto é enviada a um serviço público, e removê-la do perfil pode não excluir a cópia enviada." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ваш аватар общедоступен. Фото загружается в общедоступный сервис, и удаление его из профиля может не удалить загруженную копию." } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Avatarınız herkese açıktır. Fotoğraf herkese açık bir hizmete yüklenir ve profilinizden kaldırmanız yüklenen kopyayı silmeyebilir." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的头像是公开的。照片会上传到公共服务，从个人资料中移除照片可能不会删除已上传的副本。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的頭像是公開的。照片會上傳到公共服務，從個人檔案中移除照片可能不會刪除已上傳的副本。" } }
-      }
-    },
-    "Your profile was created, but some details couldn't be saved." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dein Profil wurde erstellt, aber einige Details konnten nicht gespeichert werden." } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu perfil se creó, pero no se pudieron guardar algunos datos." } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre profil a été créé, mais certains détails n’ont pas pu être enregistrés." } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Il tuo profilo è stato creato, ma non è stato possibile salvare alcuni dettagli." } },
-        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Seu perfil foi criado, mas alguns detalhes não puderam ser salvos." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Профиль создан, но некоторые данные не удалось сохранить." } },
-        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Profiliniz oluşturuldu ancak bazı ayrıntılar kaydedilemedi." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "你的个人资料已创建，但部分详细信息无法保存。" } },
-        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "你的個人檔案已建立，但部分詳細資料無法儲存。" } }
-      }
-    },
-    "You'll stop receiving new messages. This chat will remain on this device as read-only history until you delete it." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Du erhältst keine neuen Nachrichten mehr. Dieser Chat bleibt als schreibgeschützter Verlauf auf diesem Gerät, bis du ihn löschst."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dejarás de recibir mensajes nuevos. Este chat permanecerá en este dispositivo como historial de solo lectura hasta que lo elimines."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vous ne recevrez plus de nouveaux messages. Cette discussion restera sur cet appareil en lecture seule jusqu’à ce que vous la supprimiez."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Non riceverai più nuovi messaggi. Questa chat rimarrà su questo dispositivo come cronologia di sola lettura finché non la eliminerai."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Você deixará de receber novas mensagens. Esta conversa permanecerá neste dispositivo como histórico somente leitura até que você a exclua."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Вы перестанете получать новые сообщения. Этот чат останется на устройстве как история только для чтения, пока вы его не удалите."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yeni mesajları almayı bırakacaksınız. Bu sohbet, siz silene kadar bu cihazda salt okunur geçmiş olarak kalacak."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你将不再收到新消息。此聊天将作为只读历史记录保留在此设备上，直到你将其删除。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你將不再收到新訊息。此聊天會以唯讀記錄保留在此裝置上，直到你將其刪除。"
-          }
-        }
-      }
-    },
     "Your passphrase encrypts the exported ncryptsec1 backup. Marmot never stores it." : {
       "localizations" : {
         "de" : {
@@ -51188,6 +53315,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的密碼短語會加密匯出的 ncryptsec1 備份。Marmot 永遠不會儲存它。"
+          }
+        }
+      }
+    },
+    "Your profile was created, but some details couldn't be saved." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Profil wurde erstellt, aber einige Details konnten nicht gespeichert werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu perfil se creó, pero no se pudieron guardar algunos datos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre profil a été créé, mais certains détails n’ont pas pu être enregistrés."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il tuo profilo è stato creato, ma non è stato possibile salvare alcuni dettagli."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seu perfil foi criado, mas alguns detalhes não puderam ser salvos."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Профиль создан, но некоторые данные не удалось сохранить."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profiliniz oluşturuldu ancak bazı ayrıntılar kaydedilemedi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的个人资料已创建，但部分详细信息无法保存。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的個人檔案已建立，但部分詳細資料無法儲存。"
           }
         }
       }

@@ -16,8 +16,11 @@ final class NewChatFlowViewModel {
     let groupQuery = RecipientQueryModel()
 
     var startPrompt: StartChatPrompt?
+    var conversationChooser: ConversationChooserPresentation?
+    private(set) var choosingAccountIdHex: String?
     private(set) var isCreatingGroup = false
     var groupCreateError: String?
+    private var retryStartMode = RetryStartMode.canonicalLookup
 
 #if DEBUG
     @ObservationIgnored var existingDirectChatGroupIdForTesting: (
@@ -31,7 +34,9 @@ final class NewChatFlowViewModel {
     )?
 #endif
 
-    var isBusy: Bool { starter.isCreating || isCreatingGroup }
+    var isBusy: Bool {
+        choosingAccountIdHex != nil || starter.isCreating || isCreatingGroup
+    }
 
     /// Excludes the active account from every people list in this flow.
     func excludedAccountIds(using appState: AppState) -> Set<String> {
@@ -42,12 +47,112 @@ final class NewChatFlowViewModel {
 
     // MARK: - Direct chat
 
+    /// Person-selection entry point. Existing exact two-person conversations
+    /// are offered explicitly; otherwise the first conversation is created.
+    func chooseConversation(
+        accountIdHex: String,
+        memberRef: String,
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        guard choosingAccountIdHex == nil else { return }
+        retryStartMode = .conversationChoiceLookup
+        startPrompt = nil
+        conversationChooser = nil
+        choosingAccountIdHex = accountIdHex
+        defer { choosingAccountIdHex = nil }
+
+        guard let myAccountIdHex = appState.activeAccount?.accountIdHex else {
+            presentChoiceLookupError(
+                L10n.string("No active account is selected."),
+                accountIdHex: accountIdHex,
+                memberRef: memberRef,
+                using: appState
+            )
+            return
+        }
+
+        await directory.load(using: appState, force: true)
+        guard !Task.isCancelled else { return }
+        if let loadError = directory.loadError {
+            presentChoiceLookupError(
+                loadError,
+                accountIdHex: accountIdHex,
+                memberRef: memberRef,
+                using: appState
+            )
+            return
+        }
+
+        let choices = ConversationChoiceProjection.choices(
+            in: directory.snapshots,
+            targetAccountIdHex: accountIdHex,
+            myAccountIdHex: myAccountIdHex
+        )
+        guard !choices.isEmpty else {
+            await runStart(
+                accountIdHex: accountIdHex,
+                memberRef: memberRef,
+                existingGroupIdHex: nil,
+                failureRetryMode: .exact,
+                using: appState,
+                onOpen: onOpen
+            )
+            return
+        }
+
+        conversationChooser = ConversationChooserPresentation(
+            targetAccountIdHex: accountIdHex,
+            memberRef: memberRef,
+            recipientName: appState.knownDisplayName(forAccountIdHex: accountIdHex)
+                ?? IdentityFormatter.short(memberRef),
+            choices: choices
+        )
+        Haptics.selection()
+    }
+
+    func openConversation(
+        _ choice: ConversationChoice,
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        guard let chooser = conversationChooser else { return }
+        conversationChooser = nil
+        await runStart(
+            accountIdHex: chooser.targetAccountIdHex,
+            memberRef: chooser.memberRef,
+            existingGroupIdHex: choice.groupIdHex,
+            failureRetryMode: .exact,
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    func startNewConversation(
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
+        guard let chooser = conversationChooser else { return }
+        conversationChooser = nil
+        await runStart(
+            accountIdHex: chooser.targetAccountIdHex,
+            memberRef: chooser.memberRef,
+            existingGroupIdHex: nil,
+            failureRetryMode: .exact,
+            using: appState,
+            onOpen: onOpen
+        )
+    }
+
+    /// Canonical single-chat entry point retained for surfaces such as White
+    /// Noise Support, where opening the existing chat is always the intent.
     func startChat(
         accountIdHex: String,
         memberRef: String,
         using appState: AppState,
         onOpen: (String) -> Void
     ) async {
+        retryStartMode = .canonicalLookup
         startPrompt = nil
         let existing: String?
         do {
@@ -73,25 +178,63 @@ final class NewChatFlowViewModel {
             accountIdHex: accountIdHex,
             memberRef: memberRef,
             existingGroupIdHex: existing,
+            failureRetryMode: .canonicalLookup,
             using: appState,
             onOpen: onOpen
         )
     }
 
+    private func presentChoiceLookupError(
+        _ message: String,
+        accountIdHex: String,
+        memberRef: String,
+        using appState: AppState
+    ) {
+        Haptics.error()
+        startPrompt = StartChatPrompt(
+            kind: .error(message: message),
+            recipientName: appState.knownDisplayName(forAccountIdHex: accountIdHex),
+            accountIdHex: accountIdHex,
+            memberRef: memberRef,
+            existingGroupIdHex: nil
+        )
+    }
+
     func retryStart(using appState: AppState, onOpen: (String) -> Void) async {
         guard let prompt = startPrompt else { return }
-        await startChat(
-            accountIdHex: prompt.accountIdHex,
-            memberRef: prompt.memberRef,
-            using: appState,
-            onOpen: onOpen
-        )
+        switch retryStartMode {
+        case .canonicalLookup:
+            await startChat(
+                accountIdHex: prompt.accountIdHex,
+                memberRef: prompt.memberRef,
+                using: appState,
+                onOpen: onOpen
+            )
+        case .conversationChoiceLookup:
+            await chooseConversation(
+                accountIdHex: prompt.accountIdHex,
+                memberRef: prompt.memberRef,
+                using: appState,
+                onOpen: onOpen
+            )
+        case .exact:
+            startPrompt = nil
+            await runStart(
+                accountIdHex: prompt.accountIdHex,
+                memberRef: prompt.memberRef,
+                existingGroupIdHex: prompt.existingGroupIdHex,
+                failureRetryMode: .exact,
+                using: appState,
+                onOpen: onOpen
+            )
+        }
     }
 
     private func runStart(
         accountIdHex: String,
         memberRef: String,
         existingGroupIdHex: String?,
+        failureRetryMode: RetryStartMode,
         using appState: AppState,
         onOpen: (String) -> Void
     ) async {
@@ -105,10 +248,17 @@ final class NewChatFlowViewModel {
         case .open(let groupIdHex):
             onOpen(groupIdHex)
         case .prompt(let prompt):
+            retryStartMode = failureRetryMode
             startPrompt = prompt
         case .ignored:
             break
         }
+    }
+
+    private enum RetryStartMode {
+        case canonicalLookup
+        case conversationChoiceLookup
+        case exact
     }
 
     private func existingDirectChatGroupIdHex(

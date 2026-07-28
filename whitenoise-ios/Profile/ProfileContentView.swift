@@ -72,6 +72,31 @@ struct ProfileContentView: View {
             )
             .appAppearance()
         }
+        .sheet(item: $model.conversationChooser) { chooser in
+            ConversationChooserView(
+                presentation: chooser,
+                onOpen: { choice in
+                    Task {
+                        await model.openConversation(
+                            choice,
+                            using: appState,
+                            onOpen: openChat
+                        )
+                    }
+                },
+                onStartNew: {
+                    Task {
+                        await model.startNewConversation(
+                            using: appState,
+                            onOpen: openChat
+                        )
+                    }
+                },
+                onCancel: { model.conversationChooser = nil }
+            )
+            .interactiveDismissDisabled(model.starter.isCreating)
+            .appAppearance()
+        }
     }
 
     // MARK: - Identity
@@ -143,7 +168,8 @@ struct ProfileContentView: View {
                     DetailsActionButton(
                         title: "Message",
                         systemImage: "message",
-                        isLoading: model.starter.isCreating
+                        isLoading: model.isPreparingConversationChoices
+                            || model.starter.isCreating
                     ) {
                         Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
                     }
