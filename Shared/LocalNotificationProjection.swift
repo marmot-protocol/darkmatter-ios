@@ -1,14 +1,14 @@
 import Foundation
 import MarmotKit
 
-struct LocalNotificationRoute: Equatable, Hashable {
+nonisolated struct LocalNotificationRoute: Equatable, Hashable {
     let accountRef: String
     let groupIdHex: String
     let notificationKey: String
     let messageIdHex: String?
 }
 
-struct LocalNotificationPresentation: Equatable {
+nonisolated struct LocalNotificationPresentation: Equatable {
     let identifier: String
     let threadIdentifier: String
     let title: String

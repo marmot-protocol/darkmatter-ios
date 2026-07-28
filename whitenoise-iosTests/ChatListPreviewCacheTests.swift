@@ -130,6 +130,8 @@ struct ChatListPreviewCacheTests {
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: false,
             pendingConfirmation: false,
             title: title,
@@ -139,13 +141,19 @@ struct ChatListPreviewCacheTests {
             lastMessage: lastMessage,
             unreadCount: 0,
             hasUnread: false,
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
+            conversationCreatedAt: 1,
+            activitySortAt: 1,
             updatedAt: 1,
             selfMembership: selfMembership,
+            conversationKind: .group,
+            muted: false,
+            mutedUntilMs: nil,
             leaveRequestPending: leaveRequestPending,
             leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil
         )

@@ -87,51 +87,10 @@ final class SupportChatViewModel {
             phase = chatFlow.startPrompt == nil ? .idle : .failed
         }
     }
-}
 
-struct SupportChatView: View {
-    @Environment(AppState.self) private var appState
-    @State private var model = SupportChatViewModel()
-
-    var body: some View {
-        Group {
-            switch model.phase {
-            case .idle, .loading, .routing:
-                VStack(spacing: 14) {
-                    ProgressView()
-                    Text("Connecting to support…")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed:
-                ContentUnavailableView {
-                    Label(
-                        SupportChatPresentation.failureTitle,
-                        systemImage: "message.badge.waveform"
-                    )
-                } description: {
-                    Text(SupportChatPresentation.failureMessage)
-                } actions: {
-                    Button("Try Again") {
-                        Task {
-                            await model.retry(using: appState, onOpen: open)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-        }
-        .localizedNavigationTitle("Chat with support")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(model.isCreatingChat)
-        .interactiveDismissDisabled(model.isCreatingChat)
-        .task {
-            await model.start(using: appState, onOpen: open)
-        }
-    }
-
-    private func open(_ groupIdHex: String) {
-        appState.presentChat(groupIdHex: groupIdHex)
+    func dismissFailure() {
+        guard phase == .failed else { return }
+        phase = .idle
+        chatFlow.startPrompt = nil
     }
 }

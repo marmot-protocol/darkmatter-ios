@@ -567,7 +567,7 @@ final class AppState {
                 .nativePushEnabled
         ) ?? false
         await notificationCoordinator.cancelNativePushRegistrationTask()
-        try? await marmot.clearPushRegistration(accountRef: signingOut)
+        _ = try? await marmot.clearPushRegistration(accountRef: signingOut)
         _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
         do {
@@ -746,7 +746,7 @@ final class AppState {
         // Sign-out push rule: cancel and await the in-flight native-push
         // registration sync before clearing the departing account's registration.
         await notificationCoordinator.cancelNativePushRegistrationTask()
-        try? await marmot.clearPushRegistration(accountRef: wipingRef)
+        _ = try? await marmot.clearPushRegistration(accountRef: wipingRef)
         _ = try? await marmot.setNativePushEnabled(accountRef: wipingRef, enabled: false)
 
         let outcome: WipeOutcomeFfi

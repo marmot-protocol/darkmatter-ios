@@ -65,6 +65,7 @@ final class ChatsListViewModel {
         var hasUnread: Bool { row.hasUnread }
         var unreadMentionCount: UInt64 { row.unreadMentionCount }
         var hasUnreadMention: Bool { row.unreadMention || row.unreadMentionCount > 0 }
+        var isPinned: Bool { row.pinned }
         var isArchived: Bool { row.archived }
         var selfMembership: SelfMembershipFfi { row.selfMembership }
         var isActiveMember: Bool {
@@ -161,6 +162,9 @@ final class ChatsListViewModel {
     private var groupDetailsCache: [String: GroupDetailsFfi] = [:]
     private var groupDetailsLoadedGroupIds: Set<String> = []
     private var pendingGroupDetailsRefreshGroupIds: Set<String> = []
+    @ObservationIgnored private var defersPinOrderSnapshots = false
+    @ObservationIgnored private var deferredPinOrderSnapshot: [ChatListRowFfi]?
+    @ObservationIgnored private var pinOrderUITransitionID: UUID?
 
     private static let chatListUpdateCoalescingDelayNanoseconds: UInt64 = 16_000_000
     private static let liveSubscriptionInitialRetryDelayNanoseconds: UInt64 = 500_000_000
@@ -195,6 +199,9 @@ final class ChatsListViewModel {
         avatarEnrichmentTaskID = nil
         pendingChatListUpdateTask?.cancel()
         pendingChatListUpdateTask = nil
+        defersPinOrderSnapshots = false
+        deferredPinOrderSnapshot = nil
+        pinOrderUITransitionID = nil
         if currentAccount != accountRef {
             let hadPublishedRows = !items.isEmpty || !archivedItems.isEmpty
             rowByGroupId = [:]
@@ -343,14 +350,19 @@ final class ChatsListViewModel {
         )
     }
 
-    func applyChatListSnapshot(_ snapshot: [ChatListRowFfi]) {
+    func applyChatListSnapshot(
+        _ snapshot: [ChatListRowFfi],
+        mergingPendingRows: Bool = true
+    ) {
         loadError = nil
         pendingChatListUpdateTask?.cancel()
         pendingChatListUpdateTask = nil
-        let mergedSnapshot = Self.mergingSnapshot(
-            snapshot,
-            withPendingRows: Array(pendingChatListRowsByGroupId.values)
-        )
+        let mergedSnapshot = mergingPendingRows
+            ? Self.mergingSnapshot(
+                snapshot,
+                withPendingRows: Array(pendingChatListRowsByGroupId.values)
+            )
+            : snapshot
         pendingChatListRowsByGroupId = [:]
         let previousRows = rowByGroupId
         let previousItems = itemByGroupId
@@ -377,6 +389,34 @@ final class ChatsListViewModel {
             publishItems()
         }
         scheduleRowEnrichment(for: mergedSnapshot)
+    }
+
+    /// Applies Marmot's complete authoritative pin order without waiting for
+    /// the matching subscription snapshot to make its round trip through the
+    /// row coalescer.
+    func applyPinnedOrder(_ orderedGroupIds: [String]) {
+        let positions = Dictionary(
+            uniqueKeysWithValues: orderedGroupIds.enumerated().map { ($0.element, UInt32($0.offset)) }
+        )
+        var changed = false
+        let muteLookup = currentMuteLookup()
+
+        for groupId in Array(rowByGroupId.keys) {
+            guard var row = rowByGroupId[groupId] else { continue }
+            let position = positions[groupId]
+            let pinned = position != nil
+            guard row.pinned != pinned || row.pinnedPosition != position else { continue }
+
+            row.pinned = pinned
+            row.pinnedPosition = position
+            rowByGroupId[groupId] = row
+            itemByGroupId[groupId] = makeItem(for: row, muteLookup: muteLookup)
+            changed = true
+        }
+
+        if changed {
+            publishItems()
+        }
     }
 
     static func mergingSnapshot(
@@ -451,7 +491,46 @@ final class ChatsListViewModel {
             enqueueChatListRow(row)
         case .removeRow(_, let groupIdHex):
             removeChatListRow(groupIdHex: groupIdHex)
+        case .snapshot(let trigger, let rows):
+            if trigger == .pinOrderChanged, defersPinOrderSnapshots {
+                deferredPinOrderSnapshot = rows
+            } else {
+                applyChatListSnapshot(rows, mergingPendingRows: false)
+            }
         }
+    }
+
+    func beginPinOrderUITransition() -> UUID {
+        let transitionID = UUID()
+        defersPinOrderSnapshots = true
+        deferredPinOrderSnapshot = nil
+        pinOrderUITransitionID = transitionID
+        return transitionID
+    }
+
+    /// Finishes the short host-side transition used while the system swipe
+    /// drawer closes. A successful command supplies Marmot's authoritative
+    /// order; an unsuccessful command falls back to any deferred snapshot.
+    @discardableResult
+    func finishPinOrderUITransition(
+        transitionID: UUID,
+        orderedGroupIds: [String]?
+    ) -> Bool {
+        guard pinOrderUITransitionID == transitionID else { return false }
+        let snapshot = deferredPinOrderSnapshot
+        defersPinOrderSnapshots = false
+        deferredPinOrderSnapshot = nil
+        pinOrderUITransitionID = nil
+
+        if let orderedGroupIds {
+            applyPinnedOrder(orderedGroupIds)
+            return true
+        }
+        if let snapshot {
+            applyChatListSnapshot(snapshot, mergingPendingRows: false)
+            return true
+        }
+        return false
     }
 
     func removeChatListRow(groupIdHex: String) {
@@ -954,9 +1033,20 @@ final class ChatsListViewModel {
     }
     #endif
 
-    /// Match Marmot's durable chat-list ordering. `activitySortAt` survives
-    /// secure pruning even when a row no longer has a last-message preview.
+    /// Match Marmot's durable chat-list ordering: manually ordered pinned rows
+    /// first, then activity order. `activitySortAt` survives secure pruning
+    /// even when a row no longer has a last-message preview.
     private static let sortRule: (Item, Item) -> Bool = { a, b in
+        if a.row.pinned != b.row.pinned {
+            return a.row.pinned
+        }
+        if a.row.pinned {
+            let aPosition = a.row.pinnedPosition ?? UInt32.max
+            let bPosition = b.row.pinnedPosition ?? UInt32.max
+            if aPosition != bPosition {
+                return aPosition < bPosition
+            }
+        }
         if a.row.activitySortAt != b.row.activitySortAt {
             return a.row.activitySortAt > b.row.activitySortAt
         }
@@ -968,6 +1058,8 @@ final class ChatsListViewModel {
         let now = UInt64(Date().timeIntervalSince1970)
         return ChatListRowFfi(
             groupIdHex: group.groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: group.archived,
             pendingConfirmation: group.pendingConfirmation,
             title: title,
@@ -977,6 +1069,7 @@ final class ChatsListViewModel {
             lastMessage: nil,
             unreadCount: 0,
             hasUnread: false,
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: nil,
@@ -986,6 +1079,9 @@ final class ChatsListViewModel {
             activitySortAt: now,
             updatedAt: now,
             selfMembership: group.selfMembership,
+            conversationKind: .group,
+            muted: false,
+            mutedUntilMs: nil,
             leaveRequestPending: group.leaveRequestPending,
             leaveRequestedAtMs: group.leaveRequestedAtMs
         )

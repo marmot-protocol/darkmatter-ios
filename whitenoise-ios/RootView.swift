@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum RootPresentation: Equatable {
+nonisolated enum RootPresentation: Equatable {
     case bootstrap
     case onboarding
     case profileSelection

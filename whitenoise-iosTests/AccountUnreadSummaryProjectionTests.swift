@@ -162,6 +162,8 @@ struct AccountUnreadSummaryProjectionTests {
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
+            pinned: false,
+            pinnedPosition: nil,
             archived: archived,
             pendingConfirmation: false,
             title: groupIdHex,
@@ -171,13 +173,21 @@ struct AccountUnreadSummaryProjectionTests {
             lastMessage: nil,
             unreadCount: unreadCount,
             hasUnread: hasUnread ?? (unreadCount > 0),
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: unreadCount > 0 ? "message-\(groupIdHex)" : nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
+            conversationCreatedAt: 1,
+            activitySortAt: 1,
             updatedAt: 1,
-            selfMembership: .member
+            selfMembership: .member,
+            conversationKind: .group,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil
         )
     }
 }

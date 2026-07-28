@@ -6,7 +6,7 @@ import MarmotKit
 /// labels. NOT sanitized — every caller already pipes the result through
 /// `ContentSanitizer.singleLine`, which strips spoofing characters and caps
 /// length.
-enum MarkdownPlainText {
+nonisolated enum MarkdownPlainText {
 
     /// Previews show at most ~140 characters; these caps just bound the work
     /// on hostile inputs, not the display.

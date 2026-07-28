@@ -2,12 +2,20 @@ import Testing
 import Foundation
 @testable import whitenoise_ios
 
-/// `UnreadCountBadge` renders a compact count capped at "99+". Locks that
-/// boundary without rendering the view.
+/// `UnreadCountBadge` renders a dot for zero and a compact count capped at
+/// "99+". Locks those decisions without rendering the view.
 struct UnreadCountBadgeTests {
+    @Test func zeroCountUsesDotWithoutText() {
+        #expect(
+            UnreadCountBadge.presentation(for: 0, locale: Locale(identifier: "en_US"))
+                == .dot
+        )
+    }
+
     @Test func showsExactCountUpToNinetyNine() {
         let locale = Locale(identifier: "en_US")
 
+        #expect(UnreadCountBadge.presentation(for: 1, locale: locale) == .count("1"))
         #expect(UnreadCountBadge.label(for: 1, locale: locale) == "1")
         #expect(UnreadCountBadge.label(for: 42, locale: locale) == "42")
         #expect(UnreadCountBadge.label(for: 99, locale: locale) == "99")
@@ -39,5 +47,10 @@ struct UnreadCountBadgeTests {
 
     @Test func mentionBadgeUsesTheAtIcon() {
         #expect(MentionBadgePresentation.systemImageName == "at")
+    }
+
+    @Test func pinnedChatUsesTheFilledPinIcon() {
+        #expect(PinBadgePresentation.systemImageName == "pin.fill")
+        #expect(PinBadgePresentation.rotationDegrees == 45)
     }
 }

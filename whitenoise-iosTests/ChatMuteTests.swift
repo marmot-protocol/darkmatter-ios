@@ -428,9 +428,37 @@ struct ChatListMuteSwipeActionsTests {
         #expect(actions == [.archive])
     }
 
-    @Test func leadingSwipeOnlyOffersReadForUnreadRows() {
-        #expect(ChatListSwipeActionsPresentation.leadingActions(hasUnread: true).contains(.read))
-        #expect(ChatListSwipeActionsPresentation.leadingActions(hasUnread: false).isEmpty)
+    @Test func leadingSwipeOffersReadAndUnpinForUnreadPinnedRows() {
+        let actions = ChatListSwipeActionsPresentation.leadingActions(
+            hasUnread: true,
+            isPinned: true,
+            isArchived: false
+        )
+        #expect(actions.contains(.read))
+        #expect(!actions.contains(.unread))
+        #expect(actions.contains(.unpin))
+        #expect(!actions.contains(.pin))
+    }
+
+    @Test func leadingSwipeOffersUnreadAndPinForReadUnpinnedRows() {
+        let actions = ChatListSwipeActionsPresentation.leadingActions(
+            hasUnread: false,
+            isPinned: false,
+            isArchived: false
+        )
+        #expect(actions.contains(.unread))
+        #expect(!actions.contains(.read))
+        #expect(actions.contains(.pin))
+        #expect(!actions.contains(.unpin))
+    }
+
+    @Test func archivedRowsKeepReadControlButDoNotOfferPinning() {
+        let actions = ChatListSwipeActionsPresentation.leadingActions(
+            hasUnread: false,
+            isPinned: false,
+            isArchived: true
+        )
+        #expect(actions == [.unread])
     }
 }
 

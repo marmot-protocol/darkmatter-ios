@@ -20,11 +20,8 @@ final class NewChatFlowViewModel {
     var groupCreateError: String?
 
 #if DEBUG
-    @ObservationIgnored var loadDirectoryForTesting: (
-        @MainActor (AppState, Bool) async -> Void
-    )?
     @ObservationIgnored var existingDirectChatGroupIdForTesting: (
-        @MainActor (String) -> String?
+        @MainActor (String) async throws -> String?
     )?
     @ObservationIgnored var createGroupForTesting: (
         @MainActor (String, String, [String], String?) async throws -> String
@@ -52,21 +49,26 @@ final class NewChatFlowViewModel {
         onOpen: (String) -> Void
     ) async {
         startPrompt = nil
-        // Join any in-flight directory load so the reuse decision can't run
-        // against an empty candidate list and create a duplicate direct chat.
-#if DEBUG
-        if let loadDirectoryForTesting {
-            await loadDirectoryForTesting(appState, true)
-        } else {
-            await directory.load(using: appState, force: true)
+        let existing: String?
+        do {
+            existing = try await existingDirectChatGroupIdHex(
+                accountIdHex: accountIdHex,
+                using: appState
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            Haptics.error()
+            startPrompt = StartChatPrompt(
+                kind: .error(message: error.localizedDescription),
+                recipientName: appState.knownDisplayName(forAccountIdHex: accountIdHex),
+                accountIdHex: accountIdHex,
+                memberRef: memberRef,
+                existingGroupIdHex: nil
+            )
+            return
         }
-#else
-        await directory.load(using: appState, force: true)
-#endif
-        // A destination that disappeared while the directory was loading must
-        // not create a conversation after its task was cancelled.
         guard !Task.isCancelled else { return }
-        let existing = existingDirectChatGroupIdHex(accountIdHex: accountIdHex)
         await runStart(
             accountIdHex: accountIdHex,
             memberRef: memberRef,
@@ -78,11 +80,9 @@ final class NewChatFlowViewModel {
 
     func retryStart(using appState: AppState, onOpen: (String) -> Void) async {
         guard let prompt = startPrompt else { return }
-        startPrompt = nil
-        await runStart(
+        await startChat(
             accountIdHex: prompt.accountIdHex,
             memberRef: prompt.memberRef,
-            existingGroupIdHex: prompt.existingGroupIdHex,
             using: appState,
             onOpen: onOpen
         )
@@ -111,16 +111,60 @@ final class NewChatFlowViewModel {
         }
     }
 
-    private func existingDirectChatGroupIdHex(accountIdHex: String) -> String? {
+    private func existingDirectChatGroupIdHex(
+        accountIdHex: String,
+        using appState: AppState
+    ) async throws -> String? {
         let normalized = accountIdHex.lowercased()
 #if DEBUG
         if let existingDirectChatGroupIdForTesting {
-            return existingDirectChatGroupIdForTesting(normalized)
+            return try await existingDirectChatGroupIdForTesting(normalized)
         }
 #endif
-        return directory.candidates
-            .first { $0.accountIdHex == normalized }?
-            .directChatGroupIdHex
+        guard let accountRef = appState.activeAccountRef,
+              let myAccountIdHex = appState.activeAccount?.accountIdHex
+        else {
+            throw DirectChatLookupError.noActiveAccount
+        }
+        let client = try appState.currentMarmotClient()
+        let rows = try await client.chatList(accountRef: accountRef, includeArchived: true)
+        let candidates = rows
+            .filter {
+                DirectChatReuseLookup.shouldInspect(
+                    conversationKind: $0.conversationKind,
+                    selfMembership: $0.selfMembership
+                )
+            }
+            .sorted { $0.activitySortAt > $1.activitySortAt }
+
+        var snapshots: [RecipientGroupSnapshot] = []
+        var firstReadError: Error?
+        for row in candidates {
+            try Task.checkCancellation()
+            do {
+                let details = try await client.groupDetails(
+                    accountRef: accountRef,
+                    groupIdHex: row.groupIdHex
+                )
+                snapshots.append(RecipientGroupSnapshot(row: row, details: details))
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                firstReadError = firstReadError ?? error
+            }
+        }
+
+        if let existing = DirectChatReuseLookup.existingGroupId(
+            in: snapshots,
+            targetAccountIdHex: normalized,
+            myAccountIdHex: myAccountIdHex
+        ) {
+            return existing
+        }
+        if let firstReadError {
+            throw firstReadError
+        }
+        return nil
     }
 
     // MARK: - Group selection
@@ -280,6 +324,14 @@ final class NewChatFlowViewModel {
                 message: error.localizedDescription
             ))
         }
+    }
+}
+
+private nonisolated enum DirectChatLookupError: LocalizedError {
+    case noActiveAccount
+
+    var errorDescription: String? {
+        L10n.string("No active account is selected.")
     }
 }
 

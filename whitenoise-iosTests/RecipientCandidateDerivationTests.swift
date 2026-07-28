@@ -107,6 +107,8 @@ struct RecipientCandidateDerivationTests {
     @Test func snapshotFromRowKeepsPeerTitleOutOfDirectMessageNameDetection() {
         let row = ChatListRowFfi(
             groupIdHex: "dm-1",
+            pinned: false,
+            pinnedPosition: nil,
             archived: false,
             pendingConfirmation: false,
             title: "Alice",
@@ -116,13 +118,21 @@ struct RecipientCandidateDerivationTests {
             lastMessage: nil,
             unreadCount: 0,
             hasUnread: false,
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
+            conversationCreatedAt: 7,
+            activitySortAt: 7,
             updatedAt: 7,
-            selfMembership: .member
+            selfMembership: .member,
+            conversationKind: .direct,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil
         )
 
         let snapshot = RecipientGroupSnapshot(row: row, details: nil)
@@ -138,6 +148,8 @@ struct RecipientCandidateDerivationTests {
     @Test func snapshotRosterUsesMemberIdsInsteadOfLocalAccountLabels() {
         let row = ChatListRowFfi(
             groupIdHex: "dm-1",
+            pinned: false,
+            pinnedPosition: nil,
             archived: false,
             pendingConfirmation: false,
             title: "Alice",
@@ -147,13 +159,21 @@ struct RecipientCandidateDerivationTests {
             lastMessage: nil,
             unreadCount: 0,
             hasUnread: false,
+            manuallyMarkedUnread: false,
             unreadMentionCount: 0,
             unreadMention: false,
             firstUnreadMessageIdHex: nil,
             lastReadMessageIdHex: nil,
             lastReadTimelineAt: nil,
+            conversationCreatedAt: 7,
+            activitySortAt: 7,
             updatedAt: 7,
-            selfMembership: .member
+            selfMembership: .member,
+            conversationKind: .direct,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil
         )
         let details = GroupDetailsFfi(
             group: AppGroupRecordFfi(

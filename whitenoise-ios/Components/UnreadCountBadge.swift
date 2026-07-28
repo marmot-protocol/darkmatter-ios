@@ -11,22 +11,42 @@ nonisolated enum LocalizedNumberLabel {
     }
 }
 
-/// Compact capsule showing an unread-message count, capped at "99+". Shared by
-/// the chat list rows and the Profiles switch-account rows so both stay
-/// visually and behaviorally identical. `label` is static so its "99+" cap can
-/// be unit-tested without rendering the view.
+/// Compact unread indicator shared by chat-list and profile rows. A manual
+/// unread reminder with no unread messages renders as a dot; positive counts
+/// render in a capsule capped at "99+".
 struct UnreadCountBadge: View {
+    nonisolated enum Presentation: Equatable {
+        case dot
+        case count(String)
+    }
+
     let count: UInt64
 
+    @ViewBuilder
     var body: some View {
-        Text(Self.label(for: count))
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(.white)
-            .monospacedDigit()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(Color.accentColor))
-            .accessibilityLabel(L10n.plural("%llu unread messages", count))
+        switch Self.presentation(for: count) {
+        case .dot:
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 10, height: 10)
+                .accessibilityLabel(L10n.string("Unread"))
+        case .count(let label):
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.accentColor))
+                .accessibilityLabel(L10n.plural("%llu unread messages", count))
+        }
+    }
+
+    static func presentation(
+        for count: UInt64,
+        locale: Locale = AppLanguage.currentLocale
+    ) -> Presentation {
+        count == 0 ? .dot : .count(label(for: count, locale: locale))
     }
 
     /// Compact count label, capped at "99+" so the capsule keeps a small,

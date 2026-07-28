@@ -48,7 +48,7 @@ enum AppLockPolicy {
 
 /// Whether device-owner authentication (biometrics or passcode) can run at
 /// all, and which biometry the hardware offers. Drives the settings labels.
-struct AppLockCapability {
+nonisolated struct AppLockCapability {
     let available: Bool
     let biometryType: LABiometryType
 

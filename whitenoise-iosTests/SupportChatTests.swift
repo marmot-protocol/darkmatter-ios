@@ -1,4 +1,5 @@
 import Testing
+import MarmotKit
 @testable import whitenoise_ios
 
 @MainActor
@@ -89,6 +90,92 @@ struct SupportChatTests {
         #expect(model.phase == .routing)
     }
 
+    @Test func failedExistingChatLookupNeverCreatesADuplicate() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "active"
+        let flow = NewChatFlowViewModel()
+        var lookupAttempt = 0
+        flow.existingDirectChatGroupIdForTesting = { _ in
+            lookupAttempt += 1
+            if lookupAttempt == 1 {
+                throw TestFailure.existingChatLookupFailed
+            }
+            return "existing-support-dm"
+        }
+        var didCreate = false
+        flow.starter.createGroupForTesting = { _, _ in
+            didCreate = true
+            return "duplicate-support-dm"
+        }
+        let model = SupportChatViewModel(chatFlow: flow)
+        var openedGroupIdHex: String?
+
+        await model.start(using: appState) {
+            openedGroupIdHex = $0
+        }
+
+        #expect(model.phase == .failed)
+        #expect(!didCreate)
+
+        await model.retry(using: appState) {
+            openedGroupIdHex = $0
+        }
+
+        #expect(lookupAttempt == 2)
+        #expect(openedGroupIdHex == "existing-support-dm")
+        #expect(!didCreate)
+    }
+
+    @Test func directChatLookupUsesTypedConversationKindAndActiveMembership() {
+        #expect(DirectChatReuseLookup.shouldInspect(
+            conversationKind: .direct,
+            selfMembership: .member
+        ))
+        #expect(DirectChatReuseLookup.shouldInspect(
+            conversationKind: .unknown,
+            selfMembership: .member
+        ))
+        #expect(!DirectChatReuseLookup.shouldInspect(
+            conversationKind: .group,
+            selfMembership: .member
+        ))
+        #expect(!DirectChatReuseLookup.shouldInspect(
+            conversationKind: .direct,
+            selfMembership: .left
+        ))
+    }
+
+    @Test func directChatLookupReusesTheNewestExactDirectConversation() {
+        let myAccountIdHex = String(repeating: "a", count: 64)
+        let targetAccountIdHex = String(repeating: "b", count: 64)
+        let older = directChatSnapshot(
+            groupIdHex: "older",
+            conversationKind: .direct,
+            lastActivityAt: 10,
+            members: [myAccountIdHex, targetAccountIdHex]
+        )
+        let newer = directChatSnapshot(
+            groupIdHex: "newer",
+            conversationKind: .direct,
+            lastActivityAt: 20,
+            members: [targetAccountIdHex, myAccountIdHex]
+        )
+        let twoPersonGroup = directChatSnapshot(
+            groupIdHex: "not-a-dm",
+            conversationKind: .group,
+            lastActivityAt: 30,
+            members: [myAccountIdHex, targetAccountIdHex]
+        )
+
+        let result = DirectChatReuseLookup.existingGroupId(
+            in: [older, newer, twoPersonGroup],
+            targetAccountIdHex: targetAccountIdHex,
+            myAccountIdHex: myAccountIdHex
+        )
+
+        #expect(result == "newer")
+    }
+
     @Test func supportChatReportsLoadingWhileCreationIsInFlight() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "active"
@@ -118,10 +205,10 @@ struct SupportChatTests {
         appState.activeAccountRef = "active"
         let flow = NewChatFlowViewModel()
         let gate = SupportChatCreateGate()
-        flow.loadDirectoryForTesting = { _, _ in
+        flow.existingDirectChatGroupIdForTesting = { _ in
             await gate.hold()
+            return nil
         }
-        flow.existingDirectChatGroupIdForTesting = { _ in nil }
         var didCreate = false
         flow.starter.createGroupForTesting = { _, _ in
             didCreate = true
@@ -143,13 +230,33 @@ struct SupportChatTests {
 
     private func testFlow(existingGroupIdHex: String?) -> NewChatFlowViewModel {
         let flow = NewChatFlowViewModel()
-        flow.loadDirectoryForTesting = { _, _ in }
         flow.existingDirectChatGroupIdForTesting = { _ in existingGroupIdHex }
         return flow
     }
 
+    private func directChatSnapshot(
+        groupIdHex: String,
+        conversationKind: ChatConversationKindFfi,
+        lastActivityAt: UInt64,
+        members: [String]
+    ) -> RecipientGroupSnapshot {
+        RecipientGroupSnapshot(
+            groupIdHex: groupIdHex,
+            sanitizedName: nil,
+            title: "Direct chat",
+            avatarUrl: nil,
+            isSelfMember: true,
+            conversationKind: conversationKind,
+            lastActivityAt: lastActivityAt,
+            memberIdsHex: members,
+            lastSenderIdHex: nil,
+            welcomerIdHex: nil
+        )
+    }
+
     private enum TestFailure: Error {
         case sensitiveEngineDetail
+        case existingChatLookupFailed
     }
 }
 

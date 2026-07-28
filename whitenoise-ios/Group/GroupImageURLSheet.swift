@@ -196,7 +196,7 @@ enum DuckDuckGoImageSearchError: LocalizedError {
 }
 
 
-struct GroupImageUploadDraft: Equatable {
+nonisolated struct GroupImageUploadDraft: Equatable {
     let data: Data
     let mediaType: String
     let sourceURL: String?

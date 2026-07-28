@@ -6,7 +6,7 @@ import MarmotKit
 /// reports every stage only in its final `WipeOutcomeFfi`, so the UI renders
 /// these as an indeterminate staged display while in flight and marks them from
 /// the outcome afterwards.
-enum WipeStage: Equatable, Hashable {
+nonisolated enum WipeStage: Equatable, Hashable {
     case leavingGroups
     case deletingKeyPackages
     case wipingLocalData
@@ -15,13 +15,13 @@ enum WipeStage: Equatable, Hashable {
 /// One best-effort failure inside a wipe stage. `subject` is a shortened
 /// identifier of the affected group / relay event (`nil` for the local-cleanup
 /// stage, which has no per-item subject); `reason` is the engine's diagnostic.
-struct WipeFailureItem: Equatable {
+nonisolated struct WipeFailureItem: Equatable {
     let subject: String?
     let reason: String
 }
 
 /// Per-stage result mapped from the engine outcome for the wipe outcome sheet.
-struct WipeStageReport: Equatable {
+nonisolated struct WipeStageReport: Equatable {
     let stage: WipeStage
     /// How many items the stage completed (groups left, key packages deleted).
     /// `nil` for `.wipingLocalData`, which is all-or-nothing.
@@ -35,7 +35,7 @@ struct WipeStageReport: Equatable {
 /// with issues drives the outcome sheet. The account ref is invalid by the time
 /// this exists, so the sheet renders only this snapshot and never reaches back
 /// into the FFI.
-struct WipeReport: Equatable {
+nonisolated struct WipeReport: Equatable {
     let stages: [WipeStageReport]
 
     var issueCount: Int { stages.reduce(0) { $0 + $1.failures.count } }
@@ -44,7 +44,7 @@ struct WipeReport: Equatable {
 
 /// Maps the engine's `WipeOutcomeFfi` to the pure `WipeReport` UI model. Stages
 /// map 1:1 to the outcome fields, in engine execution order.
-enum WipeReportProjection {
+nonisolated enum WipeReportProjection {
     /// Engine failure reasons are shown verbatim in the outcome sheet; bound
     /// them so a pathologically long diagnostic can't blow up layout.
     static let maxReasonLength = 200
@@ -99,7 +99,7 @@ enum WipeReportProjection {
 /// Type-to-confirm gate for the destructive wipe. Pure so the decision is
 /// observable in tests without a view. Matches the confirmation keyword after
 /// trimming, case-insensitively (mirrors the Android gate).
-enum WipeConfirmation {
+nonisolated enum WipeConfirmation {
     static func isConfirmed(_ input: String, keyword: String) -> Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !keyword.isEmpty else { return false }

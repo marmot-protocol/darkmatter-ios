@@ -223,7 +223,7 @@ struct AppStateBootstrapTests {
 
             _ = try? appState.marmot.setLocalNotificationsEnabled(accountRef: account.label, enabled: false)
             _ = try? await appState.marmot.setNativePushEnabled(accountRef: account.label, enabled: false)
-            try? await appState.marmot.clearPushRegistration(accountRef: account.label)
+            _ = try? await appState.marmot.clearPushRegistration(accountRef: account.label)
             await appState.signOut()
             await stopReadyRuntime(appState)
         }
@@ -2874,6 +2874,13 @@ struct LocalizationCatalogTests {
             "New encrypted message",
             "That QR code isn't a White Noise profile.",
             "Couldn't create chat",
+            "Mark as unread",
+            "Pin",
+            "Pinned",
+            "Unpin",
+            "Updating chat…",
+            "Couldn't mark as unread",
+            "Couldn't update pin",
             "Push registration failed",
             "Support",
             "Chat with support",
@@ -5624,6 +5631,164 @@ struct ChatsListProjectionTests {
         #expect(viewModel.items.map(\.id) == [prunedButNewer.groupIdHex, previewButOlder.groupIdHex])
     }
 
+    @Test func pinnedRowsLeadInManualPositionOrderBeforeRecentChats() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let firstPin = chatListRow(
+            groupIdHex: hex("a1"),
+            pinned: true,
+            pinnedPosition: 0,
+            title: "First pin",
+            activitySortAt: 10
+        )
+        let secondPin = chatListRow(
+            groupIdHex: hex("a2"),
+            pinned: true,
+            pinnedPosition: 1,
+            title: "Second pin",
+            activitySortAt: 20
+        )
+        let recent = chatListRow(
+            groupIdHex: hex("a3"),
+            title: "Recent",
+            activitySortAt: 100
+        )
+
+        viewModel.applyChatListSnapshot([recent, secondPin, firstPin])
+
+        #expect(viewModel.items.map(\.id) == [
+            firstPin.groupIdHex,
+            secondPin.groupIdHex,
+            recent.groupIdHex,
+        ])
+        #expect(viewModel.items.first?.isPinned == true)
+    }
+
+    @Test func authoritativePinOrderReordersPinsAndClearsPinsOmittedFromState() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let first = chatListRow(
+            groupIdHex: hex("a1"),
+            pinned: true,
+            pinnedPosition: 0,
+            title: "First",
+            activitySortAt: 10
+        )
+        let second = chatListRow(
+            groupIdHex: hex("a2"),
+            pinned: true,
+            pinnedPosition: 1,
+            title: "Second",
+            activitySortAt: 20
+        )
+        let newlyPinned = chatListRow(
+            groupIdHex: hex("a3"),
+            title: "Third",
+            activitySortAt: 30
+        )
+        viewModel.applyChatListSnapshot([first, second, newlyPinned])
+
+        viewModel.applyPinnedOrder([
+            newlyPinned.groupIdHex,
+            second.groupIdHex,
+        ])
+
+        #expect(viewModel.items.map(\.id) == [
+            newlyPinned.groupIdHex,
+            second.groupIdHex,
+            first.groupIdHex,
+        ])
+        #expect(viewModel.item(groupIdHex: newlyPinned.groupIdHex)?.row.pinnedPosition == 0)
+        #expect(viewModel.item(groupIdHex: second.groupIdHex)?.row.pinnedPosition == 1)
+        #expect(viewModel.item(groupIdHex: first.groupIdHex)?.isPinned == false)
+        #expect(viewModel.item(groupIdHex: first.groupIdHex)?.row.pinnedPosition == nil)
+    }
+
+    @Test func pinOrderSnapshotWaitsForSwipeDrawerTransitionToFinish() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let first = chatListRow(
+            groupIdHex: hex("a1"),
+            pinned: true,
+            pinnedPosition: 0,
+            title: "First"
+        )
+        let second = chatListRow(
+            groupIdHex: hex("a2"),
+            pinned: true,
+            pinnedPosition: 1,
+            title: "Second"
+        )
+        viewModel.applyChatListSnapshot([first, second])
+
+        var reorderedFirst = first
+        reorderedFirst.pinnedPosition = 1
+        var reorderedSecond = second
+        reorderedSecond.pinnedPosition = 0
+        let transitionID = viewModel.beginPinOrderUITransition()
+        viewModel.applyChatListUpdate(.snapshot(
+            trigger: .pinOrderChanged,
+            rows: [reorderedSecond, reorderedFirst]
+        ))
+
+        #expect(viewModel.items.map(\.id) == [first.groupIdHex, second.groupIdHex])
+
+        let applied = viewModel.finishPinOrderUITransition(
+            transitionID: transitionID,
+            orderedGroupIds: [second.groupIdHex, first.groupIdHex]
+        )
+
+        #expect(applied)
+        #expect(viewModel.items.map(\.id) == [second.groupIdHex, first.groupIdHex])
+    }
+
+    @Test func pinOrderSubscriptionSnapshotAtomicallyReplacesRowsAndPendingUpdates() throws {
+        let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
+        let first = chatListRow(
+            groupIdHex: hex("a1"),
+            pinned: true,
+            pinnedPosition: 0,
+            title: "First",
+            updatedAt: 10
+        )
+        let second = chatListRow(
+            groupIdHex: hex("a2"),
+            pinned: true,
+            pinnedPosition: 1,
+            title: "Second",
+            updatedAt: 10
+        )
+        let removed = chatListRow(groupIdHex: hex("a3"), title: "Removed", updatedAt: 10)
+        viewModel.applyChatListSnapshot([first, second, removed])
+        viewModel.enqueueChatListRowUpdate(chatListRow(
+            groupIdHex: first.groupIdHex,
+            pinned: true,
+            pinnedPosition: 0,
+            title: "Stale pending",
+            updatedAt: 20
+        ))
+
+        let reorderedFirst = chatListRow(
+            groupIdHex: first.groupIdHex,
+            pinned: true,
+            pinnedPosition: 1,
+            title: "First",
+            updatedAt: 10
+        )
+        let reorderedSecond = chatListRow(
+            groupIdHex: second.groupIdHex,
+            pinned: true,
+            pinnedPosition: 0,
+            title: "Second",
+            updatedAt: 10
+        )
+        viewModel.applyChatListUpdate(.snapshot(
+            trigger: .pinOrderChanged,
+            rows: [reorderedFirst, reorderedSecond]
+        ))
+
+        #expect(viewModel.items.map(\.id) == [second.groupIdHex, first.groupIdHex])
+        #expect(viewModel.items.last?.title == "First")
+        #expect(viewModel.item(groupIdHex: removed.groupIdHex) == nil)
+    }
+
     @Test func successfulSnapshotClearsPreviousLoadError() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
         let row = chatListRow(groupIdHex: hex("a1"), title: "Recovered", updatedAt: 10)
@@ -7566,28 +7731,14 @@ struct GroupManagementPresentationTests {
         ) == GroupManagementPresentation.leavingGroupComposerMessage)
     }
 
-    @Test func relayDisclosureShowsCountAndUrls() {
+    @Test func relaySectionShowsUrls() {
         let relays = ["wss://relay.example", "wss://relay.two"]
-        let locale = Locale(identifier: "en_US")
 
-        #expect(GroupRelaysPresentation.countLabel(for: relays, locale: locale) == "2")
         #expect(GroupRelaysPresentation.rows(for: relays) == relays)
     }
 
-    @Test func relayDisclosureShowsEmptyState() {
-        #expect(GroupRelaysPresentation.countLabel(for: [], locale: Locale(identifier: "en_US")) == "0")
+    @Test func relaySectionShowsEmptyState() {
         #expect(GroupRelaysPresentation.rows(for: []) == [GroupRelaysPresentation.emptyMessage])
-    }
-
-    @Test func relayDisclosureLocalizesCountDigits() {
-        let relays = ["wss://relay.example", "wss://relay.two"]
-        let locale = Locale(identifier: "ar_EG")
-
-        #expect(
-            GroupRelaysPresentation.countLabel(for: relays, locale: locale)
-                == LocalizedNumberLabel.decimal(2, locale: locale)
-        )
-        #expect(GroupRelaysPresentation.countLabel(for: relays, locale: locale) != "2")
     }
 
     @Test func addMembersScannerAcceptsProfileDeepLinks() {
@@ -12215,6 +12366,8 @@ private func chatListPreview(
 
 private func chatListRow(
     groupIdHex: String,
+    pinned: Bool = false,
+    pinnedPosition: UInt32? = nil,
     archived: Bool = false,
     pendingConfirmation: Bool = false,
     title: String,
@@ -12223,6 +12376,7 @@ private func chatListRow(
     avatarUrl: String? = nil,
     lastMessage: ChatListMessagePreviewFfi? = nil,
     unreadCount: UInt64 = 0,
+    manuallyMarkedUnread: Bool = false,
     unreadMentionCount: UInt64 = 0,
     unreadMention: Bool = false,
     firstUnreadMessageIdHex: String? = nil,
@@ -12232,10 +12386,15 @@ private func chatListRow(
     activitySortAt: UInt64? = nil,
     updatedAt: UInt64 = 1,
     selfMembership: SelfMembershipFfi = .member,
+    conversationKind: ChatConversationKindFfi = .group,
+    muted: Bool = false,
+    mutedUntilMs: Int64? = nil,
     leaveRequestPending: Bool = false
 ) -> ChatListRowFfi {
     ChatListRowFfi(
         groupIdHex: groupIdHex,
+        pinned: pinned,
+        pinnedPosition: pinnedPosition,
         archived: archived,
         pendingConfirmation: pendingConfirmation,
         title: title,
@@ -12244,7 +12403,8 @@ private func chatListRow(
         avatar: avatar,
         lastMessage: lastMessage,
         unreadCount: unreadCount,
-        hasUnread: unreadCount > 0,
+        hasUnread: unreadCount > 0 || manuallyMarkedUnread,
+        manuallyMarkedUnread: manuallyMarkedUnread,
         unreadMentionCount: unreadMentionCount,
         unreadMention: unreadMention,
         firstUnreadMessageIdHex: firstUnreadMessageIdHex,
@@ -12254,6 +12414,9 @@ private func chatListRow(
         activitySortAt: activitySortAt ?? updatedAt,
         updatedAt: updatedAt,
         selfMembership: selfMembership,
+        conversationKind: conversationKind,
+        muted: muted,
+        mutedUntilMs: mutedUntilMs,
         leaveRequestPending: leaveRequestPending,
         leaveRequestedAtMs: leaveRequestPending ? updatedAt * 1_000 : nil
     )
