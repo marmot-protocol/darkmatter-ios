@@ -56,6 +56,9 @@ final class GroupDetailsViewModel {
     @ObservationIgnored var listMediaForTesting: (@MainActor (String, String) async throws -> [MediaRecordFfi])?
     @ObservationIgnored var leaveGroupForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var deleteGroupLocalForTesting: (@MainActor (String, String) async throws -> Bool)?
+    @ObservationIgnored var enableGroupDisbandingForTesting: (@MainActor (String, String) async throws -> GroupMutationResultFfi)?
+    @ObservationIgnored var disbandGroupForTesting: (@MainActor (String, String) async throws -> DisbandRequestFfi)?
+    @ObservationIgnored var acknowledgeDisbandFailureForTesting: (@MainActor (String, String) async throws -> Bool)?
 #endif
 
     isolated deinit {
@@ -655,6 +658,137 @@ final class GroupDetailsViewModel {
         }
     }
 
+    func endGroup(using appState: AppState) async {
+        pendingConfirmation = nil
+        guard let conversation, let accountRef = appState.activeAccountRef else { return }
+        guard GroupManagementPresentation.canEndGroup(state: conversation.managementState) else {
+            actionError = GroupManagementPresentation.disbandBlockerMessage(
+                state: conversation.managementState
+            ) ?? L10n.string("This group can't be ended right now.")
+            return
+        }
+        guard !membershipActionInFlight else { return }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
+
+        let groupIdHex = conversation.group.groupIdHex
+        do {
+            var state = conversation.managementState
+            if state?.canEnableDisbanding == true {
+                appState.present(.warning(
+                    L10n.string("Preparing to end group…"),
+                    message: L10n.string("Publishing group update.")
+                ))
+                let result: GroupMutationResultFfi
+#if DEBUG
+                if let enableGroupDisbandingForTesting {
+                    result = try await enableGroupDisbandingForTesting(accountRef, groupIdHex)
+                } else {
+                    let client = try appState.currentMarmotClient()
+                    result = try await client.enableGroupDisbanding(
+                        accountRef: accountRef,
+                        groupIdHex: groupIdHex
+                    )
+                }
+#else
+                let client = try appState.currentMarmotClient()
+                result = try await client.enableGroupDisbanding(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+#endif
+                conversation.applyGroupMutation(result)
+                state = result.managementState
+                onGroupChanged(conversation.group)
+            }
+
+            guard state?.canDisband == true else {
+                actionError = GroupManagementPresentation.disbandBlockerMessage(state: state)
+                    ?? L10n.string("This group can't be ended right now.")
+                return
+            }
+
+            appState.present(.warning(
+                L10n.string("Ending group…"),
+                message: L10n.string("Removing everyone and publishing the final group update.")
+            ))
+            let request: DisbandRequestFfi
+#if DEBUG
+            if let disbandGroupForTesting {
+                request = try await disbandGroupForTesting(accountRef, groupIdHex)
+            } else {
+                let client = try appState.currentMarmotClient()
+                request = try await client.disbandGroup(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            request = try await client.disbandGroup(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex
+            )
+#endif
+            conversation.markDisbandRequested(request)
+            onGroupChanged(conversation.group)
+            await refreshVisibleDebugState(using: appState)
+            Haptics.warning()
+            appState.present(.warning(
+                L10n.string("Ending group…"),
+                message: L10n.string("Messaging is disabled while the request is processed.")
+            ))
+        } catch {
+            await refreshAfterFailedMutation(using: appState)
+            handleActionError(error, title: L10n.string("Couldn't end group"), using: appState)
+        }
+    }
+
+    func acknowledgeDisbandFailure(using appState: AppState) async {
+        guard let conversation, let accountRef = appState.activeAccountRef,
+              case .some(.failed(_, _)) =
+                conversation.group.disbandRequest ?? conversation.managementState?.disbandRequest
+        else { return }
+        guard !membershipActionInFlight else { return }
+        membershipActionInFlight = true
+        defer { membershipActionInFlight = false }
+
+        do {
+            let acknowledged: Bool
+#if DEBUG
+            if let acknowledgeDisbandFailureForTesting {
+                acknowledged = try await acknowledgeDisbandFailureForTesting(
+                    accountRef,
+                    conversation.group.groupIdHex
+                )
+            } else {
+                let client = try appState.currentMarmotClient()
+                acknowledged = try await client.acknowledgeDisbandFailure(
+                    accountRef: accountRef,
+                    groupIdHex: conversation.group.groupIdHex
+                )
+            }
+#else
+            let client = try appState.currentMarmotClient()
+            acknowledged = try await client.acknowledgeDisbandFailure(
+                accountRef: accountRef,
+                groupIdHex: conversation.group.groupIdHex
+            )
+#endif
+            if acknowledged {
+                conversation.clearDisbandFailure()
+                onGroupChanged(conversation.group)
+            }
+            await refreshGroupManagementAndNotify()
+        } catch {
+            handleActionError(
+                error,
+                title: L10n.string("Couldn't dismiss group status"),
+                using: appState
+            )
+        }
+    }
+
     func deleteLocal(using appState: AppState, dismiss: () -> Void) async {
         guard let conversation, let accountRef = appState.activeAccountRef else { return }
         guard !conversation.leaveRequestPending else {
@@ -721,6 +855,15 @@ final class GroupDetailsViewModel {
             return L10n.string("Step down as admin before leaving the group.")
         case .WouldRemoveLastAdmin:
             return L10n.string("Make another member an admin before removing the last admin.")
+        case .DisbandingUnsupportedMembers(_, let memberIds):
+            return L10n.plural(
+                "%lld members must update White Noise before you can end this group.",
+                Int64(memberIds.count)
+            )
+        case .DisbandingNotEnabled:
+            return L10n.string("Group ending isn't ready yet. Try again.")
+        case .GroupDisbanding:
+            return GroupManagementPresentation.disbandingComposerMessage
         case .MemberNotInGroup:
             return L10n.string("That member is no longer in this group.")
         case .AlreadyAdmin:

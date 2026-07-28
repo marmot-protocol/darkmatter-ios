@@ -391,9 +391,22 @@ final class ConversationViewModel {
         return isSelfAdmin && group.admins.count <= 1
     }
 
+    var isGroupDisbanding: Bool {
+        group.disbanding || managementState?.disbanding == true
+    }
+
+    var isGroupDisbanded: Bool {
+        group.disbanded || managementState?.lifecycleState == .disbanded
+    }
+
+    var isGroupDisbandingOrDisbanded: Bool {
+        isGroupDisbanding || isGroupDisbanded
+    }
+
     var canSendMessages: Bool {
         guard !group.pendingConfirmation else { return false }
         guard !leaveRequestPending else { return false }
+        guard !isGroupDisbandingOrDisbanded else { return false }
         return GroupManagementPresentation.isActiveMember(
             state: managementState,
             members: members,
@@ -405,6 +418,12 @@ final class ConversationViewModel {
 
     var inactiveGroupMessage: String? {
         guard !canSendMessages else { return nil }
+        if isGroupDisbanded {
+            return GroupManagementPresentation.disbandedComposerMessage
+        }
+        if isGroupDisbanding {
+            return GroupManagementPresentation.disbandingComposerMessage
+        }
         if leaveRequestPending {
             return GroupManagementPresentation.leavingGroupComposerMessage
         }
@@ -740,6 +759,36 @@ final class ConversationViewModel {
             )
         }
         bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
+    }
+
+    func markDisbandRequested(_ request: DisbandRequestFfi) {
+        var updatedGroup = group
+        updatedGroup.disbanding = true
+        updatedGroup.disbandRequest = request
+        group = updatedGroup
+        if var state = managementState {
+            state.disbanding = true
+            state.canInvite = false
+            state.canLeave = false
+            state.requiresSelfDemoteBeforeLeave = false
+            state.canEnableDisbanding = false
+            state.canDisband = false
+            state.disbandRequest = request
+            managementState = state
+        }
+        scheduleTimelineTailRefresh()
+    }
+
+    func clearDisbandFailure() {
+        var updatedGroup = group
+        updatedGroup.disbanding = false
+        updatedGroup.disbandRequest = nil
+        group = updatedGroup
+        if var state = managementState {
+            state.disbanding = false
+            state.disbandRequest = nil
+            managementState = state
+        }
     }
 
     func markVisibleMessagesRead(_ records: [AppMessageRecordFfi]) {
@@ -1736,10 +1785,14 @@ final class ConversationViewModel {
         let previousName = group.name
         let wasArchived = group.archived
         let previousAdmins = Set(group.admins)
+        let wasDisbanding = group.disbanding
+        let wasDisbanded = group.disbanded
         let needsTimelineRefresh = Self.groupSnapshotNeedsTimelineTailRefresh(
             previousName: previousName,
             previousArchived: wasArchived,
             previousAdmins: previousAdmins,
+            previousDisbanding: wasDisbanding,
+            previousDisbanded: wasDisbanded,
             next: record
         )
         reconcileLeaveRequest(with: record.leaveRequestPending)
@@ -1770,12 +1823,17 @@ final class ConversationViewModel {
         previousName: String,
         previousArchived: Bool,
         previousAdmins: Set<String>,
+        previousDisbanding: Bool = false,
+        previousDisbanded: Bool = false,
         next: AppGroupRecordFfi
     ) -> Bool {
         let nameChanged = !previousName.isEmpty && previousName != next.name
         let archiveStateChanged = next.archived != previousArchived
         let adminsChanged = Set(next.admins) != previousAdmins
+        let disbandingChanged = next.disbanding != previousDisbanding
+        let disbandedChanged = next.disbanded != previousDisbanded
         return nameChanged || archiveStateChanged || adminsChanged
+            || disbandingChanged || disbandedChanged
     }
 
     func applyGroupRecord(_ record: AppGroupRecordFfi) {
@@ -1898,6 +1956,10 @@ final class ConversationViewModel {
 #if DEBUG
     func appendSystemEventForTesting(_ event: SystemEvent, timestamp: UInt64) {
         appendSystemEvent(event, timestamp: timestamp)
+    }
+
+    func setManagementStateForTesting(_ state: GroupManagementStateFfi?) {
+        managementState = state
     }
 #endif
 

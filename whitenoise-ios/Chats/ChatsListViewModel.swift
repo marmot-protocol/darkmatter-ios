@@ -67,6 +67,8 @@ final class ChatsListViewModel {
         var hasUnreadMention: Bool { row.unreadMention || row.unreadMentionCount > 0 }
         var isPinned: Bool { row.pinned }
         var isArchived: Bool { row.archived }
+        var isDisbanding: Bool { row.disbanding }
+        var isDisbanded: Bool { row.lifecycleState == .disbanded }
         var selfMembership: SelfMembershipFfi { row.selfMembership }
         var isActiveMember: Bool {
             !leaveRequestPending
@@ -101,6 +103,9 @@ final class ChatsListViewModel {
                 selfMembership: selfMembership,
                 leaveRequestPending: row.leaveRequestPending,
                 leaveRequestedAtMs: row.leaveRequestedAtMs,
+                disbanding: row.disbanding,
+                disbandRequest: row.disbandRequest,
+                disbanded: row.lifecycleState == .disbanded,
                 welcomerAccountIdHex: nil,
                 viaWelcomeMessageIdHex: nil
             )
@@ -1062,6 +1067,9 @@ final class ChatsListViewModel {
             pinnedPosition: nil,
             archived: group.archived,
             pendingConfirmation: group.pendingConfirmation,
+            lifecycleState: group.disbanded ? .disbanded : .stable,
+            disbanding: group.disbanding,
+            disbandRequest: group.disbandRequest,
             title: title,
             groupName: group.name,
             avatarUrl: group.avatarUrl,

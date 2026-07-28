@@ -7,6 +7,7 @@ enum GroupDetailsConfirmation: Identifiable {
     case deleteLocal
     case remove(GroupMemberDetailsFfi)
     case selfDemote
+    case disband
 
     var id: String {
         switch self {
@@ -18,6 +19,8 @@ enum GroupDetailsConfirmation: Identifiable {
             return "remove-\(member.memberIdHex)"
         case .selfDemote:
             return "self-demote"
+        case .disband:
+            return "disband"
         }
     }
 }
@@ -54,7 +57,9 @@ struct GroupDetailsView: View {
     @State private var didOpenRequestedAddMembers = false
     @State private var memberProjectionCache = GroupMemberListProjectionCache()
 
-    private var isAdmin: Bool { viewModel.isSelfAdmin }
+    private var isAdmin: Bool {
+        viewModel.isSelfAdmin && !viewModel.isGroupDisbandingOrDisbanded
+    }
     private var isDirectMessage: Bool { viewModel.groupDisplay.isDirectMessage }
     private var memberCount: Int {
         viewModel.groupMemberDetails.isEmpty ? viewModel.members.count : viewModel.groupMemberDetails.count
@@ -74,6 +79,7 @@ struct GroupDetailsView: View {
             } else {
                 groupIdentitySection
             }
+            groupLifecycleSection
             actionsRowSection
             sharedMediaSection
             settingsSection
@@ -389,6 +395,18 @@ struct GroupDetailsView: View {
                 onConfirm: {
                     model.pendingConfirmation = nil
                     Task { await model.selfDemote(using: appState) }
+                },
+                onCancel: { model.pendingConfirmation = nil }
+            )
+        case .disband:
+            FullScreenConfirmationDialog(
+                title: L10n.string("End this group?"),
+                message: GroupManagementPresentation.disbandConfirmationMessage,
+                systemImage: "xmark.circle",
+                destructiveTitle: L10n.string("End Group"),
+                onConfirm: {
+                    model.pendingConfirmation = nil
+                    Task { await model.endGroup(using: appState) }
                 },
                 onCancel: { model.pendingConfirmation = nil }
             )
@@ -842,8 +860,72 @@ struct GroupDetailsView: View {
 
     // MARK: - Destructive actions
 
+    @ViewBuilder
+    private var groupLifecycleSection: some View {
+        switch GroupManagementPresentation.disbandStatus(
+            group: viewModel.group,
+            state: viewModel.managementState
+        ) {
+        case .none:
+            EmptyView()
+        case .pending:
+            Section("Group Status") {
+                HStack(alignment: .top, spacing: 12) {
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Ending group…")
+                            .font(.body.weight(.medium))
+                        Text("Everyone is being removed. Messaging and group changes are disabled while the final update is processed.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        case .failed(let reason):
+            Section("Group Status") {
+                Label(
+                    GroupManagementPresentation.disbandFailureMessage(reason),
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.orange)
+                Button("Dismiss") {
+                    Task { await model.acknowledgeDisbandFailure(using: appState) }
+                }
+                .disabled(model.membershipActionInFlight)
+            }
+        case .disbanded:
+            Section("Group Status") {
+                Label("Group ended", systemImage: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+                Text("This group was permanently disbanded. No one can send new messages or make group changes.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var destructiveActionsSection: some View {
         Section {
+            if GroupManagementPresentation.shouldShowEndGroup(
+                state: viewModel.managementState
+            ) {
+                Button(role: .destructive) {
+                    model.pendingConfirmation = .disband
+                } label: {
+                    Label("End Group", systemImage: "xmark.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .disabled(
+                    !GroupManagementPresentation.canEndGroup(
+                        state: viewModel.managementState
+                    ) || model.membershipActionInFlight
+                )
+            }
+
             if !isDirectMessage, shouldShowSelfDemoteAction {
                 Button(role: .destructive) {
                     model.pendingConfirmation = .selfDemote
@@ -856,52 +938,61 @@ struct GroupDetailsView: View {
                 .disabled(!canSelfDemoteAction || model.membershipActionInFlight)
             }
 
-            if viewModel.leaveRequestPending {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(GroupManagementPresentation.leavingGroupComposerMessage)
-                        .foregroundStyle(.secondary)
-                }
-            } else if viewModel.canSendMessages {
-                Button(role: .destructive) {
-                    model.pendingConfirmation = .leave
-                } label: {
-                    Label(
-                        isDirectMessage ? L10n.string("Leave Chat") : L10n.string("Leave Group"),
-                        systemImage: "rectangle.portrait.and.arrow.right"
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .disabled(
-                    !GroupManagementPresentation.canLeave(
-                        state: viewModel.managementState,
-                        fallbackIsLastAdmin: viewModel.isLastAdmin
-                    ) || model.membershipActionInFlight
-                )
-            } else {
-                Button(role: .destructive) {
-                    model.pendingConfirmation = .deleteLocal
-                } label: {
-                    Label("Delete Local Copy", systemImage: "trash")
+            if !viewModel.isGroupDisbanding {
+                if viewModel.leaveRequestPending {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(GroupManagementPresentation.leavingGroupComposerMessage)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if viewModel.canSendMessages {
+                    Button(role: .destructive) {
+                        model.pendingConfirmation = .leave
+                    } label: {
+                        Label(
+                            isDirectMessage ? L10n.string("Leave Chat") : L10n.string("Leave Group"),
+                            systemImage: "rectangle.portrait.and.arrow.right"
+                        )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(
+                        !GroupManagementPresentation.canLeave(
+                            state: viewModel.managementState,
+                            fallbackIsLastAdmin: viewModel.isLastAdmin
+                        ) || model.membershipActionInFlight
+                    )
+                } else {
+                    Button(role: .destructive) {
+                        model.pendingConfirmation = .deleteLocal
+                    } label: {
+                        Label("Delete Local Copy", systemImage: "trash")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.membershipActionInFlight)
                 }
-                .buttonStyle(.plain)
-                .disabled(model.membershipActionInFlight)
             }
         } footer: {
-            if viewModel.leaveRequestPending {
-                Text(GroupManagementPresentation.leavingGroupComposerMessage)
-            } else if let leaveFooter = GroupManagementPresentation.leaveFooter(
-                state: viewModel.managementState,
-                fallbackIsLastAdmin: viewModel.isLastAdmin
-            ), viewModel.canSendMessages {
-                Text(leaveFooter)
-            } else if !viewModel.canSendMessages {
-                Text("Deletes this chat's local history from this device.")
+            VStack(alignment: .leading, spacing: 4) {
+                if let blocker = GroupManagementPresentation.disbandBlockerMessage(
+                    state: viewModel.managementState
+                ) {
+                    Text(blocker)
+                }
+                if viewModel.leaveRequestPending {
+                    Text(GroupManagementPresentation.leavingGroupComposerMessage)
+                } else if let leaveFooter = GroupManagementPresentation.leaveFooter(
+                    state: viewModel.managementState,
+                    fallbackIsLastAdmin: viewModel.isLastAdmin
+                ), viewModel.canSendMessages {
+                    Text(leaveFooter)
+                } else if viewModel.isGroupDisbanded {
+                    Text("Deletes this chat's local history from this device.")
+                }
             }
         }
     }

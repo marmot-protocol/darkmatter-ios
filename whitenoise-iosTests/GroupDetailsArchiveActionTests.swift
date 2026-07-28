@@ -337,6 +337,82 @@ struct GroupDetailsArchiveActionTests {
         #expect(dismissed)
     }
 
+    @Test func endGroupRecordsDurableIntentAndDisablesMessagingImmediately() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let conversation = ConversationViewModel(
+            appState: appState,
+            group: archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        )
+        conversation.setManagementStateForTesting(disbandManagementState(
+            disbandingEnabled: true,
+            canDisband: true
+        ))
+        let model = GroupDetailsViewModel()
+        var disbandRequests: [(String, String)] = []
+        var changedRecords: [AppGroupRecordFfi] = []
+
+        model.conversation = conversation
+        model.onGroupChanged = { changedRecords.append($0) }
+        model.disbandGroupForTesting = { accountRef, groupIdHex in
+            disbandRequests.append((accountRef, groupIdHex))
+            return .pending(requestedAtMs: 1_000)
+        }
+
+        await model.endGroup(using: appState)
+
+        #expect(disbandRequests.count == 1)
+        #expect(disbandRequests.first?.0 == "account-1")
+        #expect(disbandRequests.first?.1 == groupIdHex)
+        #expect(conversation.group.disbanding)
+        #expect(conversation.group.disbandRequest == .pending(requestedAtMs: 1_000))
+        #expect(!conversation.canSendMessages)
+        #expect(
+            conversation.inactiveGroupMessage
+                == GroupManagementPresentation.disbandingComposerMessage
+        )
+        #expect(changedRecords.map(\.disbanding) == [true])
+    }
+
+    @Test func endGroupEnablesLifecycleAndDisbandsFromOneConfirmation() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-1"
+        let groupIdHex = String(repeating: "ab", count: 32)
+        let group = archiveTestGroup(groupIdHex: groupIdHex, archived: false)
+        let conversation = ConversationViewModel(appState: appState, group: group)
+        conversation.setManagementStateForTesting(disbandManagementState(
+            canEnableDisbanding: true
+        ))
+        let model = GroupDetailsViewModel()
+        var enableCount = 0
+        var disbandCount = 0
+
+        model.conversation = conversation
+        model.enableGroupDisbandingForTesting = { _, _ in
+            enableCount += 1
+            return GroupMutationResultFfi(
+                summary: SendSummaryFfi(published: 1, messageIds: ["enable"]),
+                details: GroupDetailsFfi(group: group, members: []),
+                managementState: disbandManagementState(
+                    disbandingEnabled: true,
+                    canDisband: true
+                )
+            )
+        }
+        model.disbandGroupForTesting = { _, _ in
+            disbandCount += 1
+            return .pending(requestedAtMs: 2_000)
+        }
+
+        await model.endGroup(using: appState)
+
+        #expect(enableCount == 1)
+        #expect(disbandCount == 1)
+        #expect(conversation.group.disbanding)
+        #expect(conversation.group.disbandRequest == .pending(requestedAtMs: 2_000))
+    }
+
     @Test func alreadyRequestedLeaveIsPresentedAsDurableProgress() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "account-1"
@@ -621,5 +697,30 @@ private func archiveTestGroup(
         leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,
         welcomerAccountIdHex: nil,
         viaWelcomeMessageIdHex: nil
+    )
+}
+
+private func disbandManagementState(
+    disbandingEnabled: Bool = false,
+    canEnableDisbanding: Bool = false,
+    canDisband: Bool = false
+) -> GroupManagementStateFfi {
+    GroupManagementStateFfi(
+        myAccountIdHex: String(repeating: "11", count: 32),
+        isSelfAdmin: true,
+        isLastAdmin: true,
+        canInvite: true,
+        canLeave: false,
+        requiresSelfDemoteBeforeLeave: false,
+        leaveRequestPending: false,
+        leaveRequestedAtMs: nil,
+        lifecycleState: .stable,
+        disbandingEnabled: disbandingEnabled,
+        disbanding: false,
+        canEnableDisbanding: canEnableDisbanding,
+        canDisband: canDisband,
+        disbandingBlockers: [],
+        disbandRequest: nil,
+        memberActions: []
     )
 }

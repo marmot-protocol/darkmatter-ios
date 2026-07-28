@@ -8,10 +8,22 @@ nonisolated enum GroupMemberManagementAction: Equatable {
     case selfDemote
 }
 
+nonisolated enum GroupDisbandStatus: Equatable {
+    case none
+    case pending
+    case failed(DisbandFailureReasonFfi)
+    case disbanded
+}
+
 nonisolated enum GroupManagementPresentation {
     static let inactiveGroupComposerMessage = L10n.string("This group is inactive. You can't send new messages.")
     static let leftGroupComposerMessage = L10n.string("You left the group")
     static let leavingGroupComposerMessage = L10n.string("Leaving group…")
+    static let disbandingComposerMessage = L10n.string("This group is ending. New messages are disabled.")
+    static let disbandedComposerMessage = L10n.string("This group has ended. New messages are disabled.")
+    static let disbandConfirmationMessage = L10n.string(
+        "Everyone will be removed and the group will be permanently disbanded. No one will be able to send new messages. This can't be undone."
+    )
 
     static func isActiveChatListMember(_ membership: SelfMembershipFfi) -> Bool {
         membership == .member
@@ -33,6 +45,60 @@ nonisolated enum GroupManagementPresentation {
         state?.canInvite ?? fallbackIsAdmin
     }
 
+    static func disbandStatus(
+        group: AppGroupRecordFfi,
+        state: GroupManagementStateFfi?
+    ) -> GroupDisbandStatus {
+        if group.disbanded || state?.lifecycleState == .disbanded {
+            return .disbanded
+        }
+        if case .some(.failed(_, let reason)) = group.disbandRequest {
+            return .failed(reason)
+        }
+        if case .some(.failed(_, let reason)) = state?.disbandRequest {
+            return .failed(reason)
+        }
+        if group.disbanding || state?.disbanding == true {
+            return .pending
+        }
+        return .none
+    }
+
+    static func canEndGroup(state: GroupManagementStateFfi?) -> Bool {
+        guard let state, state.isSelfAdmin, state.lifecycleState != .disbanded,
+              !state.disbanding
+        else { return false }
+        return state.canDisband || state.canEnableDisbanding
+    }
+
+    static func shouldShowEndGroup(state: GroupManagementStateFfi?) -> Bool {
+        guard let state else { return false }
+        return state.isSelfAdmin
+            && state.lifecycleState != .disbanded
+            && !state.disbanding
+            && state.disbandRequest == nil
+    }
+
+    static func disbandBlockerMessage(state: GroupManagementStateFfi?) -> String? {
+        guard let state, state.isSelfAdmin, !canEndGroup(state: state),
+              !state.disbanding, state.lifecycleState != .disbanded,
+              !state.disbandingBlockers.isEmpty
+        else { return nil }
+        return L10n.plural(
+            "%lld members must update White Noise before you can end this group.",
+            Int64(state.disbandingBlockers.count)
+        )
+    }
+
+    static func disbandFailureMessage(_ reason: DisbandFailureReasonFfi) -> String {
+        switch reason {
+        case .noLongerAdmin:
+            return L10n.string("The group wasn't ended because you're no longer an admin.")
+        case .noLongerMember:
+            return L10n.string("The group wasn't ended because you're no longer a member.")
+        }
+    }
+
     static func isActiveMember(
         state: GroupManagementStateFfi?,
         members: [AppGroupMemberRecordFfi],
@@ -43,7 +109,8 @@ nonisolated enum GroupManagementPresentation {
         guard isActiveChatListMember(fallbackSelfMembership) else { return false }
 
         if let state {
-            return !state.leaveRequestPending && (
+            return state.lifecycleState != .disbanded && !state.disbanding
+                && !state.leaveRequestPending && (
                 state.isSelfAdmin
                 || state.canLeave
                 || state.requiresSelfDemoteBeforeLeave

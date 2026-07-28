@@ -1789,6 +1789,8 @@ public protocol MarmotProtocol : AnyObject {
      */
     func accountUnreadSummary() throws  -> [AccountUnreadFfi]
 
+    func acknowledgeDisbandFailure(accountRef: String, groupIdHex: String) async throws  -> Bool
+
     /**
      * Local JSONL audit logs available for explicit forensic upload.
      */
@@ -1912,6 +1914,12 @@ public protocol MarmotProtocol : AnyObject {
     func demoteAdminDetailed(accountRef: String, groupIdHex: String, memberRef: String) async throws  -> GroupMutationResultFfi
 
     /**
+     * Durably accept an irreversible disband request. Completion is observed
+     * through normal group state updates after bounded convergence.
+     */
+    func disbandGroup(accountRef: String, groupIdHex: String) async throws  -> DisbandRequestFfi
+
+    /**
      * Best-effort cached display name for an account id. Returns the Nostr
      * kind:0 display_name/name when the runtime has projected one, or the
      * local account label if the id refers to one of our own accounts.
@@ -1948,6 +1956,11 @@ public protocol MarmotProtocol : AnyObject {
      * projection and resolve the latest text per target message id.
      */
     func editMessage(accountRef: String, groupIdHex: String, targetMessageId: String, content: String) async throws  -> SendSummaryFfi
+
+    /**
+     * Install lifecycle-v1 and require it in one admin Commit.
+     */
+    func enableGroupDisbanding(accountRef: String, groupIdHex: String) async throws  -> GroupMutationResultFfi
 
     /**
      * Export the active account's private key as a password-encrypted NIP-49
@@ -2784,6 +2797,23 @@ open func accountUnreadSummary()throws  -> [AccountUnreadFfi] {
 })
 }
 
+open func acknowledgeDisbandFailure(accountRef: String, groupIdHex: String)async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_acknowledge_disband_failure(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_i8,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_i8,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
     /**
      * Local JSONL audit logs available for explicit forensic upload.
      */
@@ -3169,6 +3199,27 @@ open func demoteAdminDetailed(accountRef: String, groupIdHex: String, memberRef:
 }
 
     /**
+     * Durably accept an irreversible disband request. Completion is observed
+     * through normal group state updates after bounded convergence.
+     */
+open func disbandGroup(accountRef: String, groupIdHex: String)async throws  -> DisbandRequestFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_disband_group(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDisbandRequestFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
      * Best-effort cached display name for an account id. Returns the Nostr
      * kind:0 display_name/name when the runtime has projected one, or the
      * local account label if the id refers to one of our own accounts.
@@ -3253,6 +3304,26 @@ open func editMessage(accountRef: String, groupIdHex: String, targetMessageId: S
             completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSendSummaryFfi.lift,
+            errorHandler: FfiConverterTypeMarmotKitError.lift
+        )
+}
+
+    /**
+     * Install lifecycle-v1 and require it in one admin Commit.
+     */
+open func enableGroupDisbanding(accountRef: String, groupIdHex: String)async throws  -> GroupMutationResultFfi {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_enable_group_disbanding(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGroupMutationResultFfi.lift,
             errorHandler: FfiConverterTypeMarmotKitError.lift
         )
 }
@@ -6542,20 +6613,38 @@ public func FfiConverterTypeAppGroupMemberRecordFfi_lower(_ value: AppGroupMembe
 public struct AppGroupMlsStateFfi {
     public var groupIdHex: String
     public var protocolProfile: AppProtocolProfileFfi
+    public var lifecycleState: GroupLifecycleStateFfi
     public var epoch: UInt64
     public var memberCount: UInt32
     public var unrecoverable: Bool
     public var requiredAppComponents: [UInt16]
+    public var disbandingEnabled: Bool
+    /**
+     * True while application messages and all other ordinary outbound group
+     * work are gated pending terminal convergence.
+     */
+    public var disbanding: Bool
+    public var disbandingBlockers: [String]
+    public var disbandRequest: DisbandRequestFfi?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(groupIdHex: String, protocolProfile: AppProtocolProfileFfi, epoch: UInt64, memberCount: UInt32, unrecoverable: Bool, requiredAppComponents: [UInt16]) {
+    public init(groupIdHex: String, protocolProfile: AppProtocolProfileFfi, lifecycleState: GroupLifecycleStateFfi, epoch: UInt64, memberCount: UInt32, unrecoverable: Bool, requiredAppComponents: [UInt16], disbandingEnabled: Bool,
+        /**
+         * True while application messages and all other ordinary outbound group
+         * work are gated pending terminal convergence.
+         */disbanding: Bool, disbandingBlockers: [String], disbandRequest: DisbandRequestFfi?) {
         self.groupIdHex = groupIdHex
         self.protocolProfile = protocolProfile
+        self.lifecycleState = lifecycleState
         self.epoch = epoch
         self.memberCount = memberCount
         self.unrecoverable = unrecoverable
         self.requiredAppComponents = requiredAppComponents
+        self.disbandingEnabled = disbandingEnabled
+        self.disbanding = disbanding
+        self.disbandingBlockers = disbandingBlockers
+        self.disbandRequest = disbandRequest
     }
 }
 
@@ -6567,6 +6656,9 @@ extension AppGroupMlsStateFfi: Equatable, Hashable {
             return false
         }
         if lhs.protocolProfile != rhs.protocolProfile {
+            return false
+        }
+        if lhs.lifecycleState != rhs.lifecycleState {
             return false
         }
         if lhs.epoch != rhs.epoch {
@@ -6581,16 +6673,33 @@ extension AppGroupMlsStateFfi: Equatable, Hashable {
         if lhs.requiredAppComponents != rhs.requiredAppComponents {
             return false
         }
+        if lhs.disbandingEnabled != rhs.disbandingEnabled {
+            return false
+        }
+        if lhs.disbanding != rhs.disbanding {
+            return false
+        }
+        if lhs.disbandingBlockers != rhs.disbandingBlockers {
+            return false
+        }
+        if lhs.disbandRequest != rhs.disbandRequest {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(groupIdHex)
         hasher.combine(protocolProfile)
+        hasher.combine(lifecycleState)
         hasher.combine(epoch)
         hasher.combine(memberCount)
         hasher.combine(unrecoverable)
         hasher.combine(requiredAppComponents)
+        hasher.combine(disbandingEnabled)
+        hasher.combine(disbanding)
+        hasher.combine(disbandingBlockers)
+        hasher.combine(disbandRequest)
     }
 }
 
@@ -6604,20 +6713,30 @@ public struct FfiConverterTypeAppGroupMlsStateFfi: FfiConverterRustBuffer {
             try AppGroupMlsStateFfi(
                 groupIdHex: FfiConverterString.read(from: &buf),
                 protocolProfile: FfiConverterTypeAppProtocolProfileFfi.read(from: &buf),
+                lifecycleState: FfiConverterTypeGroupLifecycleStateFfi.read(from: &buf),
                 epoch: FfiConverterUInt64.read(from: &buf),
                 memberCount: FfiConverterUInt32.read(from: &buf),
                 unrecoverable: FfiConverterBool.read(from: &buf),
-                requiredAppComponents: FfiConverterSequenceUInt16.read(from: &buf)
+                requiredAppComponents: FfiConverterSequenceUInt16.read(from: &buf),
+                disbandingEnabled: FfiConverterBool.read(from: &buf),
+                disbanding: FfiConverterBool.read(from: &buf),
+                disbandingBlockers: FfiConverterSequenceString.read(from: &buf),
+                disbandRequest: FfiConverterOptionTypeDisbandRequestFfi.read(from: &buf)
         )
     }
 
     public static func write(_ value: AppGroupMlsStateFfi, into buf: inout [UInt8]) {
         FfiConverterString.write(value.groupIdHex, into: &buf)
         FfiConverterTypeAppProtocolProfileFfi.write(value.protocolProfile, into: &buf)
+        FfiConverterTypeGroupLifecycleStateFfi.write(value.lifecycleState, into: &buf)
         FfiConverterUInt64.write(value.epoch, into: &buf)
         FfiConverterUInt32.write(value.memberCount, into: &buf)
         FfiConverterBool.write(value.unrecoverable, into: &buf)
         FfiConverterSequenceUInt16.write(value.requiredAppComponents, into: &buf)
+        FfiConverterBool.write(value.disbandingEnabled, into: &buf)
+        FfiConverterBool.write(value.disbanding, into: &buf)
+        FfiConverterSequenceString.write(value.disbandingBlockers, into: &buf)
+        FfiConverterOptionTypeDisbandRequestFfi.write(value.disbandRequest, into: &buf)
     }
 }
 
@@ -6695,6 +6814,21 @@ public struct AppGroupRecordFfi {
      * epoch; `null` when no leave is pending.
      */
     public var leaveRequestedAtMs: UInt64?
+    /**
+     * Hide/disable the message composer while this is true. It includes both
+     * this account's durable request and another admin's authenticated
+     * terminal candidate awaiting convergence.
+     */
+    public var disbanding: Bool
+    /**
+     * This account's durable request outcome, if any. Another admin's pending
+     * candidate can make `disbanding` true while this remains `null`.
+     */
+    public var disbandRequest: DisbandRequestFfi?
+    /**
+     * Hide the composer permanently for this group id when terminal.
+     */
+    public var disbanded: Bool
     public var welcomerAccountIdHex: String?
     public var viaWelcomeMessageIdHex: String?
 
@@ -6736,7 +6870,19 @@ public struct AppGroupRecordFfi {
         /**
          * When the local account asked to leave, in milliseconds since the Unix
          * epoch; `null` when no leave is pending.
-         */leaveRequestedAtMs: UInt64?, welcomerAccountIdHex: String?, viaWelcomeMessageIdHex: String?) {
+         */leaveRequestedAtMs: UInt64?,
+        /**
+         * Hide/disable the message composer while this is true. It includes both
+         * this account's durable request and another admin's authenticated
+         * terminal candidate awaiting convergence.
+         */disbanding: Bool,
+        /**
+         * This account's durable request outcome, if any. Another admin's pending
+         * candidate can make `disbanding` true while this remains `null`.
+         */disbandRequest: DisbandRequestFfi?,
+        /**
+         * Hide the composer permanently for this group id when terminal.
+         */disbanded: Bool, welcomerAccountIdHex: String?, viaWelcomeMessageIdHex: String?) {
         self.groupIdHex = groupIdHex
         self.protocolProfile = protocolProfile
         self.endpoint = endpoint
@@ -6758,6 +6904,9 @@ public struct AppGroupRecordFfi {
         self.selfMembership = selfMembership
         self.leaveRequestPending = leaveRequestPending
         self.leaveRequestedAtMs = leaveRequestedAtMs
+        self.disbanding = disbanding
+        self.disbandRequest = disbandRequest
+        self.disbanded = disbanded
         self.welcomerAccountIdHex = welcomerAccountIdHex
         self.viaWelcomeMessageIdHex = viaWelcomeMessageIdHex
     }
@@ -6830,6 +6979,15 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         if lhs.leaveRequestedAtMs != rhs.leaveRequestedAtMs {
             return false
         }
+        if lhs.disbanding != rhs.disbanding {
+            return false
+        }
+        if lhs.disbandRequest != rhs.disbandRequest {
+            return false
+        }
+        if lhs.disbanded != rhs.disbanded {
+            return false
+        }
         if lhs.welcomerAccountIdHex != rhs.welcomerAccountIdHex {
             return false
         }
@@ -6861,6 +7019,9 @@ extension AppGroupRecordFfi: Equatable, Hashable {
         hasher.combine(selfMembership)
         hasher.combine(leaveRequestPending)
         hasher.combine(leaveRequestedAtMs)
+        hasher.combine(disbanding)
+        hasher.combine(disbandRequest)
+        hasher.combine(disbanded)
         hasher.combine(welcomerAccountIdHex)
         hasher.combine(viaWelcomeMessageIdHex)
     }
@@ -6895,6 +7056,9 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
                 selfMembership: FfiConverterTypeSelfMembershipFfi.read(from: &buf),
                 leaveRequestPending: FfiConverterBool.read(from: &buf),
                 leaveRequestedAtMs: FfiConverterOptionUInt64.read(from: &buf),
+                disbanding: FfiConverterBool.read(from: &buf),
+                disbandRequest: FfiConverterOptionTypeDisbandRequestFfi.read(from: &buf),
+                disbanded: FfiConverterBool.read(from: &buf),
                 welcomerAccountIdHex: FfiConverterOptionString.read(from: &buf),
                 viaWelcomeMessageIdHex: FfiConverterOptionString.read(from: &buf)
         )
@@ -6922,6 +7086,9 @@ public struct FfiConverterTypeAppGroupRecordFfi: FfiConverterRustBuffer {
         FfiConverterTypeSelfMembershipFfi.write(value.selfMembership, into: &buf)
         FfiConverterBool.write(value.leaveRequestPending, into: &buf)
         FfiConverterOptionUInt64.write(value.leaveRequestedAtMs, into: &buf)
+        FfiConverterBool.write(value.disbanding, into: &buf)
+        FfiConverterOptionTypeDisbandRequestFfi.write(value.disbandRequest, into: &buf)
+        FfiConverterBool.write(value.disbanded, into: &buf)
         FfiConverterOptionString.write(value.welcomerAccountIdHex, into: &buf)
         FfiConverterOptionString.write(value.viaWelcomeMessageIdHex, into: &buf)
     }
@@ -8046,6 +8213,16 @@ public struct ChatListRowFfi {
     public var pinnedPosition: UInt32?
     public var archived: Bool
     public var pendingConfirmation: Bool
+    public var lifecycleState: GroupLifecycleStateFfi
+    /**
+     * Hide/disable the message composer while terminal convergence is in
+     * progress. This also covers another admin's inbound candidate.
+     */
+    public var disbanding: Bool
+    /**
+     * This account's durable request outcome, if any.
+     */
+    public var disbandRequest: DisbandRequestFfi?
     public var title: String
     public var groupName: String
     public var avatarUrl: String?
@@ -8116,7 +8293,14 @@ public struct ChatListRowFfi {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(groupIdHex: String, pinned: Bool, pinnedPosition: UInt32?, archived: Bool, pendingConfirmation: Bool, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool,
+    public init(groupIdHex: String, pinned: Bool, pinnedPosition: UInt32?, archived: Bool, pendingConfirmation: Bool, lifecycleState: GroupLifecycleStateFfi,
+        /**
+         * Hide/disable the message composer while terminal convergence is in
+         * progress. This also covers another admin's inbound candidate.
+         */disbanding: Bool,
+        /**
+         * This account's durable request outcome, if any.
+         */disbandRequest: DisbandRequestFfi?, title: String, groupName: String, avatarUrl: String?, avatar: ChatListAvatarFfi?, lastMessage: ChatListMessagePreviewFfi?, unreadCount: UInt64, hasUnread: Bool,
         /**
          * User-created unread reminder independent of unread incoming messages.
          */manuallyMarkedUnread: Bool, unreadMentionCount: UInt64, unreadMention: Bool, firstUnreadMessageIdHex: String?, lastReadMessageIdHex: String?, lastReadTimelineAt: UInt64?, conversationCreatedAt: UInt64, activitySortAt: UInt64, updatedAt: UInt64,
@@ -8167,6 +8351,9 @@ public struct ChatListRowFfi {
         self.pinnedPosition = pinnedPosition
         self.archived = archived
         self.pendingConfirmation = pendingConfirmation
+        self.lifecycleState = lifecycleState
+        self.disbanding = disbanding
+        self.disbandRequest = disbandRequest
         self.title = title
         self.groupName = groupName
         self.avatarUrl = avatarUrl
@@ -8209,6 +8396,15 @@ extension ChatListRowFfi: Equatable, Hashable {
             return false
         }
         if lhs.pendingConfirmation != rhs.pendingConfirmation {
+            return false
+        }
+        if lhs.lifecycleState != rhs.lifecycleState {
+            return false
+        }
+        if lhs.disbanding != rhs.disbanding {
+            return false
+        }
+        if lhs.disbandRequest != rhs.disbandRequest {
             return false
         }
         if lhs.title != rhs.title {
@@ -8286,6 +8482,9 @@ extension ChatListRowFfi: Equatable, Hashable {
         hasher.combine(pinnedPosition)
         hasher.combine(archived)
         hasher.combine(pendingConfirmation)
+        hasher.combine(lifecycleState)
+        hasher.combine(disbanding)
+        hasher.combine(disbandRequest)
         hasher.combine(title)
         hasher.combine(groupName)
         hasher.combine(avatarUrl)
@@ -8324,6 +8523,9 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
                 pinnedPosition: FfiConverterOptionUInt32.read(from: &buf),
                 archived: FfiConverterBool.read(from: &buf),
                 pendingConfirmation: FfiConverterBool.read(from: &buf),
+                lifecycleState: FfiConverterTypeGroupLifecycleStateFfi.read(from: &buf),
+                disbanding: FfiConverterBool.read(from: &buf),
+                disbandRequest: FfiConverterOptionTypeDisbandRequestFfi.read(from: &buf),
                 title: FfiConverterString.read(from: &buf),
                 groupName: FfiConverterString.read(from: &buf),
                 avatarUrl: FfiConverterOptionString.read(from: &buf),
@@ -8355,6 +8557,9 @@ public struct FfiConverterTypeChatListRowFfi: FfiConverterRustBuffer {
         FfiConverterOptionUInt32.write(value.pinnedPosition, into: &buf)
         FfiConverterBool.write(value.archived, into: &buf)
         FfiConverterBool.write(value.pendingConfirmation, into: &buf)
+        FfiConverterTypeGroupLifecycleStateFfi.write(value.lifecycleState, into: &buf)
+        FfiConverterBool.write(value.disbanding, into: &buf)
+        FfiConverterOptionTypeDisbandRequestFfi.write(value.disbandRequest, into: &buf)
         FfiConverterString.write(value.title, into: &buf)
         FfiConverterString.write(value.groupName, into: &buf)
         FfiConverterOptionString.write(value.avatarUrl, into: &buf)
@@ -8564,12 +8769,14 @@ public func FfiConverterTypeChatPinStateFfi_lower(_ value: ChatPinStateFfi) -> R
 public struct GroupDetailsFfi {
     public var group: AppGroupRecordFfi
     public var members: [GroupMemberDetailsFfi]
+    public var mlsState: AppGroupMlsStateFfi
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(group: AppGroupRecordFfi, members: [GroupMemberDetailsFfi]) {
+    public init(group: AppGroupRecordFfi, members: [GroupMemberDetailsFfi], mlsState: AppGroupMlsStateFfi) {
         self.group = group
         self.members = members
+        self.mlsState = mlsState
     }
 }
 
@@ -8583,12 +8790,16 @@ extension GroupDetailsFfi: Equatable, Hashable {
         if lhs.members != rhs.members {
             return false
         }
+        if lhs.mlsState != rhs.mlsState {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(group)
         hasher.combine(members)
+        hasher.combine(mlsState)
     }
 }
 
@@ -8601,13 +8812,15 @@ public struct FfiConverterTypeGroupDetailsFfi: FfiConverterRustBuffer {
         return
             try GroupDetailsFfi(
                 group: FfiConverterTypeAppGroupRecordFfi.read(from: &buf),
-                members: FfiConverterSequenceTypeGroupMemberDetailsFfi.read(from: &buf)
+                members: FfiConverterSequenceTypeGroupMemberDetailsFfi.read(from: &buf),
+                mlsState: FfiConverterTypeAppGroupMlsStateFfi.read(from: &buf)
         )
     }
 
     public static func write(_ value: GroupDetailsFfi, into buf: inout [UInt8]) {
         FfiConverterTypeAppGroupRecordFfi.write(value.group, into: &buf)
         FfiConverterSequenceTypeGroupMemberDetailsFfi.write(value.members, into: &buf)
+        FfiConverterTypeAppGroupMlsStateFfi.write(value.mlsState, into: &buf)
     }
 }
 
@@ -8982,10 +9195,15 @@ public struct GroupManagementStateFfi {
      *
      * When this is `false`, the reason is one of
      * `requires_self_demote_before_leave` (demote first) or
-     * `leave_request_pending` (already leaving) — or the account is not a member
-     * at all. Check those before reporting an error to the user.
+     * `leave_request_pending` (already leaving), or `disbanding` / terminal
+     * `lifecycle_state` (ordinary group actions are unavailable) — or the
+     * account is not a member at all. Check those before reporting an error.
      */
     public var canLeave: Bool
+    /**
+     * Whether an admin must self-demote before leaving. Disbanding and a
+     * terminal lifecycle take precedence and keep this false.
+     */
     public var requiresSelfDemoteBeforeLeave: Bool
     /**
      * A leave is already in flight for this group; `Marmot::leave_group` would
@@ -8998,6 +9216,17 @@ public struct GroupManagementStateFfi {
      * epoch; `null` when no leave is pending.
      */
     public var leaveRequestedAtMs: UInt64?
+    public var lifecycleState: GroupLifecycleStateFfi
+    public var disbandingEnabled: Bool
+    /**
+     * Whether terminal convergence currently blocks all ordinary outbound
+     * group work. Hosts should hide the message composer while true.
+     */
+    public var disbanding: Bool
+    public var canEnableDisbanding: Bool
+    public var canDisband: Bool
+    public var disbandingBlockers: [String]
+    public var disbandRequest: DisbandRequestFfi?
     public var memberActions: [GroupMemberActionStateFfi]
 
     // Default memberwise initializers are never public by default, so we
@@ -9009,9 +9238,14 @@ public struct GroupManagementStateFfi {
          *
          * When this is `false`, the reason is one of
          * `requires_self_demote_before_leave` (demote first) or
-         * `leave_request_pending` (already leaving) — or the account is not a member
-         * at all. Check those before reporting an error to the user.
-         */canLeave: Bool, requiresSelfDemoteBeforeLeave: Bool,
+         * `leave_request_pending` (already leaving), or `disbanding` / terminal
+         * `lifecycle_state` (ordinary group actions are unavailable) — or the
+         * account is not a member at all. Check those before reporting an error.
+         */canLeave: Bool,
+        /**
+         * Whether an admin must self-demote before leaving. Disbanding and a
+         * terminal lifecycle take precedence and keep this false.
+         */requiresSelfDemoteBeforeLeave: Bool,
         /**
          * A leave is already in flight for this group; `Marmot::leave_group` would
          * return `MarmotKitError::LeaveAlreadyRequested`. Render progress rather
@@ -9020,7 +9254,11 @@ public struct GroupManagementStateFfi {
         /**
          * When the local account asked to leave, in milliseconds since the Unix
          * epoch; `null` when no leave is pending.
-         */leaveRequestedAtMs: UInt64?, memberActions: [GroupMemberActionStateFfi]) {
+         */leaveRequestedAtMs: UInt64?, lifecycleState: GroupLifecycleStateFfi, disbandingEnabled: Bool,
+        /**
+         * Whether terminal convergence currently blocks all ordinary outbound
+         * group work. Hosts should hide the message composer while true.
+         */disbanding: Bool, canEnableDisbanding: Bool, canDisband: Bool, disbandingBlockers: [String], disbandRequest: DisbandRequestFfi?, memberActions: [GroupMemberActionStateFfi]) {
         self.myAccountIdHex = myAccountIdHex
         self.isSelfAdmin = isSelfAdmin
         self.isLastAdmin = isLastAdmin
@@ -9029,6 +9267,13 @@ public struct GroupManagementStateFfi {
         self.requiresSelfDemoteBeforeLeave = requiresSelfDemoteBeforeLeave
         self.leaveRequestPending = leaveRequestPending
         self.leaveRequestedAtMs = leaveRequestedAtMs
+        self.lifecycleState = lifecycleState
+        self.disbandingEnabled = disbandingEnabled
+        self.disbanding = disbanding
+        self.canEnableDisbanding = canEnableDisbanding
+        self.canDisband = canDisband
+        self.disbandingBlockers = disbandingBlockers
+        self.disbandRequest = disbandRequest
         self.memberActions = memberActions
     }
 }
@@ -9061,6 +9306,27 @@ extension GroupManagementStateFfi: Equatable, Hashable {
         if lhs.leaveRequestedAtMs != rhs.leaveRequestedAtMs {
             return false
         }
+        if lhs.lifecycleState != rhs.lifecycleState {
+            return false
+        }
+        if lhs.disbandingEnabled != rhs.disbandingEnabled {
+            return false
+        }
+        if lhs.disbanding != rhs.disbanding {
+            return false
+        }
+        if lhs.canEnableDisbanding != rhs.canEnableDisbanding {
+            return false
+        }
+        if lhs.canDisband != rhs.canDisband {
+            return false
+        }
+        if lhs.disbandingBlockers != rhs.disbandingBlockers {
+            return false
+        }
+        if lhs.disbandRequest != rhs.disbandRequest {
+            return false
+        }
         if lhs.memberActions != rhs.memberActions {
             return false
         }
@@ -9076,6 +9342,13 @@ extension GroupManagementStateFfi: Equatable, Hashable {
         hasher.combine(requiresSelfDemoteBeforeLeave)
         hasher.combine(leaveRequestPending)
         hasher.combine(leaveRequestedAtMs)
+        hasher.combine(lifecycleState)
+        hasher.combine(disbandingEnabled)
+        hasher.combine(disbanding)
+        hasher.combine(canEnableDisbanding)
+        hasher.combine(canDisband)
+        hasher.combine(disbandingBlockers)
+        hasher.combine(disbandRequest)
         hasher.combine(memberActions)
     }
 }
@@ -9096,6 +9369,13 @@ public struct FfiConverterTypeGroupManagementStateFfi: FfiConverterRustBuffer {
                 requiresSelfDemoteBeforeLeave: FfiConverterBool.read(from: &buf),
                 leaveRequestPending: FfiConverterBool.read(from: &buf),
                 leaveRequestedAtMs: FfiConverterOptionUInt64.read(from: &buf),
+                lifecycleState: FfiConverterTypeGroupLifecycleStateFfi.read(from: &buf),
+                disbandingEnabled: FfiConverterBool.read(from: &buf),
+                disbanding: FfiConverterBool.read(from: &buf),
+                canEnableDisbanding: FfiConverterBool.read(from: &buf),
+                canDisband: FfiConverterBool.read(from: &buf),
+                disbandingBlockers: FfiConverterSequenceString.read(from: &buf),
+                disbandRequest: FfiConverterOptionTypeDisbandRequestFfi.read(from: &buf),
                 memberActions: FfiConverterSequenceTypeGroupMemberActionStateFfi.read(from: &buf)
         )
     }
@@ -9109,6 +9389,13 @@ public struct FfiConverterTypeGroupManagementStateFfi: FfiConverterRustBuffer {
         FfiConverterBool.write(value.requiresSelfDemoteBeforeLeave, into: &buf)
         FfiConverterBool.write(value.leaveRequestPending, into: &buf)
         FfiConverterOptionUInt64.write(value.leaveRequestedAtMs, into: &buf)
+        FfiConverterTypeGroupLifecycleStateFfi.write(value.lifecycleState, into: &buf)
+        FfiConverterBool.write(value.disbandingEnabled, into: &buf)
+        FfiConverterBool.write(value.disbanding, into: &buf)
+        FfiConverterBool.write(value.canEnableDisbanding, into: &buf)
+        FfiConverterBool.write(value.canDisband, into: &buf)
+        FfiConverterSequenceString.write(value.disbandingBlockers, into: &buf)
+        FfiConverterOptionTypeDisbandRequestFfi.write(value.disbandRequest, into: &buf)
         FfiConverterSequenceTypeGroupMemberActionStateFfi.write(value.memberActions, into: &buf)
     }
 }
@@ -16158,6 +16445,141 @@ extension CursorPersistenceFfi: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum DisbandFailureReasonFfi {
+
+    case noLongerAdmin
+    case noLongerMember
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDisbandFailureReasonFfi: FfiConverterRustBuffer {
+    typealias SwiftType = DisbandFailureReasonFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DisbandFailureReasonFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .noLongerAdmin
+
+        case 2: return .noLongerMember
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DisbandFailureReasonFfi, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .noLongerAdmin:
+            writeInt(&buf, Int32(1))
+
+
+        case .noLongerMember:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisbandFailureReasonFfi_lift(_ buf: RustBuffer) throws -> DisbandFailureReasonFfi {
+    return try FfiConverterTypeDisbandFailureReasonFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisbandFailureReasonFfi_lower(_ value: DisbandFailureReasonFfi) -> RustBuffer {
+    return FfiConverterTypeDisbandFailureReasonFfi.lower(value)
+}
+
+
+
+extension DisbandFailureReasonFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum DisbandRequestFfi {
+
+    case pending(requestedAtMs: UInt64
+    )
+    case failed(requestedAtMs: UInt64, reason: DisbandFailureReasonFfi
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDisbandRequestFfi: FfiConverterRustBuffer {
+    typealias SwiftType = DisbandRequestFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DisbandRequestFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .pending(requestedAtMs: try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 2: return .failed(requestedAtMs: try FfiConverterUInt64.read(from: &buf), reason: try FfiConverterTypeDisbandFailureReasonFfi.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DisbandRequestFfi, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .pending(requestedAtMs):
+            writeInt(&buf, Int32(1))
+            FfiConverterUInt64.write(requestedAtMs, into: &buf)
+
+
+        case let .failed(requestedAtMs,reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterUInt64.write(requestedAtMs, into: &buf)
+            FfiConverterTypeDisbandFailureReasonFfi.write(reason, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisbandRequestFfi_lift(_ buf: RustBuffer) throws -> DisbandRequestFfi {
+    return try FfiConverterTypeDisbandRequestFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDisbandRequestFfi_lower(_ value: DisbandRequestFfi) -> RustBuffer {
+    return FfiConverterTypeDisbandRequestFfi.lower(value)
+}
+
+
+
+extension DisbandRequestFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum EncryptedMediaVersionFfi {
 
     case v1
@@ -16508,6 +16930,98 @@ public func FfiConverterTypeGroupEvolutionPhaseFfi_lower(_ value: GroupEvolution
 
 
 extension GroupEvolutionPhaseFfi: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
+public enum GroupLifecycleStateFfi {
+
+    case stable
+    case pendingPublish
+    case merging
+    case recovering
+    case unrecoverable
+    case disbanded
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGroupLifecycleStateFfi: FfiConverterRustBuffer {
+    typealias SwiftType = GroupLifecycleStateFfi
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GroupLifecycleStateFfi {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .stable
+
+        case 2: return .pendingPublish
+
+        case 3: return .merging
+
+        case 4: return .recovering
+
+        case 5: return .unrecoverable
+
+        case 6: return .disbanded
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: GroupLifecycleStateFfi, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .stable:
+            writeInt(&buf, Int32(1))
+
+
+        case .pendingPublish:
+            writeInt(&buf, Int32(2))
+
+
+        case .merging:
+            writeInt(&buf, Int32(3))
+
+
+        case .recovering:
+            writeInt(&buf, Int32(4))
+
+
+        case .unrecoverable:
+            writeInt(&buf, Int32(5))
+
+
+        case .disbanded:
+            writeInt(&buf, Int32(6))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGroupLifecycleStateFfi_lift(_ buf: RustBuffer) throws -> GroupLifecycleStateFfi {
+    return try FfiConverterTypeGroupLifecycleStateFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGroupLifecycleStateFfi_lower(_ value: GroupLifecycleStateFfi) -> RustBuffer {
+    return FfiConverterTypeGroupLifecycleStateFfi.lower(value)
+}
+
+
+
+extension GroupLifecycleStateFfi: Equatable, Hashable {}
 
 
 
@@ -17877,6 +18391,12 @@ public enum MarmotKitError {
     )
     case WouldRemoveLastAdmin(groupIdHex: String
     )
+    case DisbandingUnsupportedMembers(groupIdHex: String, memberIdsHex: [String]
+    )
+    case DisbandingNotEnabled(groupIdHex: String
+    )
+    case GroupDisbanding(groupIdHex: String
+    )
     case MemberNotInGroup(groupIdHex: String, memberIdHex: String
     )
     case AlreadyAdmin(groupIdHex: String, memberIdHex: String
@@ -18017,40 +18537,50 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 18: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 19: return .MemberNotInGroup(
+        case 19: return .DisbandingUnsupportedMembers(
+            groupIdHex: try FfiConverterString.read(from: &buf),
+            memberIdsHex: try FfiConverterSequenceString.read(from: &buf)
+            )
+        case 20: return .DisbandingNotEnabled(
+            groupIdHex: try FfiConverterString.read(from: &buf)
+            )
+        case 21: return .GroupDisbanding(
+            groupIdHex: try FfiConverterString.read(from: &buf)
+            )
+        case 22: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 20: return .AlreadyAdmin(
+        case 23: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 21: return .NotAdmin(
+        case 24: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .StorageBusy(
+        case 25: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 23: return .SecretNotFound(
+        case 26: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 24: return .KeystoreUnavailable(
+        case 27: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 25: return .EmptyPassphrase
-        case 26: return .EncryptionFailed(
+        case 28: return .EmptyPassphrase
+        case 29: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .Io(
+        case 30: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .ExternalSignerUnavailable(
+        case 31: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .ExternalSignerMismatch
-        case 30: return .ExternalSignerRejected
-        case 31: return .Runtime(
+        case 32: return .ExternalSignerMismatch
+        case 33: return .ExternalSignerRejected
+        case 34: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -18153,68 +18683,84 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
             writeInt(&buf, Int32(19))
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterSequenceString.write(memberIdsHex, into: &buf)
+
+
+        case let .DisbandingNotEnabled(groupIdHex):
+            writeInt(&buf, Int32(20))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .GroupDisbanding(groupIdHex):
+            writeInt(&buf, Int32(21))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+            writeInt(&buf, Int32(22))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .AlreadyAdmin(groupIdHex,memberIdHex):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .NotAdmin(groupIdHex,memberIdHex):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(24))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .StorageBusy(details):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(25))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .SecretNotFound(details):
-            writeInt(&buf, Int32(23))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case let .KeystoreUnavailable(details):
-            writeInt(&buf, Int32(24))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case .EmptyPassphrase:
-            writeInt(&buf, Int32(25))
-
-
-        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(26))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case .EmptyPassphrase:
             writeInt(&buf, Int32(28))
+
+
+        case let .EncryptionFailed(details):
+            writeInt(&buf, Int32(29))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .Io(details):
+            writeInt(&buf, Int32(30))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(31))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(32))
 
 
         case .ExternalSignerRejected:
-            writeInt(&buf, Int32(30))
+            writeInt(&buf, Int32(33))
 
 
         case let .Runtime(details):
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(34))
             FfiConverterString.write(details, into: &buf)
 
         }
@@ -20062,6 +20608,30 @@ fileprivate struct FfiConverterOptionTypeChatListSubscriptionUpdateFfi: FfiConve
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeDisbandRequestFfi: FfiConverterRustBuffer {
+    typealias SwiftType = DisbandRequestFfi?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDisbandRequestFfi.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDisbandRequestFfi.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeEncryptedMediaVersionFfi: FfiConverterRustBuffer {
     typealias SwiftType = EncryptedMediaVersionFfi?
 
@@ -21403,6 +21973,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_account_unread_summary() != 15239) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_acknowledge_disband_failure() != 63327) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_audit_log_files() != 25846) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21466,6 +22039,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_demote_admin_detailed() != 49488) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_disband_group() != 1732) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_display_name() != 65469) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -21476,6 +22052,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_edit_message() != 43927) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_enable_group_disbanding() != 25467) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_export_encrypted_secret_key() != 16556) {
