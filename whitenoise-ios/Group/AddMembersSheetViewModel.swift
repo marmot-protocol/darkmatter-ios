@@ -8,6 +8,7 @@ import MarmotKit
 final class AddMembersSheetViewModel {
     let directory = RecipientDirectory()
     let query = RecipientQueryModel()
+    let userSearch = RecipientUserSearch()
     let selection = RecipientSelection()
     var isInviting = false
     var error: String?

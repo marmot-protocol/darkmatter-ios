@@ -20,25 +20,6 @@ struct NotificationSettingsView: View {
                     set: { enabled in Task { await model.setNativePush(enabled, using: appState) } }
                 ))
                 .disabled(model.nativePushToggleDisabled)
-
-                if model.isSaving {
-                    ProgressView("Saving")
-                }
-
-                if let errorMessage = model.errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                }
-
-                if let savedAt = model.savedAt {
-                    Label(
-                        L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
-                        systemImage: "checkmark.seal.fill"
-                    )
-                    .foregroundStyle(.green)
-                    .font(.callout)
-                }
             } header: {
                 Text("Delivery")
             } footer: {
@@ -51,58 +32,162 @@ struct NotificationSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                LabeledContent("APNS token") {
-                    Text(appState.notifications.apnsTokenHex == nil ? L10n.string("Not received") : L10n.string("Received"))
-                        .foregroundStyle(.secondary)
+                LabeledContent("Notifications") {
+                    Label(
+                        notificationStatusText,
+                        systemImage: notificationStatusIcon
+                    )
+                    .foregroundStyle(notificationStatusColor)
                 }
 
-                LabeledContent("Push server") {
-                    Text(NativePushServerConfig.current() == nil ? L10n.string("Not configured") : L10n.string("Configured"))
-                        .foregroundStyle(.secondary)
-                }
-
-                if let registration = model.registration {
-                    LabeledContent("Token fingerprint") {
-                        Text(registration.tokenFingerprint)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if let lastRegistrationError = appState.notifications.lastRegistrationError {
-                    Label(lastRegistrationError, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                }
-
-                if appState.notifications.apnsTokenHex == nil {
+                if model.settings != nil && notificationSetupNeedsAttention {
                     Button {
-                        Task { await model.requestApnsToken(using: appState) }
+                        Task { await checkNotificationSetup() }
                     } label: {
-                        Label("Request APNS Token", systemImage: "antenna.radiowaves.left.and.right")
+                        Label("Try Again", systemImage: "checkmark.shield")
                     }
                     .disabled(model.isSaving)
-                } else {
-                    Button {
-                        Task { await model.refreshApnsToken(using: appState) }
-                    } label: {
-                        Label("Refresh APNS Token", systemImage: "arrow.clockwise.circle")
-                    }
-                    .disabled(!model.canRefreshApnsToken)
+                }
+            }
 
-                    Button {
-                        Task { await model.syncNativeRegistration(using: appState) }
-                    } label: {
-                        Label("Sync Native Registration", systemImage: "arrow.triangle.2.circlepath")
+            if appState.developerMode {
+                Section("Developer") {
+                    LabeledContent("APNS token") {
+                        Text(appState.notifications.apnsTokenHex == nil ? L10n.string("Not received") : L10n.string("Received"))
+                            .foregroundStyle(.secondary)
                     }
-                    .disabled(!canSyncNativeRegistration)
+
+                    LabeledContent("Push server") {
+                        Text(NativePushServerConfig.current() == nil ? L10n.string("Not configured") : L10n.string("Configured"))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let registration = model.registration {
+                        LabeledContent("Token fingerprint") {
+                            Text(registration.tokenFingerprint)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let lastRegistrationError = appState.notifications.lastRegistrationError {
+                        Label(lastRegistrationError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                    }
+
+                    if appState.notifications.apnsTokenHex == nil {
+                        Button {
+                            Task { await model.requestApnsToken(using: appState) }
+                        } label: {
+                            Label("Request APNS Token", systemImage: "antenna.radiowaves.left.and.right")
+                        }
+                        .disabled(model.isSaving)
+                    } else {
+                        Button {
+                            Task { await model.refreshApnsToken(using: appState) }
+                        } label: {
+                            Label("Refresh APNS Token", systemImage: "arrow.clockwise.circle")
+                        }
+                        .disabled(!model.canRefreshApnsToken)
+
+                        Button {
+                            Task { await model.syncNativeRegistration(using: appState) }
+                        } label: {
+                            Label("Sync Native Registration", systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(!canSyncNativeRegistration)
+                    }
                 }
             }
         }
-        .navigationTitle("Notifications")
+        .localizedNavigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if model.isSaving {
+                ProgressView().controlSize(.small)
+            }
+        }
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
+    }
+
+    private var notificationSetupNeedsAttention: Bool {
+        guard let settings = model.settings else { return true }
+        let authorizationGranted: Bool
+        switch model.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            authorizationGranted = true
+        case .denied, .notDetermined:
+            authorizationGranted = false
+        @unknown default:
+            authorizationGranted = false
+        }
+
+        if settings.localNotificationsEnabled && !authorizationGranted {
+            return true
+        }
+        if settings.nativePushEnabled {
+            return NativePushServerConfig.current() == nil
+                || appState.notifications.apnsTokenHex == nil
+                || model.registration == nil
+        }
+        return false
+    }
+
+    private var notificationsEnabled: Bool {
+        guard let settings = model.settings else { return false }
+        return settings.localNotificationsEnabled || settings.nativePushEnabled
+    }
+
+    private var notificationStatusText: String {
+        guard model.settings != nil else {
+            return L10n.string("Loading push notification state…")
+        }
+        if !notificationsEnabled {
+            return L10n.string("Off")
+        }
+        return notificationSetupNeedsAttention
+            ? L10n.string("Notifications unavailable")
+            : L10n.string("Configured")
+    }
+
+    private var notificationStatusIcon: String {
+        guard model.settings != nil else {
+            return "clock"
+        }
+        if !notificationsEnabled {
+            return "bell.slash.fill"
+        }
+        return notificationSetupNeedsAttention
+            ? "exclamationmark.triangle.fill"
+            : "checkmark.circle.fill"
+    }
+
+    private var notificationStatusColor: Color {
+        guard model.settings != nil else {
+            return .secondary
+        }
+        if !notificationsEnabled {
+            return .secondary
+        }
+        return notificationSetupNeedsAttention ? .orange : .green
+    }
+
+    private func checkNotificationSetup() async {
+        guard let settings = model.settings else {
+            await model.reload(using: appState)
+            return
+        }
+        if settings.localNotificationsEnabled && !model.canRefreshApnsToken {
+            await model.requestApnsToken(using: appState)
+        } else if settings.nativePushEnabled && appState.notifications.apnsTokenHex == nil {
+            await model.requestApnsToken(using: appState)
+        } else if settings.nativePushEnabled {
+            await model.syncNativeRegistration(using: appState)
+        } else {
+            await model.reload(using: appState)
+        }
     }
 
     // Reads `appState.notifications`, so stays on the view (the toggle/refresh

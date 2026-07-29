@@ -104,10 +104,15 @@ struct SignOutAndWipeCover: View {
                         Text("Sign Out & Wipe")
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .tint(.red)
+                    .listRowBackground(Color.clear)
                     .disabled(!model.isConfirmed)
                 }
             }
-            .navigationTitle("Wipe this profile?")
+            .localizedNavigationTitle("Wipe this profile?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -184,7 +189,7 @@ struct WipeOutcomeReportView: View {
                     }
                 }
             }
-            .navigationTitle("Sign Out & Wipe finished with issues")
+            .localizedNavigationTitle("Sign Out & Wipe finished with issues")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

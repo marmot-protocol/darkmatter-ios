@@ -15,7 +15,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Profile") {
+            Section {
                 if let active = appState.activeAccount {
                     VStack(spacing: 12) {
                         HStack(spacing: 12) {
@@ -37,6 +37,9 @@ struct SettingsView: View {
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 8)
+                                    Image(systemName: "chevron.right")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(.tertiary)
                                 }
                                 .contentShape(.rect)
                             }
@@ -51,10 +54,6 @@ struct SettingsView: View {
                             }
                             .buttonStyle(.borderless)
                             .accessibilityLabel("My QR code")
-
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
                         }
 
                         Button {
@@ -68,15 +67,9 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
-                        .controlSize(.regular)
+                        .controlSize(.large)
                     }
                     .padding(.vertical, 2)
-                }
-
-                NavigationLink {
-                    ProfileEditView()
-                } label: {
-                    Label("Edit Profile", systemImage: "person.crop.circle")
                 }
 
                 NavigationLink {
@@ -91,6 +84,33 @@ struct SettingsView: View {
                     Label("Relays", systemImage: "antenna.radiowaves.left.and.right")
                 }
 
+                NavigationLink {
+                    KeyPackagesView()
+                } label: {
+                    Label("Key Packages", systemImage: "key.icloud.fill")
+                }
+
+                Button {
+                    showAccountActions = true
+                } label: {
+                    HStack {
+                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            .foregroundStyle(.red)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                    }
+                }
+                .disabled(appState.activeAccount == nil)
+            } header: {
+                Text("Profile")
+            } footer: {
+                Text("Sign out while keeping this profile on the device, or permanently remove its local data.")
+                    .font(.footnote)
+            }
+
+            Section("App") {
                 NavigationLink {
                     AppearanceSettingsView()
                 } label: {
@@ -107,12 +127,6 @@ struct SettingsView: View {
                     NotificationSettingsView()
                 } label: {
                     Label("Notifications", systemImage: "bell.badge.fill")
-                }
-
-                NavigationLink {
-                    KeyPackagesView()
-                } label: {
-                    Label("Key Packages", systemImage: "key.icloud.fill")
                 }
 
                 NavigationLink {
@@ -165,25 +179,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
-                Button {
-                    showAccountActions = true
-                } label: {
-                    HStack {
-                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                        Spacer()
-                        Image(systemName: "chevron.up")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                .disabled(appState.activeAccount == nil)
-            } header: {
-                Text("Account")
-            } footer: {
-                Text("Sign out while keeping this profile on the device, or permanently remove its local data.")
-                    .font(.footnote)
-            }
         }
         .localizedNavigationTitle("Settings")
         .task(id: appState.activeAccount?.accountIdHex) {
@@ -316,27 +311,29 @@ private struct AccountActionsSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    actionButton(
+            ScrollView {
+                VStack(spacing: 28) {
+                    actionBlock(
                         title: "Sign Out",
                         description: "Keep this profile's keys, messages, media, and settings on this device.",
                         systemImage: "rectangle.portrait.and.arrow.right",
-                        role: nil
+                        tint: .accentColor
                     ) {
                         showSignOutConfirmation = true
                     }
 
-                    actionButton(
+                    actionBlock(
                         title: "Sign Out & Wipe",
                         description: "Permanently remove this profile and its local data from this device.",
                         systemImage: "trash.fill",
-                        role: .destructive,
+                        tint: .red,
                         action: onWipe
                     )
                 }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 28)
             }
-            .navigationTitle("Sign Out")
+            .localizedNavigationTitle("Sign Out")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -349,7 +346,7 @@ private struct AccountActionsSheet: View {
                 isPresented: $showSignOutConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Sign Out", role: .destructive, action: onSignOut)
+                Button("Sign Out", action: onSignOut)
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("You can sign back in without importing your keys again.")
@@ -360,33 +357,38 @@ private struct AccountActionsSheet: View {
         .interactiveDismissDisabled(isBusy)
     }
 
-    private func actionButton(
+    private func actionBlock(
         title: LocalizedStringKey,
         description: LocalizedStringKey,
         systemImage: String,
-        role: ButtonRole?,
+        tint: Color,
         action: @escaping () -> Void
     ) -> some View {
-        Button(role: role, action: action) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title3)
-                    .frame(width: 28)
-                VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: action) {
+                HStack(spacing: 10) {
+                    if isBusy {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: systemImage)
+                    }
                     Text(title)
-                        .font(.body.weight(.semibold))
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
+                        .fontWeight(.semibold)
                 }
-                Spacer(minLength: 0)
-                if isBusy {
-                    ProgressView()
-                }
+                .frame(maxWidth: .infinity)
             }
-            .padding(.vertical, 6)
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(tint)
+            .foregroundStyle(.white)
+            .disabled(isBusy)
+
+            Text(description)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
         }
-        .disabled(isBusy)
     }
 }

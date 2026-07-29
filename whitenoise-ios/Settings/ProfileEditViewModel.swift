@@ -220,9 +220,8 @@ final class ProfileEditViewModel {
         else { return }
 
         let draft = currentDraft
-        if let validationError = draft.validationError {
+        if draft.validationError != nil {
             Haptics.error()
-            error = validationMessage(for: validationError)
             return
         }
         guard let normalizedMetadata = draft.normalizedMetadata else { return }
@@ -249,8 +248,7 @@ final class ProfileEditViewModel {
             ))
         } catch {
             Haptics.error()
-            self.error = error.localizedDescription
-            appState.present(.error(L10n.string("Couldn't publish profile"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't publish profile"), error: error))
         }
     }
 }

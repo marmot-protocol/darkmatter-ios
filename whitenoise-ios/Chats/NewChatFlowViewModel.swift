@@ -14,6 +14,8 @@ final class NewChatFlowViewModel {
     let groupSelection = RecipientSelection()
     let messageQuery = RecipientQueryModel()
     let groupQuery = RecipientQueryModel()
+    let messageUserSearch = RecipientUserSearch()
+    let groupUserSearch = RecipientUserSearch()
 
     var startPrompt: StartChatPrompt?
     var conversationChooser: ConversationChooserPresentation?
@@ -353,10 +355,7 @@ final class NewChatFlowViewModel {
             }
         } catch {
             Haptics.error()
-            appState.present(.error(
-                L10n.string("Couldn't add this person"),
-                message: error.localizedDescription
-            ))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't add this person"), error: error))
         }
     }
 
@@ -441,15 +440,12 @@ final class NewChatFlowViewModel {
                 )
             } else {
                 groupCreateError = marmotError.localizedDescription
-                appState.present(.error(
-                    L10n.string("Couldn't create chat"),
-                    message: marmotError.localizedDescription
-                ))
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't create chat"), error: marmotError))
             }
         } catch {
             Haptics.error()
             groupCreateError = error.localizedDescription
-            appState.present(.error(L10n.string("Couldn't create chat"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't create chat"), error: error))
         }
     }
 
@@ -471,7 +467,7 @@ final class NewChatFlowViewModel {
         } catch {
             appState.present(.warning(
                 L10n.string("Disappearing messages weren't applied"),
-                message: error.localizedDescription
+                message: L10n.string("Retry")
             ))
         }
     }

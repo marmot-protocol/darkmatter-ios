@@ -63,7 +63,7 @@ struct DataAndStorageView: View {
                 Text("Media that isn't downloaded automatically shows a download button instead.")
             }
         }
-        .navigationTitle("Data and storage")
+        .localizedNavigationTitle("Data and storage")
         .navigationBarTitleDisplayMode(.inline)
     }
 

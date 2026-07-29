@@ -42,6 +42,12 @@ struct NewGroupPickerView: View {
                 )
             } else {
                 peopleSection
+                RecipientUserSearchStatus(
+                    isSearching: model.groupUserSearch.isSearching,
+                    isIncomplete: model.groupUserSearch.isIncomplete,
+                    didFail: model.groupUserSearch.didFail,
+                    onRetry: { model.groupUserSearch.retry(using: appState) }
+                )
             }
         }
         .listStyle(.insetGrouped)
@@ -67,9 +73,13 @@ struct NewGroupPickerView: View {
                     .disabled(model.isBusy || appState.activeAccountRef == nil)
             }
         }
-        .task { await model.directory.load(using: appState) }
+        .task {
+            await model.directory.load(using: appState)
+            updateUserSearch()
+        }
         .onChange(of: model.groupQuery.text) { _, _ in
             model.groupQuery.queryChanged(using: appState)
+            updateUserSearch()
         }
         .onChange(of: model.groupQuery.resolution) { _, resolution in
             guard case .resolved(let resolved) = resolution else { return }
@@ -77,6 +87,9 @@ struct NewGroupPickerView: View {
         }
         .onChange(of: appState.profileRefreshGeneration) { _, _ in
             model.directory.refreshSearchFields(using: appState)
+        }
+        .onDisappear {
+            model.groupUserSearch.cancel()
         }
     }
 
@@ -86,13 +99,18 @@ struct NewGroupPickerView: View {
 
     @ViewBuilder
     private var peopleSection: some View {
-        let candidates = RecipientSearch.browse(
+        let known = RecipientSearch.browse(
             model.directory.candidates,
             query: model.groupQuery.text,
             excludedAccountIds: model.excludedAccountIds(using: appState),
             fields: { model.directory.matchFields(for: $0) }
         )
-        if model.directory.isLoading && model.directory.candidates.isEmpty {
+        let candidates = RecipientSearch.merge(
+            known: known,
+            discovered: model.groupUserSearch.candidates,
+            excludedAccountIds: model.excludedAccountIds(using: appState)
+        )
+        if model.directory.isLoading && candidates.isEmpty {
             Section {
                 HStack {
                     Spacer()
@@ -101,7 +119,7 @@ struct NewGroupPickerView: View {
                 }
                 .padding(.vertical, 16)
             }
-        } else if let loadError = model.directory.loadError, model.directory.candidates.isEmpty {
+        } else if let loadError = model.directory.loadError, candidates.isEmpty {
             Section {
                 Label(loadError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.secondary)
@@ -109,6 +127,8 @@ struct NewGroupPickerView: View {
                     Task { await model.directory.load(using: appState, force: true) }
                 }
             }
+        } else if candidates.isEmpty && model.groupUserSearch.isSearching {
+            EmptyView()
         } else if candidates.isEmpty {
             Section {
                 if model.groupQuery.isBlank {
@@ -137,7 +157,13 @@ struct NewGroupPickerView: View {
         return Button {
             model.toggleSelection(of: candidate, using: appState)
         } label: {
-            RecipientRow(accountIdHex: candidate.accountIdHex, npub: candidate.npub) {
+            RecipientRow(
+                accountIdHex: candidate.accountIdHex,
+                npub: candidate.npub,
+                profileOverride: candidate.searchProfile,
+                socialRadius: candidate.searchRadius,
+                isFollowedBySearcher: candidate.isFollowedBySearcher
+            ) {
                 RecipientSelectionIndicator(isSelected: isSelected)
             }
             .contentShape(.rect)
@@ -155,5 +181,13 @@ struct NewGroupPickerView: View {
             selectedAccountIds: selectedAccountIds
         ) else { return }
         await model.selectResolved(resolved, using: appState)
+    }
+
+    private func updateUserSearch() {
+        model.groupUserSearch.update(
+            query: model.groupQuery.text,
+            isIdentifierQuery: model.groupQuery.isIdentifierQuery,
+            using: appState
+        )
     }
 }

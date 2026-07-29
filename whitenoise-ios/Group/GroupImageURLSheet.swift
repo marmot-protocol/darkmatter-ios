@@ -347,6 +347,7 @@ struct GroupImageURLSheet: View {
     @State private var isPreparing = false
     @State private var isSaving = false
     @State private var showPhotoPicker = false
+    @State private var cropSource: AvatarImageCropSource?
     @State private var progressPhase: GroupImageProgressPhase?
 
     private let resultColumns = [
@@ -418,6 +419,20 @@ struct GroupImageURLSheet: View {
                 }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $cropSource) { source in
+            AvatarImageCropEditor(source: source) { source, croppedData in
+                isPreparing = true
+                progressPhase = .preparing
+                Task {
+                    await prepare(
+                        data: croppedData,
+                        fileName: source.fileName,
+                        typeIdentifier: "public.jpeg",
+                        sourceURL: source.sourceURL
+                    )
+                }
+            }
         }
     }
 
@@ -650,35 +665,27 @@ struct GroupImageURLSheet: View {
     }
 
     private func preparePhotoSelection(_ selection: PhotoLibrarySelection) {
-        isPreparing = true
-        progressPhase = .preparing
         saveError = nil
-        Task {
-            await prepare(
-                data: selection.data,
-                fileName: selection.fileName,
-                typeIdentifier: selection.typeIdentifier,
-                sourceURL: nil
-            )
-        }
+        cropSource = AvatarImageCropSource(
+            data: selection.data,
+            fileName: selection.fileName,
+            typeIdentifier: selection.typeIdentifier,
+            sourceURL: nil
+        )
     }
 
     private func prepareSearchResult(_ result: GroupImageSearchResult) {
-        isPreparing = true
-        progressPhase = .preparing
         saveError = nil
         Task {
             do {
                 let data = try await RemoteImageFetch.imageData(for: result.imageURL)
-                await prepare(
+                cropSource = AvatarImageCropSource(
                     data: data,
                     fileName: result.imageURL.lastPathComponent,
                     typeIdentifier: nil,
                     sourceURL: result.imageURL
                 )
             } catch {
-                isPreparing = false
-                progressPhase = nil
                 saveError = error.localizedDescription
                 Haptics.error()
             }

@@ -2,8 +2,26 @@ import Foundation
 import MarmotKit
 
 extension MarkdownDocumentFfi {
+    init(blocks: [MarkdownBlockFfi], truncated: Bool) {
+        self.init(
+            blocks: blocks,
+            truncated: truncated,
+            blankLinesBefore: Data(repeating: 0, count: blocks.count)
+        )
+    }
+
     static var emptyDocument: MarkdownDocumentFfi {
         MarkdownDocumentFfi(blocks: [], truncated: false)
+    }
+}
+
+extension MarkdownListItemFfi {
+    init(blocks: [MarkdownBlockFfi], checked: Bool?) {
+        self.init(
+            blocks: blocks,
+            checked: checked,
+            blankLinesBefore: Data(repeating: 0, count: blocks.count)
+        )
     }
 }
 

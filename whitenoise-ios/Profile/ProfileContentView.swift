@@ -24,6 +24,18 @@ struct ProfileContentView: View {
 
     let npub: String
     var moderation: ProfileModerationContext?
+    /// Search results remain ephemeral in MDK, so the New Message preview
+    /// carries their kind:0 metadata directly instead of promoting it into the
+    /// local profile directory just to render this screen.
+    var profileOverride: UserProfileMetadataFfi?
+    var initialIsFollowing: Bool?
+    var showsNewConversationActions = false
+    /// Supplied by the host once the relationship mutation binding is
+    /// available. Keeping it injected lets the profile UI land independently
+    /// without simulating a successful network publish.
+    var onLoadFollowing: (() async throws -> Bool)?
+    var onSetFollowing: ((Bool) async throws -> Bool)?
+    var onOpenConversation: ((String) -> Void)?
 
     @State private var model = ProfileViewModel()
     @State private var confirmingRemoval = false
@@ -46,11 +58,24 @@ struct ProfileContentView: View {
 
             primaryActionSection
             aboutSection
+            publicProfileSection
             moderationSection
             sharedGroupsSection
         }
         .listStyle(.insetGrouped)
-        .task(id: npub) { await model.resolve(npub: npub, using: appState) }
+        .task(id: npub) {
+            await model.resolve(
+                npub: npub,
+                using: appState,
+                refreshProfile: !showsNewConversationActions
+            )
+            if showsNewConversationActions {
+                await model.prepareFollowStatus(
+                    initialValue: initialIsFollowing,
+                    load: onLoadFollowing
+                )
+            }
+        }
         .task(id: declaredNip05) { await model.verifyDeclaredNip05(declaredNip05) }
         .sheet(isPresented: $showStartGroup) {
             if let hex = model.hex {
@@ -104,10 +129,30 @@ struct ProfileContentView: View {
     private var headerSection: some View {
         Section {
             VStack(spacing: 10) {
+                if let bannerURL {
+                    AsyncImage(url: bannerURL) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Color(.secondarySystemFill)
+                                .overlay {
+                                    if phase.error == nil {
+                                        ProgressView()
+                                    }
+                                }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 112)
+                    .clipShape(.rect(cornerRadius: 12))
+                }
+
                 AvatarBubble(
                     seed: model.hex ?? npub,
                     title: title,
-                    pictureURL: model.hex.flatMap { appState.avatarURL(forAccountIdHex: $0) }
+                    pictureURL: ContentSanitizer.imageURL(effectiveProfile?.picture)
                 )
                 .frame(width: 96, height: 96)
 
@@ -166,7 +211,7 @@ struct ProfileContentView: View {
             Section {
                 HStack(spacing: 10) {
                     DetailsActionButton(
-                        title: "Message",
+                        title: showsNewConversationActions ? "Start Conversation" : "Message",
                         systemImage: "message",
                         isLoading: model.isPreparingConversationChoices
                             || model.starter.isCreating
@@ -174,20 +219,38 @@ struct ProfileContentView: View {
                         Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
                     }
 
-                    DetailsActionButton(
-                        title: "New Group",
-                        systemImage: "person.2.badge.plus"
-                    ) {
-                        showStartGroup = true
-                    }
-                    .accessibilityLabel(L10n.formatted("Create group with %@", title))
+                    if showsNewConversationActions {
+                        DetailsActionButton(
+                            title: model.isFollowing == true ? "Unfollow" : "Follow",
+                            systemImage: model.isFollowing == true
+                                ? "person.badge.minus"
+                                : "person.badge.plus",
+                            isDisabled: onSetFollowing == nil,
+                            isLoading: model.isLoadingFollow || model.isUpdatingFollow
+                        ) {
+                            Task {
+                                await model.toggleFollow(
+                                    using: appState,
+                                    action: onSetFollowing
+                                )
+                            }
+                        }
+                    } else {
+                        DetailsActionButton(
+                            title: "New Group",
+                            systemImage: "person.2.badge.plus"
+                        ) {
+                            showStartGroup = true
+                        }
+                        .accessibilityLabel(L10n.formatted("Create group with %@", title))
 
-                    DetailsActionButton(
-                        title: "Add to Group",
-                        systemImage: "person.badge.plus",
-                        isDisabled: model.addableGroups.isEmpty
-                    ) {
-                        showAddToGroup = true
+                        DetailsActionButton(
+                            title: "Add to Group",
+                            systemImage: "person.badge.plus",
+                            isDisabled: model.addableGroups.isEmpty
+                        ) {
+                            showAddToGroup = true
+                        }
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -204,6 +267,20 @@ struct ProfileContentView: View {
             Section("About") {
                 Text(about)
                     .font(.callout)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var publicProfileSection: some View {
+        if profileHandle != nil || lightningAddress != nil {
+            Section("Profile") {
+                if let profileHandle {
+                    LabeledContent("Name", value: profileHandle)
+                }
+                if let lightningAddress {
+                    LabeledContent("Lightning address", value: lightningAddress)
+                }
             }
         }
     }
@@ -292,6 +369,10 @@ struct ProfileContentView: View {
     // MARK: - Helpers
 
     private func openChat(_ groupIdHex: String) {
+        if let onOpenConversation {
+            onOpenConversation(groupIdHex)
+            return
+        }
         DeferredChatPresentation.present(
             groupIdHex: groupIdHex,
             using: appState,
@@ -300,11 +381,13 @@ struct ProfileContentView: View {
     }
 
     private var title: String {
-        if let hex = model.hex {
-            return appState.knownDisplayName(forAccountIdHex: hex)
-                ?? IdentityFormatter.short(displayReference)
-        }
-        return IdentityFormatter.short(npub)
+        nickname
+            ?? AppState.resolvedKnownDisplayName(
+                profile: effectiveProfile,
+                projectedName: projectedDisplayName,
+                localAccountLabel: nil
+            )
+            ?? IdentityFormatter.short(displayReference)
     }
 
     private var nickname: String? {
@@ -312,22 +395,54 @@ struct ProfileContentView: View {
     }
 
     private var profileName: String? {
-        model.hex.flatMap { appState.knownProfileDisplayName(forAccountIdHex: $0) }
+        AppState.resolvedKnownDisplayName(
+            profile: effectiveProfile,
+            projectedName: nil,
+            localAccountLabel: nil
+        )
     }
 
     private var declaredNip05: String? {
-        model.hex.flatMap {
-            ContentSanitizer.profileAddress(appState.profile(forAccountIdHex: $0)?.nip05)
-        }
+        ContentSanitizer.profileAddress(effectiveProfile?.nip05)
     }
 
     private var about: String? {
-        model.hex.flatMap {
-            ContentSanitizer.multilineText(
-                appState.profile(forAccountIdHex: $0)?.about,
-                maxLength: ContentSanitizer.maxAboutLength
-            )
+        ContentSanitizer.multilineText(
+            effectiveProfile?.about,
+            maxLength: ContentSanitizer.maxAboutLength
+        )
+    }
+
+    private var lightningAddress: String? {
+        ContentSanitizer.singleLine(
+            effectiveProfile?.lud16,
+            maxLength: ContentSanitizer.maxProfileAddressLength
+        )
+    }
+
+    private var profileHandle: String? {
+        ContentSanitizer.displayName(effectiveProfile?.name)
+    }
+
+    private var bannerURL: URL? {
+        ContentSanitizer.imageURL(effectiveProfile?.banner)
+    }
+
+    private var effectiveProfile: UserProfileMetadataFfi? {
+        if let profileOverride { return profileOverride }
+        guard let hex = model.hex else { return nil }
+        if showsNewConversationActions {
+            return appState.cachedProfile(forAccountIdHex: hex)
         }
+        return appState.profile(forAccountIdHex: hex)
+    }
+
+    private var projectedDisplayName: String? {
+        guard let hex = model.hex else { return nil }
+        if showsNewConversationActions {
+            return appState.cachedKnownDisplayName(forAccountIdHex: hex)
+        }
+        return appState.knownDisplayName(forAccountIdHex: hex)
     }
 
     private var canMessage: Bool {

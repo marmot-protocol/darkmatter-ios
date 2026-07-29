@@ -9,10 +9,18 @@ protocol PrivacySecuritySettingsViewModelDataSource: AnyObject {
     func auditLogFileRows() async throws -> [AuditFileRow]?
     func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi
     func deleteAllAuditLogFiles() async throws
-    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi
+    func setAuditLogSettings(
+        enabled: Bool,
+        dataMode: AuditDataModeFfi
+    ) async throws -> AuditLogSettingsFfi
+    func present(_ toast: Toast)
 }
 
 extension AppState: PrivacySecuritySettingsViewModelDataSource {}
+
+extension PrivacySecuritySettingsViewModelDataSource {
+    func present(_ toast: Toast) {}
+}
 
 /// Screen store for `PrivacySecuritySettingsView`: owns the telemetry/audit
 /// settings projections, the audit-file list, and the save/delete actions, so
@@ -230,10 +238,14 @@ final class PrivacySecuritySettingsViewModel {
                 )
                 savedAt = Date()
                 Haptics.success()
+                dataSource.present(.success(L10n.string("Done")))
             } catch {
                 telemetrySettings = current
                 Haptics.error()
-                telemetryErrorMessage = error.localizedDescription
+                dataSource.present(UserFacingError.toast(
+                    title: L10n.string("Save failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -252,10 +264,14 @@ final class PrivacySecuritySettingsViewModel {
                 auditFileRows = []
                 savedAt = Date()
                 Haptics.success()
+                dataSource.present(.success(L10n.string("Done")))
                 await reloadAuditFiles(using: dataSource)
             } catch {
                 Haptics.error()
-                auditErrorMessage = error.localizedDescription
+                dataSource.present(UserFacingError.toast(
+                    title: L10n.string("Delete failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -266,20 +282,61 @@ final class PrivacySecuritySettingsViewModel {
         await runAction(using: dataSource) {
             auditSaving = true
             auditErrorMessage = nil
-            auditSettings = PrivacyAuditSettingsProjection(enabled: enabled)
+            auditSettings = current.updatingEnabled(enabled)
             defer { auditSaving = false }
 
             do {
                 auditSettings = PrivacyAuditSettingsProjection(
-                    settings: try await dataSource.setAuditLogEnabled(enabled)
+                    settings: try await dataSource.setAuditLogSettings(
+                        enabled: enabled,
+                        dataMode: current.dataMode
+                    )
                 )
                 savedAt = Date()
                 Haptics.success()
+                dataSource.present(.success(L10n.string("Done")))
                 await reloadAuditFiles(using: dataSource)
             } catch {
                 auditSettings = current
                 Haptics.error()
-                auditErrorMessage = error.localizedDescription
+                dataSource.present(UserFacingError.toast(
+                    title: L10n.string("Save failed"),
+                    error: error
+                ))
+            }
+        }
+    }
+
+    func setAuditSensitiveDataEnabled(
+        _ enabled: Bool,
+        using dataSource: any PrivacySecuritySettingsViewModelDataSource
+    ) async {
+        guard !auditSaving else { return }
+        guard let current = auditSettings, current.enabled else { return }
+        let updated = current.updatingSensitiveData(enabled)
+        await runAction(using: dataSource) {
+            auditSaving = true
+            auditErrorMessage = nil
+            auditSettings = updated
+            defer { auditSaving = false }
+
+            do {
+                auditSettings = PrivacyAuditSettingsProjection(
+                    settings: try await dataSource.setAuditLogSettings(
+                        enabled: current.enabled,
+                        dataMode: updated.dataMode
+                    )
+                )
+                savedAt = Date()
+                Haptics.success()
+                dataSource.present(.success(L10n.string("Done")))
+            } catch {
+                auditSettings = current
+                Haptics.error()
+                dataSource.present(UserFacingError.toast(
+                    title: L10n.string("Save failed"),
+                    error: error
+                ))
             }
         }
     }

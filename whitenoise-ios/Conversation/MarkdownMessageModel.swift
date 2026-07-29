@@ -225,7 +225,7 @@ enum MarkdownMessageBuilder {
             case .codeBlock(_, _, let content):
                 appendCodeBlock(content, to: &out, budget: &budget)
 
-            case .blockQuote(let children):
+            case .blockQuote(let children, _):
                 let nested = walkBlocks(
                     children,
                     budget: &budget,

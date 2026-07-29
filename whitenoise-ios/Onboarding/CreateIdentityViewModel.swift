@@ -144,15 +144,27 @@ final class CreateIdentityViewModel {
     }
 
     func prepareAvatar(from selection: PhotoLibrarySelection) async {
+        await prepareAvatar(
+            data: selection.data,
+            fileName: selection.fileName,
+            typeIdentifier: selection.typeIdentifier
+        )
+    }
+
+    func prepareAvatar(
+        data: Data,
+        fileName: String?,
+        typeIdentifier: String?
+    ) async {
         guard !isBusy else { return }
         avatarError = nil
         isPreparingAvatar = true
         defer { isPreparingAvatar = false }
         do {
             setAvatarDraft(try await ProfileImageDraftProcessor.prepare(
-                data: selection.data,
-                fileName: selection.fileName,
-                typeIdentifier: selection.typeIdentifier
+                data: data,
+                fileName: fileName,
+                typeIdentifier: typeIdentifier
             ))
             Haptics.selection()
         } catch {

@@ -66,6 +66,7 @@ final class RelaysViewModel {
     }
     var saveError: String?
     var savedAt: Date?
+    var loadError: String?
 
     private var actionGate = AsyncActionGate()
     private var reloadRequestedAfterSave = false
@@ -120,6 +121,7 @@ final class RelaysViewModel {
         let accountRef = dataSource.activeAccountRef
         guard let ref = accountRef else {
             lists = nil
+            loadError = nil
             return
         }
         do {
@@ -129,6 +131,7 @@ final class RelaysViewModel {
                 return
             }
             lists = loadedLists
+            loadError = nil
         } catch {
             guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                 await deferOrReload(using: dataSource)
@@ -136,6 +139,9 @@ final class RelaysViewModel {
             }
             // Keep the last-known list on a transient reload failure rather than
             // blanking an already-loaded screen back to the loading state.
+            if lists == nil {
+                loadError = error.localizedDescription
+            }
         }
     }
 
@@ -224,7 +230,7 @@ final class RelaysViewModel {
             }
             Haptics.error()
             saveError = error.localizedDescription
-            dataSource.present(.error(L10n.string("Relay update failed"), message: error.localizedDescription))
+            dataSource.present(UserFacingError.toast(title: L10n.string("Relay update failed"), error: error))
             actionGate.end()
             await drainDeferredReload(using: dataSource)
             return false

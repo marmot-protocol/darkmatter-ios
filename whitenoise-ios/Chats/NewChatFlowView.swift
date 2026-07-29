@@ -120,6 +120,9 @@ struct NewChatFlowView: View {
             .interactiveDismissDisabled(model.starter.isCreating)
             .appAppearance()
         }
+        .onDisappear {
+            model.messageUserSearch.cancel()
+        }
     }
 
     private func open(_ groupIdHex: String) {
@@ -153,6 +156,16 @@ struct NewMessageScreen: View {
     let onScan: () -> Void
     let onShowMyCode: () -> Void
     let onOpen: (String) -> Void
+    @State private var profilePreview: ProfilePreview?
+
+    private struct ProfilePreview: Hashable, Identifiable {
+        let accountIdHex: String
+        let npub: String
+        let profile: UserProfileMetadataFfi?
+        let initialIsFollowing: Bool?
+
+        var id: String { accountIdHex }
+    }
 
     var body: some View {
         @Bindable var query = model.messageQuery
@@ -182,20 +195,25 @@ struct NewMessageScreen: View {
                     excludedAccountIds: model.excludedAccountIds(using: appState),
                     isBusy: model.isBusy,
                     creatingAccountIdHex: model.starter.creatingAccountIdHex,
+                    showsDisclosureIndicator: true,
                     onRetry: { model.messageQuery.queryChanged(using: appState) },
                     onSelect: { resolved in
-                        Task {
-                            await model.chooseConversation(
-                                accountIdHex: resolved.accountIdHex,
-                                memberRef: resolved.memberRef,
-                                using: appState,
-                                onOpen: onOpen
-                            )
-                        }
+                        profilePreview = ProfilePreview(
+                            accountIdHex: resolved.accountIdHex,
+                            npub: appState.npub(forAccountIdHex: resolved.accountIdHex),
+                            profile: appState.cachedProfile(forAccountIdHex: resolved.accountIdHex),
+                            initialIsFollowing: nil
+                        )
                     }
                 )
             } else {
                 peopleSection(candidates: browseResults)
+                RecipientUserSearchStatus(
+                    isSearching: model.messageUserSearch.isSearching,
+                    isIncomplete: model.messageUserSearch.isIncomplete,
+                    didFail: model.messageUserSearch.didFail,
+                    onRetry: { model.messageUserSearch.retry(using: appState) }
+                )
             }
         }
         .listStyle(.insetGrouped)
@@ -207,13 +225,37 @@ struct NewMessageScreen: View {
                     .disabled(model.isBusy)
             }
         }
-        .task { await model.directory.load(using: appState) }
+        .task {
+            await model.directory.load(using: appState)
+            updateUserSearch()
+        }
         .refreshable { await model.directory.load(using: appState, force: true) }
         .onChange(of: model.messageQuery.text) { _, _ in
             model.messageQuery.queryChanged(using: appState)
+            updateUserSearch()
         }
         .onChange(of: appState.profileRefreshGeneration) { _, _ in
             model.directory.refreshSearchFields(using: appState)
+        }
+        .navigationDestination(item: $profilePreview) { preview in
+            ProfileContentView(
+                npub: preview.npub,
+                profileOverride: preview.profile,
+                initialIsFollowing: preview.initialIsFollowing,
+                showsNewConversationActions: true,
+                onLoadFollowing: {
+                    try await loadFollowStatus(accountIdHex: preview.accountIdHex)
+                },
+                onSetFollowing: { isFollowing in
+                    try await setFollowStatus(
+                        isFollowing,
+                        accountIdHex: preview.accountIdHex
+                    )
+                },
+                onOpenConversation: onOpen
+            )
+            .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 
@@ -224,12 +266,54 @@ struct NewMessageScreen: View {
     }
 
     private var browseResults: [RecipientCandidate] {
-        RecipientSearch.browse(
+        let known = RecipientSearch.browse(
             model.directory.candidates,
             query: model.messageQuery.text,
             excludedAccountIds: model.excludedAccountIds(using: appState),
             fields: { model.directory.matchFields(for: $0) }
         )
+        return RecipientSearch.merge(
+            known: known,
+            discovered: model.messageUserSearch.candidates,
+            excludedAccountIds: model.excludedAccountIds(using: appState)
+        )
+    }
+
+    private func updateUserSearch() {
+        model.messageUserSearch.update(
+            query: model.messageQuery.text,
+            isIdentifierQuery: model.messageQuery.isIdentifierQuery,
+            using: appState
+        )
+    }
+
+    private func loadFollowStatus(accountIdHex: String) async throws -> Bool {
+        guard let accountRef = appState.activeAccountRef else {
+            throw ProfileFollowActionError.noActiveAccount
+        }
+        return try await appState.currentMarmotClient().isFollowing(
+            accountRef: accountRef,
+            userRef: accountIdHex
+        )
+    }
+
+    private func setFollowStatus(
+        _ isFollowing: Bool,
+        accountIdHex: String
+    ) async throws -> Bool {
+        guard let accountRef = appState.activeAccountRef else {
+            throw ProfileFollowActionError.noActiveAccount
+        }
+        let updated = try await appState.currentMarmotClient().setFollowing(
+            accountRef: accountRef,
+            accountIdHex: accountIdHex,
+            isFollowing: isFollowing
+        )
+        model.messageUserSearch.setFollowStatus(
+            accountIdHex: accountIdHex,
+            isFollowing: updated
+        )
+        return updated
     }
 
     private var quickActionsSection: some View {
@@ -257,7 +341,7 @@ struct NewMessageScreen: View {
 
     @ViewBuilder
     private func peopleSection(candidates: [RecipientCandidate]) -> some View {
-        if model.directory.isLoading && model.directory.candidates.isEmpty {
+        if model.directory.isLoading && candidates.isEmpty {
             Section {
                 HStack {
                     Spacer()
@@ -266,7 +350,7 @@ struct NewMessageScreen: View {
                 }
                 .padding(.vertical, 16)
             }
-        } else if let loadError = model.directory.loadError, model.directory.candidates.isEmpty {
+        } else if let loadError = model.directory.loadError, candidates.isEmpty {
             Section {
                 Label(loadError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.secondary)
@@ -274,6 +358,8 @@ struct NewMessageScreen: View {
                     Task { await model.directory.load(using: appState, force: true) }
                 }
             }
+        } else if candidates.isEmpty && model.messageUserSearch.isSearching {
+            EmptyView()
         } else if candidates.isEmpty {
             Section {
                 if model.messageQuery.isBlank {
@@ -294,6 +380,8 @@ struct NewMessageScreen: View {
             } header: {
                 if model.messageQuery.isBlank {
                     Text("Recent")
+                } else {
+                    Text("Search results")
                 }
             }
         }
@@ -301,25 +389,48 @@ struct NewMessageScreen: View {
 
     private func personRow(_ candidate: RecipientCandidate) -> some View {
         Button {
-            Task {
-                await model.chooseConversation(
-                    accountIdHex: candidate.accountIdHex,
-                    memberRef: candidate.npub,
-                    using: appState,
-                    onOpen: onOpen
-                )
-            }
+            profilePreview = ProfilePreview(
+                accountIdHex: candidate.accountIdHex,
+                npub: candidate.npub,
+                profile: candidate.searchProfile
+                    ?? appState.cachedProfile(forAccountIdHex: candidate.accountIdHex),
+                initialIsFollowing: candidate.searchRadius == nil
+                    ? nil
+                    : candidate.isFollowedBySearcher
+            )
         } label: {
-            RecipientRow(accountIdHex: candidate.accountIdHex, npub: candidate.npub) {
+            RecipientRow(
+                accountIdHex: candidate.accountIdHex,
+                npub: candidate.npub,
+                profileOverride: candidate.searchProfile,
+                socialRadius: candidate.searchRadius,
+                isFollowedBySearcher: candidate.isFollowedBySearcher
+            ) {
                 if model.choosingAccountIdHex == candidate.accountIdHex
                     || model.starter.creatingAccountIdHex == candidate.accountIdHex {
                     ProgressView()
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .disabled(model.isBusy)
+    }
+}
+
+private enum ProfileFollowActionError: LocalizedError {
+    case noActiveAccount
+
+    var errorDescription: String? {
+        switch self {
+        case .noActiveAccount:
+            L10n.string("No active account is selected.")
+        }
     }
 }
 
@@ -496,6 +607,7 @@ struct RecipientResolutionSection: View {
     let isBusy: Bool
     var creatingAccountIdHex: String?
     var selectedAccountIds: Set<String> = []
+    var showsDisclosureIndicator = false
     var excludedMessage: (String) -> String = { _ in AddMembersPresentation.selfRecipientMessage }
     let onRetry: () -> Void
     let onSelect: (ResolvedRecipient) -> Void
@@ -549,6 +661,11 @@ struct RecipientResolutionSection: View {
                             ProgressView()
                         } else if selectedAccountIds.contains(normalized) {
                             RecipientSelectionIndicator(isSelected: true)
+                        } else if showsDisclosureIndicator {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
                         }
                     }
                 }

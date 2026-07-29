@@ -54,13 +54,31 @@ nonisolated struct PrivacyTelemetrySettingsProjection: Equatable, Sendable {
 
 nonisolated struct PrivacyAuditSettingsProjection: Equatable, Sendable {
     var enabled: Bool
+    var includesSensitiveData: Bool
+
+    var dataMode: AuditDataModeFfi {
+        includesSensitiveData ? .fullData : .obfuscatedSensitiveData
+    }
 
     init(settings: AuditLogSettingsFfi) {
         self.enabled = settings.enabled
+        self.includesSensitiveData = settings.dataMode == .fullData
     }
 
-    init(enabled: Bool) {
+    init(enabled: Bool, dataMode: AuditDataModeFfi = .obfuscatedSensitiveData) {
         self.enabled = enabled
+        self.includesSensitiveData = dataMode == .fullData
+    }
+
+    func updatingEnabled(_ enabled: Bool) -> Self {
+        Self(enabled: enabled, dataMode: dataMode)
+    }
+
+    func updatingSensitiveData(_ includesSensitiveData: Bool) -> Self {
+        Self(
+            enabled: enabled,
+            dataMode: includesSensitiveData ? .fullData : .obfuscatedSensitiveData
+        )
     }
 }
 

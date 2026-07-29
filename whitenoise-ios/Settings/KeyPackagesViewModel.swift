@@ -85,7 +85,7 @@ final class KeyPackagesViewModel {
             await reload(using: appState)
         } catch {
             Haptics.error()
-            appState.present(.error(L10n.string("Publish failed"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Publish failed"), error: error))
         }
     }
 
@@ -108,7 +108,7 @@ final class KeyPackagesViewModel {
             await reload(using: appState)
         } catch {
             Haptics.error()
-            appState.present(.error(L10n.string("Delete failed"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Delete failed"), error: error))
         }
     }
 }
