@@ -217,6 +217,7 @@ struct AccountUnreadSummaryProjectionTests {
         )
 
         #expect(store.badgeCount(forAccountIdHex: account.accountIdHex) == 5)
+        let refreshBaseline = store.incrementalRevisionSnapshot()
 
         store.refreshed(
             from: [
@@ -227,7 +228,8 @@ struct AccountUnreadSummaryProjectionTests {
                     hasUnread: true
                 ),
             ],
-            accounts: [account]
+            accounts: [account],
+            preservingUpdatesAfter: refreshBaseline
         )
 
         #expect(store.badgeCount(forAccountIdHex: account.accountIdHex) == 7)

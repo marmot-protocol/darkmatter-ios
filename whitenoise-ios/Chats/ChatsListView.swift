@@ -1253,7 +1253,7 @@ struct ChatsListView: View {
             Haptics.success()
         } catch {
             Haptics.error()
-            appState.present(.error(L10n.string("Couldn't archive chat"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't archive chat"), error: error))
         }
     }
 }

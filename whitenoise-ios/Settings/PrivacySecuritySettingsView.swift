@@ -58,19 +58,15 @@ struct PrivacySecuritySettingsView: View {
                     get: { model.telemetrySettings?.exportEnabled ?? false },
                     set: { enabled in Task { await model.setTelemetryEnabled(enabled, using: appState) } }
                 )) {
-                    Label("Anonymous Telemetry", systemImage: "chart.line.uptrend.xyaxis")
+                    HStack {
+                        Label("Anonymous Telemetry", systemImage: "chart.line.uptrend.xyaxis")
+                        Spacer()
+                        if model.telemetrySaving {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
                 }
                 .disabled(model.telemetryToggleDisabled)
-
-                if model.telemetrySaving {
-                    ProgressView("Saving")
-                }
-
-                if let telemetryErrorMessage = model.telemetryErrorMessage {
-                    Text(telemetryErrorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
             } header: {
                 Text("Telemetry")
             } footer: {
@@ -98,6 +94,7 @@ struct PrivacySecuritySettingsView: View {
                     } label: {
                         Label("Open Diagnostics", systemImage: "stethoscope")
                     }
+
                 }
             } header: {
                 Text("Developer")
@@ -110,23 +107,40 @@ struct PrivacySecuritySettingsView: View {
                     get: { model.auditSettings?.enabled ?? false },
                     set: { enabled in Task { await model.setAuditEnabled(enabled, using: appState) } }
                 )) {
-                    Label("Audit Logging", systemImage: "doc.text.magnifyingglass")
+                    HStack {
+                        Label("Audit Logging", systemImage: "doc.text.magnifyingglass")
+                        Spacer()
+                        if model.auditSaving {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
                 }
                 .disabled(model.auditToggleDisabled)
 
-                if model.auditSaving {
-                    ProgressView("Saving")
-                }
-
-                if let auditErrorMessage = model.auditErrorMessage {
-                    Text(auditErrorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                if model.auditSettings?.enabled == true {
+                    Toggle(isOn: Binding(
+                        get: { model.auditSettings?.includesSensitiveData ?? false },
+                        set: { enabled in
+                            Task {
+                                await model.setAuditSensitiveDataEnabled(
+                                    enabled,
+                                    using: appState
+                                )
+                            }
+                        }
+                    )) {
+                        Label("Include Sensitive Data", systemImage: "exclamationmark.shield.fill")
+                    }
+                    .disabled(model.auditToggleDisabled)
                 }
             } header: {
                 Text("Audit Logging")
             } footer: {
-                Text("Writes local audit JSONL files for forensic review. Toggling applies immediately to running sessions.")
+                if model.auditSettings?.enabled == true {
+                    Text("By default, identifiers are obscured and message content is excluded. Include Sensitive Data adds decrypted message content and full identifiers for forensic review, but never private keys or authentication tokens. Changes apply immediately.")
+                } else {
+                    Text("Writes local audit JSONL files for forensic review using obscured identifiers and no message content. Changes apply immediately.")
+                }
             }
 
             Section {
@@ -156,6 +170,12 @@ struct PrivacySecuritySettingsView: View {
                 if model.auditDeleting {
                     ProgressView("Deleting audit logs")
                 }
+
+                if let auditErrorMessage = model.auditErrorMessage {
+                    inlineLoadFailure(auditErrorMessage) {
+                        Task { await model.reloadAuditFiles(using: appState) }
+                    }
+                }
             } header: {
                 Text("Audit Log Files")
             } footer: {
@@ -166,24 +186,13 @@ struct PrivacySecuritySettingsView: View {
 
             if let errorMessage = model.errorMessage {
                 Section {
-                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                }
-            }
-
-            if let savedAt = model.savedAt {
-                Section {
-                    Label(
-                        L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
-                        systemImage: "checkmark.seal.fill"
-                    )
-                    .foregroundStyle(.green)
-                    .font(.callout)
+                    inlineLoadFailure(errorMessage) {
+                        Task { await model.reload(using: appState) }
+                    }
                 }
             }
         }
-        .navigationTitle("Privacy & Security")
+        .localizedNavigationTitle("Privacy & Security")
         .navigationBarTitleDisplayMode(.inline)
         .task { appLockCapability = AppLockCapability.current() }
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
@@ -203,6 +212,15 @@ struct PrivacySecuritySettingsView: View {
 
     private var telemetryFooter: String {
         "Anonymous telemetry helps improve reliability and performance."
+    }
+
+    private func inlineLoadFailure(_: String, retry: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Couldn't load this screen", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+                .font(.callout)
+            Button("Retry", action: retry)
+        }
     }
 
     private var appLockToggleTitle: String {

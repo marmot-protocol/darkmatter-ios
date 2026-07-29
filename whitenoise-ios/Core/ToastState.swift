@@ -6,11 +6,28 @@ final class ToastState {
     private(set) var activeToast: Toast?
 
     @ObservationIgnored private var toastDismissTask: Task<Void, Never>?
+    @ObservationIgnored private var expandedToastID: UUID?
 
     @MainActor
     func present(_ toast: Toast) {
         toastDismissTask?.cancel()
         activeToast = toast
+        expandedToastID = nil
+        scheduleDismissal(for: toast)
+    }
+
+    @MainActor
+    func setExpanded(_ isExpanded: Bool, for toastID: UUID) {
+        guard activeToast?.id == toastID else { return }
+        expandedToastID = isExpanded ? toastID : nil
+        toastDismissTask?.cancel()
+        if !isExpanded, let activeToast {
+            scheduleDismissal(for: activeToast)
+        }
+    }
+
+    @MainActor
+    private func scheduleDismissal(for toast: Toast) {
         let id = toast.id
         toastDismissTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: Self.sleepNanoseconds(forDuration: toast.duration))
@@ -26,6 +43,7 @@ final class ToastState {
     @MainActor
     func dismiss() {
         toastDismissTask?.cancel()
+        expandedToastID = nil
         activeToast = nil
     }
 

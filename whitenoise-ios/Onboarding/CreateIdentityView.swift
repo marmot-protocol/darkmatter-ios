@@ -15,6 +15,7 @@ struct CreateIdentityView: View {
     @State private var model = CreateIdentityViewModel()
     @State private var showAvatarDisclosure = false
     @State private var showPhotoPicker = false
+    @State private var cropSource: AvatarImageCropSource?
 
     var body: some View {
         @Bindable var model = model
@@ -139,7 +140,12 @@ struct CreateIdentityView: View {
                 filter: .images,
                 onSelection: { selections in
                     guard let selection = selections.first else { return }
-                    Task { await model.prepareAvatar(from: selection) }
+                    cropSource = AvatarImageCropSource(
+                        data: selection.data,
+                        fileName: selection.fileName,
+                        typeIdentifier: selection.typeIdentifier,
+                        sourceURL: nil
+                    )
                 },
                 onError: model.setAvatarPreparationError,
                 onDismiss: {
@@ -147,6 +153,17 @@ struct CreateIdentityView: View {
                 }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $cropSource) { source in
+            AvatarImageCropEditor(source: source) { source, croppedData in
+                Task {
+                    await model.prepareAvatar(
+                        data: croppedData,
+                        fileName: source.fileName,
+                        typeIdentifier: "public.jpeg"
+                    )
+                }
+            }
         }
     }
 

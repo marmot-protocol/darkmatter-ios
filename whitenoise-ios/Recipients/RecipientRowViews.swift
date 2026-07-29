@@ -3,13 +3,32 @@ import UIKit
 import MarmotKit
 
 /// One person in a recipient list: avatar, resolved name, and identity
-/// context (NIP-05 when the profile declares a shape-valid one, otherwise the
-/// short npub). The trailing slot carries selection or progress state.
+/// context. Search results always show the npub, and direct follows carry an
+/// explicit badge. The trailing slot carries selection or progress state.
 struct RecipientRow<Trailing: View>: View {
     @Environment(AppState.self) private var appState
     let accountIdHex: String
     let npub: String
-    @ViewBuilder var trailing: Trailing
+    let profileOverride: UserProfileMetadataFfi?
+    let socialRadius: UInt8?
+    let isFollowedBySearcher: Bool
+    let trailing: Trailing
+
+    init(
+        accountIdHex: String,
+        npub: String,
+        profileOverride: UserProfileMetadataFfi? = nil,
+        socialRadius: UInt8? = nil,
+        isFollowedBySearcher: Bool = false,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.accountIdHex = accountIdHex
+        self.npub = npub
+        self.profileOverride = profileOverride
+        self.socialRadius = socialRadius
+        self.isFollowedBySearcher = isFollowedBySearcher
+        self.trailing = trailing()
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -17,17 +36,34 @@ struct RecipientRow<Trailing: View>: View {
                 seed: accountIdHex,
                 title: displayName,
                 pictureURL: appState.avatarURL(forAccountIdHex: accountIdHex)
+                    ?? ContentSanitizer.imageURL(profileOverride?.picture)
             )
             .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(displayName)
-                    .font(.body)
-                    .lineLimit(1)
-                Text(secondaryIdentity)
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.body)
+                        .lineLimit(1)
+                    if isFollowedBySearcher {
+                        Label("Following", systemImage: "person.badge.checkmark")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .labelStyle(.titleAndIcon)
+                            .fixedSize()
+                    }
+                }
+                Text(npub)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.middle)
+                if let socialContext {
+                    Text(socialContext)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 8)
             trailing
@@ -38,16 +74,58 @@ struct RecipientRow<Trailing: View>: View {
 
     private var displayName: String {
         appState.knownDisplayName(forAccountIdHex: accountIdHex)
+            ?? AppState.resolvedKnownDisplayName(
+                profile: profileOverride,
+                projectedName: nil,
+                localAccountLabel: nil
+            )
             ?? IdentityFormatter.short(npub)
     }
 
-    private var secondaryIdentity: String {
-        if let nip05 = ContentSanitizer.profileAddress(
-            appState.profile(forAccountIdHex: accountIdHex)?.nip05
-        ) {
-            return nip05
+    private var socialContext: String? {
+        guard !isFollowedBySearcher, let socialRadius else { return nil }
+        switch socialRadius {
+        case 0:
+            return L10n.string("You")
+        case 1:
+            return L10n.string("In your network")
+        case 2:
+            return L10n.string("Via your network")
+        case .max:
+            return L10n.string("Discovery")
+        default:
+            return nil
         }
-        return IdentityFormatter.short(npub)
+    }
+}
+
+struct RecipientUserSearchStatus: View {
+    let isSearching: Bool
+    let isIncomplete: Bool
+    let didFail: Bool
+    let onRetry: () -> Void
+
+    var body: some View {
+        if isSearching {
+            Section {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Searching your network…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else if didFail {
+            Section {
+                Label("Search couldn’t be completed.", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                Button("Retry", action: onRetry)
+            }
+        } else if isIncomplete {
+            Section {
+                Label("Some search results may be missing.", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 

@@ -16,6 +16,7 @@ protocol NotificationSettingsViewModelDataSource: AnyObject {
     func setLocalNotificationsEnabled(_ enabled: Bool) async throws -> NotificationSettingsFfi
     func setNativePushEnabled(_ enabled: Bool) async throws -> NotificationSettingsFfi
     func syncNativePushRegistration(accountRef: String) async throws -> PushRegistrationFfi
+    func present(_ toast: Toast)
 }
 
 extension AppState: NotificationSettingsViewModelDataSource {
@@ -30,6 +31,10 @@ extension AppState: NotificationSettingsViewModelDataSource {
     func refreshNotificationApnsToken() async throws -> String {
         try await notifications.refreshApnsToken()
     }
+}
+
+extension NotificationSettingsViewModelDataSource {
+    func present(_ toast: Toast) {}
 }
 
 /// Keeps action results account-scoped after awaits: a result produced for one
@@ -178,12 +183,16 @@ final class NotificationSettingsViewModel {
                 authorizationStatus = updatedAuthorizationStatus
                 savedAt = Date()
                 Haptics.success()
+                appState.present(.success(L10n.string("Done")))
             } catch {
                 let updatedAuthorizationStatus = await appState.notificationAuthorizationStatus()
                 guard canApplyActionResult(startedFor: accountRef, using: appState) else { return }
                 authorizationStatus = updatedAuthorizationStatus
                 Haptics.error()
-                errorMessage = error.localizedDescription
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Notification failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -214,12 +223,16 @@ final class NotificationSettingsViewModel {
                 }
                 savedAt = Date()
                 Haptics.success()
+                appState.present(.success(L10n.string("Done")))
             } catch {
                 let updatedAuthorizationStatus = await appState.notificationAuthorizationStatus()
                 guard canApplyActionResult(startedFor: accountRef, using: appState) else { return }
                 authorizationStatus = updatedAuthorizationStatus
                 Haptics.error()
-                errorMessage = error.localizedDescription
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Notification failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -235,12 +248,17 @@ final class NotificationSettingsViewModel {
                 authorizationStatus = updatedAuthorizationStatus
                 savedAt = Date()
                 requestReloadAfterAction()
+                Haptics.success()
+                appState.present(.success(L10n.string("Done")))
             } catch {
                 let updatedAuthorizationStatus = await appState.notificationAuthorizationStatus()
                 guard canApplyActionResult(startedFor: accountRef, using: appState) else { return }
                 authorizationStatus = updatedAuthorizationStatus
                 Haptics.error()
-                errorMessage = error.localizedDescription
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Notification failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -256,12 +274,16 @@ final class NotificationSettingsViewModel {
                 savedAt = Date()
                 requestReloadAfterAction()
                 Haptics.success()
+                appState.present(.success(L10n.string("Done")))
             } catch {
                 let updatedAuthorizationStatus = await appState.notificationAuthorizationStatus()
                 guard canApplyActionResult(startedFor: accountRef, using: appState) else { return }
                 authorizationStatus = updatedAuthorizationStatus
                 Haptics.error()
-                errorMessage = error.localizedDescription
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Notification failed"),
+                    error: error
+                ))
             }
         }
     }
@@ -275,10 +297,14 @@ final class NotificationSettingsViewModel {
                 registration = updatedRegistration
                 savedAt = Date()
                 Haptics.success()
+                appState.present(.success(L10n.string("Done")))
             } catch {
                 guard canApplyActionResult(startedFor: accountRef, using: appState) else { return }
                 Haptics.error()
-                errorMessage = error.localizedDescription
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Notification failed"),
+                    error: error
+                ))
             }
         }
     }

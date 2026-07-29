@@ -26,7 +26,7 @@ struct AccountsView: View {
                 }
             }
         }
-        .navigationTitle("Profiles")
+        .localizedNavigationTitle("Profiles")
         .navigationBarTitleDisplayMode(.inline)
         .task { await appState.refreshAccountUnreadSummaries() }
         .sheet(isPresented: $showAdd) {
@@ -151,10 +151,12 @@ struct SignedOutProfilesView: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
                     .listRowBackground(Color.clear)
                 }
             }
-            .navigationTitle("White Noise")
+            .localizedNavigationTitle("White Noise")
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await appState.refreshAccountUnreadSummaries() }

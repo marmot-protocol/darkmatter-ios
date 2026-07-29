@@ -49,6 +49,12 @@ struct AddMembersSheet: View {
                     )
                 } else {
                     peopleSection
+                    RecipientUserSearchStatus(
+                        isSearching: model.userSearch.isSearching,
+                        isIncomplete: model.userSearch.isIncomplete,
+                        didFail: model.userSearch.didFail,
+                        onRetry: { model.userSearch.retry(using: appState) }
+                    )
                 }
 
                 if let error = model.error {
@@ -88,9 +94,13 @@ struct AddMembersSheet: View {
                 }
             }
             .interactiveDismissDisabled(model.isInviting)
-            .task { await model.directory.load(using: appState) }
+            .task {
+                await model.directory.load(using: appState)
+                updateUserSearch()
+            }
             .onChange(of: model.query.text) { _, _ in
                 model.query.queryChanged(using: appState)
+                updateUserSearch()
             }
             .onChange(of: model.query.resolution) { _, resolution in
                 guard case .resolved(let resolved) = resolution else { return }
@@ -98,6 +108,9 @@ struct AddMembersSheet: View {
             }
             .onChange(of: appState.profileRefreshGeneration) { _, _ in
                 model.directory.refreshSearchFields(using: appState)
+            }
+            .onDisappear {
+                model.userSearch.cancel()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerSheet { raw in
@@ -124,13 +137,18 @@ struct AddMembersSheet: View {
 
     @ViewBuilder
     private var peopleSection: some View {
-        let candidates = RecipientSearch.browse(
+        let known = RecipientSearch.browse(
             model.directory.candidates,
             query: model.query.text,
             excludedAccountIds: excludedAccountIds,
             fields: { model.directory.matchFields(for: $0) }
         )
-        if model.directory.isLoading && model.directory.candidates.isEmpty {
+        let candidates = RecipientSearch.merge(
+            known: known,
+            discovered: model.userSearch.candidates,
+            excludedAccountIds: excludedAccountIds
+        )
+        if model.directory.isLoading && candidates.isEmpty {
             Section {
                 HStack {
                     Spacer()
@@ -139,7 +157,7 @@ struct AddMembersSheet: View {
                 }
                 .padding(.vertical, 16)
             }
-        } else if let loadError = model.directory.loadError, model.directory.candidates.isEmpty {
+        } else if let loadError = model.directory.loadError, candidates.isEmpty {
             Section {
                 Label(loadError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.secondary)
@@ -147,6 +165,8 @@ struct AddMembersSheet: View {
                     Task { await model.directory.load(using: appState, force: true) }
                 }
             }
+        } else if candidates.isEmpty && model.userSearch.isSearching {
+            EmptyView()
         } else if candidates.isEmpty {
             Section {
                 if model.query.isBlank {
@@ -175,7 +195,13 @@ struct AddMembersSheet: View {
         return Button {
             model.toggle(candidate, excludedAccountIds: excludedAccountIds)
         } label: {
-            RecipientRow(accountIdHex: candidate.accountIdHex, npub: candidate.npub) {
+            RecipientRow(
+                accountIdHex: candidate.accountIdHex,
+                npub: candidate.npub,
+                profileOverride: candidate.searchProfile,
+                socialRadius: candidate.searchRadius,
+                isFollowedBySearcher: candidate.isFollowedBySearcher
+            ) {
                 RecipientSelectionIndicator(isSelected: isSelected)
             }
             .contentShape(.rect)
@@ -216,5 +242,13 @@ struct AddMembersSheet: View {
         Haptics.success()
         // The sheet observes the text and runs the resolution itself.
         model.query.text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func updateUserSearch() {
+        model.userSearch.update(
+            query: model.query.text,
+            isIdentifierQuery: model.query.isIdentifierQuery,
+            using: appState
+        )
     }
 }

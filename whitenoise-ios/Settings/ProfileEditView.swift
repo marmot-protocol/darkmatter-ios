@@ -111,20 +111,25 @@ struct ProfileEditView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: 12))
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .disabled(saveDisabled)
                 .listRowBackground(Color.clear)
             }
 
-            if let error = model.error {
+            if model.error != nil {
                 Section {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Couldn't load this screen", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Button("Retry") {
+                            Task { await model.loadExisting(using: appState) }
+                        }
+                    }
                 }
             }
         }
-        .navigationTitle("Profile")
+        .localizedNavigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: appState.activeAccount?.accountIdHex) { await model.loadExisting(using: appState) }
         .sheet(isPresented: $showImagePicker) {
@@ -376,6 +381,7 @@ struct ProfileImagePickerSheet: View {
     @State private var isUploading = false
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
+    @State private var cropSource: AvatarImageCropSource?
     @State private var progressPhase: ProfileImageProgressPhase?
 
     private let resultColumns = [
@@ -396,7 +402,7 @@ struct ProfileImagePickerSheet: View {
                     }
                 }
             }
-            .navigationTitle("Profile image")
+            .localizedNavigationTitle("Profile image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -436,6 +442,19 @@ struct ProfileImagePickerSheet: View {
             allowsMultipleSelection: false,
             onCompletion: prepareFileSelection
         )
+        .fullScreenCover(item: $cropSource) { source in
+            AvatarImageCropEditor(source: source) { source, croppedData in
+                beginPreparing()
+                Task {
+                    await prepare(
+                        data: croppedData,
+                        fileName: source.fileName,
+                        typeIdentifier: "public.jpeg",
+                        sourceURL: source.sourceURL
+                    )
+                }
+            }
+        }
     }
 
     private var previewSection: some View {
@@ -617,15 +636,13 @@ struct ProfileImagePickerSheet: View {
     }
 
     private func preparePhotoSelection(_ selection: PhotoLibrarySelection) {
-        beginPreparing()
-        Task {
-            await prepare(
-                data: selection.data,
-                fileName: selection.fileName,
-                typeIdentifier: selection.typeIdentifier,
-                sourceURL: nil
-            )
-        }
+        saveError = nil
+        cropSource = AvatarImageCropSource(
+            data: selection.data,
+            fileName: selection.fileName,
+            typeIdentifier: selection.typeIdentifier,
+            sourceURL: nil
+        )
     }
 
     private func prepareFileSelection(_ result: Result<[URL], Error>) {
@@ -634,7 +651,6 @@ struct ProfileImagePickerSheet: View {
             saveError = error.localizedDescription
         case .success(let urls):
             guard let url = urls.first else { return }
-            beginPreparing()
             let isSecurityScoped = url.startAccessingSecurityScopedResource()
             Task {
                 defer {
@@ -643,23 +659,25 @@ struct ProfileImagePickerSheet: View {
                     }
                 }
                 do {
-                    draft = try await GroupImageDraftProcessor.prepare(fileURL: url)
-                    Haptics.selection()
+                    cropSource = AvatarImageCropSource(
+                        data: try Data(contentsOf: url),
+                        fileName: url.lastPathComponent,
+                        typeIdentifier: nil,
+                        sourceURL: nil
+                    )
                 } catch {
                     saveError = error.localizedDescription
                     Haptics.error()
                 }
-                finishPreparing()
             }
         }
     }
 
     private func prepareSearchResult(_ result: GroupImageSearchResult) {
-        beginPreparing()
         Task {
             do {
                 let data = try await RemoteImageFetch.imageData(for: result.imageURL)
-                await prepare(
+                cropSource = AvatarImageCropSource(
                     data: data,
                     fileName: result.imageURL.lastPathComponent,
                     typeIdentifier: nil,
@@ -668,7 +686,6 @@ struct ProfileImagePickerSheet: View {
             } catch {
                 saveError = error.localizedDescription
                 Haptics.error()
-                finishPreparing()
             }
         }
     }

@@ -54,6 +54,47 @@ nonisolated enum RecipientSearch {
         return namePrefix + nameContained + identity
     }
 
+    /// Direct follows stay first. A streamed duplicate enriches the known
+    /// candidate with search relationship/profile data while preserving its
+    /// existing chat context.
+    static func merge(
+        known: [RecipientCandidate],
+        discovered: [RecipientCandidate],
+        excludedAccountIds: Set<String> = []
+    ) -> [RecipientCandidate] {
+        let excluded = Set(excludedAccountIds.map(normalized))
+        let discoveredByID = Dictionary(
+            discovered.map { (normalized($0.accountIdHex), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seen: Set<String> = []
+        let enrichedKnown = known.map { candidate in
+            guard let result = discoveredByID[normalized(candidate.accountIdHex)] else {
+                return candidate
+            }
+            return RecipientCandidate(
+                accountIdHex: candidate.accountIdHex,
+                npub: candidate.npub,
+                lastActivityAt: candidate.lastActivityAt,
+                directChatGroupIdHex: candidate.directChatGroupIdHex,
+                sharedChatCount: candidate.sharedChatCount,
+                searchProfile: result.searchProfile ?? candidate.searchProfile,
+                searchRadius: result.searchRadius,
+                isFollowedBySearcher: result.isFollowedBySearcher
+            )
+        }
+        let merged = (enrichedKnown + discovered).filter { candidate in
+            let accountIdHex = normalized(candidate.accountIdHex)
+            return !excluded.contains(accountIdHex) && seen.insert(accountIdHex).inserted
+        }
+        return merged.enumerated().sorted { lhs, rhs in
+            if lhs.element.isFollowedBySearcher != rhs.element.isFollowedBySearcher {
+                return lhs.element.isFollowedBySearcher
+            }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
     private static func matchesIdentity(
         _ candidate: RecipientCandidate,
         fields: MatchFields,

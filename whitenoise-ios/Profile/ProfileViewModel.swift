@@ -16,13 +16,20 @@ final class ProfileViewModel {
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var verifiedNip05: String?
+    private(set) var isFollowing: Bool?
+    private(set) var isLoadingFollow = false
+    private(set) var isUpdatingFollow = false
 
     let starter = DirectChatStarter()
     let directory = RecipientDirectory()
     private var attemptedNip05Verification: String?
     private var resolutionGeneration: UInt64 = 0
 
-    func resolve(npub: String, using appState: AppState) async {
+    func resolve(
+        npub: String,
+        using appState: AppState,
+        refreshProfile: Bool = true
+    ) async {
         resolutionGeneration &+= 1
         let generation = resolutionGeneration
         // A reused profile surface must fail closed while the new identity is
@@ -41,8 +48,10 @@ final class ProfileViewModel {
         guard !Task.isCancelled, generation == resolutionGeneration else { return }
         applyResolvedAccount(resolvedHex)
         guard let resolvedHex else { return }
-        // Trigger enrichment (cached read + background relay fetch).
-        _ = appState.profile(forAccountIdHex: resolvedHex)
+        if refreshProfile {
+            // Trigger enrichment (cached read + background relay fetch).
+            _ = appState.profile(forAccountIdHex: resolvedHex)
+        }
         await directory.load(using: appState)
         guard !Task.isCancelled,
               generation == resolutionGeneration,
@@ -105,6 +114,54 @@ final class ProfileViewModel {
         case .lookupFailed:
             verifiedNip05 = nil
             attemptedNip05Verification = nil
+        }
+    }
+
+    func prepareFollowStatus(
+        initialValue: Bool?,
+        load: (() async throws -> Bool)?
+    ) async {
+        isFollowing = initialValue ?? false
+        guard let hex, let load else { return }
+        isLoadingFollow = true
+        defer { isLoadingFollow = false }
+        do {
+            let loaded = try await load()
+            guard self.hex == hex, !Task.isCancelled else { return }
+            isFollowing = loaded
+        } catch {
+            // Search results already carry a direct-follow bit. If a later
+            // refresh fails, keep that known state rather than replacing it.
+        }
+    }
+
+    func toggleFollow(
+        using appState: AppState,
+        action: ((Bool) async throws -> Bool)?
+    ) async {
+        guard let hex,
+              !isUpdatingFollow,
+              !appState.accounts.contains(where: { $0.accountIdHex == hex }),
+              let action
+        else { return }
+        let desired = !(isFollowing ?? false)
+        isUpdatingFollow = true
+        defer { isUpdatingFollow = false }
+
+        do {
+            let updated = try await action(desired)
+            guard self.hex == hex else { return }
+            isFollowing = updated
+            Haptics.success()
+        } catch {
+            Haptics.error()
+            appState.present(
+                UserFacingError.toast(
+                    title: L10n.string("Couldn't update follow status"),
+                    error: error,
+                    fallbackMessage: L10n.string("Please try again.")
+                )
+            )
         }
     }
 

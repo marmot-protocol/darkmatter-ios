@@ -16,7 +16,7 @@ struct RelaysView: View {
             accountRelaysSection
             publishedListsSection
         }
-        .navigationTitle("Relays")
+        .localizedNavigationTitle("Relays")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if model.isSaving {
@@ -34,7 +34,18 @@ struct RelaysView: View {
     private var accountRelaysSection: some View {
         Section {
             if model.lists == nil {
-                ProgressView("Loading relays")
+                if model.loadError != nil {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Couldn't load this screen", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                        Button("Retry") {
+                            Task { await model.reload(using: appState) }
+                        }
+                    }
+                } else {
+                    ProgressView("Loading relays")
+                }
             } else {
                 if model.currentRelays.isEmpty {
                     Text("No relays published")
@@ -62,22 +73,18 @@ struct RelaysView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
                     }
+                    .buttonStyle(.borderless)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+                    .accessibilityLabel(L10n.string("Add"))
                     .disabled(!model.canAdd)
                 }
             }
 
-            if let saveError = model.saveError {
+            if model.saveError == L10n.string("Keep at least one relay."),
+               let saveError = model.saveError {
                 Label(saveError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                    .font(.callout)
-            }
-
-            if let savedAt = model.savedAt {
-                Label(
-                    L10n.formatted("Saved %@", savedAt.formatted(.relative(presentation: .named))),
-                    systemImage: "checkmark.seal.fill"
-                )
-                    .foregroundStyle(.green)
                     .font(.callout)
             }
         } header: {

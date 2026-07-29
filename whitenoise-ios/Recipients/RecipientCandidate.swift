@@ -14,6 +14,35 @@ nonisolated struct RecipientCandidate: Equatable, Identifiable {
     let directChatGroupIdHex: String?
     /// How many chats this person appears in (identity context).
     let sharedChatCount: Int
+    /// Search-only profile metadata returned by Marmot. It stays ephemeral:
+    /// showing a result must not promote a stranger into the local directory.
+    let searchProfile: UserProfileMetadataFfi?
+    /// Social distance from the active account. `nil` identifies a candidate
+    /// derived from existing chat state rather than live discovery.
+    let searchRadius: UInt8?
+    /// Direct follow relationship reported by Marmot search. Radius 1 alone
+    /// is not enough because it also includes shared-group peers.
+    let isFollowedBySearcher: Bool
+
+    init(
+        accountIdHex: String,
+        npub: String,
+        lastActivityAt: UInt64,
+        directChatGroupIdHex: String?,
+        sharedChatCount: Int,
+        searchProfile: UserProfileMetadataFfi? = nil,
+        searchRadius: UInt8? = nil,
+        isFollowedBySearcher: Bool = false
+    ) {
+        self.accountIdHex = accountIdHex
+        self.npub = npub
+        self.lastActivityAt = lastActivityAt
+        self.directChatGroupIdHex = directChatGroupIdHex
+        self.sharedChatCount = sharedChatCount
+        self.searchProfile = searchProfile
+        self.searchRadius = searchRadius
+        self.isFollowedBySearcher = isFollowedBySearcher
+    }
 
     var id: String { accountIdHex }
 }

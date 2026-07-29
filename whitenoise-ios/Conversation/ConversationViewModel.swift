@@ -2060,10 +2060,7 @@ final class ConversationViewModel {
             return updated
         } catch {
             Haptics.error()
-            appState.present(.error(
-                L10n.string("Couldn't accept invitation"),
-                message: error.localizedDescription
-            ))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't accept invitation"), error: error))
             return nil
         }
     }
@@ -2100,10 +2097,7 @@ final class ConversationViewModel {
             return result.group
         } catch {
             Haptics.error()
-            appState.present(.error(
-                L10n.string("Couldn't decline invitation"),
-                message: error.localizedDescription
-            ))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't decline invitation"), error: error))
             return nil
         }
     }
@@ -2213,7 +2207,7 @@ final class ConversationViewModel {
         } catch {
             timelineStore.rollbackOptimisticEdit(messageIdHex: message.messageIdHex)
             Haptics.error()
-            appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Send failed"), error: error))
             return false
         }
     }
@@ -2287,7 +2281,7 @@ final class ConversationViewModel {
                 timelineStore.noteProjectionChanged()
             }
             Haptics.error()
-            appState.present(.error(L10n.string("Couldn't delete message"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't delete message"), error: error))
             return false
         }
     }
@@ -2399,7 +2393,7 @@ final class ConversationViewModel {
                 timelineStore.noteProjectionChanged()
             }
             Haptics.error()
-            appState.present(.error(L10n.string("Reaction failed"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Reaction failed"), error: error))
         }
     }
 }

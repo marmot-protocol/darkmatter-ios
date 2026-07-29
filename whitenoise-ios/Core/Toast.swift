@@ -14,19 +14,27 @@ struct Toast: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let message: String?
+    /// An opt-in diagnostic for support; never rendered until the toast is
+    /// expanded by the user.
+    let diagnostic: String?
     let style: Style
     let duration: TimeInterval
 
     static func success(_ title: String, message: String? = nil, duration: TimeInterval = 3.0) -> Toast {
-        Toast(title: title, message: message, style: .success, duration: duration)
+        Toast(title: title, message: message, diagnostic: nil, style: .success, duration: duration)
     }
 
     static func warning(_ title: String, message: String? = nil, duration: TimeInterval = 3.5) -> Toast {
-        Toast(title: title, message: message, style: .warning, duration: duration)
+        Toast(title: title, message: message, diagnostic: nil, style: .warning, duration: duration)
     }
 
-    static func error(_ title: String, message: String? = nil, duration: TimeInterval = 4.0) -> Toast {
-        Toast(title: title, message: message, style: .error, duration: duration)
+    static func error(
+        _ title: String,
+        message: String? = nil,
+        diagnostic: String? = nil,
+        duration: TimeInterval = 4.0
+    ) -> Toast {
+        Toast(title: title, message: message, diagnostic: diagnostic, style: .error, duration: duration)
     }
 }
 
@@ -68,6 +76,8 @@ struct ToastHost: ViewModifier {
     private func updateOverlay(_ toast: Toast?) {
         ToastOverlayPresenter.shared.update(toast: toast) {
             appState.dismissToast()
+        } onExpansionChange: { isExpanded in
+            appState.toastState.setExpanded(isExpanded, for: toast?.id ?? UUID())
         }
     }
 }
@@ -79,7 +89,11 @@ private final class ToastOverlayPresenter {
     private var window: ToastOverlayWindow?
     private var host: UIHostingController<ToastWindowContent>?
 
-    func update(toast: Toast?, onDismiss: @escaping () -> Void = {}) {
+    func update(
+        toast: Toast?,
+        onDismiss: @escaping () -> Void = {},
+        onExpansionChange: @escaping (Bool) -> Void = { _ in }
+    ) {
         guard let toast else {
             dismiss()
             return
@@ -92,6 +106,7 @@ private final class ToastOverlayPresenter {
         host?.rootView = ToastWindowContent(
             toast: toast,
             onDismiss: onDismiss,
+            onExpansionChange: onExpansionChange,
             onFrameChange: { [weak window] frame in
                 window?.interactiveFrame = frame
             }
@@ -129,6 +144,7 @@ private final class ToastOverlayPresenter {
         let host = UIHostingController(rootView: ToastWindowContent(
             toast: nil,
             onDismiss: {},
+            onExpansionChange: { _ in },
             onFrameChange: { _ in }
         ))
         host.view.backgroundColor = .clear
@@ -163,12 +179,17 @@ private final class ToastOverlayWindow: UIWindow {
 private struct ToastWindowContent: View {
     let toast: Toast?
     let onDismiss: () -> Void
+    let onExpansionChange: (Bool) -> Void
     let onFrameChange: (CGRect) -> Void
 
     var body: some View {
         VStack {
             if let toast {
-                ToastView(toast: toast, onDismiss: onDismiss)
+                ToastView(
+                    toast: toast,
+                    onDismiss: onDismiss,
+                    onExpansionChange: onExpansionChange
+                )
                     .padding(.horizontal, 16)
                     .padding(.top, 4)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -190,26 +211,58 @@ private struct ToastWindowContent: View {
 private struct ToastView: View {
     let toast: Toast
     let onDismiss: () -> Void
+    let onExpansionChange: (Bool) -> Void
 
     @State private var dragOffset: CGFloat = 0
+    @State private var showsDiagnostic = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(tint)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(tint)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(toast.title)
-                    .font(.callout.weight(.semibold))
-                if let message = toast.message {
-                    Text(message)
-                        .font(.footnote)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(toast.title)
+                        .font(.callout.weight(.semibold))
+                    if let message = toast.message {
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                if toast.diagnostic != nil {
+                    Image(systemName: showsDiagnostic ? "chevron.up" : "chevron.down")
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                        .padding(.top, 4)
+                        .padding(.trailing, 4)
                 }
             }
 
-            Spacer(minLength: 4)
+            if showsDiagnostic, let diagnostic = toast.diagnostic {
+                Divider()
+                HStack(alignment: .top, spacing: 8) {
+                    Text(diagnostic)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        UIPasteboard.general.string = diagnostic
+                    } label: {
+                        Image(systemName: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(L10n.string("Copy"))
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -221,6 +274,14 @@ private struct ToastView: View {
         .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
         .offset(y: dragOffset)
         .opacity(1 - min(abs(dragOffset) / 120, 0.6))
+        .contentShape(.rect)
+        .onTapGesture {
+            guard toast.diagnostic != nil else { return }
+            withAnimation(.smooth(duration: 0.2)) {
+                showsDiagnostic.toggle()
+            }
+            onExpansionChange(showsDiagnostic)
+        }
         .gesture(
             DragGesture(minimumDistance: 8)
                 .onChanged { value in
@@ -241,6 +302,11 @@ private struct ToastView: View {
         )
         .accessibilityAction(.escape) {
             onDismiss()
+        }
+        .onDisappear {
+            if showsDiagnostic {
+                onExpansionChange(false)
+            }
         }
     }
 

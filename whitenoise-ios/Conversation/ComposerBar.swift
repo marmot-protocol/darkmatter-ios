@@ -597,13 +597,13 @@ struct ComposerBar: View {
         guard inputEnabled, audioDraft == nil else { return }
         showAttachmentUnavailableTooltip = false
         isRestoringKeyboard = false
+        isTextInputFocused = false
+        activeAccessoryPanel = panel
         if reservedPaneHeight < 0.5 {
             withAnimation(.easeOut(duration: 0.22)) {
                 reservedPaneHeight = reservedHeight(for: rememberedKeyboardPaneHeight)
             }
         }
-        activeAccessoryPanel = panel
-        isTextInputFocused = false
     }
 
     private func restoreKeyboardFromAccessoryPanel() {

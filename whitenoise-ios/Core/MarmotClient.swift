@@ -92,6 +92,43 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
+    /// Reads the active account's locally cached kind-3 follow list without
+    /// blocking SwiftUI on the generated synchronous FFI call.
+    func accountFollows(accountRef: String) async throws -> Set<String> {
+        try await Task.detached(priority: .utility) { [marmot, accountRef] in
+            Set(try marmot.accountFollows(accountRef: accountRef).map { $0.lowercased() })
+        }.value
+    }
+
+    /// Resolves one follow relationship from Marmot's local kind-3 cache.
+    func isFollowing(accountRef: String, userRef: String) async throws -> Bool {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, userRef] in
+            try marmot.isFollowing(accountRef: accountRef, userRef: userRef)
+        }.value
+    }
+
+    /// Publishes a follow-list replacement through Marmot and reports the
+    /// resulting relationship rather than assuming the requested mutation.
+    func setFollowing(
+        accountRef: String,
+        accountIdHex: String,
+        isFollowing: Bool
+    ) async throws -> Bool {
+        let normalizedAccountId = accountIdHex.lowercased()
+        let updated = if isFollowing {
+            try await marmot.followUser(
+                accountRef: accountRef,
+                userRef: normalizedAccountId
+            )
+        } else {
+            try await marmot.unfollowUser(
+                accountRef: accountRef,
+                userRef: normalizedAccountId
+            )
+        }
+        return updated.contains { $0.caseInsensitiveCompare(normalizedAccountId) == .orderedSame }
+    }
+
     /// Reads the durable chat-list projection off the main actor. Chat-list
     /// screens call this on account bind and pull-to-refresh, and the generated
     /// `Marmot.chatList` binding is a synchronous storage read.

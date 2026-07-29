@@ -79,7 +79,7 @@ struct IdentityView: View {
                 }
             }
         }
-        .navigationTitle("Identity")
+        .localizedNavigationTitle("Identity")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $model.showRawExportConfirm) {
             FullScreenConfirmationDialog(
@@ -153,7 +153,7 @@ private struct EncryptedNsecExportSheet: View {
                     }
                 }
             }
-            .navigationTitle("Encrypted export")
+            .localizedNavigationTitle("Encrypted export")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

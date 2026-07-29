@@ -1,4 +1,5 @@
 import Foundation
+import MarmotKit
 import Testing
 @testable import whitenoise_ios
 
@@ -128,6 +129,97 @@ struct RecipientSearchTests {
         #expect(result.first?.accountIdHex == alice)
     }
 
+    @Test func liveSearchRunsForAnyNonemptyFreeTextAndLeavesIdentifiersToResolver() {
+        #expect(!RecipientUserSearch.shouldSearch(query: " ", isIdentifierQuery: false))
+        #expect(RecipientUserSearch.shouldSearch(query: "a", isIdentifierQuery: false))
+        #expect(RecipientUserSearch.shouldSearch(query: "  al  ", isIdentifierQuery: false))
+        #expect(!RecipientUserSearch.shouldSearch(query: "alice", isIdentifierQuery: true))
+    }
+
+    @Test func streamedResultsRerankAcrossBatchesAndDeduplicateBestMatch() {
+        let results = RecipientUserSearch.sortedUniqueResults([
+            searchResult(bob, radius: 2, field: .displayName, quality: .prefix),
+            searchResult(alice, radius: 1, field: .about, quality: .contains),
+            searchResult(carol, radius: 1, field: .name, quality: .exact),
+            searchResult(bob, radius: 1, field: .displayName, quality: .prefix),
+        ], followedAccountIds: [bob])
+
+        #expect(results.map(\.accountIdHex) == [bob, carol, alice])
+        #expect(results.first?.radius == 1)
+    }
+
+    @Test func discoveryResultsUseProviderRankBeforeLocalMatchStrength() {
+        let results = RecipientUserSearch.sortedUniqueResults([
+            searchResult(
+                alice,
+                radius: .max,
+                field: .name,
+                quality: .exact,
+                providerRank: 0.2
+            ),
+            searchResult(
+                bob,
+                radius: .max,
+                field: .about,
+                quality: .contains,
+                providerRank: 0.9
+            ),
+        ])
+
+        #expect(results.map(\.accountIdHex) == [bob, alice])
+    }
+
+    @Test func followedRecipientsSortFirstAndKnownChatContextSurvivesMerge() {
+        let knownAlice = candidate(alice)
+        let discoveredAlice = RecipientCandidate(
+            accountIdHex: alice,
+            npub: knownAlice.npub,
+            lastActivityAt: 0,
+            directChatGroupIdHex: nil,
+            sharedChatCount: 0,
+            searchRadius: 1,
+            isFollowedBySearcher: true
+        )
+        let discoveredBob = RecipientCandidate(
+            accountIdHex: bob,
+            npub: candidate(bob).npub,
+            lastActivityAt: 0,
+            directChatGroupIdHex: nil,
+            sharedChatCount: 0,
+            searchRadius: 2
+        )
+
+        let merged = RecipientSearch.merge(
+            known: [knownAlice],
+            discovered: [discoveredAlice, discoveredBob],
+            excludedAccountIds: []
+        )
+
+        #expect(merged.map(\.accountIdHex) == [alice, bob])
+        #expect(merged.first?.isFollowedBySearcher == true)
+        #expect(merged.first?.sharedChatCount == knownAlice.sharedChatCount)
+        #expect(merged.first?.searchRadius == 1)
+    }
+
+    @Test func remoteFollowSortsAheadOfKnownNonFollow() {
+        let followedBob = RecipientCandidate(
+            accountIdHex: bob,
+            npub: candidate(bob).npub,
+            lastActivityAt: 0,
+            directChatGroupIdHex: nil,
+            sharedChatCount: 0,
+            searchRadius: 1,
+            isFollowedBySearcher: true
+        )
+
+        let merged = RecipientSearch.merge(
+            known: [candidate(alice)],
+            discovered: [followedBob]
+        )
+
+        #expect(merged.map(\.accountIdHex) == [bob, alice])
+    }
+
     private func candidate(_ hex: String) -> RecipientCandidate {
         RecipientCandidate(
             accountIdHex: hex,
@@ -136,5 +228,57 @@ struct RecipientSearchTests {
             directChatGroupIdHex: nil,
             sharedChatCount: 1
         )
+    }
+
+    private func searchResult(
+        _ hex: String,
+        radius: UInt8,
+        field: MatchedFieldFfi,
+        quality: MatchQualityFfi,
+        providerRank: Double? = nil
+    ) -> UserDirectorySearchResultFfi {
+        UserDirectorySearchResultFfi(
+            accountIdHex: hex,
+            npub: candidate(hex).npub,
+            radius: radius,
+            matchedField: field,
+            matchQuality: quality,
+            providerRank: providerRank,
+            profile: nil
+        )
+    }
+}
+
+@MainActor
+struct ProfileFollowTests {
+    private let peer = String(repeating: "dd", count: 32)
+
+    @Test func profileLoadsFollowStatusFromTheBindingAdapter() async {
+        let model = ProfileViewModel()
+        model.applyResolvedAccount(peer)
+
+        await model.prepareFollowStatus(initialValue: false) {
+            true
+        }
+
+        #expect(model.isFollowing == true)
+        #expect(!model.isLoadingFollow)
+    }
+
+    @Test func profileTogglePublishesTheOppositeStateAndUsesReturnedResult() async throws {
+        let model = ProfileViewModel()
+        let appState = AppState(client: try MarmotClient.testClient())
+        model.applyResolvedAccount(peer)
+        await model.prepareFollowStatus(initialValue: true, load: nil)
+        var requestedState: Bool?
+
+        await model.toggleFollow(using: appState) { desired in
+            requestedState = desired
+            return desired
+        }
+
+        #expect(requestedState == false)
+        #expect(model.isFollowing == false)
+        #expect(!model.isUpdatingFollow)
     }
 }

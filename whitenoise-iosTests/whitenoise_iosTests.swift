@@ -3,6 +3,7 @@ import Foundation
 import SwiftUI
 import UIKit
 import AVFoundation
+import Combine
 @testable import whitenoise_ios
 @testable import MarmotKit
 
@@ -6024,6 +6025,139 @@ struct ChatsListProjectionTests {
         #expect(display.avatarSeed != groupId)
     }
 
+    @Test func cachedDirectPeerResolvesAnUnnamedDirectRowWithoutGroupDetails() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let other = hex("33")
+        let groupId = hex("ac")
+        let avatar = "https://cdn.example.com/alice.png"
+        appState.profileStore.profileProjectionCache[other] = ProfileDisplayProjection(
+            profile: UserProfileMetadataFfi(
+                name: nil,
+                displayName: "Alice",
+                about: nil,
+                picture: avatar,
+                banner: nil,
+                nip05: nil,
+                lud16: nil
+            ),
+            projectedName: nil,
+            localAccountLabel: nil
+        )
+        let row = chatListRow(
+            groupIdHex: groupId,
+            title: groupId,
+            groupName: "",
+            conversationKind: .direct
+        )
+
+        let display = ChatsListViewModel.display(
+            for: row,
+            details: nil,
+            appState: appState,
+            cachedDirectPeerAccountId: other
+        )
+
+        #expect(display.title == "Alice")
+        #expect(display.avatarURL?.absoluteString == avatar)
+        #expect(display.avatarSeed == other)
+        #expect(display.isDirectMessage == true)
+    }
+
+    @Test func directPeerCacheIsAccountScopedBoundedAndKeepsRecentDirectRows() {
+        let olderDirect = chatListRow(
+            groupIdHex: hex("b1"),
+            title: "Older direct",
+            activitySortAt: 10,
+            conversationKind: .direct
+        )
+        let newerDirect = chatListRow(
+            groupIdHex: hex("b2"),
+            title: "Newer direct",
+            activitySortAt: 20,
+            conversationKind: .direct
+        )
+        let group = chatListRow(
+            groupIdHex: hex("b3"),
+            title: "Group",
+            activitySortAt: 30,
+            conversationKind: .group
+        )
+        var cache = ChatListDirectPeerCache(maxAccounts: 2, maxGroupsPerAccount: 1)
+
+        cache.store(
+            accountRef: "alice",
+            peersByGroupId: [
+                olderDirect.groupIdHex: hex("41"),
+                newerDirect.groupIdHex: hex("42"),
+                group.groupIdHex: hex("43"),
+            ],
+            rowsByGroupId: [
+                olderDirect.groupIdHex: olderDirect,
+                newerDirect.groupIdHex: newerDirect,
+                group.groupIdHex: group,
+            ]
+        )
+
+        #expect(cache.restore(accountRef: "bob").isEmpty)
+        #expect(cache.restore(accountRef: "alice") == [newerDirect.groupIdHex: hex("42")])
+    }
+
+    @Test func emptyPartialBindDoesNotEraseRetainedDirectPeerMappings() {
+        let row = chatListRow(
+            groupIdHex: hex("b4"),
+            title: "Direct",
+            activitySortAt: 20,
+            conversationKind: .direct
+        )
+        let peer = hex("44")
+        var cache = ChatListDirectPeerCache()
+        cache.store(
+            accountRef: "alice",
+            peersByGroupId: [row.groupIdHex: peer],
+            rowsByGroupId: [row.groupIdHex: row]
+        )
+
+        cache.store(accountRef: "alice", peersByGroupId: [:], rowsByGroupId: [:])
+
+        #expect(cache.restore(accountRef: "alice") == [row.groupIdHex: peer])
+    }
+
+    @Test func chatListEnrichmentPrioritizesPinnedThenRecentVisibleRows() {
+        let firstPin = chatListRow(
+            groupIdHex: hex("b5"),
+            pinned: true,
+            pinnedPosition: 0,
+            title: "First pin",
+            activitySortAt: 1
+        )
+        let secondPin = chatListRow(
+            groupIdHex: hex("b6"),
+            pinned: true,
+            pinnedPosition: 1,
+            title: "Second pin",
+            activitySortAt: 100
+        )
+        let recent = chatListRow(
+            groupIdHex: hex("b7"),
+            title: "Recent",
+            activitySortAt: 50
+        )
+        let older = chatListRow(
+            groupIdHex: hex("b8"),
+            title: "Older",
+            activitySortAt: 10
+        )
+        let rows = [firstPin, secondPin, recent, older]
+        let rowsByGroupId = Dictionary(uniqueKeysWithValues: rows.map { ($0.groupIdHex, $0) })
+
+        let prioritized = ChatsListViewModel.prioritizedEnrichmentGroupIds(
+            Set(rowsByGroupId.keys),
+            rowsByGroupId: rowsByGroupId
+        )
+
+        #expect(prioritized == rows.map(\.groupIdHex))
+    }
+
     @Test func itemAvatarURLRejectsUnsafeProjectedGroupAvatarURL() throws {
         let item = ChatsListViewModel.Item(
             row: chatListRow(groupIdHex: hex("d5"), title: "Unsafe Avatar"),
@@ -10905,6 +11039,31 @@ struct VideoPreviewOverlayPresentationTests {
 }
 
 struct MessageAudioBubblePresentationTests {
+    @Test func singleUncaptionedAudioReservesSpaceForMessageMetadata() {
+        #expect(MessageAudioBubblePresentation.shouldReserveMetadataFooter(
+            mediaKinds: [.audio],
+            hasVisibleBodyText: false,
+            hasReply: false
+        ))
+    }
+
+    @Test func captionedRepliedAndMixedMediaDoNotReserveAudioFooterSpace() {
+        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
+            mediaKinds: [.audio],
+            hasVisibleBodyText: true,
+            hasReply: false
+        ))
+        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
+            mediaKinds: [.audio],
+            hasVisibleBodyText: false,
+            hasReply: true
+        ))
+        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
+            mediaKinds: [.audio, .document],
+            hasVisibleBodyText: false,
+            hasReply: false
+        ))
+    }
 
     @Test func missingDurationDoesNotReserveLabelSpace() {
         #expect(MessageAudioBubblePresentation.durationLabel(nil) == nil)
@@ -11444,7 +11603,70 @@ private struct TimelineSemanticPositionHarness: View {
 }
 
 @MainActor
+private final class TimelineResizeHarnessModel: ObservableObject {
+    @Published var viewportHeight: CGFloat = 700
+}
+
+private struct TimelineShortContentResizeHarness: View {
+    @ObservedObject var model: TimelineResizeHarnessModel
+    let onVisibleTargetsChanged: (Set<String>) -> Void
+
+    var body: some View {
+        GeometryReader { viewport in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    Text("Only message")
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .id("message")
+                }
+                .scrollTargetLayout()
+                .frame(minHeight: max(0, viewport.size.height), alignment: .bottom)
+            }
+            .defaultScrollAnchor(.bottom, for: .initialOffset)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            .onScrollTargetVisibilityChange(
+                idType: String.self,
+                threshold: TimelineViewportVisibility.minimumVisibleFraction
+            ) { visibleIDs in
+                onVisibleTargetsChanged(Set(visibleIDs))
+            }
+        }
+        .frame(height: model.viewportHeight)
+    }
+}
+
+@MainActor
 struct TimelineBottomTests {
+
+    @Test func shortTimelineRemainsVisibleWhenViewportShrinks() async throws {
+        let model = TimelineResizeHarnessModel()
+        var visibleTargets = Set<String>()
+        let controller = UIHostingController(
+            rootView: TimelineShortContentResizeHarness(model: model) {
+                visibleTargets = $0
+            }
+        )
+        let windowScene = try #require(
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first
+        )
+        let window = UIWindow(windowScene: windowScene)
+        window.frame = CGRect(x: 0, y: 0, width: 390, height: 700)
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+
+        for _ in 0..<100 where !visibleTargets.contains("message") {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(visibleTargets.contains("message"))
+
+        model.viewportHeight = 390
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(visibleTargets.contains("message"))
+        window.isHidden = true
+    }
 
     @Test func swiftUILazyTimelineResolvesSemanticBottomTarget() async throws {
         let target = TimelineInitialPositionTarget.latest(id: "row-79")
@@ -11670,6 +11892,15 @@ struct TimelineBottomTests {
         ))
     }
 
+    @Test func ordinaryLatestEntryUsesDefaultBottomPlacement() {
+        #expect(!TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(
+            .latest(id: "msg-latest")
+        ))
+        #expect(TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(
+            .item(id: "msg-target", anchor: .center)
+        ))
+    }
+
     @Test func timelineVisibilityStorePublishesOnlyVisibilityEdges() {
         let visibility = TimelineVisibilityStore()
 
@@ -11803,59 +12034,6 @@ struct TimelineBottomTests {
         #expect(!TimelineBottom.shouldPreservePinAfterContentGrowth(previous: previous, current: current))
     }
 
-    @Test func keyboardTransitionFollowsOnlyPinnedIdleTimeline() {
-        #expect(TimelineKeyboardBottomFollow.shouldBegin(
-            distanceToBottom: 0,
-            isFollowEnabled: true,
-            isTracking: false,
-            isDragging: false,
-            isDecelerating: false
-        ))
-        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
-            distanceToBottom: TimelineBottom.pinnedThreshold + 1,
-            isFollowEnabled: true,
-            isTracking: false,
-            isDragging: false,
-            isDecelerating: false
-        ))
-        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
-            distanceToBottom: 0,
-            isFollowEnabled: true,
-            isTracking: false,
-            isDragging: true,
-            isDecelerating: false
-        ))
-        #expect(!TimelineKeyboardBottomFollow.shouldBegin(
-            distanceToBottom: 0,
-            isFollowEnabled: false,
-            isTracking: false,
-            isDragging: false,
-            isDecelerating: false
-        ))
-    }
-
-    @Test func keyboardFollowStartsClampingWhenTallContentExceedsShrinkingViewport() {
-        #expect(!TimelineKeyboardBottomFollow.shouldClamp(
-            contentHeight: 620,
-            boundsHeight: 700,
-            adjustedTopInset: 0,
-            adjustedBottomInset: 0
-        ))
-        #expect(TimelineKeyboardBottomFollow.shouldClamp(
-            contentHeight: 620,
-            boundsHeight: 390,
-            adjustedTopInset: 0,
-            adjustedBottomInset: 0
-        ))
-        #expect(TimelineKeyboardBottomFollow.distanceToBottom(
-            contentHeight: 620,
-            boundsHeight: 390,
-            adjustedTopInset: 0,
-            adjustedBottomInset: 0,
-            contentOffsetY: 0
-        ) == 230)
-    }
-
     @Test func projectionChangesFollowPinnedOrInitialBottomPlacementOnly() {
         #expect(TimelineBottom.shouldFollowProjectionChange(
             isPinned: true,
@@ -11974,21 +12152,6 @@ struct TimelineBottomTests {
             lastAutomaticTargetID: nil,
             nextTargetID: "message-a"
         ))
-    }
-
-    @Test func bottomClampComputesLegalScrollViewOffset() {
-        #expect(ScrollViewBottomClamp.legalBottomOffsetY(
-            contentHeight: 2_000,
-            boundsHeight: 700,
-            adjustedTopInset: 10,
-            adjustedBottomInset: 40
-        ) == 1_340)
-        #expect(ScrollViewBottomClamp.legalBottomOffsetY(
-            contentHeight: 200,
-            boundsHeight: 700,
-            adjustedTopInset: 10,
-            adjustedBottomInset: 40
-        ) == -10)
     }
 
     @Test func messageActionsPlacementPrefersBelowWhenThereIsRoom() {

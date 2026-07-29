@@ -221,7 +221,7 @@ final class GroupDetailsViewModel {
             await refreshAfterFailedMutation(using: appState)
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(.error(L10n.string("Couldn't rename group"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't rename group"), error: error))
         }
     }
 
@@ -282,10 +282,7 @@ final class GroupDetailsViewModel {
             await refreshAfterFailedMutation(using: appState)
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(.error(
-                L10n.string("Couldn't update group description"),
-                message: error.localizedDescription
-            ))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't update group description"), error: error))
             return false
         }
     }
@@ -447,7 +444,7 @@ final class GroupDetailsViewModel {
             Haptics.error()
             actionError = error.localizedDescription
             onProgress(nil)
-            appState.present(.error(L10n.string("Couldn't update group image"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't update group image"), error: error))
             throw error
         }
     }
@@ -587,7 +584,7 @@ final class GroupDetailsViewModel {
         } catch {
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(.error(L10n.string("Couldn't update archive"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't update archive"), error: error))
         }
     }
 

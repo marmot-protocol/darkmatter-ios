@@ -508,7 +508,7 @@ final class AppState {
                 _ = try await marmot.signInAccount(accountRef: accountRef)
                 try await refreshAccounts()
             } catch {
-                present(.error(L10n.string("Couldn't sign in"), message: error.localizedDescription))
+                present(UserFacingError.toast(title: L10n.string("Couldn't sign in"), error: error))
                 return
             }
         }
@@ -587,7 +587,7 @@ final class AppState {
                 accountRef: signingOut,
                 wasEnabled: nativePushWasEnabled
             )
-            present(.error(L10n.string("Couldn't sign out"), message: error.localizedDescription))
+            present(UserFacingError.toast(title: L10n.string("Couldn't sign out"), error: error))
             return false
         }
 
@@ -654,7 +654,7 @@ final class AppState {
                     reason: "\(L10n.string("Couldn't refresh accounts")): \(error.localizedDescription)"
                 ))
             } else {
-                present(.error(L10n.string("Couldn't refresh accounts"), message: error.localizedDescription))
+                present(UserFacingError.toast(title: L10n.string("Couldn't refresh accounts"), error: error))
             }
         }
 
@@ -758,7 +758,7 @@ final class AppState {
                 accountRef: wipingRef,
                 wasEnabled: nativePushWasEnabled
             )
-            present(.error(L10n.string("Couldn't wipe profile"), message: error.localizedDescription))
+            present(UserFacingError.toast(title: L10n.string("Couldn't wipe profile"), error: error))
             return false
         }
 
@@ -897,13 +897,22 @@ final class AppState {
 
     @MainActor
     @discardableResult
-    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
+    func setAuditLogSettings(
+        enabled: Bool,
+        dataMode: AuditDataModeFfi
+    ) async throws -> AuditLogSettingsFfi {
         guard phase == .ready else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
         let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         return try await lease.client.marmot.setAuditLogSettings(
-            settings: AuditLogSettingsFfi(enabled: enabled, dataMode: .fullData)
+            settings: AuditLogSettingsFfi(enabled: enabled, dataMode: dataMode)
         )
+    }
+
+    @MainActor
+    @discardableResult
+    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
+        try await setAuditLogSettings(enabled: enabled, dataMode: .obfuscatedSensitiveData)
     }
 
     func auditLogFiles() async throws -> [AuditLogFileFfi]? {

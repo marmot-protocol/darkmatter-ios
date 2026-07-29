@@ -296,6 +296,7 @@ struct MessageBubble: View {
             if !isFromMe { Spacer(minLength: oppositeInset) }
         }
         .padding(.horizontal, 12)
+        .padding(.top, mediaItems.isEmpty ? 0 : 4)
         .fullScreenCover(item: $mediaGallery) { gallery in
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
@@ -499,6 +500,7 @@ struct MessageBubble: View {
                 items: mediaItems,
                 isFromMe: isFromMe,
                 maxWidth: mediaGridWidth,
+                reservesAudioMetadataFooterSpace: reservesAudioMetadataFooterSpace,
                 onLoadMedia: onLoadMedia,
                 onOpenImage: { item, data in
                     mediaGallery = MessageMediaGallery(
@@ -527,11 +529,16 @@ struct MessageBubble: View {
             }
             .overlay(alignment: .bottomTrailing) {
                 if !hasVisibleBodyText && replyPreview == nil {
-                    mediaOverlayMetadataFooter
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.42), in: Capsule())
-                        .padding(6)
+                    if reservesAudioMetadataFooterSpace {
+                        messageMetadataFooter
+                            .padding(6)
+                    } else {
+                        mediaOverlayMetadataFooter
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.42), in: Capsule())
+                            .padding(6)
+                    }
                 }
             }
 
@@ -562,6 +569,14 @@ struct MessageBubble: View {
 
     private var mediaGridWidth: CGFloat {
         sizeClass == .regular ? 340 : 276
+    }
+
+    private var reservesAudioMetadataFooterSpace: Bool {
+        MessageAudioBubblePresentation.shouldReserveMetadataFooter(
+            mediaKinds: mediaItems.map(\.kind),
+            hasVisibleBodyText: hasVisibleBodyText,
+            hasReply: replyPreview != nil
+        )
     }
 
     private func quoted(_ preview: (name: String, text: String)) -> some View {
@@ -1178,6 +1193,7 @@ private struct MessageMediaAttachmentContent: View {
     let items: [MessageMediaAttachment]
     let isFromMe: Bool
     let maxWidth: CGFloat
+    let reservesAudioMetadataFooterSpace: Bool
     let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
@@ -1247,6 +1263,7 @@ private struct MessageMediaAttachmentContent: View {
                             item: item,
                             isFromMe: isFromMe,
                             width: maxWidth,
+                            reservesMetadataFooterSpace: reservesAudioMetadataFooterSpace,
                             onLoadMedia: onLoadMedia
                         )
                     case .document, .unsupported:
@@ -1491,6 +1508,14 @@ nonisolated enum MessageMediaThumbnailPresentation {
 }
 
 nonisolated enum MessageAudioBubblePresentation {
+    static func shouldReserveMetadataFooter(
+        mediaKinds: [MediaAttachmentKind],
+        hasVisibleBodyText: Bool,
+        hasReply: Bool
+    ) -> Bool {
+        mediaKinds == [.audio] && !hasVisibleBodyText && !hasReply
+    }
+
     static func cacheKey(for item: MessageMediaAttachment) -> String {
         if let hash = item.reference?.plaintextSha256.lowercased(),
            hash.range(of: #"^[0-9a-f]{64}$"#, options: .regularExpression) != nil
@@ -2214,6 +2239,7 @@ private struct MessageAudioAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
     let width: CGFloat
+    let reservesMetadataFooterSpace: Bool
     let onLoadMedia: ConversationMediaLoader
 
     @State private var player: AVAudioPlayer?
@@ -2234,6 +2260,8 @@ private struct MessageAudioAttachmentView: View {
     private var speedBadgeWidth: CGFloat = 38
     @ScaledMetric(relativeTo: .caption)
     private var speedBadgeHeight: CGFloat = 28
+    @ScaledMetric(relativeTo: .caption2)
+    private var metadataFooterReservedHeight: CGFloat = 20
 
     private let speeds: [Float] = [1, 1.5, 2]
     private var metadataCacheKey: String {
@@ -2244,62 +2272,72 @@ private struct MessageAudioAttachmentView: View {
         item: MessageMediaAttachment,
         isFromMe: Bool,
         width: CGFloat,
+        reservesMetadataFooterSpace: Bool,
         onLoadMedia: ConversationMediaLoader
     ) {
         self.item = item
         self.isFromMe = isFromMe
         self.width = width
+        self.reservesMetadataFooterSpace = reservesMetadataFooterSpace
         self.onLoadMedia = onLoadMedia
         _durationSeconds = State(initialValue: item.durationSeconds)
         _waveformSamples = State(initialValue: item.waveformSamples.isEmpty ? MediaWaveformAnalyzer.fallback() : item.waveformSamples)
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button(action: togglePlayback) {
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: isPlaying ? "pause.fill" : didFail ? "arrow.clockwise" : "play.fill")
-                            .font(.subheadline.weight(.bold))
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: togglePlayback) {
+                    Group {
+                        if isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: isPlaying ? "pause.fill" : didFail ? "arrow.clockwise" : "play.fill")
+                                .font(.subheadline.weight(.bold))
+                        }
+                    }
+                    .frame(width: playButtonSize, height: playButtonSize)
+                    .foregroundStyle(isFromMe ? Color.accentColor : Color.white)
+                    .background(isFromMe ? Color.white.opacity(0.95) : Color.accentColor, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
+
+                VStack(alignment: .leading, spacing: 5) {
+                    AudioWaveformView(
+                        samples: waveformSamples,
+                        progress: progress,
+                        barColor: isFromMe ? Color.white.opacity(0.58) : Color.secondary.opacity(0.45),
+                        playedColor: isFromMe ? Color.white : Color.accentColor
+                    )
+                    .frame(height: 28)
+                    if let durationLabel = MessageAudioBubblePresentation.durationLabel(durationSeconds ?? item.durationSeconds) {
+                        Text(durationLabel)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(isFromMe ? Color.white.opacity(0.75) : Color.secondary)
                     }
                 }
-                .frame(width: playButtonSize, height: playButtonSize)
-                .foregroundStyle(isFromMe ? Color.accentColor : Color.white)
-                .background(isFromMe ? Color.white.opacity(0.95) : Color.accentColor, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
 
-            VStack(alignment: .leading, spacing: 5) {
-                AudioWaveformView(
-                    samples: waveformSamples,
-                    progress: progress,
-                    barColor: isFromMe ? Color.white.opacity(0.58) : Color.secondary.opacity(0.45),
-                    playedColor: isFromMe ? Color.white : Color.accentColor
-                )
-                .frame(height: 28)
-                if let durationLabel = MessageAudioBubblePresentation.durationLabel(durationSeconds ?? item.durationSeconds) {
-                    Text(durationLabel)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(isFromMe ? Color.white.opacity(0.75) : Color.secondary)
+                Button(action: cycleSpeed) {
+                    Text(speedLabel)
+                        .font(.caption.weight(.bold))
+                        .frame(width: speedBadgeWidth, height: speedBadgeHeight)
+                        .background(isFromMe ? Color.white.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(isFromMe ? Color.white : Color.primary)
+                .accessibilityLabel("Playback speed")
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
 
-            Button(action: cycleSpeed) {
-                Text(speedLabel)
-                    .font(.caption.weight(.bold))
-                    .frame(width: speedBadgeWidth, height: speedBadgeHeight)
-                    .background(isFromMe ? Color.white.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
+            if reservesMetadataFooterSpace {
+                Color.clear
+                    .frame(height: metadataFooterReservedHeight)
+                    .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(isFromMe ? Color.white : Color.primary)
-            .accessibilityLabel("Playback speed")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
         .frame(width: width)
         .frame(minHeight: 68)
         .background(isFromMe ? Color.accentColor : Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))

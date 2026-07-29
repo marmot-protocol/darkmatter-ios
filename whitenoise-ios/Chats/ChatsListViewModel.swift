@@ -3,6 +3,67 @@ import Observation
 import OSLog
 import MarmotKit
 
+/// Session cache for the small piece of roster state a DM row needs to resolve
+/// through the already-cached profile directory. It is account-scoped because
+/// the same MLS group id must never be interpreted through another profile's
+/// roster, and bounded because chat-list view models can live for the app
+/// session while users switch among several local profiles.
+struct ChatListDirectPeerCache {
+    private let maxAccounts: Int
+    private let maxGroupsPerAccount: Int
+    private var peersByAccount: [String: [String: String]] = [:]
+    private var accountRecency: [String] = []
+
+    init(maxAccounts: Int = 4, maxGroupsPerAccount: Int = 512) {
+        self.maxAccounts = max(1, maxAccounts)
+        self.maxGroupsPerAccount = max(1, maxGroupsPerAccount)
+    }
+
+    mutating func store(
+        accountRef: String,
+        peersByGroupId: [String: String],
+        rowsByGroupId: [String: ChatListRowFfi]
+    ) {
+        // A rapid account switch can cancel the replacement snapshot before
+        // any rows arrive. Keep the last useful mapping instead of replacing
+        // it with an empty partial bind.
+        guard !rowsByGroupId.isEmpty else { return }
+        let retained = peersByGroupId
+            .filter { groupId, peerId in
+                !peerId.isEmpty
+                    && rowsByGroupId[groupId]?.conversationKind == .direct
+            }
+            .sorted { lhs, rhs in
+                let lhsActivity = rowsByGroupId[lhs.key]?.activitySortAt ?? 0
+                let rhsActivity = rowsByGroupId[rhs.key]?.activitySortAt ?? 0
+                if lhsActivity != rhsActivity {
+                    return lhsActivity > rhsActivity
+                }
+                return lhs.key < rhs.key
+            }
+            .prefix(maxGroupsPerAccount)
+        peersByAccount[accountRef] = Dictionary(
+            uniqueKeysWithValues: retained.map { ($0.key, $0.value) }
+        )
+        touch(accountRef)
+        while accountRecency.count > maxAccounts {
+            let evicted = accountRecency.removeFirst()
+            peersByAccount[evicted] = nil
+        }
+    }
+
+    mutating func restore(accountRef: String) -> [String: String] {
+        guard let peers = peersByAccount[accountRef] else { return [:] }
+        touch(accountRef)
+        return peers
+    }
+
+    private mutating func touch(_ accountRef: String) {
+        accountRecency.removeAll { $0 == accountRef }
+        accountRecency.append(accountRef)
+    }
+}
+
 /// Owns the live list of chats for the currently active account. The list is
 /// now driven by Marmot's durable chat-list projection instead of rebuilding
 /// previews from account-wide message snapshots on every appearance.
@@ -163,6 +224,8 @@ final class ChatsListViewModel {
     private var pendingChatListRowsByGroupId: [String: ChatListRowFfi] = [:]
     private var avatarURLByGroupId: [String: String] = [:]
     private var avatarURLLoadedGroupIds: Set<String> = []
+    private var directPeerAccountIdByGroupId: [String: String] = [:]
+    private var retainedDirectPeerCache = ChatListDirectPeerCache()
     private var pendingAvatarURLRefreshGroupIds: Set<String> = []
     private var groupDetailsCache: [String: GroupDetailsFfi] = [:]
     private var groupDetailsLoadedGroupIds: Set<String> = []
@@ -208,6 +271,13 @@ final class ChatsListViewModel {
         deferredPinOrderSnapshot = nil
         pinOrderUITransitionID = nil
         if currentAccount != accountRef {
+            if let currentAccount {
+                retainedDirectPeerCache.store(
+                    accountRef: currentAccount,
+                    peersByGroupId: directPeerAccountIdByGroupId,
+                    rowsByGroupId: rowByGroupId
+                )
+            }
             let hadPublishedRows = !items.isEmpty || !archivedItems.isEmpty
             rowByGroupId = [:]
             itemByGroupId = [:]
@@ -219,6 +289,9 @@ final class ChatsListViewModel {
             pendingChatListRowsByGroupId = [:]
             avatarURLByGroupId = [:]
             avatarURLLoadedGroupIds = []
+            directPeerAccountIdByGroupId = accountRef.map {
+                retainedDirectPeerCache.restore(accountRef: $0)
+            } ?? [:]
             pendingAvatarURLRefreshGroupIds = []
             groupDetailsCache = [:]
             groupDetailsLoadedGroupIds = []
@@ -456,6 +529,7 @@ final class ChatsListViewModel {
     private func pruneEnrichmentCaches(toSurviving surviving: Set<String>) {
         groupDetailsCache = Self.intersecting(groupDetailsCache, with: surviving)
         avatarURLByGroupId = Self.intersecting(avatarURLByGroupId, with: surviving)
+        directPeerAccountIdByGroupId = Self.intersecting(directPeerAccountIdByGroupId, with: surviving)
         groupDetailsLoadedGroupIds = Self.intersecting(groupDetailsLoadedGroupIds, with: surviving)
         avatarURLLoadedGroupIds = Self.intersecting(avatarURLLoadedGroupIds, with: surviving)
         pendingAvatarURLRefreshGroupIds = Self.intersecting(pendingAvatarURLRefreshGroupIds, with: surviving)
@@ -544,6 +618,7 @@ final class ChatsListViewModel {
         rowByGroupId[groupIdHex] = nil
         itemByGroupId[groupIdHex] = nil
         avatarURLByGroupId[groupIdHex] = nil
+        directPeerAccountIdByGroupId[groupIdHex] = nil
         avatarURLLoadedGroupIds.remove(groupIdHex)
         pendingAvatarURLRefreshGroupIds.remove(groupIdHex)
         groupDetailsCache[groupIdHex] = nil
@@ -623,6 +698,9 @@ final class ChatsListViewModel {
 
     @discardableResult
     private func storeRow(_ row: ChatListRowFfi, muteLookup: MuteLookup? = nil) -> Bool {
+        if row.conversationKind == .group {
+            directPeerAccountIdByGroupId[row.groupIdHex] = nil
+        }
         updateCachedGroupDetails(with: row)
         let item = makeItem(for: row, muteLookup: muteLookup)
         let changed = itemByGroupId[row.groupIdHex] != item
@@ -734,7 +812,8 @@ final class ChatsListViewModel {
             for: row,
             details: details,
             appState: appState,
-            fallbackAvatarURL: fallbackAvatarURL
+            fallbackAvatarURL: fallbackAvatarURL,
+            cachedDirectPeerAccountId: directPeerAccountIdByGroupId[row.groupIdHex]
         )
     }
 
@@ -749,8 +828,23 @@ final class ChatsListViewModel {
         for row: ChatListRowFfi,
         details: GroupDetailsFfi?,
         appState: AppState?,
-        fallbackAvatarURL: URL? = nil
+        fallbackAvatarURL: URL? = nil,
+        cachedDirectPeerAccountId: String? = nil
     ) -> Display {
+        if details == nil,
+           let appState,
+           row.conversationKind == .direct,
+           ContentSanitizer.groupName(row.groupName) == nil,
+           let cachedDirectPeerAccountId {
+            return Display(
+                title: appState.knownDisplayName(forAccountIdHex: cachedDirectPeerAccountId)
+                    ?? appState.shortNpub(forAccountIdHex: cachedDirectPeerAccountId),
+                avatarURL: appState.avatarURL(forAccountIdHex: cachedDirectPeerAccountId)
+                    ?? fallbackAvatarURL,
+                avatarSeed: cachedDirectPeerAccountId,
+                isDirectMessage: true
+            )
+        }
         guard let details, let appState else {
             return Display(
                 title: Item.sanitizedTitle(for: row),
@@ -887,7 +981,10 @@ final class ChatsListViewModel {
                 let displayGroupIds = self.pendingGroupDetailsRefreshGroupIds
                 self.pendingAvatarURLRefreshGroupIds = []
                 self.pendingGroupDetailsRefreshGroupIds = []
-                let groupIds = Array(avatarGroupIds.union(displayGroupIds))
+                let groupIds = Self.prioritizedEnrichmentGroupIds(
+                    avatarGroupIds.union(displayGroupIds),
+                    rowsByGroupId: self.rowByGroupId
+                )
                 guard !groupIds.isEmpty else { break }
 
                 var changed = false
@@ -935,6 +1032,7 @@ final class ChatsListViewModel {
                                in: members,
                                myAccountId: appState.activeAccount?.accountIdHex
                            ) {
+                            self.directPeerAccountIdByGroupId[groupId] = other
                             appState.warmProfileProjection(
                                 forAccountIdHex: other,
                                 refreshAfterLoad: true
@@ -997,6 +1095,33 @@ final class ChatsListViewModel {
         guard avatarEnrichmentTaskID == taskID else { return }
         avatarURLTask = nil
         avatarEnrichmentTaskID = nil
+    }
+
+    /// Resolve the rows a user is most likely to see first. The previous set
+    /// conversion made enrichment order arbitrary, so an off-screen old chat
+    /// could delay a visible DM even though every read was local.
+    static func prioritizedEnrichmentGroupIds(
+        _ groupIds: Set<String>,
+        rowsByGroupId: [String: ChatListRowFfi]
+    ) -> [String] {
+        groupIds.sorted { lhs, rhs in
+            guard let lhsRow = rowsByGroupId[lhs] else { return false }
+            guard let rhsRow = rowsByGroupId[rhs] else { return true }
+            if lhsRow.pinned != rhsRow.pinned {
+                return lhsRow.pinned
+            }
+            if lhsRow.pinned {
+                let lhsPosition = lhsRow.pinnedPosition ?? UInt32.max
+                let rhsPosition = rhsRow.pinnedPosition ?? UInt32.max
+                if lhsPosition != rhsPosition {
+                    return lhsPosition < rhsPosition
+                }
+            }
+            if lhsRow.activitySortAt != rhsRow.activitySortAt {
+                return lhsRow.activitySortAt > rhsRow.activitySortAt
+            }
+            return lhs < rhs
+        }
     }
 
     #if DEBUG

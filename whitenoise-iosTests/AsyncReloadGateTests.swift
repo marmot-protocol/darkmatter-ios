@@ -219,8 +219,11 @@ private final class PrivacySecuritySettingsDataSourceStub: PrivacySecuritySettin
 
     func deleteAllAuditLogFiles() async throws {}
 
-    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
-        AuditLogSettingsFfi(enabled: enabled, dataMode: .obfuscatedSensitiveData)
+    func setAuditLogSettings(
+        enabled: Bool,
+        dataMode: AuditDataModeFfi
+    ) async throws -> AuditLogSettingsFfi {
+        AuditLogSettingsFfi(enabled: enabled, dataMode: dataMode)
     }
 
     func waitUntilProjectionCallCount(_ count: Int) async {

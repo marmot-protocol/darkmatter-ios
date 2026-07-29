@@ -429,7 +429,10 @@ struct MarkdownMessageBuilderTests {
     @Test func deepQuoteNestingStopsAtRenderDepthCap() throws {
         var block: MarkdownBlockFfi = para([.text(content: "core")])
         for _ in 0..<30 {
-            block = .blockQuote(blocks: [para([.text(content: "q")]), block])
+            block = .blockQuote(
+                blocks: [para([.text(content: "q")]), block],
+                blankLinesBefore: Data([0, 0])
+            )
         }
         let blocks = try #require(MarkdownMessageBuilder.displayBlocks(for: doc([block])))
 

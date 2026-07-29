@@ -198,7 +198,7 @@ final class ComposerModel {
             onError(error.localizedDescription)
             await MainActor.run {
                 Haptics.error()
-                appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
+                appState.present(UserFacingError.toast(title: L10n.string("Send failed"), error: error))
             }
         }
     }
@@ -303,7 +303,7 @@ final class ComposerModel {
             onError(error.localizedDescription)
             await MainActor.run {
                 Haptics.error()
-                appState.present(.error(L10n.string("Send failed"), message: error.localizedDescription))
+                appState.present(UserFacingError.toast(title: L10n.string("Send failed"), error: error))
             }
         }
     }

@@ -54,7 +54,7 @@ cp "$OUTPUT_DIR/MarmotKit.swift" "$VENDOR_DIR/Sources/MarmotKit/MarmotKit.swift"
 
 echo "==> Stripping debug symbols from vendored static libraries"
 while IFS= read -r -d '' library; do
-    xcrun strip -S "$library"
+    xcrun strip -S -x "$library"
 done < <(find "$VENDOR_DIR/MarmotKit.xcframework" -name 'libmarmot_uniffi.a' -print0)
 
 echo "==> Tidying generated text artifacts"

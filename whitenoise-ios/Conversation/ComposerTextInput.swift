@@ -54,13 +54,18 @@ struct ComposerTextInput: UIViewRepresentable {
             )
         }
 
-        if focusRequest > context.coordinator.lastFocusRequest {
+        let receivedFocusRequest = focusRequest > context.coordinator.lastFocusRequest
+        if receivedFocusRequest {
             context.coordinator.lastFocusRequest = focusRequest
-            isFocused = true
         }
 
-        if isFocused, !uiView.isFirstResponder {
-            context.coordinator.scheduleFocus(for: uiView)
+        if isFocused || receivedFocusRequest {
+            if !uiView.isFirstResponder {
+                context.coordinator.scheduleFocus(
+                    for: uiView,
+                    promoteBinding: receivedFocusRequest
+                )
+            }
         } else {
             context.coordinator.cancelPendingFocus()
             if !isFocused, uiView.isFirstResponder {
@@ -99,11 +104,18 @@ struct ComposerTextInput: UIViewRepresentable {
             self.lastFocusRequest = 0
         }
 
-        func scheduleFocus(for textView: ImagePasteTextView) {
+        func scheduleFocus(
+            for textView: ImagePasteTextView,
+            promoteBinding: Bool = false
+        ) {
             guard pendingFocusTask == nil else { return }
             pendingFocusTask = Task { @MainActor [weak self, weak textView] in
                 guard let self else { return }
                 defer { pendingFocusTask = nil }
+                if promoteBinding, !parent.isFocused {
+                    parent.isFocused = true
+                    await Task.yield()
+                }
                 guard !Task.isCancelled,
                       parent.isFocused,
                       let textView,

@@ -155,6 +155,13 @@ enum TimelineInitialTargetScrollPolicy {
             return visibleTargetIDs.contains(id)
         }
     }
+
+    static func requiresProgrammaticScroll(_ target: TimelineInitialPositionTarget) -> Bool {
+        if case .item = target {
+            return true
+        }
+        return false
+    }
 }
 
 struct TimelineBottomScrollRequest: Equatable {
@@ -199,61 +206,6 @@ enum TimelineBottomScrollCoordinator {
         isUserScrolling: Bool
     ) -> Bool {
         reason.isUserInitiated || !isUserScrolling
-    }
-}
-
-enum ScrollViewBottomClamp {
-    static let tolerance: CGFloat = 0.5
-
-    static func legalBottomOffsetY(
-        contentHeight: CGFloat,
-        boundsHeight: CGFloat,
-        adjustedTopInset: CGFloat,
-        adjustedBottomInset: CGFloat
-    ) -> CGFloat {
-        max(-adjustedTopInset, contentHeight - boundsHeight + adjustedBottomInset)
-    }
-}
-
-enum TimelineKeyboardBottomFollow {
-    static func distanceToBottom(
-        contentHeight: CGFloat,
-        boundsHeight: CGFloat,
-        adjustedTopInset: CGFloat,
-        adjustedBottomInset: CGFloat,
-        contentOffsetY: CGFloat
-    ) -> CGFloat {
-        let bottomOffsetY = ScrollViewBottomClamp.legalBottomOffsetY(
-            contentHeight: contentHeight,
-            boundsHeight: boundsHeight,
-            adjustedTopInset: adjustedTopInset,
-            adjustedBottomInset: adjustedBottomInset
-        )
-        return max(0, bottomOffsetY - contentOffsetY)
-    }
-
-    static func shouldBegin(
-        distanceToBottom: CGFloat,
-        isFollowEnabled: Bool,
-        isTracking: Bool,
-        isDragging: Bool,
-        isDecelerating: Bool
-    ) -> Bool {
-        isFollowEnabled
-            && !isTracking
-            && !isDragging
-            && !isDecelerating
-            && distanceToBottom <= TimelineBottom.pinnedThreshold
-    }
-
-    static func shouldClamp(
-        contentHeight: CGFloat,
-        boundsHeight: CGFloat,
-        adjustedTopInset: CGFloat,
-        adjustedBottomInset: CGFloat
-    ) -> Bool {
-        contentHeight + adjustedTopInset + adjustedBottomInset
-            > boundsHeight + ScrollViewBottomClamp.tolerance
     }
 }
 
@@ -527,188 +479,6 @@ enum ConversationInvitePresentation {
             && !hasError
             && !isLoading
             && !hasMessage(in: timeline)
-    }
-}
-
-private struct TimelineKeyboardBottomFollower: UIViewRepresentable {
-    let isFollowEnabled: Bool
-
-    func makeUIView(context: Context) -> TimelineKeyboardBottomFollowerView {
-        let view = TimelineKeyboardBottomFollowerView()
-        view.isFollowEnabled = isFollowEnabled
-        return view
-    }
-
-    func updateUIView(_ uiView: TimelineKeyboardBottomFollowerView, context: Context) {
-        uiView.isFollowEnabled = isFollowEnabled
-        uiView.resolveScrollView()
-    }
-
-    static func dismantleUIView(
-        _ uiView: TimelineKeyboardBottomFollowerView,
-        coordinator: Void
-    ) {
-        uiView.stop()
-    }
-}
-
-final class TimelineKeyboardBottomFollowerView: UIView {
-    var isFollowEnabled = false {
-        didSet {
-            if !isFollowEnabled {
-                stopDisplayLink()
-            }
-        }
-    }
-
-    private weak var resolvedScrollView: UIScrollView?
-    private var displayLink: CADisplayLink?
-    private var followDeadline: CFTimeInterval = 0
-    private var settleFramesRemaining = 0
-    private var isObservingKeyboard = false
-
-    override func didMoveToSuperview() {
-        super.didMoveToSuperview()
-        resolveScrollView()
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        resolveScrollView()
-        if window == nil {
-            stop()
-        } else {
-            startObservingKeyboardIfNeeded()
-            DispatchQueue.main.async { [weak self] in
-                self?.resolveScrollView()
-            }
-        }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        followCurrentFrameIfNeeded()
-    }
-
-    func resolveScrollView() {
-        resolvedScrollView = enclosingScrollView()
-    }
-
-    func stop() {
-        stopDisplayLink()
-        stopObservingKeyboard()
-        resolvedScrollView = nil
-    }
-
-    private func startObservingKeyboardIfNeeded() {
-        guard !isObservingKeyboard else { return }
-        isObservingKeyboard = true
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(keyboardWillChangeFrame(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-    }
-
-    private func stopObservingKeyboard() {
-        guard isObservingKeyboard else { return }
-        NotificationCenter.default.removeObserver(
-            self,
-            name: UIResponder.keyboardWillChangeFrameNotification,
-            object: nil
-        )
-        isObservingKeyboard = false
-    }
-
-    @objc private func keyboardWillChangeFrame(_ notification: Notification) {
-        guard let scrollView = resolvedScrollView ?? enclosingScrollView() else { return }
-        resolvedScrollView = scrollView
-        let distanceToBottom = TimelineKeyboardBottomFollow.distanceToBottom(
-            contentHeight: scrollView.contentSize.height,
-            boundsHeight: scrollView.bounds.height,
-            adjustedTopInset: scrollView.adjustedContentInset.top,
-            adjustedBottomInset: scrollView.adjustedContentInset.bottom,
-            contentOffsetY: scrollView.contentOffset.y
-        )
-        guard TimelineKeyboardBottomFollow.shouldBegin(
-            distanceToBottom: distanceToBottom,
-            isFollowEnabled: isFollowEnabled,
-            isTracking: scrollView.isTracking,
-            isDragging: scrollView.isDragging,
-            isDecelerating: scrollView.isDecelerating
-        ) else {
-            stopDisplayLink()
-            return
-        }
-
-        let duration = KeyboardFrameChange.animationParameters(from: notification).duration
-        followDeadline = CACurrentMediaTime() + max(0.25, duration)
-        settleFramesRemaining = 3
-        startDisplayLinkIfNeeded()
-        followCurrentFrameIfNeeded()
-    }
-
-    private func startDisplayLinkIfNeeded() {
-        guard displayLink == nil else { return }
-        let displayLink = CADisplayLink(target: self, selector: #selector(displayLinkDidFire(_:)))
-        displayLink.add(to: .main, forMode: .common)
-        self.displayLink = displayLink
-    }
-
-    private func stopDisplayLink() {
-        displayLink?.invalidate()
-        displayLink = nil
-        settleFramesRemaining = 0
-    }
-
-    @objc private func displayLinkDidFire(_ displayLink: CADisplayLink) {
-        followCurrentFrameIfNeeded()
-        guard displayLink.timestamp >= followDeadline else { return }
-        if settleFramesRemaining > 0 {
-            settleFramesRemaining -= 1
-        } else {
-            stopDisplayLink()
-        }
-    }
-
-    private func followCurrentFrameIfNeeded() {
-        guard displayLink != nil, isFollowEnabled, let scrollView = resolvedScrollView else { return }
-        guard !scrollView.isTracking, !scrollView.isDragging, !scrollView.isDecelerating else {
-            stopDisplayLink()
-            return
-        }
-        guard TimelineKeyboardBottomFollow.shouldClamp(
-            contentHeight: scrollView.contentSize.height,
-            boundsHeight: scrollView.bounds.height,
-            adjustedTopInset: scrollView.adjustedContentInset.top,
-            adjustedBottomInset: scrollView.adjustedContentInset.bottom
-        ) else { return }
-
-        let targetY = ScrollViewBottomClamp.legalBottomOffsetY(
-            contentHeight: scrollView.contentSize.height,
-            boundsHeight: scrollView.bounds.height,
-            adjustedTopInset: scrollView.adjustedContentInset.top,
-            adjustedBottomInset: scrollView.adjustedContentInset.bottom
-        )
-        guard abs(scrollView.contentOffset.y - targetY) > ScrollViewBottomClamp.tolerance else { return }
-        UIView.performWithoutAnimation {
-            scrollView.setContentOffset(
-                CGPoint(x: scrollView.contentOffset.x, y: targetY),
-                animated: false
-            )
-        }
-    }
-
-    private func enclosingScrollView() -> UIScrollView? {
-        var candidate = superview
-        while let view = candidate {
-            if let scrollView = view as? UIScrollView {
-                return scrollView
-            }
-            candidate = view.superview
-        }
-        return nil
     }
 }
 
@@ -1115,7 +885,7 @@ struct ConversationView: View {
                     selectionLimit: remainingMediaDraftSlots,
                     onSelection: addPhotoLibrarySelections,
                     onError: { error in
-                        appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                        appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
                     },
                     onDismiss: {
                         showPhotoLibraryPicker = false
@@ -1131,10 +901,7 @@ struct ConversationView: View {
                     isSending: viewModel?.sendInFlight ?? false,
                     onAddSelections: addMediaApprovalSelections,
                     onSelectionError: { error in
-                        appState.present(.error(
-                            L10n.string("Couldn't add attachment"),
-                            message: error.localizedDescription
-                        ))
+                        appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
                     },
                     onCancel: dismissMediaApproval,
                     onSend: sendApprovedMedia
@@ -1794,16 +1561,16 @@ struct ConversationView: View {
                             }
                             .padding(.top, 8)
                             .padding(.bottom, BottomInputChromeLayout.timelineComposerSpacing)
+                            // Keep short conversations bottom-aligned by making
+                            // their content track the live viewport height. The
+                            // alignment scroll-anchor role can retain the old
+                            // height while the iOS 27 keyboard resizes the
+                            // safe-area bar, leaving the rows scrollable outside
+                            // the visible chat area.
+                            .frame(minHeight: max(0, outer.size.height), alignment: .bottom)
                             .background {
                                 TimelineKeyboardDismissInstaller(onTap: dismissKeyboard)
                                     .frame(width: 0, height: 0)
-                            }
-                            .background {
-                                TimelineKeyboardBottomFollower(
-                                    isFollowEnabled: !userMovedAwayFromTimelineBottom
-                                        && !isUserScrollingTimeline
-                                )
-                                .frame(width: 0, height: 0)
                             }
                         }
                         .overlay(alignment: .bottomTrailing) {
@@ -1817,10 +1584,14 @@ struct ConversationView: View {
                                 ProgressView()
                             }
                         }
-                        // Row expansion keeps the current viewport; the custom
-                        // geometry policy below follows growth only when pinned.
+                        // Initial offset starts long conversations at the latest
+                        // row. Short conversations are aligned by the live
+                        // viewport-sized content frame above.
                         .defaultScrollAnchor(.bottom, for: .initialOffset)
-                        .defaultScrollAnchor(.bottom, for: .alignment)
+                        .defaultScrollAnchor(
+                            userMovedAwayFromTimelineBottom ? nil : .bottom,
+                            for: .sizeChanges
+                        )
                         .task(id: initialTimelinePositionRequestGeneration) {
                             await Task.yield()
                             guard !Task.isCancelled,
@@ -2417,10 +2188,16 @@ struct ConversationView: View {
     ) {
         cancelPendingBottomScroll()
         didRequestInitialTimelinePosition = true
-        isInitialTimelinePositionSettled = false
-        pendingInitialPositionTarget = target
         isAtTimelineBottom = target.isBottom
         userMovedAwayFromTimelineBottom = !target.isBottom
+        guard TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(target) else {
+            isInitialTimelinePositionSettled = true
+            pendingInitialPositionTarget = nil
+            markCurrentlyVisibleMessagesRead(viewModel: viewModel)
+            return
+        }
+        isInitialTimelinePositionSettled = false
+        pendingInitialPositionTarget = target
         initialTimelinePositionRequestGeneration &+= 1
     }
 
@@ -2767,7 +2544,7 @@ struct ConversationView: View {
             } catch is CancellationError {
                 return
             } catch {
-                appState.present(.error(L10n.string("Couldn't add contact"), message: error.localizedDescription))
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't add contact"), error: error))
             }
         }
     }
@@ -2780,7 +2557,7 @@ struct ConversationView: View {
             } catch is CancellationError {
                 return
             } catch {
-                appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
             }
         }
     }
@@ -2813,7 +2590,7 @@ struct ConversationView: View {
                 } catch is CancellationError {
                     return
                 } catch {
-                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                    appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
                 }
             }
             guard !prepared.isEmpty else { return }
@@ -2854,7 +2631,7 @@ struct ConversationView: View {
                 } catch is CancellationError {
                     return
                 } catch {
-                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                    appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
                 }
             }
         }
@@ -2886,7 +2663,7 @@ struct ConversationView: View {
         case .success(let urls):
             addFileAttachments(urls)
         case .failure(let error):
-            appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
         }
     }
 
@@ -2918,7 +2695,7 @@ struct ConversationView: View {
                 } catch is CancellationError {
                     return
                 } catch {
-                    appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                    appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
                 }
             }
         }
@@ -2927,7 +2704,7 @@ struct ConversationView: View {
     private func beginVoicePress() {
         guard canBeginMediaSelection() else { return }
         voiceRecorder.beginPress { error in
-            appState.present(.error(L10n.string("Couldn't record audio"), message: error.localizedDescription))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't record audio"), error: error))
         }
     }
 
@@ -2957,7 +2734,7 @@ struct ConversationView: View {
             } catch is CancellationError {
                 return
             } catch {
-                appState.present(.error(L10n.string("Couldn't add attachment"), message: error.localizedDescription))
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
             }
         }
     }

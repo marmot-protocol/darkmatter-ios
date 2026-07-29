@@ -93,16 +93,21 @@ struct KeyPackagesView: View {
                         .font(.footnote)
                 }
 
-                if let loadError = model.loadError {
+                if model.loadError != nil {
                     Section {
-                        Label(loadError, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .font(.callout)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Couldn't load this screen", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                                .font(.callout)
+                            Button("Retry") {
+                                Task { await model.reload(using: appState) }
+                            }
+                        }
                     }
                 }
             }
         }
-        .navigationTitle("Key Packages")
+        .localizedNavigationTitle("Key Packages")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if model.isLoading && !model.packages.isEmpty {

@@ -70,7 +70,7 @@ nonisolated enum MarkdownPlainText {
                 appendInlines(inlines, to: &state, depth: depth)
             case .codeBlock(_, _, let content), .mathBlock(let content):
                 state.append(content)
-            case .blockQuote(let nested):
+            case .blockQuote(let nested, _):
                 appendBlocks(nested, to: &state, depth: depth + 1)
             case .listBlock(_, _, let items):
                 for item in items {
