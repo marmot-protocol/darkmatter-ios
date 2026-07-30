@@ -273,14 +273,23 @@ final class AppState {
     static let agentTextStreamQuicCandidates = [agentTextStreamQuicBrokerCandidate]
 
     init(
-        client: MarmotClient,
+        client: MarmotClient?,
         notifications: AppNotifications,
         conversationDraftStore: ConversationDraftStore? = nil,
-        suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig = AppState.defaultSuspendedRuntimeTelemetryBuildConfig
+        suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig = AppState.defaultSuspendedRuntimeTelemetryBuildConfig,
+        runtimeClientFactory: @escaping RuntimeLifecycle.RuntimeClientFactory =
+            RuntimeLifecycle.defaultRuntimeClientFactory,
+        runtimeRetrySleeper: @escaping RuntimeLifecycle.RetrySleeper = {
+            delay in try await Task.sleep(for: delay)
+        },
+        runtimeConstructionRetryPolicy: RuntimeConstructionRetryPolicy = .foreground
     ) {
         self.runtimeLifecycle = RuntimeLifecycle(
             client: client,
-            suspendedRuntimeTelemetryBuildConfig: suspendedRuntimeTelemetryBuildConfig
+            suspendedRuntimeTelemetryBuildConfig: suspendedRuntimeTelemetryBuildConfig,
+            runtimeClientFactory: runtimeClientFactory,
+            retrySleeper: runtimeRetrySleeper,
+            constructionRetryPolicy: runtimeConstructionRetryPolicy
         )
         self.notifications = notifications
         self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
@@ -309,19 +318,11 @@ final class AppState {
         profileRefreshGeneration += 1
     }
 
-    /// Production entry point. Builds a keychain-backed client; if secure
-    /// storage or a durable on-disk root can't be initialized the app can't run
-    /// safely, so we trap with a clear message rather than fall back to insecure
-    /// on-disk keys or a temporary directory iOS will silently purge.
+    /// Production entry point. Runtime construction belongs to bootstrap so the
+    /// single lifecycle owner can retry temporary cross-process root contention
+    /// without trapping during SwiftUI app initialization.
     convenience init() {
-        do {
-            self.init(client: try MarmotClient())
-        } catch {
-            // Don't interpolate the error: its description can carry internal
-            // Keychain/storage details into crash logs (#21). The type alone is
-            // enough to triage which failure mode trapped.
-            fatalError(AppState.redactedStorageInitFailureMessage(for: error))
-        }
+        self.init(client: nil, notifications: .shared)
     }
 
     /// Convenience accessor for the underlying FFI handle.
