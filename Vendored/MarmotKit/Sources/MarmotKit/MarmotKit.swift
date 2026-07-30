@@ -2729,8 +2729,11 @@ open class Marmot:
      * platform keyring (Keychain on Apple platforms, Android's native
      * keyring on Android) via the default keychain-backed account home —
      * not in a plaintext file. Fallible because initializing the platform
-     * secret store can fail. Call [`Marmot::start`] before subscribing to
-     * events.
+     * secret store can fail or another process may own the same root
+     * ([`MarmotKitError::RuntimeBusy`]). Root ownership is nonblocking and
+     * remains held until the final `Marmot`/runtime handle is dropped, even
+     * after [`Marmot::shutdown`]. Call [`Marmot::start`] before subscribing
+     * to events.
      */
 public convenience init(rootPath: String, relayUrls: [String])throws  {
     let pointer =
@@ -19126,6 +19129,12 @@ public enum MarmotKitError {
      */
     case FollowListUnavailable
     case TransportClosed
+    /**
+     * Another process or runtime owns the shared Marmot root. This is a typed,
+     * retryable/fallback signal for the iOS foreground app and NSE; neither
+     * host should open an unleased runtime after receiving it.
+     */
+    case RuntimeBusy
     case RuntimeStopping
     /**
      * An account worker's transport catch-up failed (sync error or timeout).
@@ -19281,66 +19290,67 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             )
         case 12: return .FollowListUnavailable
         case 13: return .TransportClosed
-        case 14: return .RuntimeStopping
-        case 15: return .AccountCatchUp(
+        case 14: return .RuntimeBusy
+        case 15: return .RuntimeStopping
+        case 16: return .AccountCatchUp(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 16: return .NotGroupAdmin(
+        case 17: return .NotGroupAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .AdminCannotSelfRemove(
+        case 18: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 18: return .LeaveAlreadyRequested(
+        case 19: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 19: return .WouldRemoveLastAdmin(
+        case 20: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 20: return .DisbandingUnsupportedMembers(
+        case 21: return .DisbandingUnsupportedMembers(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdsHex: try FfiConverterSequenceString.read(from: &buf)
             )
-        case 21: return .DisbandingNotEnabled(
+        case 22: return .DisbandingNotEnabled(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .GroupDisbanding(
+        case 23: return .GroupDisbanding(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 23: return .MemberNotInGroup(
+        case 24: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 24: return .AlreadyAdmin(
+        case 25: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 25: return .NotAdmin(
+        case 26: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 26: return .StorageBusy(
+        case 27: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .SecretNotFound(
+        case 28: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .KeystoreUnavailable(
+        case 29: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .EmptyPassphrase
-        case 30: return .EncryptionFailed(
+        case 30: return .EmptyPassphrase
+        case 31: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 31: return .Io(
+        case 32: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 32: return .ExternalSignerUnavailable(
+        case 33: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 33: return .ExternalSignerMismatch
-        case 34: return .ExternalSignerRejected
-        case 35: return .Runtime(
+        case 34: return .ExternalSignerMismatch
+        case 35: return .ExternalSignerRejected
+        case 36: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -19418,113 +19428,117 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(13))
 
 
-        case .RuntimeStopping:
+        case .RuntimeBusy:
             writeInt(&buf, Int32(14))
 
 
-        case let .AccountCatchUp(details):
+        case .RuntimeStopping:
             writeInt(&buf, Int32(15))
+
+
+        case let .AccountCatchUp(details):
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .NotGroupAdmin(groupIdHex):
-            writeInt(&buf, Int32(16))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(17))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .LeaveAlreadyRequested(groupIdHex):
+        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(18))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .WouldRemoveLastAdmin(groupIdHex):
+        case let .LeaveAlreadyRequested(groupIdHex):
             writeInt(&buf, Int32(19))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+        case let .WouldRemoveLastAdmin(groupIdHex):
             writeInt(&buf, Int32(20))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterSequenceString.write(memberIdsHex, into: &buf)
 
 
         case let .DisbandingNotEnabled(groupIdHex):
-            writeInt(&buf, Int32(21))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(22))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(23))
             FfiConverterString.write(groupIdHex, into: &buf)
-            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .AlreadyAdmin(groupIdHex,memberIdHex):
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(24))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .NotAdmin(groupIdHex,memberIdHex):
+        case let .AlreadyAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(25))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageBusy(details):
+        case let .NotAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(26))
-            FfiConverterString.write(details, into: &buf)
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .SecretNotFound(details):
+        case let .StorageBusy(details):
             writeInt(&buf, Int32(27))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .KeystoreUnavailable(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(details, into: &buf)
 
 
-        case .EmptyPassphrase:
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(29))
-
-
-        case let .EncryptionFailed(details):
-            writeInt(&buf, Int32(30))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(30))
+
+
+        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(31))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .Io(details):
             writeInt(&buf, Int32(32))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(33))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(33))
-
-
-        case .ExternalSignerRejected:
             writeInt(&buf, Int32(34))
 
 
-        case let .Runtime(details):
+        case .ExternalSignerRejected:
             writeInt(&buf, Int32(35))
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(36))
             FfiConverterString.write(details, into: &buf)
 
         }
@@ -23646,7 +23660,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_usersearchsubscription_next_update() != 9602) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_constructor_marmot_new() != 56105) {
+    if (uniffi_marmot_uniffi_checksum_constructor_marmot_new() != 53434) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_constructor_marmot_new_with_cursor_persistence() != 18903) {

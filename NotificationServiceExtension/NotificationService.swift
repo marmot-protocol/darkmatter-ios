@@ -1,17 +1,17 @@
 import Foundation
 import MarmotKit
+import OSLog
 import UserNotifications
 
 @MainActor
 final class NotificationService: UNNotificationServiceExtension {
-    private var contentHandler: ((UNNotificationContent) -> Void)?
+    private let delivery = OneShotNotificationDelivery()
     private var bestAttemptContent: UNMutableNotificationContent?
     /// Communication-intent copy of the primary content. `updating(from:)`
     /// returns a new immutable content, so it rides in its own slot and
     /// `finish` prefers it unless the timeout fallback rewrote the original.
     private var decoratedContent: UNNotificationContent?
     private var collectionTask: Task<Void, Never>?
-    private var expirationTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
     private var avatarFetchTask: Task<[String: Data], Never>?
     private var activeMarmot: Marmot?
@@ -19,12 +19,16 @@ final class NotificationService: UNNotificationServiceExtension {
     private var applicationBadgeCount: Int?
     private var didApplyRenderDecision = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
+    private static let runtimeOwnershipLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios.NotificationService",
+        category: "runtime-ownership"
+    )
 
     override func didReceive(
         _ request: UNNotificationRequest,
         withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void
     ) {
-        self.contentHandler = contentHandler
+        delivery.reset(handler: contentHandler)
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         activeMarmot = nil
         activeMarmotNeedsShutdown = false
@@ -45,26 +49,15 @@ final class NotificationService: UNNotificationServiceExtension {
         // with whatever avatars have resolved instead of waiting out the
         // remaining fetch deadlines.
         avatarFetchTask?.cancel()
-        let additionalPresentationTask = additionalPresentationTask
-        guard let marmot = takeActiveMarmotForShutdown() else {
-            if let additionalPresentationTask {
-                expirationTask = Task.detached { [weak self] in
-                    await additionalPresentationTask.value
-                    await self?.finish(applyingFallbackForTimeout: true)
-                }
-            } else {
-                finish(applyingFallbackForTimeout: true)
-            }
-            return
-        }
-        expirationTask = Task.detached { [weak self] in
-            let shutdownTask = Task.detached {
+        if let marmot = takeActiveMarmotForShutdown() {
+            // The content handler has an iOS-owned deadline. Deliver immediately;
+            // shutdown continues independently and releases its final handle when
+            // Rust returns.
+            Task.detached {
                 await marmot.shutdown()
             }
-            await additionalPresentationTask?.value
-            await self?.finish(applyingFallbackForTimeout: true)
-            await shutdownTask.value
         }
+        finish(applyingFallbackForTimeout: true)
     }
 
     private func collectAndDecorateNotification() async {
@@ -84,6 +77,13 @@ final class NotificationService: UNNotificationServiceExtension {
             )
             activeMarmot = marmot
             activeMarmotNeedsShutdown = true
+            if Task.isCancelled {
+                if let marmot = takeActiveMarmotForShutdown(marmot) {
+                    await marmot.shutdown()
+                }
+                finish(applyingFallbackForTimeout: true)
+                return
+            }
             do {
                 try await marmot.start()
                 guard activeMarmot === marmot else { return }
@@ -180,6 +180,13 @@ final class NotificationService: UNNotificationServiceExtension {
             if let marmot = takeActiveMarmotForShutdown(marmot) {
                 await marmot.shutdown()
             }
+        } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
+            Self.runtimeOwnershipLog.info(
+                "contention_fallback operation=nse attempt=1"
+            )
+            applyFallback(to: content)
+            finish()
+            return
         } catch {
             // Keep the provider payload generic when collection fails. The main
             // app will catch up when it next starts or receives a local event.
@@ -326,7 +333,7 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     private func finish(applyingFallbackForTimeout: Bool = false) {
-        guard let contentHandler, let bestAttemptContent else { return }
+        guard let bestAttemptContent else { return }
         var deliverable: UNNotificationContent = bestAttemptContent
         if NotificationServiceTimeoutPolicy.shouldApplyTimeoutFallback(
             applyingFallbackForTimeout: applyingFallbackForTimeout,
@@ -336,14 +343,13 @@ final class NotificationService: UNNotificationServiceExtension {
         } else if let decoratedContent {
             deliverable = decoratedContent
         }
-        self.contentHandler = nil
         self.bestAttemptContent = nil
         self.collectionTask = nil
-        self.expirationTask = nil
         self.additionalPresentationTask = nil
+        self.avatarFetchTask = nil
         self.applicationBadgeCount = nil
         self.didApplyRenderDecision = false
         self.decoratedContent = nil
-        contentHandler(deliverable)
+        delivery.deliver(deliverable)
     }
 }

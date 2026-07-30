@@ -6,17 +6,58 @@ import MarmotKit
 /// Runtime handle for one notification action: either the live foreground
 /// client (durable) or a lease-private frozen runtime built while the app's
 /// durable runtime stays suspended.
-struct NotificationActionRuntimeLease {
-    let client: MarmotClient
+final class NotificationActionRuntimeLease {
+    private var retainedClient: MarmotClient?
+    let clientIdentity: ObjectIdentifier
     /// True when the lease owns a private ephemeral frozen runtime. It is
     /// never the app's client slot and must be shut down when the action
     /// completes; foreground never adopts it.
     let ownsEphemeralRuntime: Bool
+
+    init(client: MarmotClient, ownsEphemeralRuntime: Bool) {
+        retainedClient = client
+        clientIdentity = ObjectIdentifier(client)
+        self.ownsEphemeralRuntime = ownsEphemeralRuntime
+    }
+
+    var client: MarmotClient {
+        guard let retainedClient else {
+            preconditionFailure("Notification action runtime lease already released")
+        }
+        return retainedClient
+    }
+
+    fileprivate func takeClientForRelease() -> MarmotClient? {
+        defer { retainedClient = nil }
+        return retainedClient
+    }
 }
 
 enum NotificationActionError: Error {
     case runtimeUnavailable
     case markReadFailed
+}
+
+enum RuntimeOwnershipContentionError: LocalizedError {
+    case retryWindowExhausted
+
+    var errorDescription: String? {
+        "White Noise is still finishing another secure background operation. Please try again."
+    }
+}
+
+struct RuntimeConstructionRetryPolicy: Sendable {
+    let delays: [Duration]
+
+    nonisolated static let foreground = RuntimeConstructionRetryPolicy(
+        delays: [
+            .milliseconds(75),
+            .milliseconds(150),
+            .milliseconds(300),
+            .milliseconds(600),
+            .milliseconds(1_200),
+        ]
+    )
 }
 
 enum ForegroundRuntimeMutationError: LocalizedError {
@@ -54,15 +95,26 @@ struct ForegroundRuntimeMutationLease {
 @Observable
 @MainActor
 final class RuntimeLifecycle {
+    typealias RuntimeClientFactory = @Sendable (
+        _ rootPath: String,
+        _ relayUrls: [String],
+        _ cursorPersistence: CursorPersistenceFfi,
+        _ telemetryConfig: TelemetryBuildConfig
+    ) async throws -> MarmotClient
+    typealias RetrySleeper = @Sendable (_ delay: Duration) async throws -> Void
+
     /// The live FFI runtime. Released (`nil`) while the app is suspended in the
     /// background so its SQLite storage in the shared App Group container is
     /// closed and its file lock freed — otherwise iOS terminates the app at
     /// suspension with `0xdead10cc` ("held a file lock in a shared container").
     /// Rebuilt on foreground in `resumeAfterForegroundActivation`.
     @ObservationIgnored private(set) var client: MarmotClient?
-    @ObservationIgnored private let runtimeRootPath: String
+    @ObservationIgnored private let runtimeRootPath: String?
     @ObservationIgnored private let runtimeRelayUrls: [String]
     @ObservationIgnored private let suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig
+    @ObservationIgnored private let runtimeClientFactory: RuntimeClientFactory
+    @ObservationIgnored private let retrySleeper: RetrySleeper
+    @ObservationIgnored private let constructionRetryPolicy: RuntimeConstructionRetryPolicy
 
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTaskID = UUID()
@@ -109,15 +161,41 @@ final class RuntimeLifecycle {
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
         category: "cold-bootstrap"
     )
+    private static let runtimeOwnershipLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "runtime-ownership"
+    )
 
     init(
-        client: MarmotClient,
-        suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig
+        client: MarmotClient?,
+        suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig,
+        runtimeClientFactory: @escaping RuntimeClientFactory = RuntimeLifecycle.defaultRuntimeClientFactory,
+        retrySleeper: @escaping RetrySleeper = { delay in try await Task.sleep(for: delay) },
+        constructionRetryPolicy: RuntimeConstructionRetryPolicy = .foreground
     ) {
         self.client = client
-        self.runtimeRootPath = client.rootPath
-        self.runtimeRelayUrls = client.relayUrls
+        self.runtimeRootPath = client?.rootPath
+        self.runtimeRelayUrls = client?.relayUrls ?? MarmotClient.seedRelays
         self.suspendedRuntimeTelemetryBuildConfig = suspendedRuntimeTelemetryBuildConfig
+        self.runtimeClientFactory = runtimeClientFactory
+        self.retrySleeper = retrySleeper
+        self.constructionRetryPolicy = constructionRetryPolicy
+    }
+
+    nonisolated static func defaultRuntimeClientFactory(
+        rootPath: String,
+        relayUrls: [String],
+        cursorPersistence: CursorPersistenceFfi,
+        telemetryConfig: TelemetryBuildConfig
+    ) async throws -> MarmotClient {
+        try await Task.detached(priority: .userInitiated) {
+            try MarmotClient(
+                rootPath: rootPath,
+                relayUrls: relayUrls,
+                cursorPersistence: cursorPersistence,
+                telemetryConfig: telemetryConfig
+            )
+        }.value
     }
 
     func configure(appState: AppState) {
@@ -176,24 +254,64 @@ final class RuntimeLifecycle {
     /// Build a fresh runtime from the captured on-disk root and relay set. Used
     /// to restore the runtime after a background suspension released it.
     private func makeRuntime(
-        cursorPersistence: CursorPersistenceFfi = .advance
+        cursorPersistence: CursorPersistenceFfi = .advance,
+        retryOnContention: Bool,
+        stillOwnsWork: () -> Bool
     ) async throws -> MarmotClient {
-        let rootPath = runtimeRootPath
+        let rootPath = try runtimeRootPath ?? AppContainerConfig.productionMarmotRoot().path
         let relayUrls = runtimeRelayUrls
         let telemetryConfig = TelemetryBuildConfig.current()
-        return try await Task.detached(priority: .userInitiated) {
-            try MarmotClient(
-                rootPath: rootPath,
-                relayUrls: relayUrls,
-                cursorPersistence: cursorPersistence,
-                telemetryConfig: telemetryConfig
-            )
-        }.value
+        let startedAt = ContinuousClock.now
+        var attempt = 1
+
+        while true {
+            try Task.checkCancellation()
+            guard stillOwnsWork() else { throw CancellationError() }
+            do {
+                return try await runtimeClientFactory(
+                    rootPath,
+                    relayUrls,
+                    cursorPersistence,
+                    telemetryConfig
+                )
+            } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
+                guard retryOnContention,
+                      stillOwnsWork(),
+                      attempt <= constructionRetryPolicy.delays.count
+                else {
+                    if retryOnContention, stillOwnsWork() {
+                        Self.runtimeOwnershipLog.error(
+                            """
+                            contention_exhausted operation=foreground \
+                            attempts=\(attempt, privacy: .public) \
+                            elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)
+                            """
+                        )
+                        throw RuntimeOwnershipContentionError.retryWindowExhausted
+                    }
+                    throw error
+                }
+
+                Self.runtimeOwnershipLog.info(
+                    """
+                    contention_retry operation=foreground \
+                    attempt=\(attempt, privacy: .public) \
+                    elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)
+                    """
+                )
+                let delay = constructionRetryPolicy.delays[attempt - 1]
+                attempt += 1
+                try await retrySleeper(delay)
+            }
+        }
     }
 
-    private func startCurrentRuntime() async throws {
+    private func startCurrentRuntime(stillOwnsWork: () -> Bool) async throws {
         if client == nil {
-            client = try await makeRuntime()
+            client = try await makeRuntime(
+                retryOnContention: true,
+                stillOwnsWork: stillOwnsWork
+            )
         }
         guard let client else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
         try await client.startRuntime()
@@ -213,7 +331,7 @@ final class RuntimeLifecycle {
         bootstrapTaskID = id
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.performBootstrap()
+            await self.performBootstrap(id: id)
         }
         bootstrapTask = task
         resumeBootstrapRegistrationWaiters()
@@ -222,14 +340,18 @@ final class RuntimeLifecycle {
     }
 
     @MainActor
-    private func performBootstrap() async {
+    private func performBootstrap(id: UUID) async {
         guard let appState else { return }
         let bootstrapStartedAt = ContinuousClock.now
         var runtimeStartMilliseconds = 0.0
         var accountLoadMilliseconds = 0.0
         do {
             let runtimeStartStartedAt = ContinuousClock.now
-            try await startCurrentRuntime()
+            try await startCurrentRuntime {
+                self.bootstrapTaskID == id
+                    && !Task.isCancelled
+                    && (!self.sceneHasReportedPhase || self.isAppSceneActive)
+            }
             runtimeStartMilliseconds = Self.elapsedMilliseconds(since: runtimeStartStartedAt)
 #if DEBUG
             if let afterBootstrapRuntimeStartForTesting {
@@ -397,10 +519,10 @@ final class RuntimeLifecycle {
     }
 
     private func shutdownAndReleaseCurrentClient() async {
-        if let client {
-            await client.marmot.shutdown()
-            self.client = nil
-        }
+        let clientToRelease = client
+        client = nil
+        guard let clientToRelease else { return }
+        await clientToRelease.marmot.shutdown()
     }
 
     private func clearCompletedBootstrapTask(id: UUID) {
@@ -530,7 +652,10 @@ final class RuntimeLifecycle {
         if isRestartingAfterSuspension {
             do {
                 let constructionStartedAt = ContinuousClock.now
-                let restored = try await makeRuntime()
+                let restored = try await makeRuntime(
+                    retryOnContention: true,
+                    stillOwnsWork: { self.ownsForegroundActivation(id: activationID) }
+                )
                 constructionMilliseconds = Self.elapsedMilliseconds(since: constructionStartedAt)
 #if DEBUG
                 if let afterForegroundRuntimeCreatedForTesting {
@@ -684,7 +809,21 @@ final class RuntimeLifecycle {
         }
         let ephemeral: MarmotClient
         do {
-            ephemeral = try await makeRuntime(cursorPersistence: .frozen)
+            ephemeral = try await makeRuntime(
+                cursorPersistence: .frozen,
+                retryOnContention: false,
+                stillOwnsWork: {
+                    self.phaseOwnsLiveRuntime
+                        && self.runtimeSuspendedForBackground
+                        && !Task.isCancelled
+                }
+            )
+        } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
+            finishRuntimeSuspensionWait()
+            Self.runtimeOwnershipLog.info(
+                "contention_fallback operation=notification_action attempt=1"
+            )
+            throw NotificationActionError.runtimeUnavailable
         } catch {
             finishRuntimeSuspensionWait()
             throw error
@@ -709,9 +848,7 @@ final class RuntimeLifecycle {
     /// arrived mid-action then continues through the normal suspend / resume
     /// path after re-checking the authoritative scene flag.
     func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
-        if lease.ownsEphemeralRuntime {
-            await lease.client.marmot.shutdown()
-        }
+        await releaseNotificationActionClient(lease)
         finishRuntimeSuspensionWait()
 
         // A live-client lease on a cold UI-less launch rides the runtime that
@@ -721,6 +858,15 @@ final class RuntimeLifecycle {
             await startRuntimeSuspension().value
         } else if lease.ownsEphemeralRuntime, isAppSceneActive {
             startForegroundActivation()
+        }
+    }
+
+    private func releaseNotificationActionClient(
+        _ lease: NotificationActionRuntimeLease
+    ) async {
+        guard let clientToRelease = lease.takeClientForRelease() else { return }
+        if lease.ownsEphemeralRuntime {
+            await clientToRelease.marmot.shutdown()
         }
     }
 

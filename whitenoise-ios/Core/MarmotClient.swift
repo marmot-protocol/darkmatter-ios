@@ -35,10 +35,10 @@ nonisolated final class MarmotClient: Sendable {
     }
 
     /// Designated init that lets callers override the on-disk root, relay set,
-    /// and cursor policy. The app's durable runtime goes through the no-arg
-    /// convenience init (`.advance`); short-lived background passes construct
-    /// with `.frozen` so they cannot ratchet the durable transport-cursor
-    /// floor. Throwing because the keychain-backed account store can fail to
+    /// and cursor policy. The app's durable runtime is constructed by the
+    /// lifecycle coordinator with `.advance`; short-lived background passes
+    /// use `.frozen` so they cannot ratchet the durable transport-cursor floor.
+    /// Throwing because the keychain-backed account store can fail to
     /// initialize (account secrets are stored in the Keychain, not on disk).
     convenience init(
         rootPath: String,

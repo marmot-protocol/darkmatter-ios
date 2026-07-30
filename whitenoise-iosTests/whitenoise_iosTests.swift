@@ -60,14 +60,23 @@ struct AppStateBootstrapTests {
 
     @Test func coldBootstrapBecomesReadyBeforeUnreadSummaryRefreshCompletes() async throws {
         resetPersistedActiveAccountRef()
-        let originalClient = try MarmotClient.testClient()
-        let original = AppState(client: originalClient, notifications: deniedNotifications())
+        var originalClient: MarmotClient? = try MarmotClient.testClient()
+        let originalRootPath = originalClient!.rootPath
+        let originalRelayUrls = originalClient!.relayUrls
+        let original = AppState(
+            client: originalClient!,
+            notifications: deniedNotifications()
+        )
         await original.bootstrap()
         _ = try await original.createIdentity()
         await stopReadyRuntime(original)
+        originalClient = nil
 
         let relaunched = AppState(
-            client: try originalClient.freshRuntime(),
+            client: try MarmotClient(
+                rootPath: originalRootPath,
+                relayUrls: originalRelayUrls
+            ),
             notifications: deniedNotifications()
         )
         relaunched.setAppSceneActive(true)
@@ -1013,9 +1022,13 @@ struct AppStateBootstrapTests {
         // Seed an account on disk, then build a fresh AppState so the next
         // bootstrap starts from `.bootstrapping` and resolves to `.ready`.
         let seeded = try await readyAppStateWithCreatedIdentities()
-        let seedClient = try #require(seeded.appState.client)
+        let seedRootPath = try #require(seeded.appState.client).rootPath
+        let seedRelayUrls = try #require(seeded.appState.client).relayUrls
         await stopReadyRuntime(seeded.appState)
-        let appState = AppState(client: try seedClient.freshRuntime(), notifications: deniedNotifications())
+        let appState = AppState(
+            client: try MarmotClient(rootPath: seedRootPath, relayUrls: seedRelayUrls),
+            notifications: deniedNotifications()
+        )
 
         let suspension = appState.startRuntimeSuspension()
         var suspensionCompleted = false
@@ -1105,7 +1118,7 @@ struct AppStateBootstrapTests {
         await appState.startForegroundActivation().value
 
         #expect(appState.client != nil)
-        #expect(appState.client !== lease.client)
+        #expect(appState.client?.cursorPersistence == .advance)
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.runtimeGeneration == generation + 1)
 
@@ -1143,7 +1156,7 @@ struct AppStateBootstrapTests {
         #expect(appState.isAppSceneActive)
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.client != nil)
-        #expect(appState.client !== lease.client)
+        #expect(appState.client?.cursorPersistence == .advance)
 
         await stopReadyRuntime(appState)
     }
@@ -1165,7 +1178,7 @@ struct AppStateBootstrapTests {
 
         await appState.runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
 
-        #expect(appState.client === lease.client)
+        #expect(appState.client.map(ObjectIdentifier.init) == lease.clientIdentity)
         #expect(appState.phase == .ready)
 
         await stopReadyRuntime(appState)
@@ -1963,8 +1976,13 @@ struct AppStateBootstrapTests {
         // UserDefaults and bootstrap points at an account that was removed
         // from local Marmot storage.
         UserDefaults.standard.removeObject(forKey: "marmot.activeAccountRef")
-        let client = try MarmotClient.testClient()
-        let appState = AppState(client: client, notifications: deniedNotifications())
+        var client: MarmotClient? = try MarmotClient.testClient()
+        let rootPath = client!.rootPath
+        let relayUrls = client!.relayUrls
+        let appState = AppState(
+            client: client!,
+            notifications: deniedNotifications()
+        )
         await appState.bootstrap()
         let only = try await appState.createIdentity()
         appState.activeAccountRef = only.label
@@ -1973,7 +1991,12 @@ struct AppStateBootstrapTests {
         await appState.signOut()
 
         #expect(UserDefaults.standard.string(forKey: "marmot.activeAccountRef") == nil)
-        let reborn = AppState(client: try client.freshRuntime(), notifications: deniedNotifications())
+        await appState.startRuntimeSuspension().value
+        client = nil
+        let reborn = AppState(
+            client: try MarmotClient(rootPath: rootPath, relayUrls: relayUrls),
+            notifications: deniedNotifications()
+        )
         #expect(reborn.activeAccountRef == nil)
     }
 
