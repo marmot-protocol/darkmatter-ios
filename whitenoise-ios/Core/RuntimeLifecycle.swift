@@ -332,17 +332,20 @@ final class RuntimeLifecycle {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.performBootstrap(id: id)
+            self.clearCompletedBootstrapTask(id: id)
         }
         bootstrapTask = task
         resumeBootstrapRegistrationWaiters()
         await task.value
-        clearCompletedBootstrapTask(id: id)
     }
 
     @MainActor
     private func performBootstrap(id: UUID) async {
         guard let appState else { return }
         let bootstrapStartedAt = ContinuousClock.now
+        let beganWhileInactive = appState.sceneHasReportedPhase
+            && !appState.isAppSceneActive
+            && !bootstrapNeedsBackgroundSuspensionRecheck
         var runtimeStartMilliseconds = 0.0
         var accountLoadMilliseconds = 0.0
         do {
@@ -350,7 +353,8 @@ final class RuntimeLifecycle {
             try await startCurrentRuntime {
                 self.bootstrapTaskID == id
                     && !Task.isCancelled
-                    && (!self.sceneHasReportedPhase || self.isAppSceneActive)
+                    && !self.bootstrapNeedsBackgroundSuspensionRecheck
+                    && (!self.sceneHasReportedPhase || self.isAppSceneActive || beganWhileInactive)
             }
             runtimeStartMilliseconds = Self.elapsedMilliseconds(since: runtimeStartStartedAt)
 #if DEBUG
@@ -423,6 +427,11 @@ final class RuntimeLifecycle {
                 appState.scheduleAccountUnreadSummaryRefresh()
                 appState.startReadyForegroundMaintenance()
             }
+        } catch is CancellationError {
+            // Backgrounding or losing bootstrap ownership is expected
+            // lifecycle control flow. Leave the phase bootstrapping so the
+            // next active transition can build a fresh runtime.
+            await releaseRuntimeAfterStartupFailure()
         } catch {
             if !(error is CancellationError),
                appState.sceneHasReportedPhase,
@@ -545,6 +554,14 @@ final class RuntimeLifecycle {
         appState?.isAppSceneActive = true
         appState?.sceneHasReportedPhase = true
         resumeBootstrapRegistrationWaiters()
+        if appState?.phase == .bootstrapping {
+            return Task { [weak self] in
+                guard let self else { return }
+                await bootstrapTask?.value
+                guard appState?.phase == .bootstrapping else { return }
+                await bootstrap()
+            }
+        }
         if let foregroundActivationTask {
             return foregroundActivationTask
         }

@@ -510,6 +510,8 @@ enum MarkdownMessageBuilder {
                 dest = url.lowercased().hasPrefix("mailto:") ? url : "mailto:\(url)"
             case .uri:
                 dest = url
+            case .www:
+                dest = "https://\(url)"
             }
             nested.link = allowedLinkURL(dest)
         }

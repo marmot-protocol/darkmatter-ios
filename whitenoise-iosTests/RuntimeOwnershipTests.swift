@@ -84,6 +84,32 @@ private actor RuntimeRetryGate {
 @MainActor
 @Suite(.serialized)
 struct RuntimeOwnershipTests {
+    @Test func inactiveLaunchBootstrapsWithoutTreatingInactiveAsCancellation() async {
+        let factory = ScriptedRuntimeFactory(busyFailures: 0)
+        let appState = AppState(
+            client: nil,
+            notifications: runtimeOwnershipDeniedNotifications(),
+            runtimeClientFactory: { rootPath, relayUrls, cursorPersistence, telemetryConfig in
+                try await factory.make(
+                    rootPath: rootPath,
+                    relayUrls: relayUrls,
+                    cursorPersistence: cursorPersistence,
+                    telemetryConfig: telemetryConfig
+                )
+            }
+        )
+        appState.setAppSceneActive(false)
+
+        await appState.bootstrap()
+
+        #expect(appState.phase == .onboarding)
+        #expect(appState.client != nil)
+        let inactiveSnapshot = await factory.snapshot()
+        #expect(inactiveSnapshot.attempts == 1)
+
+        await appState.startRuntimeSuspension().value
+    }
+
     @Test func bootstrapRetriesRuntimeBusySeriallyAndInstallsOneClient() async {
         let factory = ScriptedRuntimeFactory(busyFailures: 2)
         let appState = AppState(
@@ -146,6 +172,7 @@ struct RuntimeOwnershipTests {
         let snapshot = await factory.snapshot()
         #expect(snapshot.attempts == 1)
         #expect(appState.client == nil)
+        #expect(appState.phase == .bootstrapping)
     }
 
     @Test func exhaustedContentionIsRecoverableAndASecondBootstrapCanSucceed() async {

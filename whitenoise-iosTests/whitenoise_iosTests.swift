@@ -3482,6 +3482,25 @@ struct DiagnosticsPresentationTests {
         #expect(text.contains(IdentityFormatter.short(recipient)))
     }
 
+    @Test func diagnosticTextLabelsEpochStallEscalation() {
+        let groupId = hex("cc")
+        let event = MarmotEventFfi.epochStallEscalated(
+            accountIdHex: hex("aa"),
+            accountLabel: "alice",
+            groupIdHex: groupId,
+            stalledEpoch: 12,
+            arms: 3
+        )
+
+        let text = DiagnosticsView.diagnosticText(for: event)
+
+        #expect(text.contains("[alice]"))
+        #expect(text.contains(IdentityFormatter.short(groupId)))
+        #expect(text.contains("epoch 12"))
+        #expect(text.contains("3 recovery attempts"))
+        #expect(text.contains("re-sync recommended"))
+    }
+
     @Test func diagnosticTextLabelsGroupStateInvalidated() {
         let groupId = hex("cc")
         let event = MarmotEventFfi.groupEvent(
@@ -3499,6 +3518,27 @@ struct DiagnosticsPresentationTests {
 
         #expect(text.contains("[alice] group event state invalidated"))
         #expect(text.contains(IdentityFormatter.short(groupId)))
+    }
+
+    @Test func diagnosticTextLabelsTransportObjectResourceRefusal() {
+        let groupId = hex("cc")
+        let messageId = hex("dd")
+        let event = MarmotEventFfi.groupEvent(
+            accountIdHex: hex("aa"),
+            accountLabel: "alice",
+            groupIdHex: groupId,
+            event: .transportObjectResourceRefused(
+                messageIdHex: messageId,
+                resource: "deferred_peel_rows"
+            )
+        )
+
+        let text = DiagnosticsView.diagnosticText(for: event)
+
+        #expect(text.contains("[alice] group event resource refused"))
+        #expect(text.contains(IdentityFormatter.short(groupId)))
+        #expect(!text.contains(messageId))
+        #expect(!text.contains("deferred_peel_rows"))
     }
 }
 

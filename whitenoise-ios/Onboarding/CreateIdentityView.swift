@@ -87,7 +87,11 @@ struct CreateIdentityView: View {
             VStack(spacing: 8) {
                 Button {
                     Task {
-                        await model.submit(using: appState, dismiss: { dismiss() })
+                        if model.phase == .creationFailed {
+                            await model.prepare(using: appState)
+                        } else {
+                            await model.submit(using: appState, dismiss: { dismiss() })
+                        }
                     }
                 } label: {
                     HStack {
@@ -124,6 +128,9 @@ struct CreateIdentityView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(!model.allowsBackNavigation)
         .interactiveDismissDisabled(!model.allowsBackNavigation)
+        .task {
+            await model.prepare(using: appState)
+        }
         .alert("Choose Avatar", isPresented: $showAvatarDisclosure) {
             Button("Continue") {
                 showPhotoPicker = true

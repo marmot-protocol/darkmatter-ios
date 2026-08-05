@@ -65,6 +65,11 @@ echo "==> Stamping MARMOT_VERSION"
 MDK_SHA="$(git -C "$MDK_DIR" rev-parse --short HEAD)"
 MDK_BRANCH="$(git -C "$MDK_DIR" rev-parse --abbrev-ref HEAD)"
 MDK_TAG="$(git -C "$MDK_DIR" tag --points-at HEAD 2>/dev/null | head -1 || true)"
+UNIFFI_VERSION="$(sed -nE 's/^uniffi = \{ version = "([^"]+)".*/\1/p' "$MDK_DIR/crates/marmot-uniffi/Cargo.toml" | head -1)"
+if [[ -z "$UNIFFI_VERSION" ]]; then
+    echo "error: could not determine UniFFI version from marmot-uniffi/Cargo.toml" >&2
+    exit 1
+fi
 MDK_DIRTY=""
 if ! git -C "$MDK_DIR" diff --quiet || ! git -C "$MDK_DIR" diff --cached --quiet; then
     MDK_DIRTY="-dirty"
@@ -80,7 +85,7 @@ mdk-sha: ${MDK_SHA}${MDK_DIRTY}
 mdk-branch: ${MDK_BRANCH}
 mdk-tag: ${MDK_TAG:-}
 built-at: ${BUILT_AT}
-uniffi-version: 0.28.3
+uniffi-version: ${UNIFFI_VERSION}
 features: ${FEATURES}
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
 ios-deployment-target: 18.0
@@ -106,7 +111,7 @@ public enum MarmotKitVersion {
     public static let mdkSHA = "${MDK_SHA}${MDK_DIRTY}"
     public static let mdkTag = "${MDK_TAG:-}"
     public static let builtAt = "${BUILT_AT}"
-    public static let uniffiVersion = "0.28.3"
+    public static let uniffiVersion = "${UNIFFI_VERSION}"
     public static let features = "${FEATURES}"
 }
 EOF
