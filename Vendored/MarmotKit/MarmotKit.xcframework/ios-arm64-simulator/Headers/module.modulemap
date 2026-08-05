@@ -1,4 +1,7 @@
 module marmot_uniffiFFI {
     header "marmot_uniffiFFI.h"
     export *
+    use "Darwin"
+    use "_Builtin_stdbool"
+    use "_Builtin_stdint"
 }

@@ -91,6 +91,8 @@ struct DiagnosticsView: View {
             return "[\(label)] agent stream activity"
         case .welcomeDeliveryPending(_, let label, let groupIdHex, let messageIdHex, let recipientHex):
             return "[\(label)] welcome pending group \(IdentityFormatter.short(groupIdHex)) message \(IdentityFormatter.short(messageIdHex)) recipient \(IdentityFormatter.short(recipientHex))"
+        case .epochStallEscalated(_, let label, let groupIdHex, let stalledEpoch, let arms):
+            return "[\(label)] group \(IdentityFormatter.short(groupIdHex)) cannot catch up at epoch \(stalledEpoch) after \(arms) recovery attempts; re-sync recommended"
         }
     }
 
@@ -104,6 +106,8 @@ struct DiagnosticsView: View {
             return "created"
         case .groupJoined:
             return "joined"
+        case .transportObjectResourceRefused:
+            return "resource refused"
         case .messageReceived:
             return "message"
         case .appMessageInvalidated:

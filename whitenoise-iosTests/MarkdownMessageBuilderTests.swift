@@ -141,6 +141,12 @@ struct MarkdownMessageBuilderTests {
         ])]))
         #expect(String(email.characters) == "a@b.com")
         #expect(try #require(email.runs.first).link == URL(string: "mailto:a@b.com"))
+
+        let www = try firstParagraph(doc([para([
+            .autolink(url: "www.example.com/path", kind: .www, classification: .web)
+        ])]))
+        #expect(String(www.characters) == "www.example.com/path")
+        #expect(try #require(www.runs.first).link == URL(string: "https://www.example.com/path"))
     }
 
     @Test func nostrProfileEntitiesLinkAndOthersStayInert() throws {

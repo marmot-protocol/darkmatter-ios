@@ -11,15 +11,31 @@ struct CreateIdentityOnboardingTests {
         let model = CreateIdentityViewModel()
         var dismissed = false
 
+        await model.prepare(using: service)
+
+        #expect(model.displayName == "Engine Name")
+        #expect(model.phase == .editing)
         await model.submit(using: service) {
             dismissed = true
         }
 
         #expect(service.createCount == 1)
-        #expect(service.profileReadCount == 0)
+        #expect(service.profileReadCount == 1)
         #expect(service.publishCount == 0)
         #expect(service.completeCount == 1)
         #expect(dismissed)
+    }
+
+    @Test func preparationDoesNotOverwriteAnEnteredDisplayName() async {
+        let service = CreateIdentityServiceStub()
+        let model = CreateIdentityViewModel()
+        model.displayName = "Alice"
+
+        await model.prepare(using: service)
+
+        #expect(model.displayName == "Alice")
+        #expect(service.createCount == 1)
+        #expect(service.profileReadCount == 1)
     }
 
     @Test func metadataMergePreservesUneditedFieldsAndDefaultName() throws {

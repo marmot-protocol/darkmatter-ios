@@ -111,6 +111,7 @@ final class CreateIdentityViewModel {
     private(set) var createdIdentity: AccountSummaryFfi?
     private var existingProfile: UserProfileMetadataFfi?
     private var loadedExistingProfile = false
+    private var prefilledDisplayName: String?
     private var uploadedAvatarURL: String?
 
     var isSubmitting: Bool {
@@ -181,24 +182,37 @@ final class CreateIdentityViewModel {
         Haptics.error()
     }
 
+    /// Creates the identity and loads Marmot's generated profile before the
+    /// user starts editing. Marmot owns the pseudonym, so Swift reads it back
+    /// instead of maintaining a second copy of the name-generation rules.
+    func prepare(using service: CreateIdentityServicing) async {
+        guard !isBusy, !loadedExistingProfile else { return }
+
+        phase = .creating
+        do {
+            if createdIdentity == nil {
+                createdIdentity = try await service.createIdentityForProfileSetup()
+            }
+            guard let createdIdentity else { return }
+            try await loadExistingProfile(for: createdIdentity, using: service)
+            phase = .editing
+        } catch {
+            phase = .creationFailed
+            Haptics.error()
+        }
+    }
+
     func submit(
         using service: CreateIdentityServicing,
         dismiss: () -> Void
     ) async {
         guard !isBusy else { return }
 
-        if createdIdentity == nil {
-            phase = .creating
-            do {
-                createdIdentity = try await service.createIdentityForProfileSetup()
-            } catch {
-                phase = .creationFailed
-                Haptics.error()
-                return
-            }
+        if createdIdentity == nil || !loadedExistingProfile {
+            await prepare(using: service)
         }
 
-        guard let createdIdentity else { return }
+        guard loadedExistingProfile, let createdIdentity else { return }
         phase = .savingProfile
         do {
             try await savePendingProfile(for: createdIdentity, using: service)
@@ -228,8 +242,9 @@ final class CreateIdentityViewModel {
         for identity: AccountSummaryFfi,
         using service: CreateIdentityServicing
     ) async throws {
+        let draftDisplayName = editedDisplayName
         let needsProfileRead = OnboardingProfileMetadataDraft(
-            displayName: displayName,
+            displayName: draftDisplayName,
             about: about,
             uploadedPictureURL: uploadedAvatarURL
         ).hasEdits || avatarDraft != nil
@@ -250,7 +265,7 @@ final class CreateIdentityViewModel {
         }
 
         let draft = OnboardingProfileMetadataDraft(
-            displayName: displayName,
+            displayName: draftDisplayName,
             about: about,
             uploadedPictureURL: uploadedAvatarURL
         )
@@ -259,6 +274,31 @@ final class CreateIdentityViewModel {
             accountRef: identity.label,
             profile: profile
         )
+    }
+
+    private var editedDisplayName: String {
+        let normalized = ContentSanitizer.displayName(displayName)
+        return normalized == prefilledDisplayName ? "" : displayName
+    }
+
+    private func loadExistingProfile(
+        for identity: AccountSummaryFfi,
+        using service: CreateIdentityServicing
+    ) async throws {
+        guard !loadedExistingProfile else { return }
+
+        let profile = try await service.onboardingProfile(
+            accountIdHex: identity.accountIdHex
+        )
+        existingProfile = profile
+        loadedExistingProfile = true
+
+        guard ContentSanitizer.displayName(displayName) == nil else { return }
+        let generatedName = ContentSanitizer.displayName(profile?.displayName ?? "")
+            ?? ContentSanitizer.displayName(profile?.name ?? "")
+        guard let generatedName else { return }
+        displayName = generatedName
+        prefilledDisplayName = generatedName
     }
 }
 
