@@ -1,5 +1,6 @@
 import Testing
 import UIKit
+import MarmotKit
 @testable import whitenoise_ios
 
 /// #40 — the Import button must only enable for a complete nsec, not any string
@@ -45,6 +46,18 @@ struct ImportIdentityValidationTests {
         #expect(!model.beginImportIfIdle())
         #expect(model.isImporting)
         #expect(!model.identity.isEmpty)
+    }
+
+    @Test @MainActor func onlyAmbiguousPreJournalSetupRequestsExplicitRecovery() {
+        #expect(ImportIdentityViewModel.requiresIncompleteSetupRecovery(
+            MarmotKitError.AccountSetupRecoveryRequired
+        ))
+        #expect(!ImportIdentityViewModel.requiresIncompleteSetupRecovery(
+            MarmotKitError.AccountSetupRetryRequired
+        ))
+        #expect(!ImportIdentityViewModel.requiresIncompleteSetupRecovery(
+            MarmotKitError.AccountSetupKeyPackageRecoveryAvailable
+        ))
     }
 
     @Test func redactedImportErrorStripsSecretShapedTokens() {

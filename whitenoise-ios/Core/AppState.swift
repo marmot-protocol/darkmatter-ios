@@ -1183,6 +1183,42 @@ final class AppState {
         return summary
     }
 
+    /// Consent-gated compatibility recovery for imports stranded before MDK
+    /// persisted resumable account-setup state. The caller must explain the
+    /// possible orphaned KeyPackage before invoking this path.
+    @MainActor
+    @discardableResult
+    func recoverIncompleteIdentity(_ identity: String) async throws -> AccountSummaryFfi {
+        let lease = try await runtimeLifecycle.beginUserInitiatedForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
+        let relays = MarmotClient.seedRelays
+        let summary: AccountSummaryFfi
+        do {
+            summary = try await lease.client.marmot.loginRecoveringIncompleteSetup(
+                nsec: identity,
+                defaultRelays: relays,
+                bootstrapRelays: relays,
+                acknowledgePossibleKeyPackageOrphan: true
+            )
+        } catch let error as MarmotKitError {
+            switch error {
+            case .AccountSetupRetryRequired, .AccountSetupKeyPackageRecoveryAvailable:
+                // The account became safely resumable between the original
+                // failure and consent. Resume it without asking for the nsec
+                // again or resetting recoverable KeyPackage material.
+                summary = try await lease.client.marmot.login(
+                    identity: identity,
+                    defaultRelays: relays,
+                    bootstrapRelays: relays
+                )
+            default:
+                throw error
+            }
+        }
+        await activateNewIdentity(summary)
+        return summary
+    }
+
     @MainActor
     private func activateNewIdentity(_ summary: AccountSummaryFfi) async {
         cacheActivatedAccountSummaryIfNeeded(summary)

@@ -2108,6 +2108,14 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func loginExternalSigner(publicKey: String, signer: ExternalAccountSignerFfi, defaultRelays: [String], bootstrapRelays: [String]) async throws  -> AccountSummaryFfi
 
     /**
+     * Consent-gated one-call recovery for installations stranded before MDK
+     * had durable account-setup journals. This validates the same nsec,
+     * removes only the recognized ambiguous partial shape, preserves an
+     * existing account-id Keychain credential, and immediately retries login.
+     */
+    func loginRecoveringIncompleteSetup(nsec: String, defaultRelays: [String], bootstrapRelays: [String], acknowledgePossibleKeyPackageOrphan: Bool) async throws  -> AccountSummaryFfi
+
+    /**
      * Mark a kind-9 timeline message visible/read. Own kind-9 messages can
      * advance the marker too, which clears any earlier unread messages.
      */
@@ -2277,6 +2285,14 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * publish a fresh one.
      */
     func republishKeyPackage(accountRef: String) async throws  -> UInt64
+
+    /**
+     * Remove only the legacy ambiguous partial-account shape so a subsequent
+     * `login` with the same nsec can recreate it. The acknowledgement is
+     * required because old local state cannot prove that no KeyPackage was
+     * exposed before its stable slot was lost.
+     */
+    func resetIncompleteAccountSetup(nsec: String, acknowledgePossibleKeyPackageOrphan: Bool) async throws
 
     func resumeMaintenance(accountRef: String) async throws
 
@@ -3801,6 +3817,29 @@ open func loginExternalSigner(publicKey: String, signer: ExternalAccountSignerFf
 }
 
     /**
+     * Consent-gated one-call recovery for installations stranded before MDK
+     * had durable account-setup journals. This validates the same nsec,
+     * removes only the recognized ambiguous partial shape, preserves an
+     * existing account-id Keychain credential, and immediately retries login.
+     */
+open func loginRecoveringIncompleteSetup(nsec: String, defaultRelays: [String], bootstrapRelays: [String], acknowledgePossibleKeyPackageOrphan: Bool)async throws  -> AccountSummaryFfi  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_login_recovering_incomplete_setup(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(nsec),FfiConverterSequenceString.lower(defaultRelays),FfiConverterSequenceString.lower(bootstrapRelays),FfiConverterBool.lower(acknowledgePossibleKeyPackageOrphan)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAccountSummaryFfi_lift,
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
+}
+
+    /**
      * Mark a kind-9 timeline message visible/read. Own kind-9 messages can
      * advance the marker too, which clears any earlier unread messages.
      */
@@ -4339,6 +4378,29 @@ open func republishKeyPackage(accountRef: String)async throws  -> UInt64  {
             completeFunc: ffi_marmot_uniffi_rust_future_complete_u64,
             freeFunc: ffi_marmot_uniffi_rust_future_free_u64,
             liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
+}
+
+    /**
+     * Remove only the legacy ambiguous partial-account shape so a subsequent
+     * `login` with the same nsec can recreate it. The acknowledgement is
+     * required because old local state cannot prove that no KeyPackage was
+     * exposed before its stable slot was lost.
+     */
+open func resetIncompleteAccountSetup(nsec: String, acknowledgePossibleKeyPackageOrphan: Bool)async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_reset_incomplete_account_setup(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(nsec),FfiConverterBool.lower(acknowledgePossibleKeyPackageOrphan)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_void,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_void,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_void,
+            liftFunc: { $0 },
             errorHandler: FfiConverterTypeMarmotKitError_lift
         )
 }
@@ -19779,6 +19841,15 @@ public enum MarmotKitError: Swift.Error {
      * account's in-memory engine session. Retry only after that owner closes.
      */
     case AccountSessionBusy
+    /**
+     * A pre-journal account has an encrypted database but no recoverable
+     * stable KeyPackage slot. Automatic retry cannot prove non-exposure; the
+     * host may offer `reset_incomplete_account_setup` with explicit consent.
+     */
+    case AccountSetupRecoveryRequired
+    case AccountSetupRetryRequired
+    case AccountSetupResetNotApplicable
+    case AccountSetupKeyPackageRecoveryAvailable
     case RuntimeStopping
     /**
      * An account worker's transport catch-up failed (sync error or timeout).
@@ -19936,66 +20007,70 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 13: return .TransportClosed
         case 14: return .RuntimeBusy
         case 15: return .AccountSessionBusy
-        case 16: return .RuntimeStopping
-        case 17: return .AccountCatchUp(
+        case 16: return .AccountSetupRecoveryRequired
+        case 17: return .AccountSetupRetryRequired
+        case 18: return .AccountSetupResetNotApplicable
+        case 19: return .AccountSetupKeyPackageRecoveryAvailable
+        case 20: return .RuntimeStopping
+        case 21: return .AccountCatchUp(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 18: return .NotGroupAdmin(
+        case 22: return .NotGroupAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 19: return .AdminCannotSelfRemove(
+        case 23: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 20: return .LeaveAlreadyRequested(
+        case 24: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 21: return .WouldRemoveLastAdmin(
+        case 25: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 22: return .DisbandingUnsupportedMembers(
+        case 26: return .DisbandingUnsupportedMembers(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdsHex: try FfiConverterSequenceString.read(from: &buf)
             )
-        case 23: return .DisbandingNotEnabled(
+        case 27: return .DisbandingNotEnabled(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 24: return .GroupDisbanding(
+        case 28: return .GroupDisbanding(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 25: return .MemberNotInGroup(
+        case 29: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 26: return .AlreadyAdmin(
+        case 30: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .NotAdmin(
+        case 31: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .StorageBusy(
+        case 32: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .SecretNotFound(
+        case 33: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .KeystoreUnavailable(
+        case 34: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 31: return .EmptyPassphrase
-        case 32: return .EncryptionFailed(
+        case 35: return .EmptyPassphrase
+        case 36: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 33: return .Io(
+        case 37: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 34: return .ExternalSignerUnavailable(
+        case 38: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 35: return .ExternalSignerMismatch
-        case 36: return .ExternalSignerRejected
-        case 37: return .Runtime(
+        case 39: return .ExternalSignerMismatch
+        case 40: return .ExternalSignerRejected
+        case 41: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -20081,113 +20156,129 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(15))
 
 
-        case .RuntimeStopping:
+        case .AccountSetupRecoveryRequired:
             writeInt(&buf, Int32(16))
 
 
-        case let .AccountCatchUp(details):
+        case .AccountSetupRetryRequired:
             writeInt(&buf, Int32(17))
+
+
+        case .AccountSetupResetNotApplicable:
+            writeInt(&buf, Int32(18))
+
+
+        case .AccountSetupKeyPackageRecoveryAvailable:
+            writeInt(&buf, Int32(19))
+
+
+        case .RuntimeStopping:
+            writeInt(&buf, Int32(20))
+
+
+        case let .AccountCatchUp(details):
+            writeInt(&buf, Int32(21))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .NotGroupAdmin(groupIdHex):
-            writeInt(&buf, Int32(18))
+            writeInt(&buf, Int32(22))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .AdminCannotSelfRemove(groupIdHex):
-            writeInt(&buf, Int32(19))
+            writeInt(&buf, Int32(23))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .LeaveAlreadyRequested(groupIdHex):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(24))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .WouldRemoveLastAdmin(groupIdHex):
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(25))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(26))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterSequenceString.write(memberIdsHex, into: &buf)
 
 
         case let .DisbandingNotEnabled(groupIdHex):
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(27))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .GroupDisbanding(groupIdHex):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(28))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .MemberNotInGroup(groupIdHex,memberIdHex):
-            writeInt(&buf, Int32(25))
+            writeInt(&buf, Int32(29))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .AlreadyAdmin(groupIdHex,memberIdHex):
-            writeInt(&buf, Int32(26))
+            writeInt(&buf, Int32(30))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .NotAdmin(groupIdHex,memberIdHex):
-            writeInt(&buf, Int32(27))
+            writeInt(&buf, Int32(31))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
         case let .StorageBusy(details):
-            writeInt(&buf, Int32(28))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case let .SecretNotFound(details):
-            writeInt(&buf, Int32(29))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case let .KeystoreUnavailable(details):
-            writeInt(&buf, Int32(30))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case .EmptyPassphrase:
-            writeInt(&buf, Int32(31))
-
-
-        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(32))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(33))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(34))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(35))
+
+
+        case let .EncryptionFailed(details):
+            writeInt(&buf, Int32(36))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .Io(details):
+            writeInt(&buf, Int32(37))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(38))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(39))
 
 
         case .ExternalSignerRejected:
-            writeInt(&buf, Int32(36))
+            writeInt(&buf, Int32(40))
 
 
         case let .Runtime(details):
-            writeInt(&buf, Int32(37))
+            writeInt(&buf, Int32(41))
             FfiConverterString.write(details, into: &buf)
 
         }
@@ -24159,6 +24250,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_login_external_signer() != 44038) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_login_recovering_incomplete_setup() != 65462) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_mark_timeline_message_read() != 32522) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -24250,6 +24344,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_republish_key_package() != 44103) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_reset_incomplete_account_setup() != 58104) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_resume_maintenance() != 1654) {

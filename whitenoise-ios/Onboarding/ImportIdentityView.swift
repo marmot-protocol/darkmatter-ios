@@ -43,7 +43,7 @@ struct ImportIdentityView: View {
         @Bindable var model = model
         return Form {
             Section {
-                PasteAwareNsecField(
+                PasteAwareNsecTextArea(
                     text: $model.identity,
                     placeholder: "nsec1…",
                     onPaste: { token, resultingIdentity in
@@ -79,17 +79,23 @@ struct ImportIdentityView: View {
                 .disabled(!canSubmit)
             }
 
-            if let error = model.error {
-                Section {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                }
-            }
         }
         .navigationTitle("Import Identity")
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(model.isImporting)
+        .alert(
+            "Recover incomplete setup?",
+            isPresented: $model.showIncompleteSetupRecoveryConfirmation
+        ) {
+            Button("Recover Identity", role: .destructive) {
+                model.resolveIncompleteSetupRecoveryConfirmation(approved: true)
+            }
+            Button("Cancel", role: .cancel) {
+                model.resolveIncompleteSetupRecoveryConfirmation(approved: false)
+            }
+        } message: {
+            Text("A previous sign-in stopped before setup finished. Recovery removes that incomplete local setup and tries again. A KeyPackage from the failed attempt may remain published on relays.")
+        }
         .onDisappear {
             model.scrubDismissedImportState()
         }
@@ -101,12 +107,12 @@ struct ImportIdentityView: View {
 /// must capture the pasteboard generation only when the user actually pastes —
 /// not on every keystroke/autofill — so a later clipboard wipe can prove it
 /// still owns the pasted secret without reading `.string` (#409).
-private struct PasteAwareNsecField: UIViewRepresentable {
+private struct PasteAwareNsecTextArea: UIViewRepresentable {
     @Binding var text: String
     let placeholder: String
     let onPaste: (SensitiveClipboard.Token?, String) -> Void
 
-    /// Roughly three lines tall so it matches the old `lineLimit(3...6)` field.
+    /// Keep the editor visibly distinct from a single-line field before input.
     private static let minimumLineCount: CGFloat = 3
 
     func makeCoordinator() -> Coordinator {
@@ -121,6 +127,8 @@ private struct PasteAwareNsecField: UIViewRepresentable {
         textView.backgroundColor = .clear
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
+        textView.textContainer.lineBreakMode = .byCharWrapping
+        textView.textContainer.widthTracksTextView = true
         textView.adjustsFontForContentSizeCategory = true
         textView.font = UIFontMetrics(forTextStyle: .body)
             .scaledFont(for: .monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular))
@@ -132,6 +140,7 @@ private struct PasteAwareNsecField: UIViewRepresentable {
         textView.accessibilityLabel = L10n.string("Identity")
         textView.accessibilityHint = L10n.string("Paste your nsec secret key.")
         textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         let placeholderLabel = UILabel()
         placeholderLabel.text = placeholder
@@ -149,12 +158,6 @@ private struct PasteAwareNsecField: UIViewRepresentable {
         ])
         context.coordinator.placeholderLabel = placeholderLabel
 
-        // Keep at least ~3 lines of height like the old field's minimum.
-        let lineHeight = textView.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
-        textView.heightAnchor
-            .constraint(greaterThanOrEqualToConstant: lineHeight * Self.minimumLineCount)
-            .isActive = true
-
         textView.text = text
         placeholderLabel.isHidden = !text.isEmpty
         return textView
@@ -166,6 +169,22 @@ private struct PasteAwareNsecField: UIViewRepresentable {
             uiView.text = text
         }
         context.coordinator.placeholderLabel?.isHidden = !uiView.text.isEmpty
+    }
+
+    func sizeThatFits(
+        _ proposal: ProposedViewSize,
+        uiView: PasteInterceptingTextView,
+        context: Context
+    ) -> CGSize? {
+        guard let width = proposal.width else { return nil }
+        let fittingSize = CGSize(width: width, height: .greatestFiniteMagnitude)
+        let contentHeight = uiView.sizeThatFits(fittingSize).height
+        let lineHeight = uiView.font?.lineHeight
+            ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
+        return CGSize(
+            width: width,
+            height: max(contentHeight, lineHeight * Self.minimumLineCount)
+        )
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
