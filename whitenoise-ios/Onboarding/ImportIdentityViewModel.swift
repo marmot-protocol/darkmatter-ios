@@ -1,12 +1,13 @@
 import Foundation
 import UIKit
+import MarmotKit
 
 /// Screen store for `ImportIdentityView`: owns the pasted-nsec field + in-flight
 /// state and the import action. The secret-handling order is preserved verbatim
 /// — consume/clear the visible field before the first await, and clear the
 /// sensitive clipboard in a `defer` so it runs on every outcome (#nsec hygiene).
 /// The clipboard token is NOT captured at import tap: it is set by the view's
-/// paste interception (`PasteAwareNsecField.onPaste`) at a genuine user paste,
+/// paste interception (`PasteAwareNsecTextArea.onPaste`) at a genuine user paste,
 /// then tied to the post-paste field value so later edits cannot turn a stale
 /// paste token into permission to wipe unrelated clipboard contents. If the user
 /// typed/autofilled the field, pasted a non-nsec, edited the pasted value into a
@@ -21,7 +22,10 @@ import UIKit
 final class ImportIdentityViewModel {
     var identity = ""
     var isImporting = false
-    var error: String?
+    var showIncompleteSetupRecoveryConfirmation = false
+
+    @ObservationIgnored
+    private var recoveryConfirmationContinuation: CheckedContinuation<Bool, Never>?
 
     /// Set by the view's paste interception at a genuine user paste; nil when
     /// the nsec was typed/autofilled or never pasted. Gates the deferred clear.
@@ -37,30 +41,60 @@ final class ImportIdentityViewModel {
         guard beginImportIfIdle() else { return }
         let trimmed = ImportIdentityView.consumeIdentityForImport(&identity)
         let clipboardToken = consumeClipboardTokenForImportedIdentity(trimmed)
-        error = nil
         defer {
             SensitiveClipboard.clear(matching: clipboardToken)
             clearPastedClipboardToken()
             isImporting = false
         }
         do {
-            try await appState.importIdentity(trimmed)
+            do {
+                try await appState.importIdentity(trimmed)
+            } catch {
+                guard Self.requiresIncompleteSetupRecovery(error) else { throw error }
+                Haptics.error()
+                guard await requestIncompleteSetupRecoveryConfirmation() else { return }
+                try await appState.recoverIncompleteIdentity(trimmed)
+            }
             Haptics.success()
             appState.present(.success(L10n.string("Welcome back"), message: L10n.string("Identity imported.")))
             dismiss()
         } catch {
-            Haptics.error()
-            let presentation = UserFacingError.present(
-                title: L10n.string("Import failed"),
-                error: error
-            )
-            self.error = presentation.message
-            appState.present(.error(
-                presentation.title,
-                message: presentation.message,
-                diagnostic: presentation.diagnostic
-            ))
+            presentImportFailure(error, using: appState)
         }
+    }
+
+    static func requiresIncompleteSetupRecovery(_ error: Error) -> Bool {
+        guard let marmotError = error as? MarmotKitError else { return false }
+        if case .AccountSetupRecoveryRequired = marmotError { return true }
+        return false
+    }
+
+    func requestIncompleteSetupRecoveryConfirmation() async -> Bool {
+        guard recoveryConfirmationContinuation == nil else { return false }
+        return await withCheckedContinuation { continuation in
+            recoveryConfirmationContinuation = continuation
+            showIncompleteSetupRecoveryConfirmation = true
+        }
+    }
+
+    func resolveIncompleteSetupRecoveryConfirmation(approved: Bool) {
+        let continuation = recoveryConfirmationContinuation
+        recoveryConfirmationContinuation = nil
+        showIncompleteSetupRecoveryConfirmation = false
+        continuation?.resume(returning: approved)
+    }
+
+    private func presentImportFailure(_ error: Error, using appState: AppState) {
+        Haptics.error()
+        let presentation = UserFacingError.present(
+            title: L10n.string("Import failed"),
+            error: error
+        )
+        appState.present(.error(
+            presentation.title,
+            message: presentation.message,
+            diagnostic: presentation.diagnostic
+        ))
     }
 
     /// Synchronous in-flight gate for `runImport`. Returns `true` and marks the
@@ -108,6 +142,7 @@ final class ImportIdentityViewModel {
     /// uses, so unrelated clipboard content is never touched), and drop the
     /// shadow copy — every exit from the sheet clears the secret.
     func scrubDismissedImportState(pasteboard: UIPasteboard = .general) {
+        resolveIncompleteSetupRecoveryConfirmation(approved: false)
         identity = ""
         SensitiveClipboard.clear(matching: pastedClipboardToken, from: pasteboard)
         clearPastedClipboardToken()

@@ -1,4 +1,5 @@
 import Foundation
+import MarmotKit
 
 /// Separates the short, actionable error copy we show in the UI from the
 /// diagnostic supplied by the runtime or an underlying framework.
@@ -18,10 +19,17 @@ struct UserFacingError: Equatable {
 
     static func present(title: String, error: Error, fallbackMessage: String? = nil) -> UserFacingError {
         let diagnostic = sanitizedDiagnostic(for: error)
-        if diagnostic.localizedCaseInsensitiveContains("account id is already in use") {
+        if isDuplicateIdentity(error, diagnostic: diagnostic) {
             return UserFacingError(
-                title: L10n.string("This identity is already on this device"),
-                message: L10n.string("Use the existing profile instead of importing it again."),
+                title: title,
+                message: L10n.string("Identity already signed in on this device"),
+                diagnostic: diagnostic
+            )
+        }
+        if let setupMessage = accountSetupMessage(for: error) {
+            return UserFacingError(
+                title: title,
+                message: setupMessage,
                 diagnostic: diagnostic
             )
         }
@@ -31,6 +39,32 @@ struct UserFacingError: Equatable {
             message: fallbackMessage ?? L10n.string("Retry"),
             diagnostic: diagnostic
         )
+    }
+
+    private static func isDuplicateIdentity(_ error: Error, diagnostic: String) -> Bool {
+        if let marmotError = error as? MarmotKitError,
+           case .DuplicateIdentity = marmotError {
+            return true
+        }
+
+        // Older MarmotKit builds surfaced this condition only in runtime
+        // details. Retain that match for imported diagnostics and mixed-version
+        // development builds.
+        return diagnostic.localizedCaseInsensitiveContains("account id is already in use")
+    }
+
+    private static func accountSetupMessage(for error: Error) -> String? {
+        guard let marmotError = error as? MarmotKitError else { return nil }
+        switch marmotError {
+        case .AccountSetupRecoveryRequired:
+            return L10n.string("Incomplete identity setup needs approval to recover.")
+        case .AccountSetupRetryRequired, .AccountSetupKeyPackageRecoveryAvailable:
+            return L10n.string("Identity setup can be resumed. Try importing again.")
+        case .AccountSetupResetNotApplicable:
+            return L10n.string("This incomplete identity setup could not be recovered.")
+        default:
+            return nil
+        }
     }
 
     /// Runtime errors may include an nsec if input validation failed. Never
