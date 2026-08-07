@@ -19952,6 +19952,21 @@ public enum MarmotKitError: Swift.Error {
      * retry without treating the account as broken.
      */
     case ExternalSignerRejected
+    /**
+     * The group's outbound retention queue is full
+     * (`MAX_QUEUED_OUTBOUND_INTENTS_PER_GROUP`), so this message was **not**
+     * accepted and nothing was queued for it. The app layer has already
+     * retracted the optimistic local row; this variant is typed rather than
+     * the untyped [`MarmotKitError::Runtime`] bucket so the host can say the
+     * group is stuck instead of reporting an opaque failure. Unlike
+     * [`MarmotKitError::StorageBusy`] it is not worth an automatic retry:
+     * whatever the group is waiting on — a stalled publication, unsettled
+     * convergence input, or an inactive transport — clears on its own schedule,
+     * not on a timer this call could pick. Prompt the user to resend once the
+     * group is sending again.
+     */
+    case GroupSendQueueFull(groupIdHex: String
+    )
     case Runtime(details: String
     )
 }
@@ -20070,7 +20085,10 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             )
         case 39: return .ExternalSignerMismatch
         case 40: return .ExternalSignerRejected
-        case 41: return .Runtime(
+        case 41: return .GroupSendQueueFull(
+            groupIdHex: try FfiConverterString.read(from: &buf)
+            )
+        case 42: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
 
@@ -20277,8 +20295,13 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(40))
 
 
-        case let .Runtime(details):
+        case let .GroupSendQueueFull(groupIdHex):
             writeInt(&buf, Int32(41))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(42))
             FfiConverterString.write(details, into: &buf)
 
         }

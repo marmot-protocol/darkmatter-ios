@@ -59,4 +59,14 @@ struct UserFacingErrorTests {
         #expect(toast.message == "Retry")
         #expect(toast.diagnostic == "network timed out")
     }
+
+    @Test func fullGroupSendQueueExplainsWhenToResend() {
+        let presentation = UserFacingError.present(
+            title: "Send failed",
+            error: MarmotKitError.GroupSendQueueFull(groupIdHex: "group-id")
+        )
+
+        #expect(presentation.message == "This chat is still catching up. Wait for it to finish, then resend your message.")
+        #expect(!presentation.message.contains("group-id"))
+    }
 }

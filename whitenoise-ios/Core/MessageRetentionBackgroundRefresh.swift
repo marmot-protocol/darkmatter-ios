@@ -11,10 +11,11 @@ nonisolated enum MessageRetentionBackgroundRefreshPolicy {
     }
 }
 
-/// Schedules best-effort iOS background refreshes for disappearing-message
-/// cleanup. The task borrows RuntimeLifecycle's exclusive short-lived runtime
-/// lease, so it never races the foreground runtime or leaves the App Group
-/// SQLite store locked after iOS suspends the process.
+/// Schedules best-effort iOS background refreshes for relay catch-up and
+/// disappearing-message cleanup. Both operations share RuntimeLifecycle's
+/// exclusive short-lived runtime lease, so they never race the foreground
+/// runtime or leave the App Group SQLite store locked after iOS suspends the
+/// process.
 @MainActor
 final class MessageRetentionBackgroundRefresh {
     static let shared = MessageRetentionBackgroundRefresh()
@@ -74,7 +75,7 @@ final class MessageRetentionBackgroundRefresh {
             return
         }
         let operation = Task { @MainActor in
-            await appState.performBackgroundRetentionSweep()
+            await appState.performBackgroundMessageRefreshAndRetentionSweep()
         }
         task.expirationHandler = {
             operation.cancel()

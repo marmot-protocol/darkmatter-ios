@@ -53912,6 +53912,9 @@
         }
       }
     },
+    "This chat is still catching up. Wait for it to finish, then resend your message." : {
+      "extractionState" : "manual"
+    },
     "This group is inactive. You can't send new messages." : {
       "extractionState" : "manual",
       "localizations" : {

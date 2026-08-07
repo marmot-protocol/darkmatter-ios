@@ -100,6 +100,12 @@ struct DiagnosticsView: View {
         plaintext.isEmpty ? "(empty)" : "(\(plaintext.count) chars)"
     }
 
+    static func notificationServiceDiagnosticText(
+        _ snapshot: NotificationServiceDiagnosticSnapshot
+    ) -> String {
+        "[NSE] \(snapshot.outcome.rawValue) at \(snapshot.stage.rawValue) in \(snapshot.durationMilliseconds) ms (\(snapshot.notificationCount) notifications)"
+    }
+
     private static func groupEventLabel(_ event: GroupEventKindFfi) -> String {
         switch event {
         case .groupCreated:

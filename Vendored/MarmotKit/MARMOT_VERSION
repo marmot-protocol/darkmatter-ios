@@ -1,7 +1,7 @@
-mdk-sha: 790eb860
+mdk-sha: 64f13c4c
 mdk-branch: master
 mdk-tag:
-built-at: 2026-08-06T08:29:45Z
+built-at: 2026-08-07T09:16:07Z
 uniffi-version: 0.29.4
 features: otlp-export
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim

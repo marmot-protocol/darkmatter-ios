@@ -3540,6 +3540,20 @@ struct DiagnosticsPresentationTests {
         #expect(!text.contains(messageId))
         #expect(!text.contains("deferred_peel_rows"))
     }
+
+    @Test func notificationServiceDiagnosticTextContainsOnlyOperationalShape() {
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            durationMilliseconds: 931,
+            stage: .collectionCompleted,
+            outcome: .failed,
+            notificationCount: 0
+        )
+
+        let text = DiagnosticsView.notificationServiceDiagnosticText(snapshot)
+
+        #expect(text == "[NSE] failed at collectionCompleted in 931 ms (0 notifications)")
+    }
 }
 
 struct GroupPushDebugPresentationTests {

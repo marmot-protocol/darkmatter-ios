@@ -24,6 +24,9 @@ final class DiagnosticsViewModel {
     /// the task lifecycle (rebinding when the runtime generation changes); this
     /// just provides the cancellable stream loop.
     func runEventStream(using appState: AppState) async {
+        if let snapshot = NotificationServiceDiagnostics.lastSnapshotInSharedContainer() {
+            append(DiagnosticsView.notificationServiceDiagnosticText(snapshot))
+        }
         streaming = true
         defer { streaming = false }
         guard let client = try? appState.currentMarmotClient() else { return }
