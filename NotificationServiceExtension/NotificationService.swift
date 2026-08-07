@@ -183,16 +183,16 @@ final class NotificationService: UNNotificationServiceExtension {
                 // suppressed". Account-wide inference gets both directions
                 // wrong, so the fallback stays audible until the engine
                 // reports suppressed records explicitly.
-                if result.status == .failed {
-                    recordDiagnostic(
-                        outcome: .failed,
-                        notificationCount: result.notifications.count
-                    )
-                }
                 await apply(decision, to: content)
-                diagnosticStage = .rendered
+                let diagnosticOutcome: NotificationServiceDiagnosticOutcome
+                if result.status == .failed {
+                    diagnosticOutcome = .failed
+                } else {
+                    diagnosticStage = .rendered
+                    diagnosticOutcome = decision.diagnosticOutcome
+                }
                 recordDiagnostic(
-                    outcome: decision.diagnosticOutcome,
+                    outcome: diagnosticOutcome,
                     notificationCount: result.notifications.count
                 )
             } catch {

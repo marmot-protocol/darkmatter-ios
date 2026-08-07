@@ -19,13 +19,14 @@ final class DiagnosticsViewModel {
     var entries: [LogEntry] = []
     var streaming = false
     var sendingToSelf = false
+    private var lastNotificationServiceDiagnosticRecordedAt: Date?
 
     /// Body of the view's `.task(id: runtimeGeneration)` — the view still owns
     /// the task lifecycle (rebinding when the runtime generation changes); this
     /// just provides the cancellable stream loop.
     func runEventStream(using appState: AppState) async {
         if let snapshot = NotificationServiceDiagnostics.lastSnapshotInSharedContainer() {
-            append(DiagnosticsView.notificationServiceDiagnosticText(snapshot))
+            appendNotificationServiceDiagnosticIfNeeded(snapshot)
         }
         streaming = true
         defer { streaming = false }
@@ -40,8 +41,19 @@ final class DiagnosticsViewModel {
         entries.removeAll()
     }
 
-    func append(_ text: String) {
-        entries.append(LogEntry(timestamp: Date(), text: text))
+    func appendNotificationServiceDiagnosticIfNeeded(
+        _ snapshot: NotificationServiceDiagnosticSnapshot
+    ) {
+        guard snapshot.recordedAt != lastNotificationServiceDiagnosticRecordedAt else { return }
+        lastNotificationServiceDiagnosticRecordedAt = snapshot.recordedAt
+        append(
+            DiagnosticsView.notificationServiceDiagnosticText(snapshot),
+            timestamp: snapshot.recordedAt
+        )
+    }
+
+    func append(_ text: String, timestamp: Date = Date()) {
+        entries.append(LogEntry(timestamp: timestamp, text: text))
         if entries.count > 500 { entries.removeFirst(entries.count - 500) }
     }
 

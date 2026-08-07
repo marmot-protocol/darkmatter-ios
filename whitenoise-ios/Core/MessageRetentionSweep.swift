@@ -303,13 +303,11 @@ final class MessageRetentionSweeper {
 }
 
 extension AppState {
-    /// Runs one bounded background relay catch-up followed by an expiration
-    /// pass. The ephemeral runtime uses frozen cursor persistence, so an
-    /// incomplete background query cannot advance the durable relay floor or
-    /// consume the NSE notification cursor. The runtime lease is always
-    /// released before iOS suspends the process.
+    /// Runs one expiration pass from a BGAppRefresh launch. The runtime lease is
+    /// always released, including cancellation and per-pass failure, so the
+    /// shared store is closed again before iOS suspends the process.
     @MainActor
-    func performBackgroundMessageRefreshAndRetentionSweep() async -> Bool {
+    func performBackgroundRetentionSweep() async -> Bool {
         if phase == .bootstrapping {
             await bootstrap()
         }
@@ -323,14 +321,6 @@ extension AppState {
         do {
             let acquired = try await runtimeLifecycle.startRuntimeForNotificationAction()
             lease = acquired
-            let catchUpSucceeded: Bool
-            do {
-                try await acquired.client.catchUpAccounts()
-                try Task.checkCancellation()
-                catchUpSucceeded = true
-            } catch {
-                catchUpSucceeded = false
-            }
             let accounts = try await acquired.client.listAccounts()
             let accountRefs = MessageRetentionSweepPolicy.sweepAccountRefs(from: accounts)
             let groupsByAccountRef = await MessageRetentionSweep.loadGroupSnapshots(
@@ -356,7 +346,7 @@ extension AppState {
                     forPlaintextHashes: outcome.mediaPlaintextHashes
                 )
             }
-            return !Task.isCancelled && catchUpSucceeded && cacheEvictionSucceeded
+            return !Task.isCancelled && cacheEvictionSucceeded
         } catch {
             if let lease {
                 await runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)

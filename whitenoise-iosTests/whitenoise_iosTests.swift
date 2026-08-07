@@ -3541,7 +3541,7 @@ struct DiagnosticsPresentationTests {
         #expect(!text.contains("deferred_peel_rows"))
     }
 
-    @Test func notificationServiceDiagnosticTextContainsOnlyOperationalShape() {
+    @Test @MainActor func notificationServiceDiagnosticTextContainsOnlyOperationalShape() {
         let snapshot = NotificationServiceDiagnosticSnapshot(
             recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
             durationMilliseconds: 931,
@@ -3552,7 +3552,25 @@ struct DiagnosticsPresentationTests {
 
         let text = DiagnosticsView.notificationServiceDiagnosticText(snapshot)
 
-        #expect(text == "[NSE] failed at collectionCompleted in 931 ms (0 notifications)")
+        #expect(text == "[NSE 2023-11-14T22:13:20Z] failed at collectionCompleted in 931 ms (0 notifications)")
+    }
+
+    @Test @MainActor func notificationServiceDiagnosticIsTimestampedAndAppendedOnce() {
+        let recordedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: recordedAt,
+            durationMilliseconds: 931,
+            stage: .collectionCompleted,
+            outcome: .failed,
+            notificationCount: 0
+        )
+        let model = DiagnosticsViewModel()
+
+        model.appendNotificationServiceDiagnosticIfNeeded(snapshot)
+        model.appendNotificationServiceDiagnosticIfNeeded(snapshot)
+
+        #expect(model.entries.count == 1)
+        #expect(model.entries.first?.timestamp == recordedAt)
     }
 }
 
