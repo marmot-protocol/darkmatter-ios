@@ -273,7 +273,7 @@ private struct ToastView: View {
         )
         .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 4)
         .offset(y: dragOffset)
-        .opacity(1 - min(abs(dragOffset) / 120, 0.6))
+        .opacity(1 - min(Double(abs(dragOffset)) / 120, 0.6))
         .contentShape(.rect)
         .onTapGesture {
             guard toast.diagnostic != nil else { return }
