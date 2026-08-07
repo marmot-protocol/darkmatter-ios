@@ -700,7 +700,7 @@ struct ConversationView: View {
         )
     }
 
-    var body: some View {
+    private var conversationChromeView: some View {
         timeline
             .safeAreaInset(edge: .top, spacing: 0) { searchBarInset }
             .bottomInputChromeAccessory {
@@ -753,6 +753,10 @@ struct ConversationView: View {
                     .onDisappear { openAddMembersOnDetails = false }
                 }
             }
+    }
+
+    private var conversationMessageSheets: some View {
+        conversationChromeView
             .sheet(item: $emojiPickerTarget) { target in
                 if let viewModel {
                     EmojiPickerSheet(
@@ -868,6 +872,10 @@ struct ConversationView: View {
                 onRetry: { rowId in Task { await viewModel?.retryFailedSend(rowId: rowId) } },
                 onDiscard: { viewModel?.discardFailedSend(rowId: $0) }
             ))
+    }
+
+    private var conversationAttachmentSheets: some View {
+        conversationMessageSheets
             .sheet(isPresented: $showCameraCapture) {
                 CameraCaptureView(
                     onImage: { image in
@@ -933,6 +941,10 @@ struct ConversationView: View {
                 allowsMultipleSelection: true,
                 onCompletion: addFileImporterResult
             )
+    }
+
+    var body: some View {
+        conversationAttachmentSheets
             .task(id: ConversationRuntimeStartToken(
                 runtimeGeneration: appState.runtimeGeneration,
                 isRuntimeWarmingUp: appState.isRuntimeWarmingUp

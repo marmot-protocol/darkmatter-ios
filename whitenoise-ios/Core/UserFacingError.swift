@@ -33,6 +33,13 @@ struct UserFacingError: Equatable {
                 diagnostic: diagnostic
             )
         }
+        if let sendMessage = sendMessage(for: error) {
+            return UserFacingError(
+                title: title,
+                message: sendMessage,
+                diagnostic: diagnostic
+            )
+        }
 
         return UserFacingError(
             title: title,
@@ -65,6 +72,12 @@ struct UserFacingError: Equatable {
         default:
             return nil
         }
+    }
+
+    private static func sendMessage(for error: Error) -> String? {
+        guard let marmotError = error as? MarmotKitError else { return nil }
+        guard case .GroupSendQueueFull = marmotError else { return nil }
+        return L10n.string("This chat is still catching up. Wait for it to finish, then resend your message.")
     }
 
     /// Runtime errors may include an nsec if input validation failed. Never

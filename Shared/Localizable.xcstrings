@@ -3454,6 +3454,22 @@
         }
       }
     },
+    "%lld notifications" : {
+      "comment" : "Notification count in a developer diagnostic line.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld Benachrichtigung" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld Benachrichtigungen" } } } } } } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notification" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifications" } } } } } } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificación" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificaciones" } } } } } } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notification" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifications" } } } } } } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifica" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifiche" } } } } } } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificação" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificações" } } } } } } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомление" } }, "few" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомления" } }, "many" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомлений" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомления" } } } } } } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld bildirim" } } } } } } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld 条通知" } } } } } } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld 則通知" } } } } } } }
+      }
+    },
     "%lld selected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4412,6 +4428,22 @@
         }
       }
     },
+    "[NSE %@] %@ at %@ in %@ (%@)" : {
+      "comment" : "Developer diagnostic for a notification service wake. Arguments are timestamp, outcome, stage, localized duration, and localized notification count.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ bei %@ in %@ (%@)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ at %@ in %@ (%@)" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ en %@ en %@ (%@)" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ à %@ en %@ (%@)" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ a %@ in %@ (%@)" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ em %@ em %@ (%@)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ на этапе %@ за %@ (%@)" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@, %@ aşamasında %@ içinde (%@)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ 于 %@，耗时 %@（%@）" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ 於 %@，耗時 %@（%@）" } }
+      }
+    },
     "A group name is required when creating it without members." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4472,7 +4504,17 @@
       }
     },
     "A previous sign-in stopped before setup finished. Recovery removes that incomplete local setup and tries again. A KeyPackage from the failed attempt may remain published on relays." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eine vorherige Anmeldung wurde beendet, bevor die Einrichtung abgeschlossen war. Bei der Wiederherstellung wird diese unvollständige lokale Einrichtung entfernt und die Anmeldung erneut versucht. Ein KeyPackage des fehlgeschlagenen Versuchs kann weiterhin auf Relays veröffentlicht sein." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Un inicio de sesión anterior se detuvo antes de que finalizara la configuración. La recuperación elimina esa configuración local incompleta y vuelve a intentarlo. Es posible que un KeyPackage del intento fallido siga publicado en los relés." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Une connexion précédente s’est interrompue avant la fin de la configuration. La récupération supprime cette configuration locale incomplète et réessaie. Un KeyPackage de la tentative échouée peut rester publié sur les relais." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Un accesso precedente si è interrotto prima del completamento della configurazione. Il recupero rimuove la configurazione locale incompleta e riprova. Un KeyPackage del tentativo non riuscito potrebbe rimanere pubblicato sui relay." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Um login anterior foi interrompido antes da conclusão da configuração. A recuperação remove essa configuração local incompleta e tenta novamente. Um KeyPackage da tentativa com falha pode continuar publicado nos relays." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Предыдущий вход прервался до завершения настройки. Восстановление удалит незавершённую локальную настройку и повторит попытку. KeyPackage от неудачной попытки может остаться опубликованным на релеях." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Önceki bir oturum açma işlemi kurulum tamamlanmadan durdu. Kurtarma, tamamlanmamış yerel kurulumu kaldırıp yeniden dener. Başarısız denemeye ait bir KeyPackage rölelerde yayımlanmış olarak kalabilir." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上一次登录在设置完成前中止。恢复操作会移除未完成的本地设置并重试。失败尝试中的 KeyPackage 可能仍发布在中继上。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "上一次登入在設定完成前中止。復原操作會移除未完成的本機設定並重試。失敗嘗試中的 KeyPackage 可能仍發佈在中繼上。" } }
+      }
     },
     "About" : {
       "extractionState" : "manual",
@@ -6959,7 +7001,17 @@
       }
     },
     "App" : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "App" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Aplicación" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "App" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "App" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Aplicativo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Приложение" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Uygulama" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "应用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "應用程式" } }
+      }
     },
     "App Lock" : {
       "extractionState" : "manual",
@@ -8480,7 +8532,17 @@
       }
     },
     "By default, identifiers are obscured and message content is excluded. Include Sensitive Data adds decrypted message content and full identifiers for forensic review, but never private keys or authentication tokens. Changes apply immediately." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Standardmäßig werden Kennungen verschleiert und Nachrichteninhalte ausgeschlossen. „Sensible Daten einschließen“ fügt entschlüsselte Nachrichteninhalte und vollständige Kennungen für die forensische Prüfung hinzu, jedoch niemals private Schlüssel oder Authentifizierungstoken. Änderungen werden sofort wirksam." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "De forma predeterminada, los identificadores se ocultan y se excluye el contenido de los mensajes. Incluir datos confidenciales añade el contenido descifrado y los identificadores completos para la revisión forense, pero nunca claves privadas ni tokens de autenticación. Los cambios se aplican de inmediato." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Par défaut, les identifiants sont masqués et le contenu des messages est exclu. Inclure les données sensibles ajoute le contenu déchiffré des messages et les identifiants complets pour l’analyse forensique, mais jamais les clés privées ni les jetons d’authentification. Les modifications s’appliquent immédiatement." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Per impostazione predefinita, gli identificatori sono oscurati e il contenuto dei messaggi è escluso. Includi dati sensibili aggiunge il contenuto decrittografato e gli identificatori completi per l’analisi forense, ma mai chiavi private o token di autenticazione. Le modifiche vengono applicate immediatamente." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Por padrão, os identificadores são ocultados e o conteúdo das mensagens é excluído. Incluir dados confidenciais adiciona o conteúdo descriptografado e os identificadores completos para análise forense, mas nunca chaves privadas ou tokens de autenticação. As alterações são aplicadas imediatamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "По умолчанию идентификаторы скрываются, а содержимое сообщений исключается. Параметр «Включить конфиденциальные данные» добавляет расшифрованное содержимое сообщений и полные идентификаторы для криминалистического анализа, но никогда не включает закрытые ключи или токены аутентификации. Изменения применяются немедленно." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Varsayılan olarak tanımlayıcılar gizlenir ve mesaj içeriği hariç tutulur. Hassas Verileri Dahil Et, adli inceleme için şifresi çözülmüş mesaj içeriğini ve tam tanımlayıcıları ekler; ancak özel anahtarları veya kimlik doğrulama belirteçlerini asla eklemez. Değişiklikler hemen uygulanır." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "默认情况下，标识符会被隐藏，并且不包含消息内容。启用“包含敏感数据”后，会加入已解密的消息内容和完整标识符以供取证审查，但绝不会包含私钥或身份验证令牌。更改会立即生效。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "預設情況下，識別碼會被隱藏，且不包含訊息內容。啟用「包含敏感資料」後，會加入已解密的訊息內容和完整識別碼以供鑑識審查，但絕不會包含私密金鑰或驗證權杖。變更會立即生效。" } }
+      }
     },
     "Camera" : {
       "comment" : "A name for a photo taken by the user.",
@@ -14187,7 +14249,18 @@
     },
     "Couldn't update follow status" : {
       "comment" : "Error message when a follow status update fails.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Folgestatus konnte nicht aktualisiert werden" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo actualizar el estado de seguimiento" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Impossible de mettre à jour le statut de suivi" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Impossibile aggiornare lo stato di follow" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível atualizar o status de seguir" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось обновить статус подписки" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Takip durumu güncellenemedi" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法更新关注状态" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法更新關注狀態" } }
+      }
     },
     "Couldn't update follow status." : {
       "extractionState" : "manual",
@@ -14795,7 +14868,18 @@
     },
     "Crop image" : {
       "comment" : "A title for the screen that lets you crop an image.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bild zuschneiden" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recortar imagen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Recadrer l’image" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Ritaglia immagine" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Recortar imagem" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Обрезать изображение" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Görseli kırp" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "裁剪图像" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "裁切影像" } }
+      }
     },
     "Current" : {
       "extractionState" : "manual",
@@ -24763,7 +24847,17 @@
       }
     },
     "Identity setup can be resumed. Try importing again." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Identitätseinrichtung kann fortgesetzt werden. Versuche den Import erneut." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "La configuración de la identidad puede reanudarse. Intenta importarla de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La configuration de l’identité peut reprendre. Essayez de l’importer à nouveau." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "La configurazione dell’identità può essere ripresa. Prova a importarla di nuovo." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A configuração da identidade pode ser retomada. Tente importar novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройку личности можно продолжить. Попробуйте импортировать её ещё раз." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kimlik kurulumuna devam edilebilir. Yeniden içe aktarmayı deneyin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可以继续身份设置。请再次尝试导入。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "可以繼續身分設定。請再次嘗試匯入。" } }
+      }
     },
     "Idle" : {
       "extractionState" : "manual",
@@ -25601,10 +25695,30 @@
       }
     },
     "Include Sensitive Data" : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sensible Daten einschließen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Incluir datos confidenciales" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Inclure les données sensibles" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Includi dati sensibili" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Incluir dados confidenciais" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Включить конфиденциальные данные" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Hassas Verileri Dahil Et" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "包含敏感数据" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "包含敏感資料" } }
+      }
     },
     "Incomplete identity setup needs approval to recover." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Wiederherstellung der unvollständigen Identitätseinrichtung muss bestätigt werden." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Se necesita aprobación para recuperar la configuración incompleta de la identidad." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "La récupération de la configuration incomplète de l’identité nécessite une confirmation." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Il recupero della configurazione incompleta dell’identità richiede una conferma." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "A recuperação da configuração incompleta da identidade precisa de confirmação." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для восстановления незавершённой настройки личности требуется подтверждение." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tamamlanmamış kimlik kurulumunu kurtarmak için onay gerekiyor." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复未完成的身份设置需要获得确认。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "復原未完成的身分設定需要獲得確認。" } }
+      }
     },
     "Info" : {
       "extractionState" : "manual",
@@ -38372,7 +38486,18 @@
     },
     "Pinch to zoom, then drag to position the image." : {
       "comment" : "A description of how to use the crop tool.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ziehe zum Zoomen zwei Finger zusammen oder auseinander und verschiebe dann das Bild." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Pellizca para ampliar y arrastra para colocar la imagen." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pincez pour zoomer, puis faites glisser l’image pour la positionner." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Pizzica per ingrandire, quindi trascina per posizionare l’immagine." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Faça o gesto de pinça para ampliar e arraste para posicionar a imagem." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Разведите пальцы, чтобы увеличить масштаб, затем перетащите изображение в нужное положение." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yakınlaştırmak için parmaklarınızı açın, ardından görseli konumlandırmak için sürükleyin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "双指捏合缩放，然后拖动以调整图像位置。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "雙指撥動縮放，然後拖曳以調整影像位置。" } }
+      }
     },
     "Pinned" : {
       "extractionState" : "manual",
@@ -38689,7 +38814,18 @@
     },
     "Please try again." : {
       "comment" : "Fallback message for a toast error when updating a follow status.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Bitte versuche es erneut." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Inténtalo de nuevo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Veuillez réessayer." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Riprova." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tente novamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Повторите попытку." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Lütfen tekrar deneyin." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请重试。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請再試一次。" } }
+      }
     },
     "Point the camera at a White Noise profile QR" : {
       "extractionState" : "manual",
@@ -41843,11 +41979,33 @@
     },
     "Recover Identity" : {
       "comment" : "A button that recovers a previous failed sign-in.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Identität wiederherstellen" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recuperar identidad" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Récupérer l’identité" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Recupera identità" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Recuperar identidade" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстановить личность" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kimliği Kurtar" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复身份" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "復原身分" } }
+      }
     },
     "Recover incomplete setup?" : {
       "comment" : "A confirmation dialog title.",
-      "isCommentAutoGenerated" : true
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Unvollständige Einrichtung wiederherstellen?" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "¿Recuperar la configuración incompleta?" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Récupérer la configuration incomplète ?" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Recuperare la configurazione incompleta?" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Recuperar a configuração incompleta?" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстановить незавершённую настройку?" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tamamlanmamış kurulum kurtarılsın mı?" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "要恢复未完成的设置吗？" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "要復原未完成的設定嗎？" } }
+      }
     },
     "Refresh" : {
       "comment" : "A button that refreshes the audit logs.",
@@ -53912,6 +54070,65 @@
         }
       }
     },
+    "This chat is still catching up. Wait for it to finish, then resend your message." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Chat wird noch synchronisiert. Warte, bis die Synchronisierung abgeschlossen ist, und sende deine Nachricht dann erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este chat aún se está sincronizando. Espera a que termine y vuelve a enviar tu mensaje."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette discussion est toujours en cours de synchronisation. Attendez qu’elle se termine, puis renvoyez votre message."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questa chat è ancora in fase di sincronizzazione. Attendi il completamento, quindi invia nuovamente il messaggio."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este bate-papo ainda está sendo sincronizado. Aguarde a conclusão e reenvie sua mensagem."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот чат всё ещё синхронизируется. Дождитесь завершения, затем отправьте сообщение повторно."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu sohbet hâlâ eşitleniyor. Tamamlanmasını bekleyin, ardından mesajınızı yeniden gönderin."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此聊天仍在同步。请等待同步完成，然后重新发送消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此聊天仍在同步。請等待同步完成，然後重新傳送訊息。"
+          }
+        }
+      }
+    },
     "This group is inactive. You can't send new messages." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -54092,7 +54309,17 @@
       }
     },
     "This incomplete identity setup could not be recovered." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese unvollständige Identitätseinrichtung konnte nicht wiederhergestellt werden." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se pudo recuperar esta configuración incompleta de la identidad." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette configuration incomplète de l’identité n’a pas pu être récupérée." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Non è stato possibile recuperare questa configurazione incompleta dell’identità." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível recuperar esta configuração incompleta da identidade." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось восстановить эту незавершённую настройку личности." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu tamamlanmamış kimlik kurulumu kurtarılamadı." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法恢复此未完成的身份设置。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法復原此未完成的身分設定。" } }
+      }
     },
     "This link opens %@:\n%@" : {
       "comment" : "External-link confirmation body. First placeholder is the display host, second placeholder is the bounded URL.",
@@ -58452,7 +58679,17 @@
       }
     },
     "Writes local audit JSONL files for forensic review using obscured identifiers and no message content. Changes apply immediately." : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schreibt lokale JSONL-Prüfprotokolle für die forensische Prüfung mit verschleierten Kennungen und ohne Nachrichteninhalte. Änderungen werden sofort wirksam." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Escribe archivos de auditoría JSONL locales para la revisión forense, con identificadores ocultos y sin contenido de mensajes. Los cambios se aplican de inmediato." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Écrit des fichiers d’audit JSONL locaux pour l’analyse forensique, avec des identifiants masqués et sans contenu de message. Les modifications s’appliquent immédiatement." } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Scrive file di audit JSONL locali per l’analisi forense, con identificatori oscurati e senza contenuto dei messaggi. Le modifiche vengono applicate immediatamente." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Grava arquivos de auditoria JSONL locais para análise forense, com identificadores ocultados e sem conteúdo de mensagens. As alterações são aplicadas imediatamente." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Записывает локальные файлы аудита JSONL для криминалистического анализа со скрытыми идентификаторами и без содержимого сообщений. Изменения применяются немедленно." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Adli inceleme için gizlenmiş tanımlayıcılarla ve mesaj içeriği olmadan yerel JSONL denetim dosyaları yazar. Değişiklikler hemen uygulanır." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "写入本地 JSONL 审计文件以供取证审查，其中标识符已隐藏且不包含消息内容。更改会立即生效。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "寫入本機 JSONL 稽核檔案以供鑑識審查，其中識別碼已隱藏且不包含訊息內容。變更會立即生效。" } }
+      }
     },
     "Writes local audit JSONL files for forensic review. Changing this restarts the local runtime immediately." : {
       "comment" : "A description of the audit logging feature.",

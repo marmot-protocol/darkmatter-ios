@@ -92,4 +92,21 @@ struct NotificationContentDecoratorTests {
             didApplyRenderDecision: false
         ))
     }
+
+    @Test func notificationServiceDiagnosticSnapshotRoundTripsWithoutMessageData() {
+        let suiteName = "notification-service-diagnostics-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            durationMilliseconds: 812,
+            stage: .rendered,
+            outcome: .decorated,
+            notificationCount: 2
+        )
+
+        NotificationServiceDiagnostics.record(snapshot, defaults: defaults)
+
+        #expect(NotificationServiceDiagnostics.lastSnapshot(defaults: defaults) == snapshot)
+    }
 }

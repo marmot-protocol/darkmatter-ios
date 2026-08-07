@@ -100,6 +100,34 @@ struct DiagnosticsView: View {
         plaintext.isEmpty ? "(empty)" : "(\(plaintext.count) chars)"
     }
 
+    static func notificationServiceDiagnosticText(
+        _ snapshot: NotificationServiceDiagnosticSnapshot,
+        locale: Locale = AppLanguage.currentLocale
+    ) -> String {
+        let recordedAt = snapshot.recordedAt.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .standard).locale(locale)
+        )
+        let duration = Duration.milliseconds(snapshot.durationMilliseconds).formatted(
+            .units(allowed: [.milliseconds], width: .abbreviated).locale(locale)
+        )
+        let notificationCount = L10n.plural(
+            "%lld notifications",
+            Int64(snapshot.notificationCount),
+            locale: locale
+        )
+        return L10n.formatted(
+            "[NSE %@] %@ at %@ in %@ (%@)",
+            arguments: [
+                recordedAt,
+                snapshot.outcome.rawValue,
+                snapshot.stage.rawValue,
+                duration,
+                notificationCount
+            ],
+            locale: locale
+        )
+    }
+
     private static func groupEventLabel(_ event: GroupEventKindFfi) -> String {
         switch event {
         case .groupCreated:

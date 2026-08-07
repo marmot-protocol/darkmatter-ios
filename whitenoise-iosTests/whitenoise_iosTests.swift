@@ -3540,6 +3540,49 @@ struct DiagnosticsPresentationTests {
         #expect(!text.contains(messageId))
         #expect(!text.contains("deferred_peel_rows"))
     }
+
+    @Test @MainActor func notificationServiceDiagnosticTextUsesLocalizedOperationalShape() {
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            durationMilliseconds: 931,
+            stage: .collectionCompleted,
+            outcome: .failed,
+            notificationCount: 0
+        )
+
+        let english = DiagnosticsView.notificationServiceDiagnosticText(
+            snapshot,
+            locale: Locale(identifier: "en_US")
+        )
+        let german = DiagnosticsView.notificationServiceDiagnosticText(
+            snapshot,
+            locale: Locale(identifier: "de_DE")
+        )
+
+        #expect(english.contains("931 ms"))
+        #expect(english.contains("0 notifications"))
+        #expect(german.contains("0 Benachrichtigungen"))
+        #expect(english != german)
+        #expect(!english.contains("2023-11-14T22:13:20Z"))
+    }
+
+    @Test @MainActor func notificationServiceDiagnosticIsTimestampedAndAppendedOnce() {
+        let recordedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: recordedAt,
+            durationMilliseconds: 931,
+            stage: .collectionCompleted,
+            outcome: .failed,
+            notificationCount: 0
+        )
+        let model = DiagnosticsViewModel()
+
+        model.appendNotificationServiceDiagnosticIfNeeded(snapshot)
+        model.appendNotificationServiceDiagnosticIfNeeded(snapshot)
+
+        #expect(model.entries.count == 1)
+        #expect(model.entries.first?.timestamp == recordedAt)
+    }
 }
 
 struct GroupPushDebugPresentationTests {

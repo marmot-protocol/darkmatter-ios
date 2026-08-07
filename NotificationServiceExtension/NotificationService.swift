@@ -18,10 +18,13 @@ final class NotificationService: UNNotificationServiceExtension {
     private var activeMarmotNeedsShutdown = false
     private var applicationBadgeCount: Int?
     private var didApplyRenderDecision = false
+    private var diagnosticStartedAt = Date()
+    private var diagnosticStage: NotificationServiceDiagnosticStage = .received
+    private var didRecordDiagnostic = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
-    private static let runtimeOwnershipLog = Logger(
+    private static let diagnosticLog = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios.NotificationService",
-        category: "runtime-ownership"
+        category: "notification-service"
     )
 
     override func didReceive(
@@ -37,6 +40,9 @@ final class NotificationService: UNNotificationServiceExtension {
         applicationBadgeCount = nil
         didApplyRenderDecision = false
         decoratedContent = nil
+        diagnosticStartedAt = Date()
+        diagnosticStage = .received
+        didRecordDiagnostic = false
 
         collectionTask = Task { [weak self] in
             await self?.collectAndDecorateNotification()
@@ -44,6 +50,7 @@ final class NotificationService: UNNotificationServiceExtension {
     }
 
     override func serviceExtensionTimeWillExpire() {
+        recordDiagnostic(outcome: .expired)
         collectionTask?.cancel()
         // Unblocks the additional-presentation task: it enqueues immediately
         // with whatever avatars have resolved instead of waiting out the
@@ -77,6 +84,7 @@ final class NotificationService: UNNotificationServiceExtension {
             )
             activeMarmot = marmot
             activeMarmotNeedsShutdown = true
+            diagnosticStage = .runtimeCreated
             if Task.isCancelled {
                 if let marmot = takeActiveMarmotForShutdown(marmot) {
                     await marmot.shutdown()
@@ -86,11 +94,13 @@ final class NotificationService: UNNotificationServiceExtension {
             }
             do {
                 try await marmot.start()
+                diagnosticStage = .runtimeStarted
                 guard activeMarmot === marmot else { return }
                 let result = try await marmot.collectNotificationsAfterWake(
                     maxWaitMs: maxNotificationServiceWaitMs,
                     source: .apnsNse
                 )
+                diagnosticStage = .collectionCompleted
                 if result.status != .failed,
                    let summaries = try? marmot.accountUnreadSummary() {
                     var supplementalUnreadConversationCounts: [String: UInt64] = [:]
@@ -174,26 +184,58 @@ final class NotificationService: UNNotificationServiceExtension {
                 // wrong, so the fallback stays audible until the engine
                 // reports suppressed records explicitly.
                 await apply(decision, to: content)
+                let diagnosticOutcome: NotificationServiceDiagnosticOutcome
+                if result.status == .failed {
+                    diagnosticOutcome = .failed
+                } else {
+                    diagnosticStage = .rendered
+                    diagnosticOutcome = decision.diagnosticOutcome
+                }
+                recordDiagnostic(
+                    outcome: diagnosticOutcome,
+                    notificationCount: result.notifications.count
+                )
             } catch {
+                recordDiagnostic(outcome: .failed)
                 applyFallback(to: content)
             }
             if let marmot = takeActiveMarmotForShutdown(marmot) {
                 await marmot.shutdown()
             }
         } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
-            Self.runtimeOwnershipLog.info(
-                "contention_fallback operation=nse attempt=1"
-            )
+            recordDiagnostic(outcome: .runtimeOwnershipContention)
             applyFallback(to: content)
             finish()
             return
         } catch {
             // Keep the provider payload generic when collection fails. The main
             // app will catch up when it next starts or receives a local event.
+            recordDiagnostic(outcome: .failed)
             applyFallback(to: content)
         }
 
         finish()
+    }
+
+    private func recordDiagnostic(
+        outcome: NotificationServiceDiagnosticOutcome,
+        notificationCount: Int = 0
+    ) {
+        guard !didRecordDiagnostic else { return }
+        didRecordDiagnostic = true
+        let elapsed = max(0, Date().timeIntervalSince(diagnosticStartedAt))
+        let durationMilliseconds = Int((elapsed * 1_000).rounded())
+        let snapshot = NotificationServiceDiagnosticSnapshot(
+            recordedAt: Date(),
+            durationMilliseconds: durationMilliseconds,
+            stage: diagnosticStage,
+            outcome: outcome,
+            notificationCount: notificationCount
+        )
+        NotificationServiceDiagnostics.recordInSharedContainer(snapshot)
+        Self.diagnosticLog.info(
+            "wake_finished outcome=\(outcome.rawValue, privacy: .public) stage=\(self.diagnosticStage.rawValue, privacy: .public) duration_ms=\(durationMilliseconds, privacy: .public) notification_count=\(notificationCount, privacy: .public)"
+        )
     }
 
     private func takeActiveMarmotForShutdown(_ marmot: Marmot? = nil) -> Marmot? {
