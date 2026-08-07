@@ -3454,6 +3454,22 @@
         }
       }
     },
+    "%lld notifications" : {
+      "comment" : "Notification count in a developer diagnostic line.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld Benachrichtigung" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld Benachrichtigungen" } } } } } } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notification" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifications" } } } } } } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificación" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificaciones" } } } } } } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notification" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifications" } } } } } } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifica" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notifiche" } } } } } } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificação" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld notificações" } } } } } } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомление" } }, "few" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомления" } }, "many" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомлений" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld уведомления" } } } } } } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld bildirim" } } } } } } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld 条通知" } } } } } } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%#@count@" }, "substitutions" : { "count" : { "argNum" : 1, "formatSpecifier" : "lld", "variations" : { "plural" : { "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld 則通知" } } } } } } }
+      }
+    },
     "%lld selected" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4410,6 +4426,22 @@
             "value" : "1 名成員"
           }
         }
+      }
+    },
+    "[NSE %@] %@ at %@ in %@ (%@)" : {
+      "comment" : "Developer diagnostic for a notification service wake. Arguments are timestamp, outcome, stage, localized duration, and localized notification count.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ bei %@ in %@ (%@)" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ at %@ in %@ (%@)" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ en %@ en %@ (%@)" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ à %@ en %@ (%@)" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ a %@ in %@ (%@)" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ em %@ em %@ (%@)" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ на этапе %@ за %@ (%@)" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@, %@ aşamasında %@ içinde (%@)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ 于 %@，耗时 %@（%@）" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "[NSE %@] %@ 於 %@，耗時 %@（%@）" } }
       }
     },
     "A group name is required when creating it without members." : {
@@ -24821,7 +24853,7 @@
         "fr" : { "stringUnit" : { "state" : "translated", "value" : "La configuration de l’identité peut reprendre. Essayez de l’importer à nouveau." } },
         "it" : { "stringUnit" : { "state" : "translated", "value" : "La configurazione dell’identità può essere ripresa. Prova a importarla di nuovo." } },
         "pt" : { "stringUnit" : { "state" : "translated", "value" : "A configuração da identidade pode ser retomada. Tente importar novamente." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройку идентификатора можно продолжить. Попробуйте импортировать его ещё раз." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Настройку личности можно продолжить. Попробуйте импортировать её ещё раз." } },
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kimlik kurulumuna devam edilebilir. Yeniden içe aktarmayı deneyin." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可以继续身份设置。请再次尝试导入。" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "可以繼續身分設定。請再次嘗試匯入。" } }
@@ -25682,7 +25714,7 @@
         "fr" : { "stringUnit" : { "state" : "translated", "value" : "La récupération de la configuration incomplète de l’identité nécessite une confirmation." } },
         "it" : { "stringUnit" : { "state" : "translated", "value" : "Il recupero della configurazione incompleta dell’identità richiede una conferma." } },
         "pt" : { "stringUnit" : { "state" : "translated", "value" : "A recuperação da configuração incompleta da identidade precisa de confirmação." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для восстановления незавершённой настройки идентификатора требуется подтверждение." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для восстановления незавершённой настройки личности требуется подтверждение." } },
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tamamlanmamış kimlik kurulumunu kurtarmak için onay gerekiyor." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复未完成的身份设置需要获得确认。" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "復原未完成的身分設定需要獲得確認。" } }
@@ -41954,7 +41986,7 @@
         "fr" : { "stringUnit" : { "state" : "translated", "value" : "Récupérer l’identité" } },
         "it" : { "stringUnit" : { "state" : "translated", "value" : "Recupera identità" } },
         "pt" : { "stringUnit" : { "state" : "translated", "value" : "Recuperar identidade" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстановить идентификатор" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Восстановить личность" } },
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kimliği Kurtar" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复身份" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "復原身分" } }
@@ -54283,7 +54315,7 @@
         "fr" : { "stringUnit" : { "state" : "translated", "value" : "Cette configuration incomplète de l’identité n’a pas pu être récupérée." } },
         "it" : { "stringUnit" : { "state" : "translated", "value" : "Non è stato possibile recuperare questa configurazione incompleta dell’identità." } },
         "pt" : { "stringUnit" : { "state" : "translated", "value" : "Não foi possível recuperar esta configuração incompleta da identidade." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось восстановить эту незавершённую настройку идентификатора." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось восстановить эту незавершённую настройку личности." } },
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bu tamamlanmamış kimlik kurulumu kurtarılamadı." } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法恢复此未完成的身份设置。" } },
         "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無法復原此未完成的身分設定。" } }

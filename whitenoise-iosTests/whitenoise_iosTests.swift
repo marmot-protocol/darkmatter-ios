@@ -3541,7 +3541,7 @@ struct DiagnosticsPresentationTests {
         #expect(!text.contains("deferred_peel_rows"))
     }
 
-    @Test @MainActor func notificationServiceDiagnosticTextContainsOnlyOperationalShape() {
+    @Test @MainActor func notificationServiceDiagnosticTextUsesLocalizedOperationalShape() {
         let snapshot = NotificationServiceDiagnosticSnapshot(
             recordedAt: Date(timeIntervalSince1970: 1_700_000_000),
             durationMilliseconds: 931,
@@ -3550,9 +3550,20 @@ struct DiagnosticsPresentationTests {
             notificationCount: 0
         )
 
-        let text = DiagnosticsView.notificationServiceDiagnosticText(snapshot)
+        let english = DiagnosticsView.notificationServiceDiagnosticText(
+            snapshot,
+            locale: Locale(identifier: "en_US")
+        )
+        let german = DiagnosticsView.notificationServiceDiagnosticText(
+            snapshot,
+            locale: Locale(identifier: "de_DE")
+        )
 
-        #expect(text == "[NSE 2023-11-14T22:13:20Z] failed at collectionCompleted in 931 ms (0 notifications)")
+        #expect(english.contains("931 ms"))
+        #expect(english.contains("0 notifications"))
+        #expect(german.contains("0 Benachrichtigungen"))
+        #expect(english != german)
+        #expect(!english.contains("2023-11-14T22:13:20Z"))
     }
 
     @Test @MainActor func notificationServiceDiagnosticIsTimestampedAndAppendedOnce() {

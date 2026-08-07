@@ -101,10 +101,31 @@ struct DiagnosticsView: View {
     }
 
     static func notificationServiceDiagnosticText(
-        _ snapshot: NotificationServiceDiagnosticSnapshot
+        _ snapshot: NotificationServiceDiagnosticSnapshot,
+        locale: Locale = AppLanguage.currentLocale
     ) -> String {
-        let recordedAt = snapshot.recordedAt.formatted(.iso8601)
-        return "[NSE \(recordedAt)] \(snapshot.outcome.rawValue) at \(snapshot.stage.rawValue) in \(snapshot.durationMilliseconds) ms (\(snapshot.notificationCount) notifications)"
+        let recordedAt = snapshot.recordedAt.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .standard).locale(locale)
+        )
+        let duration = Duration.milliseconds(snapshot.durationMilliseconds).formatted(
+            .units(allowed: [.milliseconds], width: .abbreviated).locale(locale)
+        )
+        let notificationCount = L10n.plural(
+            "%lld notifications",
+            Int64(snapshot.notificationCount),
+            locale: locale
+        )
+        return L10n.formatted(
+            "[NSE %@] %@ at %@ in %@ (%@)",
+            arguments: [
+                recordedAt,
+                snapshot.outcome.rawValue,
+                snapshot.stage.rawValue,
+                duration,
+                notificationCount
+            ],
+            locale: locale
+        )
     }
 
     private static func groupEventLabel(_ event: GroupEventKindFfi) -> String {
