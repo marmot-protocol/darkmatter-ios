@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 import UserNotifications
 @testable import MarmotKit
@@ -175,6 +176,32 @@ struct RuntimeOwnershipTests {
         #expect(inactiveSnapshot.attempts == 1)
 
         await appState.startRuntimeSuspension().value
+    }
+
+    @Test func initialSceneRuntimeActionDistinguishesBackgroundFromInactive() {
+        #expect(SceneRuntimeAction.resolve(.active) == .activate)
+        #expect(SceneRuntimeAction.resolve(.inactive) == .remainInactive)
+        #expect(SceneRuntimeAction.resolve(.background) == .suspend)
+    }
+
+    @Test func coldBackgroundLaunchClosesRuntimeAfterBootstrap() async throws {
+        var injectedClient: MarmotClient? = try MarmotClient.testClient()
+        let marmot = try #require(injectedClient?.marmot)
+        weak let releasedClient = injectedClient
+        let appState = AppState(
+            client: injectedClient,
+            notifications: runtimeOwnershipDeniedNotifications()
+        )
+        injectedClient = nil
+
+        let suspension = appState.startRuntimeSuspension()
+        await appState.bootstrap()
+        await suspension.value
+
+        #expect(appState.phase == .onboarding)
+        #expect(appState.client == nil)
+        #expect(releasedClient == nil)
+        #expect(marmot.storageIsClosed())
     }
 
     @Test func bootstrapRetriesRuntimeBusySeriallyAndInstallsOneClient() async {

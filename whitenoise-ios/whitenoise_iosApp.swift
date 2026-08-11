@@ -2,6 +2,25 @@ import MarmotKit
 import SwiftUI
 import UIKit
 
+enum SceneRuntimeAction: Equatable {
+    case activate
+    case remainInactive
+    case suspend
+
+    static func resolve(_ phase: ScenePhase) -> Self {
+        switch phase {
+        case .active:
+            .activate
+        case .inactive:
+            .remainInactive
+        case .background:
+            .suspend
+        @unknown default:
+            .remainInactive
+        }
+    }
+}
+
 @MainActor
 final class BackgroundRuntimeSuspensionTask {
     typealias BeginBackgroundTask = @MainActor (
@@ -86,34 +105,16 @@ struct whitenoise_iosApp: App {
                     // at launch so connectivity-restored events fire even in
                     // sessions that never read a media setting.
                     _ = MediaAutoDownloadStore.shared
-                    appState.setAppSceneActive(scenePhase == .active)
+                    handleScenePhase(scenePhase, isInitial: true)
                     appLockOverlay.update(for: appState.appLock.shield, controller: appState.appLock)
                     syncCaptureProtection()
-                    if scenePhase == .active {
-                        appState.appLock.handleScenePhaseActive()
-                        Task { await appState.appLock.requestUnlock() }
-                    }
                     await appState.bootstrap()
                 }
                 .onOpenURL { url in
                     appState.handle(url: url)
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    switch phase {
-                    case .active:
-                        appState.appLock.handleScenePhaseActive()
-                        Task { await appState.appLock.requestUnlock() }
-                        appState.startForegroundActivation()
-                    case .inactive:
-                        appState.appLock.handleScenePhaseInactive()
-                        appState.setAppSceneActive(false)
-                    case .background:
-                        appState.appLock.handleScenePhaseBackground()
-                        beginBackgroundRuntimeSuspension()
-                    @unknown default:
-                        appState.appLock.handleScenePhaseInactive()
-                        appState.setAppSceneActive(false)
-                    }
+                    handleScenePhase(phase, isInitial: false)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: MediaAutoDownloadStore.connectivityRestored)) { _ in
                     // Relay recovery is otherwise foreground-driven; a network
@@ -129,6 +130,26 @@ struct whitenoise_iosApp: App {
                 .onChange(of: appState.blockScreenshots) { _, _ in
                     syncCaptureProtection()
                 }
+        }
+    }
+
+    @MainActor
+    private func handleScenePhase(_ phase: ScenePhase, isInitial: Bool) {
+        switch SceneRuntimeAction.resolve(phase) {
+        case .activate:
+            appState.appLock.handleScenePhaseActive()
+            Task { await appState.appLock.requestUnlock() }
+            if isInitial {
+                appState.setAppSceneActive(true)
+            } else {
+                appState.startForegroundActivation()
+            }
+        case .remainInactive:
+            appState.appLock.handleScenePhaseInactive()
+            appState.setAppSceneActive(false)
+        case .suspend:
+            appState.appLock.handleScenePhaseBackground()
+            beginBackgroundRuntimeSuspension()
         }
     }
 
