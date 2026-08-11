@@ -52,7 +52,7 @@ final class ProfileViewModel {
             // Trigger enrichment (cached read + background relay fetch).
             _ = appState.profile(forAccountIdHex: resolvedHex)
         }
-        await directory.load(using: appState)
+        await directory.load(using: appState, includeAdminMetadata: true)
         guard !Task.isCancelled,
               generation == resolutionGeneration,
               hex == resolvedHex
@@ -172,7 +172,11 @@ final class ProfileViewModel {
         isPreparingConversationChoices = true
         defer { isPreparingConversationChoices = false }
 
-        await directory.load(using: appState, force: true)
+        await directory.load(
+            using: appState,
+            force: true,
+            includeAdminMetadata: true
+        )
         guard !Task.isCancelled else { return }
         let memberRef = ProfileReferenceResolution.referenceForResolution(npub) ?? hex
         if let loadError = directory.loadError {

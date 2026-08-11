@@ -496,7 +496,11 @@ final class GroupDetailsViewModel {
             addableGroups = []
             return
         }
-        await recipientDirectory.load(using: appState, force: force)
+        await recipientDirectory.load(
+            using: appState,
+            force: force,
+            includeAdminMetadata: true
+        )
         guard !Task.isCancelled else { return }
         sharedGroups = SharedGroupsProjection.sharedGroups(
             snapshots: recipientDirectory.snapshots,

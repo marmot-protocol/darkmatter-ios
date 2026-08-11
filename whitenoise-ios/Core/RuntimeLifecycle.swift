@@ -51,11 +51,12 @@ struct RuntimeConstructionRetryPolicy: Sendable {
 
     nonisolated static let foreground = RuntimeConstructionRetryPolicy(
         delays: [
-            .milliseconds(75),
-            .milliseconds(150),
-            .milliseconds(300),
-            .milliseconds(600),
-            .milliseconds(1_200),
+            .milliseconds(100),
+            .milliseconds(200),
+            .milliseconds(400),
+            .milliseconds(800),
+            .milliseconds(1_600),
+            .milliseconds(3_200),
         ]
     )
 }
@@ -255,7 +256,7 @@ final class RuntimeLifecycle {
     /// to restore the runtime after a background suspension released it.
     private func makeRuntime(
         cursorPersistence: CursorPersistenceFfi = .advance,
-        retryOnContention: Bool,
+        retryOnTransientReadiness: Bool,
         stillOwnsWork: () -> Bool
     ) async throws -> MarmotClient {
         let rootPath = try runtimeRootPath ?? AppContainerConfig.productionMarmotRoot().path
@@ -274,27 +275,30 @@ final class RuntimeLifecycle {
                     cursorPersistence,
                     telemetryConfig
                 )
-            } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
-                guard retryOnContention,
+            } catch let error as MarmotKitError where error.isTransientStartupReadinessFailure {
+                guard retryOnTransientReadiness,
                       stillOwnsWork(),
                       attempt <= constructionRetryPolicy.delays.count
                 else {
-                    if retryOnContention, stillOwnsWork() {
+                    if retryOnTransientReadiness, stillOwnsWork() {
                         Self.runtimeOwnershipLog.error(
                             """
-                            contention_exhausted operation=foreground \
+                            readiness_retry_exhausted operation=foreground \
                             attempts=\(attempt, privacy: .public) \
                             elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)
                             """
                         )
-                        throw RuntimeOwnershipContentionError.retryWindowExhausted
+                        if error.isRuntimeOwnershipContention {
+                            throw RuntimeOwnershipContentionError.retryWindowExhausted
+                        }
+                        throw error
                     }
                     throw error
                 }
 
                 Self.runtimeOwnershipLog.info(
                     """
-                    contention_retry operation=foreground \
+                    readiness_retry operation=foreground \
                     attempt=\(attempt, privacy: .public) \
                     elapsed_ms=\(Self.elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)
                     """
@@ -307,14 +311,30 @@ final class RuntimeLifecycle {
     }
 
     private func startCurrentRuntime(stillOwnsWork: () -> Bool) async throws {
-        if client == nil {
-            client = try await makeRuntime(
-                retryOnContention: true,
-                stillOwnsWork: stillOwnsWork
-            )
+        var retryIndex = 0
+        while true {
+            try Task.checkCancellation()
+            guard stillOwnsWork() else { throw CancellationError() }
+            if client == nil {
+                client = try await makeRuntime(
+                    retryOnTransientReadiness: true,
+                    stillOwnsWork: stillOwnsWork
+                )
+            }
+            guard let client else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
+            do {
+                try await client.startRuntime()
+                return
+            } catch let error as MarmotKitError where error.isTransientStartupReadinessFailure {
+                guard stillOwnsWork(), retryIndex < constructionRetryPolicy.delays.count else {
+                    throw error
+                }
+                await shutdownAndReleaseCurrentClient()
+                let delay = constructionRetryPolicy.delays[retryIndex]
+                retryIndex += 1
+                try await retrySleeper(delay)
+            }
         }
-        guard let client else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
-        try await client.startRuntime()
     }
 
     // MARK: - Bootstrap
@@ -353,8 +373,10 @@ final class RuntimeLifecycle {
             try await startCurrentRuntime {
                 self.bootstrapTaskID == id
                     && !Task.isCancelled
-                    && !self.bootstrapNeedsBackgroundSuspensionRecheck
-                    && (!self.sceneHasReportedPhase || self.isAppSceneActive || beganWhileInactive)
+                    && (!self.sceneHasReportedPhase
+                        || self.isAppSceneActive
+                        || beganWhileInactive
+                        || self.bootstrapNeedsBackgroundSuspensionRecheck)
             }
             runtimeStartMilliseconds = Self.elapsedMilliseconds(since: runtimeStartStartedAt)
 #if DEBUG
@@ -366,7 +388,14 @@ final class RuntimeLifecycle {
             let accountLoadStartedAt = ContinuousClock.now
             // Routing needs the durable account list, but unread badges do not
             // gate local conversation display. Refresh them after `.ready`.
-            try await appState.refreshAccounts(refreshUnreadSummaries: false)
+            try await refreshAccountsForBootstrap(appState, stillOwnsWork: {
+                self.bootstrapTaskID == id
+                    && !Task.isCancelled
+                    && (!self.sceneHasReportedPhase
+                        || self.isAppSceneActive
+                        || beganWhileInactive
+                        || self.bootstrapNeedsBackgroundSuspensionRecheck)
+            })
             accountLoadMilliseconds = Self.elapsedMilliseconds(since: accountLoadStartedAt)
             if appState.accounts.isEmpty {
                 appState.activeAccountRef = nil
@@ -531,7 +560,29 @@ final class RuntimeLifecycle {
         let clientToRelease = client
         client = nil
         guard let clientToRelease else { return }
-        await clientToRelease.marmot.shutdown()
+        try? await clientToRelease.marmot.shutdownAndClose()
+    }
+
+    private func refreshAccountsForBootstrap(
+        _ appState: AppState,
+        stillOwnsWork: () -> Bool
+    ) async throws {
+        var retryIndex = 0
+        while true {
+            try Task.checkCancellation()
+            guard stillOwnsWork() else { throw CancellationError() }
+            do {
+                try await appState.refreshAccounts(refreshUnreadSummaries: false)
+                return
+            } catch let error as MarmotKitError where error.isTransientStartupReadinessFailure {
+                guard stillOwnsWork(), retryIndex < constructionRetryPolicy.delays.count else {
+                    throw error
+                }
+                let delay = constructionRetryPolicy.delays[retryIndex]
+                retryIndex += 1
+                try await retrySleeper(delay)
+            }
+        }
     }
 
     private func clearCompletedBootstrapTask(id: UUID) {
@@ -637,11 +688,10 @@ final class RuntimeLifecycle {
         isRuntimeSuspending = true
         defer { finishRuntimeSuspensionWait() }
         await shutdownAndReleaseCurrentClient()
-        // Release the FFI handle so Rust drops the runtime and closes its
-        // SQLite storage in the shared App Group container. Holding the handle
-        // alive across suspension (only swapping it on resume) keeps that
-        // file lock held, which is what iOS kills the app for with
-        // `0xdead10cc`. Rebuilt in `resumeAfterForegroundActivation`.
+        // `shutdownAndClose()` explicitly closes every SQLite connection and
+        // releases the root lease. Dropping only the top-level handle cannot
+        // prove that while subscriptions and projections retain internal Arcs;
+        // suspending with either lock is an iOS `0xdead10cc` kill.
         runtimeSuspendedForBackground = true
     }
 
@@ -669,8 +719,8 @@ final class RuntimeLifecycle {
         if isRestartingAfterSuspension {
             do {
                 let constructionStartedAt = ContinuousClock.now
-                let restored = try await makeRuntime(
-                    retryOnContention: true,
+                var restored = try await makeRuntime(
+                    retryOnTransientReadiness: true,
                     stillOwnsWork: { self.ownsForegroundActivation(id: activationID) }
                 )
                 constructionMilliseconds = Self.elapsedMilliseconds(since: constructionStartedAt)
@@ -680,12 +730,31 @@ final class RuntimeLifecycle {
                 }
 #endif
                 guard ownsForegroundActivation(id: activationID) else {
-                    await restored.marmot.shutdown()
+                    try? await restored.marmot.shutdownAndClose()
                     return
                 }
                 do {
                     let startStartedAt = ContinuousClock.now
-                    try await restored.startRuntime()
+                    var retryIndex = 0
+                    while true {
+                        do {
+                            try await restored.startRuntime()
+                            break
+                        } catch let error as MarmotKitError
+                            where error.isTransientStartupReadinessFailure {
+                            guard ownsForegroundActivation(id: activationID),
+                                  retryIndex < constructionRetryPolicy.delays.count
+                            else { throw error }
+                            try? await restored.marmot.shutdownAndClose()
+                            let delay = constructionRetryPolicy.delays[retryIndex]
+                            retryIndex += 1
+                            try await retrySleeper(delay)
+                            restored = try await makeRuntime(
+                                retryOnTransientReadiness: true,
+                                stillOwnsWork: { self.ownsForegroundActivation(id: activationID) }
+                            )
+                        }
+                    }
                     startMilliseconds = Self.elapsedMilliseconds(since: startStartedAt)
                 } catch {
                     if !(error is CancellationError), ownsForegroundActivation(id: activationID) {
@@ -696,7 +765,7 @@ final class RuntimeLifecycle {
                             outcome: .failure
                         )
                     }
-                    await restored.marmot.shutdown()
+                    try? await restored.marmot.shutdownAndClose()
                     if ownsForegroundActivation(id: activationID) {
                         appState?.stopNotificationSubscription()
                         await appState?.cancelNativePushRegistrationTask()
@@ -705,7 +774,7 @@ final class RuntimeLifecycle {
                     return
                 }
                 guard ownsForegroundActivation(id: activationID) else {
-                    await restored.marmot.shutdown()
+                    try? await restored.marmot.shutdownAndClose()
                     return
                 }
                 client = restored
@@ -828,7 +897,7 @@ final class RuntimeLifecycle {
         do {
             ephemeral = try await makeRuntime(
                 cursorPersistence: .frozen,
-                retryOnContention: false,
+                retryOnTransientReadiness: false,
                 stillOwnsWork: {
                     self.phaseOwnsLiveRuntime
                         && self.runtimeSuspendedForBackground
@@ -849,7 +918,7 @@ final class RuntimeLifecycle {
             try await ephemeral.startRuntime()
         } catch {
             // Release the partial runtime like the bootstrap failure path.
-            await ephemeral.marmot.shutdown()
+            try? await ephemeral.marmot.shutdownAndClose()
             finishRuntimeSuspensionWait()
             throw error
         }
@@ -883,7 +952,7 @@ final class RuntimeLifecycle {
     ) async {
         guard let clientToRelease = lease.takeClientForRelease() else { return }
         if lease.ownsEphemeralRuntime {
-            await clientToRelease.marmot.shutdown()
+            try? await clientToRelease.marmot.shutdownAndClose()
         }
     }
 

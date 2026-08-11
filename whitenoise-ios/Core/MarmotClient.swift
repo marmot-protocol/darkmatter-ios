@@ -699,6 +699,10 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.downloadGroupBlossomImage(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func downloadProfileImage(url: String, maxBytes: UInt64) async throws -> Data {
+        try await marmot.downloadProfileImage(url: url, maxBytes: maxBytes)
+    }
+
     func updateMessageRetention(accountRef: String, groupIdHex: String, disappearingMessageSecs: UInt64) async throws -> SendSummaryFfi {
         try await marmot.updateMessageRetention(
             accountRef: accountRef,
@@ -726,8 +730,22 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.groupMembers(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func groupMemberIdsPage(
+        accountRef: String,
+        groupIdsHex: [String]
+    ) async throws -> [AppGroupMemberIdsFfi] {
+        try await marmot.groupMemberIdsPage(
+            accountRef: accountRef,
+            groupIdsHex: groupIdsHex
+        )
+    }
+
     func groupDetails(accountRef: String, groupIdHex: String) async throws -> GroupDetailsFfi {
         try await marmot.groupDetails(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func groupRoster(accountRef: String, groupIdHex: String) async throws -> GroupRosterFfi {
+        try await marmot.groupRoster(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
     func groupManagementState(accountRef: String, groupIdHex: String) async throws -> GroupManagementStateFfi {

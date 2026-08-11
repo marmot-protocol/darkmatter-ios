@@ -8,6 +8,77 @@ struct RecipientSearchTests {
     private let bob = String(repeating: "bb", count: 32)
     private let carol = String(repeating: "cc", count: 32)
 
+    @Test func membershipPagesAreUniqueBoundedAndStable() {
+        let ids = (0..<205).map { "group-\($0)" } + ["group-4", "group-204"]
+
+        let pages = GroupMembershipPageLoader.pages(for: ids)
+
+        #expect(pages.map(\.count) == [100, 100, 5])
+        #expect(pages.flatMap { $0 } == (0..<205).map { "group-\($0)" })
+    }
+
+    @Test func membershipLoaderUsesTenCommandsForOneThousandGroups() async throws {
+        let ids = (0..<1_000).map { "group-\($0)" }
+        var requestedPages: [[String]] = []
+
+        let result = try await GroupMembershipPageLoader.load(
+            groupIdsHex: ids,
+            pageRead: { page in
+                requestedPages.append(page)
+                return page.map {
+                    AppGroupMemberIdsFfi(groupIdHex: $0, memberIdsHex: ["member-\($0)"])
+                }
+            },
+            fallbackRead: { _ in
+                Issue.record("a successful page must not fall back")
+                return []
+            }
+        )
+
+        #expect(requestedPages.count == 10)
+        #expect(requestedPages.allSatisfy { $0.count == 100 })
+        #expect(result.pageReadCount == 10)
+        #expect(result.fallbackReadCount == 0)
+        #expect(result.memberIdsByGroupId.count == 1_000)
+        #expect(result.firstUnresolvedError == nil)
+    }
+
+    @Test func failedMembershipPageFallsBackPerGroupAndKeepsPartialSuccess() async throws {
+        let ids = ["good-a", "bad", "good-b"]
+
+        let result = try await GroupMembershipPageLoader.load(
+            groupIdsHex: ids,
+            pageRead: { _ in throw MembershipReadFailure.page },
+            fallbackRead: { groupIdHex in
+                if groupIdHex == "bad" { throw MembershipReadFailure.group }
+                return ["member-\(groupIdHex)"]
+            }
+        )
+
+        #expect(result.memberIdsByGroupId["good-a"] == ["member-good-a"])
+        #expect(result.memberIdsByGroupId["good-b"] == ["member-good-b"])
+        #expect(result.memberIdsByGroupId["bad"] == nil)
+        #expect(result.pageReadCount == 1)
+        #expect(result.fallbackReadCount == 3)
+        #expect(result.firstUnresolvedError != nil)
+    }
+
+    @Test func malformedMembershipPageResponseUsesTheSameSafeFallback() async throws {
+        let ids = ["first", "second"]
+
+        let result = try await GroupMembershipPageLoader.load(
+            groupIdsHex: ids,
+            pageRead: { _ in
+                [AppGroupMemberIdsFfi(groupIdHex: "wrong", memberIdsHex: [])]
+            },
+            fallbackRead: { ["fallback-\($0)"] }
+        )
+
+        #expect(result.memberIdsByGroupId["first"] == ["fallback-first"])
+        #expect(result.memberIdsByGroupId["second"] == ["fallback-second"])
+        #expect(result.firstUnresolvedError == nil)
+    }
+
     @Test func completingOlderDirectoryLoadCannotClearNewerTaskSlot() {
         let older = UUID()
         let newer = UUID()
@@ -247,6 +318,11 @@ struct RecipientSearchTests {
             profile: nil
         )
     }
+}
+
+private enum MembershipReadFailure: Error {
+    case page
+    case group
 }
 
 @MainActor

@@ -289,21 +289,26 @@ final class NewChatFlowViewModel {
             }
             .sorted { $0.activitySortAt > $1.activitySortAt }
 
-        var snapshots: [RecipientGroupSnapshot] = []
-        var firstReadError: Error?
-        for row in candidates {
-            try Task.checkCancellation()
-            do {
-                let details = try await client.groupDetails(
+        let membership = try await GroupMembershipPageLoader.load(
+            groupIdsHex: candidates.map(\.groupIdHex),
+            pageRead: { groupIdsHex in
+                try await client.groupMemberIdsPage(
                     accountRef: accountRef,
-                    groupIdHex: row.groupIdHex
+                    groupIdsHex: groupIdsHex
                 )
-                snapshots.append(RecipientGroupSnapshot(row: row, details: details))
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                firstReadError = firstReadError ?? error
+            },
+            fallbackRead: { groupIdHex in
+                try await client.groupMembers(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                ).map(\.memberIdHex)
             }
+        )
+        let snapshots: [RecipientGroupSnapshot] = candidates.compactMap { row -> RecipientGroupSnapshot? in
+            guard let memberIdsHex = membership.memberIdsByGroupId[row.groupIdHex] else {
+                return nil
+            }
+            return RecipientGroupSnapshot(row: row, memberIdsHex: memberIdsHex)
         }
 
         if let existing = DirectChatReuseLookup.existingGroupId(
@@ -313,7 +318,7 @@ final class NewChatFlowViewModel {
         ) {
             return existing
         }
-        if let firstReadError {
+        if let firstReadError = membership.firstUnresolvedError {
             throw firstReadError
         }
         return nil

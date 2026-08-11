@@ -3,6 +3,30 @@ import Testing
 @testable import MarmotKit
 
 struct GroupMemberOrderingTests {
+    @Test func lightweightRosterProjectionPreservesMembershipAndLifecycleState() {
+        let selfMember = member("self", isSelf: true, isAdmin: true)
+        let peer = member("peer")
+        let roster = GroupRosterFfi(
+            groupIdHex: "group",
+            members: [selfMember, peer],
+            epoch: 12,
+            rosterRevision: 15,
+            selfMembership: .removed,
+            memberCount: 2,
+            lifecycleState: .disbanded
+        )
+
+        let projection = ConversationGroupRosterProjection(roster: roster)
+
+        #expect(projection.memberRecords.map(\.memberIdHex) == ["self", "peer"])
+        #expect(projection.memberDetails == [selfMember, peer])
+        #expect(projection.adminIdsHex == ["self"])
+        #expect(projection.selfMembership == .removed)
+        #expect(!projection.isUnrecoverable)
+        #expect(projection.isDisbanded)
+        #expect(projection.revision == 15)
+    }
+
     @Test func ordersSelfThenAdminsThenNamesWithStableTiebreak() {
         let you = member("11", isSelf: true)
         let admin = member("22", isAdmin: true)

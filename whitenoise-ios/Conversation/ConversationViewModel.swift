@@ -68,6 +68,32 @@ private struct TimelineTailRefreshRequest {
 
 typealias TimelineTailRefreshOperation = @MainActor () async -> Void
 
+nonisolated struct ConversationGroupRosterProjection: Equatable {
+    let memberRecords: [AppGroupMemberRecordFfi]
+    let memberDetails: [GroupMemberDetailsFfi]
+    let adminIdsHex: [String]
+    let selfMembership: SelfMembershipFfi
+    let isUnrecoverable: Bool
+    let isDisbanded: Bool
+    let revision: UInt64
+
+    init(roster: GroupRosterFfi) {
+        memberDetails = roster.members
+        memberRecords = roster.members.map {
+            AppGroupMemberRecordFfi(
+                memberIdHex: $0.memberIdHex,
+                account: $0.account,
+                local: $0.local
+            )
+        }
+        adminIdsHex = roster.members.filter(\.isAdmin).map(\.memberIdHex)
+        selfMembership = roster.selfMembership
+        isUnrecoverable = roster.lifecycleState == .unrecoverable
+        isDisbanded = roster.lifecycleState == .disbanded
+        revision = roster.rosterRevision
+    }
+}
+
 /// Owns the live state of a single conversation: the merged timeline of
 /// message bubbles + system events, aggregated reactions, the group roster,
 /// the in-progress reply, and the send pipeline.
@@ -168,6 +194,7 @@ final class ConversationViewModel {
     private(set) var groupMemberDetails: [GroupMemberDetailsFfi] = []
     private(set) var mentionRosterResolution: ComposerMentionRosterResolution = .unresolved
     private(set) var groupMlsRefreshGeneration: UInt64 = 0
+    private(set) var groupRosterRevision: UInt64?
     private(set) var managementState: GroupManagementStateFfi?
     private(set) var isLoadingOlder = false
     private(set) var isLoadingNewer = false
@@ -1181,14 +1208,11 @@ final class ConversationViewModel {
             else { return }
             do {
                 let client = try appState.currentMarmotClient()
-                let next = try await client.groupMembers(
+                let roster = try await client.groupRoster(
                     accountRef: accountRef,
                     groupIdHex: groupIdHex
                 )
-                self.applyGroupMlsTrackedChanges {
-                    self.members = next
-                    self.mentionRosterResolution = .resolved
-                }
+                self.applyGroupRoster(roster)
             } catch {
                 guard !Task.isCancelled else { return }
                 self.error = error.localizedDescription
@@ -1949,6 +1973,44 @@ final class ConversationViewModel {
         }
     }
 
+    private func applyGroupRoster(
+        _ roster: GroupRosterFfi,
+        announceRosterChanges: Bool = false
+    ) {
+        guard roster.groupIdHex == group.groupIdHex else { return }
+        let projection = ConversationGroupRosterProjection(roster: roster)
+        let previousAdmins = Set(group.admins)
+        let previousMemberIds = members.map(\.memberIdHex)
+        let previousIdentity = groupMlsRefreshIdentity
+        let nextMembers = projection.memberRecords
+        let nextMemberIds = nextMembers.map(\.memberIdHex)
+        let nextAdmins = projection.adminIdsHex
+        let membersChanged = Self.groupMembersNeedTimelineTailRefresh(
+            previousMemberIds: previousMemberIds,
+            nextMemberIds: nextMemberIds
+        )
+        let adminsChanged = Set(nextAdmins) != previousAdmins
+
+        var nextGroup = group
+        nextGroup.admins = nextAdmins
+        nextGroup.selfMembership = projection.selfMembership
+        nextGroup.unrecoverable = projection.isUnrecoverable
+        nextGroup.disbanded = projection.isDisbanded
+        group = nextGroup
+        groupMemberDetails = projection.memberDetails
+        members = nextMembers
+        groupRosterRevision = projection.revision
+        mentionRosterResolution = .resolved
+        bumpGroupMlsRefreshGenerationIfNeeded(previousIdentity: previousIdentity)
+
+        if announceRosterChanges && membersChanged {
+            appState?.present(.success(L10n.string("Group membership updated")))
+        }
+        if adminsChanged || membersChanged {
+            scheduleTimelineTailRefresh()
+        }
+    }
+
     private func reconcileLeaveRequest(with pending: Bool) {
         leaveRequestPending = pending
     }
@@ -1997,20 +2059,11 @@ final class ConversationViewModel {
         }
         do {
             let client = try appState.currentMarmotClient()
-            let next = try await client.groupMembers(
+            let roster = try await client.groupRoster(
                 accountRef: accountRef,
                 groupIdHex: group.groupIdHex
             )
-            if Self.groupMembersNeedTimelineTailRefresh(
-                previousMemberIds: members.map(\.memberIdHex),
-                nextMemberIds: next.map(\.memberIdHex)
-            ) {
-                scheduleTimelineTailRefresh()
-            }
-            applyGroupMlsTrackedChanges {
-                members = next
-                mentionRosterResolution = .resolved
-            }
+            applyGroupRoster(roster, announceRosterChanges: true)
         } catch {
             // Silent; the next subscription tick will retry.
         }

@@ -323,7 +323,12 @@ enum RemoteAvatarImageLoader {
         category: "avatar-cache"
     )
 
-    static func image(for url: URL, maxPixelSize: Int, scale: CGFloat) async throws -> UIImage {
+    static func image(
+        for url: URL,
+        maxPixelSize: Int,
+        scale: CGFloat,
+        fetch: @escaping @Sendable (URL) async throws -> Data = RemoteImageFetch.imageData
+    ) async throws -> UIImage {
         let targetPixelSize = max(maxPixelSize, 1)
         let key = cacheKey(for: url, maxPixelSize: targetPixelSize)
         let failureKey = failureCacheKey(for: url)
@@ -337,7 +342,7 @@ enum RemoteAvatarImageLoader {
         }
 
         do {
-            let data = try await imageData(for: url, keyString: failureKeyString)
+            let data = try await cachedImageData(for: url, keyString: failureKeyString, fetch: fetch)
             guard let image = await RemoteImageDecoder.downsampledImage(
                 from: data,
                 maxPixelSize: targetPixelSize,
@@ -357,16 +362,18 @@ enum RemoteAvatarImageLoader {
         }
     }
 
-    private static func imageData(for url: URL, keyString: String) async throws -> Data {
+    private static func cachedImageData(
+        for url: URL,
+        keyString: String,
+        fetch: @escaping @Sendable (URL) async throws -> Data
+    ) async throws -> Data {
         if let cached = await RemoteAvatarDiskCache.shared.data(for: url) {
             cacheLog.debug("disk_hit bytes=\(cached.count, privacy: .public)")
             return cached
         }
 
         let startedAt = ContinuousClock.now
-        let data = try await imageData(for: url, keyString: keyString) { url in
-            try await RemoteImageFetch.imageData(for: url)
-        }
+        let data = try await imageData(for: url, keyString: keyString, fetch: fetch)
         await RemoteAvatarDiskCache.shared.store(data, for: url)
         cacheLog.debug(
             "network_fetch bytes=\(data.count, privacy: .public) duration_ms=\(elapsedMilliseconds(since: startedAt), format: .fixed(precision: 0), privacy: .public)"

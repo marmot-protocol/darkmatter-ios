@@ -1,5 +1,83 @@
 import Foundation
 import MarmotKit
+import OSLog
+
+nonisolated struct GroupMembershipPageLoadResult {
+    let memberIdsByGroupId: [String: [String]]
+    let firstUnresolvedError: Error?
+    let pageReadCount: Int
+    let fallbackReadCount: Int
+}
+
+/// Batches the common chat-projection membership read while retaining the
+/// old per-group fault isolation when one all-or-nothing page fails.
+nonisolated enum GroupMembershipPageLoader {
+    static let maximumPageSize = 100
+
+    static func pages(for groupIdsHex: [String]) -> [[String]] {
+        var seen: Set<String> = []
+        let unique = groupIdsHex.filter { seen.insert($0).inserted }
+        return stride(from: 0, to: unique.count, by: maximumPageSize).map { start in
+            Array(unique[start..<min(start + maximumPageSize, unique.count)])
+        }
+    }
+
+    static func load(
+        groupIdsHex: [String],
+        pageRead: ([String]) async throws -> [AppGroupMemberIdsFfi],
+        fallbackRead: (String) async throws -> [String]
+    ) async throws -> GroupMembershipPageLoadResult {
+        var memberIdsByGroupId: [String: [String]] = [:]
+        var firstUnresolvedError: Error?
+        var pageReadCount = 0
+        var fallbackReadCount = 0
+
+        for page in pages(for: groupIdsHex) {
+            try Task.checkCancellation()
+            do {
+                pageReadCount += 1
+                let rows = try await pageRead(page)
+                guard rows.count == page.count,
+                      zip(rows, page).allSatisfy({ $0.groupIdHex == $1 })
+                else {
+                    throw GroupMembershipPageResponseError.invalidRows
+                }
+                for row in rows {
+                    memberIdsByGroupId[row.groupIdHex] = row.memberIdsHex
+                }
+                continue
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // A page is atomic in MarmotKit. Recover each requested group
+                // independently so one quarantined row cannot blank the rest.
+            }
+
+            for groupIdHex in page {
+                try Task.checkCancellation()
+                do {
+                    fallbackReadCount += 1
+                    memberIdsByGroupId[groupIdHex] = try await fallbackRead(groupIdHex)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    firstUnresolvedError = firstUnresolvedError ?? error
+                }
+            }
+        }
+
+        return GroupMembershipPageLoadResult(
+            memberIdsByGroupId: memberIdsByGroupId,
+            firstUnresolvedError: firstUnresolvedError,
+            pageReadCount: pageReadCount,
+            fallbackReadCount: fallbackReadCount
+        )
+    }
+
+    private enum GroupMembershipPageResponseError: Error {
+        case invalidRows
+    }
+}
 
 /// Screen-lifetime directory of people derivable from the active account's
 /// chat state. Loads the durable chat-list rows plus each group's roster off
@@ -9,12 +87,18 @@ import MarmotKit
 @MainActor
 @Observable
 final class RecipientDirectory {
+    nonisolated private static let loadLog = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
+        category: "recipient-directory"
+    )
+
     private(set) var snapshots: [RecipientGroupSnapshot] = []
     private(set) var candidates: [RecipientCandidate] = []
     private(set) var isLoading = false
     private(set) var loadError: String?
     private(set) var searchFieldsByAccountId: [String: RecipientSearch.MatchFields] = [:]
     private var loadedAccountRef: String?
+    private var loadedAdminMetadata = false
     private var loadTask: Task<Void, Never>?
     private var loadTaskID: UUID?
     private var loadAccountRef: String?
@@ -23,7 +107,11 @@ final class RecipientDirectory {
 
     /// Callers that need the directory before deciding (e.g. DM reuse) can
     /// await this mid-flight: a concurrent load is joined, not skipped.
-    func load(using appState: AppState, force: Bool = false) async {
+    func load(
+        using appState: AppState,
+        force: Bool = false,
+        includeAdminMetadata: Bool = false
+    ) async {
         guard let accountRef = appState.activeAccountRef else {
             resetForAccountChange()
             return
@@ -39,7 +127,12 @@ final class RecipientDirectory {
             await loadTask.value
         }
         guard appState.activeAccountRef == accountRef else { return }
-        if loadedAccountRef == accountRef, !force, !snapshots.isEmpty { return }
+        if loadedAccountRef == accountRef,
+           !force,
+           !snapshots.isEmpty,
+           !includeAdminMetadata || loadedAdminMetadata {
+            return
+        }
         guard !isLoading else { return }
         let taskID = UUID()
         loadTaskID = taskID
@@ -48,6 +141,7 @@ final class RecipientDirectory {
             await performLoad(
                 accountRef: accountRef,
                 taskID: taskID,
+                includeAdminMetadata: includeAdminMetadata,
                 using: appState
             )
         }
@@ -92,6 +186,7 @@ final class RecipientDirectory {
     private func performLoad(
         accountRef: String,
         taskID: UUID,
+        includeAdminMetadata: Bool,
         using appState: AppState
     ) async {
         guard Self.loadRequestIsCurrent(
@@ -111,7 +206,11 @@ final class RecipientDirectory {
         do {
             let client = try appState.currentMarmotClient()
             let myAccountIdHex = appState.activeAccount?.accountIdHex
-            let loaded = try await Self.loadSnapshots(client: client, accountRef: accountRef)
+            let loaded = try await Self.loadSnapshots(
+                client: client,
+                accountRef: accountRef,
+                includeAdminMetadata: includeAdminMetadata
+            )
             let derived = await Self.deriveCandidates(from: loaded, myAccountIdHex: myAccountIdHex)
             try Task.checkCancellation()
             guard Self.loadRequestIsCurrent(
@@ -124,6 +223,7 @@ final class RecipientDirectory {
             snapshots = loaded
             candidates = derived
             loadedAccountRef = accountRef
+            loadedAdminMetadata = includeAdminMetadata
             refreshSearchFields(using: appState)
             for candidate in derived.prefix(Self.profileWarmupLimit) {
                 _ = appState.profile(forAccountIdHex: candidate.accountIdHex)
@@ -152,6 +252,7 @@ final class RecipientDirectory {
         candidates = []
         searchFieldsByAccountId = [:]
         loadedAccountRef = nil
+        loadedAdminMetadata = false
         loadError = nil
     }
 
@@ -177,43 +278,91 @@ final class RecipientDirectory {
         searchFieldsByAccountId[candidate.accountIdHex] ?? .init()
     }
 
-    /// Rosters load per row with bounded concurrency; a row whose details
-    /// read fails still contributes its last-message sender, so one bad group
-    /// can't blank the directory.
+    /// Membership pages collapse up to 100 chat rosters into one worker
+    /// command. A failed page falls back per group so one bad row still cannot
+    /// blank the directory.
     private nonisolated static func loadSnapshots(
         client: MarmotClient,
-        accountRef: String
+        accountRef: String,
+        includeAdminMetadata: Bool
     ) async throws -> [RecipientGroupSnapshot] {
+        let startedAt = ContinuousClock.now
         let rows = try await client.chatList(accountRef: accountRef, includeArchived: true)
-        var detailsByGroupId: [String: GroupDetailsFfi] = [:]
-        try await withThrowingTaskGroup(of: (String, GroupDetailsFfi?).self) { group in
-            var iterator = rows.makeIterator()
+        let membership = try await GroupMembershipPageLoader.load(
+            groupIdsHex: rows.map(\.groupIdHex),
+            pageRead: { groupIdsHex in
+                try await client.groupMemberIdsPage(
+                    accountRef: accountRef,
+                    groupIdsHex: groupIdsHex
+                )
+            },
+            fallbackRead: { groupIdHex in
+                try await client.groupMembers(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                ).map(\.memberIdHex)
+            }
+        )
+        let adminIdsByGroupId = if includeAdminMetadata {
+            try await loadAdminIds(client: client, accountRef: accountRef, rows: rows)
+        } else {
+            [String: [String]]()
+        }
+        let elapsed = startedAt.duration(to: .now).components
+        let elapsedMs = Double(elapsed.seconds) * 1_000
+            + Double(elapsed.attoseconds) / 1_000_000_000_000_000
+        loadLog.debug(
+            "membership_projection groups=\(rows.count, privacy: .public) pages=\(membership.pageReadCount, privacy: .public) fallbacks=\(membership.fallbackReadCount, privacy: .public) admin_enrichment=\(includeAdminMetadata, privacy: .public) duration_ms=\(elapsedMs, format: .fixed(precision: 0), privacy: .public)"
+        )
+
+        return rows.map { row in
+            RecipientGroupSnapshot(
+                row: row,
+                memberIdsHex: membership.memberIdsByGroupId[row.groupIdHex] ?? [],
+                adminIdsHex: adminIdsByGroupId[row.groupIdHex] ?? []
+            )
+        }
+    }
+
+    private nonisolated static func loadAdminIds(
+        client: MarmotClient,
+        accountRef: String,
+        rows: [ChatListRowFfi]
+    ) async throws -> [String: [String]] {
+        let eligibleRows = rows.filter {
+            ContentSanitizer.groupName($0.groupName) != nil
+                && GroupManagementPresentation.isActiveChatListMember($0.selfMembership)
+        }
+        var adminIdsByGroupId: [String: [String]] = [:]
+        try await withThrowingTaskGroup(of: (String, [String]?).self) { group in
+            var iterator = eligibleRows.makeIterator()
             var inFlight = 0
             func addNext() {
                 guard let row = iterator.next() else { return }
                 inFlight += 1
                 group.addTask {
-                    let details = try? await client.groupDetails(
+                    let roster = try? await client.groupRoster(
                         accountRef: accountRef,
                         groupIdHex: row.groupIdHex
                     )
-                    return (row.groupIdHex, details)
+                    return (
+                        row.groupIdHex,
+                        roster?.members.filter(\.isAdmin).map(\.memberIdHex)
+                    )
                 }
             }
             for _ in 0..<4 { addNext() }
             while inFlight > 0 {
                 try Task.checkCancellation()
-                guard let (groupIdHex, details) = try await group.next() else { break }
+                guard let (groupIdHex, adminIds) = try await group.next() else { break }
                 inFlight -= 1
-                if let details {
-                    detailsByGroupId[groupIdHex] = details
+                if let adminIds {
+                    adminIdsByGroupId[groupIdHex] = adminIds
                 }
                 addNext()
             }
         }
-        return rows.map { row in
-            RecipientGroupSnapshot(row: row, details: detailsByGroupId[row.groupIdHex])
-        }
+        return adminIdsByGroupId
     }
 
     private nonisolated static func deriveCandidates(

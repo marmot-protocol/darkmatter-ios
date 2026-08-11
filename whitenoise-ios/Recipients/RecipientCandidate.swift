@@ -70,21 +70,41 @@ nonisolated struct RecipientGroupSnapshot: Equatable {
 
     init(row: ChatListRowFfi, details: GroupDetailsFfi?) {
         self.init(
+            row: row,
+            memberIdsHex: details?.members.map(GroupMemberDetailsPresentation.profileAccountIdHex) ?? [],
+            adminIdsHex: details?.group.admins ?? [],
+            groupName: details?.group.name,
+            avatarUrl: details?.group.avatarUrl,
+            imageHashHex: details?.group.imageHashHex,
+            welcomerIdHex: details?.group.welcomerAccountIdHex
+        )
+    }
+
+    init(
+        row: ChatListRowFfi,
+        memberIdsHex: [String],
+        adminIdsHex: [String] = [],
+        groupName: String? = nil,
+        avatarUrl: String? = nil,
+        imageHashHex: String? = nil,
+        welcomerIdHex: String? = nil
+    ) {
+        self.init(
             groupIdHex: row.groupIdHex,
-            sanitizedName: ContentSanitizer.groupName(details?.group.name ?? row.groupName),
+            sanitizedName: ContentSanitizer.groupName(groupName ?? row.groupName),
             title: ContentSanitizer.groupName(row.groupName)
                 ?? ContentSanitizer.groupName(row.title)
                 ?? IdentityFormatter.short(row.groupIdHex),
-            avatarUrl: details?.group.avatarUrl ?? row.avatarUrl,
-            imageHashHex: details?.group.imageHashHex ?? row.avatar?.imageHashHex,
+            avatarUrl: avatarUrl ?? row.avatarUrl,
+            imageHashHex: imageHashHex ?? row.avatar?.imageHashHex,
             isArchived: row.archived,
             isSelfMember: GroupManagementPresentation.isActiveChatListMember(row.selfMembership),
             conversationKind: row.conversationKind,
             lastActivityAt: row.lastMessage?.timelineAt ?? row.updatedAt,
-            memberIdsHex: details?.members.map(GroupMemberDetailsPresentation.profileAccountIdHex) ?? [],
+            memberIdsHex: memberIdsHex,
             lastSenderIdHex: row.lastMessage?.sender,
-            welcomerIdHex: details?.group.welcomerAccountIdHex,
-            adminIdsHex: details?.group.admins ?? []
+            welcomerIdHex: welcomerIdHex,
+            adminIdsHex: adminIdsHex
         )
     }
 

@@ -1031,7 +1031,7 @@ final class AppState {
     @ObservationIgnored private var unreadSummaryRefreshGeneration = 0
     /// Tracked so suspension can drain an in-flight badge refresh before the
     /// runtime shuts down; an escaping task could otherwise hold the FFI
-    /// handle mid-`accountUnreadSummary()` while `shutdown()` runs.
+    /// handle mid-`accountUnreadSummary()` while terminal storage close runs.
     @ObservationIgnored private var unreadSummaryRefreshTask: Task<Void, Never>?
 #if DEBUG
     @ObservationIgnored var beforeUnreadSummaryRefreshForTesting: (() async -> Void)?

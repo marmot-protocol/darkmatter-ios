@@ -5,17 +5,25 @@ import UserNotifications
 @testable import whitenoise_ios
 
 private actor ScriptedRuntimeFactory {
-    private var busyFailuresRemaining: Int
+    private var failures: [MarmotKitError]
+    private var runtimeBusyFailuresRemaining: Int
     private var attempts = 0
     private var constructionsInFlight = 0
     private var maximumConstructionsInFlight = 0
 
     init(busyFailures: Int) {
-        busyFailuresRemaining = busyFailures
+        failures = []
+        runtimeBusyFailuresRemaining = busyFailures
+    }
+
+    init(failures: [MarmotKitError]) {
+        self.failures = failures
+        runtimeBusyFailuresRemaining = 0
     }
 
     func allowNextConstructionToSucceed() {
-        busyFailuresRemaining = 0
+        failures.removeAll()
+        runtimeBusyFailuresRemaining = 0
     }
 
     func make(
@@ -32,8 +40,11 @@ private actor ScriptedRuntimeFactory {
         )
         defer { constructionsInFlight -= 1 }
 
-        if busyFailuresRemaining > 0 {
-            busyFailuresRemaining -= 1
+        if !failures.isEmpty {
+            throw failures.removeFirst()
+        }
+        if runtimeBusyFailuresRemaining > 0 {
+            runtimeBusyFailuresRemaining -= 1
             throw MarmotKitError.RuntimeBusy
         }
         return try MarmotClient.testClient()
@@ -84,6 +95,62 @@ private actor RuntimeRetryGate {
 @MainActor
 @Suite(.serialized)
 struct RuntimeOwnershipTests {
+    @Test func releasedMembershipPageLimitCrossesTheRealBinding() async throws {
+        let client = try MarmotClient.testClient()
+        do {
+            _ = try await client.groupMemberIdsPage(
+                accountRef: "unused",
+                groupIdsHex: (0...100).map { String(format: "%032x", $0) }
+            )
+            Issue.record("Expected the 100-group binding limit to be enforced")
+        } catch let error as MarmotKitError {
+            guard case .InvalidGroupMembershipPage(let maximum) = error else {
+                Issue.record("Unexpected membership page error: \(error)")
+                return
+            }
+            #expect(maximum == 100)
+        }
+        try await client.marmot.shutdownAndClose()
+    }
+
+    @Test func newlyCreatedGroupIsImmediatelyReadableThroughRosterAndPage() async throws {
+        let client = try MarmotClient.testClient()
+        do {
+            try await client.startRuntime()
+            let account = try await client.marmot.createIdentity(
+                defaultRelays: MarmotClient.seedRelays,
+                bootstrapRelays: MarmotClient.seedRelays
+            )
+            let groupIdHex = try await client.createGroup(
+                accountRef: account.label,
+                name: "Local readiness",
+                memberRefs: [],
+                description: "Available when create returns"
+            )
+
+            let roster = try await client.groupRoster(
+                accountRef: account.label,
+                groupIdHex: groupIdHex
+            )
+            let page = try await client.groupMemberIdsPage(
+                accountRef: account.label,
+                groupIdsHex: [groupIdHex]
+            )
+
+            #expect(roster.groupIdHex == groupIdHex)
+            #expect(roster.memberCount == 1)
+            #expect(roster.selfMembership == .member)
+            #expect(roster.members.count == 1)
+            #expect(page.map(\.groupIdHex) == [groupIdHex])
+            #expect(page.first?.memberIdsHex == roster.members.map(\.memberIdHex))
+            try await client.marmot.shutdownAndClose()
+            #expect(client.marmot.storageIsClosed())
+        } catch {
+            try? await client.marmot.shutdownAndClose()
+            throw error
+        }
+    }
+
     @Test func inactiveLaunchBootstrapsWithoutTreatingInactiveAsCancellation() async {
         let factory = ScriptedRuntimeFactory(busyFailures: 0)
         let appState = AppState(
@@ -140,6 +207,37 @@ struct RuntimeOwnershipTests {
         #expect(snapshot.maximumInFlight == 1)
         #expect(appState.client != nil)
         #expect(appState.phase == .onboarding)
+    }
+
+    @Test func bootstrapRetriesTransientStorageAndKeystoreReadiness() async {
+        let factory = ScriptedRuntimeFactory(failures: [
+            .StorageBusy(details: "database is locked"),
+            .KeystoreUnavailable(details: "protected data unavailable"),
+        ])
+        let appState = AppState(
+            client: nil,
+            notifications: runtimeOwnershipDeniedNotifications(),
+            runtimeClientFactory: { rootPath, relayUrls, cursorPersistence, telemetryConfig in
+                try await factory.make(
+                    rootPath: rootPath,
+                    relayUrls: relayUrls,
+                    cursorPersistence: cursorPersistence,
+                    telemetryConfig: telemetryConfig
+                )
+            },
+            runtimeRetrySleeper: { _ in },
+            runtimeConstructionRetryPolicy: RuntimeConstructionRetryPolicy(
+                delays: [.zero, .zero]
+            )
+        )
+        appState.setAppSceneActive(true)
+
+        await appState.bootstrap()
+
+        let snapshot = await factory.snapshot()
+        #expect(snapshot.attempts == 3)
+        #expect(appState.phase == .onboarding)
+        #expect(appState.client != nil)
     }
 
     @Test func bootstrapStopsRetryingWhenAppBackgrounds() async {
@@ -211,6 +309,7 @@ struct RuntimeOwnershipTests {
 
     @Test func backgroundSuspensionDropsTheFinalClientReference() async throws {
         var injectedClient: MarmotClient? = try MarmotClient.testClient()
+        let marmot = try #require(injectedClient?.marmot)
         weak let releasedClient = injectedClient
         let appState = AppState(
             client: injectedClient,
@@ -224,6 +323,7 @@ struct RuntimeOwnershipTests {
 
         #expect(appState.client == nil)
         #expect(releasedClient == nil)
+        #expect(marmot.storageIsClosed())
     }
 
     @Test func runtimeLeaseRejectsASecondOwnerUntilTheFinalHandleDrops() async throws {
@@ -247,7 +347,7 @@ struct RuntimeOwnershipTests {
             #expect(error.isRuntimeOwnershipContention)
         }
 
-        await first?.shutdown()
+        try await first?.shutdownAndClose()
         first = nil
 
         let replacement = try Marmot.newWithCursorPersistence(
@@ -255,12 +355,21 @@ struct RuntimeOwnershipTests {
             relayUrls: ["wss://relay.invalid.test"],
             cursorPersistence: .advance
         )
-        await replacement.shutdown()
+        try await replacement.shutdownAndClose()
     }
 
     @Test func notificationContentionUsesTypedImmediateFallbackClassification() {
         #expect(MarmotKitError.RuntimeBusy.isRuntimeOwnershipContention)
         #expect(!MarmotKitError.RuntimeStopping.isRuntimeOwnershipContention)
+    }
+
+    @Test func startupReadinessClassifierIsNarrowAndTyped() {
+        #expect(MarmotKitError.RuntimeBusy.isTransientStartupReadinessFailure)
+        #expect(MarmotKitError.StorageBusy(details: "busy").isTransientStartupReadinessFailure)
+        #expect(MarmotKitError.KeystoreUnavailable(details: "locked").isTransientStartupReadinessFailure)
+        #expect(!MarmotKitError.StorageClosed(details: "closed").isTransientStartupReadinessFailure)
+        #expect(!MarmotKitError.InvalidGroupMembershipPage(maxGroups: 100).isTransientStartupReadinessFailure)
+        #expect(!MarmotKitError.Io(details: "disk failed").isTransientStartupReadinessFailure)
     }
 
     @Test func notificationActionContentionFailsImmediatelyAndReleasesSuspensionGate() async throws {

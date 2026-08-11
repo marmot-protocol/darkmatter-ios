@@ -481,6 +481,7 @@ private enum GroupAvatarImageLoader {
 private struct AvatarRemoteImage: View {
     let url: URL
 
+    @Environment(AppState.self) private var appState: AppState?
     @Environment(\.displayScale) private var displayScale
     @State private var phase = Phase.loading
 
@@ -514,10 +515,20 @@ private struct AvatarRemoteImage: View {
     private func load(_ request: AvatarRemoteImageRequest) async {
         phase = .loading
         do {
+            let client = try? appState?.currentMarmotClient()
             let image = try await RemoteAvatarImageLoader.image(
                 for: request.url,
                 maxPixelSize: request.maxPixelSize,
-                scale: displayScale
+                scale: displayScale,
+                fetch: { url in
+                    if let client {
+                        return try await client.downloadProfileImage(
+                            url: url.absoluteString,
+                            maxBytes: UInt64(RemoteImageFetch.maximumImageBytes)
+                        )
+                    }
+                    return try await RemoteImageFetch.imageData(for: url)
+                }
             )
             guard !Task.isCancelled else { return }
             phase = .success(request, image)

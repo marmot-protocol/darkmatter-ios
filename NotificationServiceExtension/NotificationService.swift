@@ -61,7 +61,7 @@ final class NotificationService: UNNotificationServiceExtension {
             // shutdown continues independently and releases its final handle when
             // Rust returns.
             Task.detached {
-                await marmot.shutdown()
+                try? await marmot.shutdownAndClose()
             }
         }
         finish(applyingFallbackForTimeout: true)
@@ -87,7 +87,7 @@ final class NotificationService: UNNotificationServiceExtension {
             diagnosticStage = .runtimeCreated
             if Task.isCancelled {
                 if let marmot = takeActiveMarmotForShutdown(marmot) {
-                    await marmot.shutdown()
+                    try? await marmot.shutdownAndClose()
                 }
                 finish(applyingFallbackForTimeout: true)
                 return
@@ -200,7 +200,7 @@ final class NotificationService: UNNotificationServiceExtension {
                 applyFallback(to: content)
             }
             if let marmot = takeActiveMarmotForShutdown(marmot) {
-                await marmot.shutdown()
+                try? await marmot.shutdownAndClose()
             }
         } catch let error as MarmotKitError where error.isRuntimeOwnershipContention {
             recordDiagnostic(outcome: .runtimeOwnershipContention)

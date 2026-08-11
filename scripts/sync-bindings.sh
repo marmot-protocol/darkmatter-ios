@@ -43,6 +43,11 @@ if [[ ! -d "$MDK_DIR/crates/marmot-uniffi" ]]; then
 fi
 
 export OTLP_EXPORT="${OTLP_EXPORT:-1}"
+# Keep the vendored static libraries below GitHub's per-file size limit while
+# retaining optimized native code. A single codegen unit also gives LLVM more
+# room to remove duplicate code within each crate.
+export CARGO_PROFILE_RELEASE_OPT_LEVEL="${CARGO_PROFILE_RELEASE_OPT_LEVEL:-s}"
+export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="${CARGO_PROFILE_RELEASE_CODEGEN_UNITS:-1}"
 echo "==> Building MarmotKit.xcframework from $MDK_DIR"
 "$MDK_DIR/crates/marmot-uniffi/xcframework.sh"
 
@@ -89,6 +94,8 @@ uniffi-version: ${UNIFFI_VERSION}
 features: ${FEATURES}
 ios-targets: aarch64-apple-ios, aarch64-apple-ios-sim
 ios-deployment-target: 18.0
+rust-release-opt-level: ${CARGO_PROFILE_RELEASE_OPT_LEVEL}
+rust-release-codegen-units: ${CARGO_PROFILE_RELEASE_CODEGEN_UNITS}
 
 Notes:
 - Regenerate with: whitenoise-ios/scripts/sync-bindings.sh
