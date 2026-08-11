@@ -52,8 +52,8 @@ zero-cache. We aim for *no logic in the iOS layer that the bindings can own*.
   MainActor-blocking path) vs **21** correct `currentMarmotClient()` sites.
 - Only 2 of ~21 screens use a view model; 19 embed Marmot calls in `body`.
 
-Cross-repo: the Rust source of truth is `/Users/jeff/code/darkmatter`.
-Bindings regenerate via `scripts/sync-bindings.sh` into `Vendored/MarmotKit`.
+Cross-repo: the Rust source of truth is `/Users/jeff/code/mdk`.
+Published bindings install via `scripts/sync-bindings.sh` into `Packages/MarmotKit`.
 
 ---
 
@@ -265,13 +265,13 @@ data. This is the phase that actually achieves "thin shell."
 > are already done or belong in iOS.** Net required Rust work is ~one change.
 > Full spec lives in `docs/thin-shell-rust-prompt.md` (hand to the Rust repo).
 
-**Rust targets** (`/Users/jeff/code/darkmatter`):
+**Rust targets** (`/Users/jeff/code/mdk`):
 - FFI structs + resolution: `crates/marmot-uniffi/src/conversions/{timeline,media}.rs`
 - App-layer record (if resolution lives there): `crates/marmot-app/src/lib.rs`,
   internal record in `crates/storage-sqlite/src/timeline.rs`
 - Tests: `crates/marmot-uniffi/src/conversions/` (+ `marmot-app/src/projection/tests.rs`)
-- Regenerate: `OTLP_EXPORT=1 ./crates/marmot-uniffi/xcframework.sh`, then iOS
-  `DARKMATTER_DIR=/Users/jeff/code/darkmatter ./scripts/sync-bindings.sh`
+- Publish an immutable MarmotKit snapshot, then install it in iOS with
+  `./scripts/sync-bindings.sh <full-master-sha>`.
 
 **Required change (additive-then-delete):**
 
@@ -441,8 +441,8 @@ xcodebuild build -project whitenoise-ios.xcodeproj -scheme "Whitenoise (Producti
 # Format gate
 git diff --check
 
-# Regenerate bindings after Rust changes
-./scripts/sync-bindings.sh
+# Install a published binding snapshot after Rust changes
+./scripts/sync-bindings.sh <full-master-sha>
 ```
 
 For lifecycle/notification/binding changes, also walk the relevant items in

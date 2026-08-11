@@ -128,15 +128,14 @@ viewer/UI state and belongs in iOS.
 - Every addition is additive (new field defaults to empty). Ship it; iOS
   switches to reading `media`, confirms parity against `list_media`, then a
   follow-up PR removes `media_json` and the iOS `list_media`-for-timeline path.
-- Workspace version is `0.2.0` (`Cargo.toml`); there is no ABI pin between the
-  repos. After merge, iOS picks the change up with:
-  `DARKMATTER_DIR=<your darkmatter checkout> ./scripts/sync-bindings.sh`.
+- The published MarmotKit release is the ABI pin between the repositories.
+  After merge, publish an immutable snapshot and install it in iOS with:
+  `./scripts/sync-bindings.sh <full-master-sha>`.
 
 ## Build / test / regenerate
 
 ```sh
-# Build + regenerate the Swift xcframework & bindings (OTLP on, as iOS uses)
-OTLP_EXPORT=1 ./crates/marmot-uniffi/xcframework.sh
+# Publish the MarmotKit snapshot with the repository workflow after validation.
 
 # Tests
 cargo test -p marmot-uniffi --lib conversions

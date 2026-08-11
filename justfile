@@ -4,11 +4,9 @@
 default:
     @just --list
 
-# The xcframework is git-ignored; this rebuilds it locally from the sibling
-# ../mdk Rust repo (needs the toolchain) and stamps provenance. Run on a
-# fresh clone and after Rust changes.
-sync-bindings:
-    @./scripts/sync-bindings.sh
+# Install a published formal release or immutable master snapshot.
+sync-bindings release:
+	@./scripts/sync-bindings.sh {{release}}
 
 # Lint Swift files
 lint:
@@ -22,7 +20,6 @@ autofix:
 test:
     @./scripts/test.sh
 
-# Leaves Vendored/MarmotKit alone — that xcframework is tracked, not build output.
 # Remove local build output: build/ and this project's DerivedData
 clean:
     @rm -rf build

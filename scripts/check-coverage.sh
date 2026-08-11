@@ -15,7 +15,7 @@ XCRESULT="build/TestResults.xcresult"
 MIN_COVERAGE=""
 WARNINGS_FILE=""
 
-# Only first-party source counts; the vendored bindings and test bundle are
+# Only first-party app source counts; the generated bindings and test bundle are
 # separate targets and drop out on the target/path filters below. Defined once
 # here and reused by the jq filter and the find safety net so they never drift.
 SOURCE_ROOTS=(whitenoise-ios Shared NotificationServiceExtension)

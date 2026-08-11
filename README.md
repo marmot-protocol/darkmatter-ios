@@ -8,7 +8,7 @@
   SwiftUI interface. Rust cryptographic core. Generic APNS wakes. Local-first diagnostics.
 </p>
 
-White Noise iOS is the native iPhone client for the MDK/Marmot secure messaging stack. The app gives iOS users a polished SwiftUI chat experience while delegating accounts, MLS group state, storage, relay catch-up, message processing, encrypted media, push-token cryptography, telemetry, and audit-log plumbing to the vendored `MarmotKit` UniFFI package.
+White Noise iOS is the native iPhone client for the MDK/Marmot secure messaging stack. The app gives iOS users a polished SwiftUI chat experience while delegating accounts, MLS group state, storage, relay catch-up, message processing, encrypted media, push-token cryptography, telemetry, and audit-log plumbing to the `MarmotKit` UniFFI package.
 
 The project is intentionally split along the platform boundary: Swift owns presentation, navigation, lifecycle, notifications, and Apple integration; Marmot owns protocol state and durable encrypted data.
 
@@ -28,7 +28,7 @@ The project is intentionally split along the platform boundary: Swift owns prese
 
 - SwiftUI owns the app shell, onboarding, settings, chat UI, navigation, sheets, toasts, and foreground/background lifecycle.
 - `AppState` is the observable hub for global app state. It owns the live `MarmotClient`, the active account, pending navigation, visible-chat tracking, notification subscriptions, native push sync, and runtime suspend/resume.
-- `MarmotKit` is generated from the sibling MDK Rust repo. It exposes the Marmot runtime through UniFFI and ships here as a vendored xcframework plus generated Swift bindings.
+- `MarmotKit` is generated from MDK. Its generated Swift source is kept in a local package while SwiftPM downloads the matching immutable XCFramework release.
 - `Shared/` compiles into both the app and the Notification Service Extension, so files there must remain extension-safe.
 - The Notification Service Extension opens the shared Marmot store, runs bounded relay catch-up, and projects local notification content without putting private metadata in the APNS payload.
 
@@ -39,8 +39,8 @@ The project is intentionally split along the platform boundary: Swift owns prese
 - `whitenoise-ios/Chats/`, `Conversation/`, `Group/`, `Settings/`, `Profile/`, `Onboarding/` - feature screens and view models.
 - `NotificationServiceExtension/` - APNS wake handling and local notification decoration.
 - `Shared/` - extension-safe code shared by the app and notification extension.
-- `Vendored/MarmotKit/` - generated UniFFI Swift bindings and the prebuilt Marmot static library xcframework.
-- `scripts/sync-bindings.sh` - rebuilds and re-vendors `MarmotKit` from the sibling Rust checkout.
+- `Packages/MarmotKit/` - generated UniFFI Swift bindings and the pinned remote XCFramework declaration.
+- `scripts/sync-bindings.sh` - verifies and installs a published immutable `MarmotKit` release.
 - `docs/manual-tests.md` - release-focused manual checks for flows that are expensive to automate.
 - `AGENTS.md` - canonical coding-agent guidance for this repo.
 
@@ -48,7 +48,7 @@ The project is intentionally split along the platform boundary: Swift owns prese
 
 - Xcode with iOS 18+ SDK support.
 - Apple developer signing configured for device builds, APNS, App Groups, and the Notification Service Extension.
-- The sibling MDK Rust repo at `../mdk` only when regenerating Marmot bindings. Normal Swift builds use the vendored `MarmotKit` bundle.
+- Network access for SwiftPM to download the pinned MarmotKit XCFramework on a clean build.
 
 Production identifiers:
 
@@ -122,21 +122,21 @@ xcodebuild -showdestinations \
 
 ## MarmotKit Bindings
 
-`Vendored/MarmotKit/MARMOT_VERSION` records the MDK commit used for the current bindings.
+`Packages/MarmotKit/MARMOT_VERSION` records the immutable MDK release used for the current bindings.
 
-Regenerate bindings after changes in `marmot-uniffi` or any Rust crate it depends on:
-
-```sh
-./scripts/sync-bindings.sh
-```
-
-Use `MDK_DIR` if the Rust checkout is not the sibling default:
+After publishing a MarmotKit snapshot for a full commit SHA on MDK `master`, install it with:
 
 ```sh
-MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
+./scripts/sync-bindings.sh <full-master-sha>
 ```
 
-Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, regenerate, then validate the iOS app.
+Install a formal MarmotKit release by version with:
+
+```sh
+./scripts/sync-bindings.sh 0.9.11
+```
+
+The script verifies the published manifest, SwiftPM checksum, generated Swift source, and source SHA before updating them together. Do not hand-edit generated files in `Packages/MarmotKit`.
 
 ## Privacy And Storage
 
@@ -149,7 +149,7 @@ Do not hand-edit generated files in `Vendored/MarmotKit`. Change Rust/UniFFI, re
 
 ## Telemetry And Audit Logs
 
-Telemetry is compiled into the vendored MarmotKit bundle with the `otlp-export` feature. The app reads these Xcode build settings through `Info.plist`:
+Telemetry is compiled into the published MarmotKit bundle with the `otlp-export` feature. The app reads these Xcode build settings through `Info.plist`:
 
 - `WHITENOISE_OTLP_ENDPOINT` - default `https://otlp.ipf.dev/v1/metrics`
 - `WHITENOISE_OTLP_BEARER_TOKEN` - defaults to `$(OTLP_TOKEN_WHITENOISE_IOS)`

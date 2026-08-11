@@ -53,21 +53,21 @@ Keep keyboard notification adapters and other SwiftUI/UIKit-only helpers in the 
 
 ## Rust Bindings
 
-The generated Swift bindings and static library live in `Vendored/MarmotKit`. The source of truth is the sibling MDK repo, normally at `/Users/jeff/code/mdk`.
+The generated Swift bindings and immutable remote binary declaration live in `Packages/MarmotKit`. The source of truth is the MDK MarmotKit release published from `marmot-protocol/mdk`.
 
-Regenerate with:
-
-```sh
-./scripts/sync-bindings.sh
-```
-
-or:
+Install a published snapshot using its full `master` commit SHA:
 
 ```sh
-MDK_DIR=/path/to/mdk ./scripts/sync-bindings.sh
+./scripts/sync-bindings.sh <full-master-sha>
 ```
 
-Do not patch generated binding files directly. Change Rust/UniFFI, regenerate, then validate the iOS app.
+Install a formal release using its version:
+
+```sh
+./scripts/sync-bindings.sh 0.9.11
+```
+
+Do not patch generated binding files directly or commit an expanded XCFramework. Change Rust/UniFFI, publish an immutable release, install it with the script, then validate the iOS app. The generated Swift source, binary URL, and checksum must always move together.
 
 ## Notifications
 
@@ -201,6 +201,6 @@ For TestFlight-facing changes, also walk the relevant items in `docs/manual-test
 
 ## Git Hygiene
 
-The worktree may contain user edits. Do not revert changes you did not make. If a generated file changes, confirm whether it came from `scripts/sync-bindings.sh` before touching it.
+The worktree may contain user edits. Do not revert changes you did not make. If a generated file changes, confirm whether it came from a published MarmotKit release installed by `scripts/sync-bindings.sh` before touching it.
 
 Commit related work as one clear checkpoint when asked. Leave unrelated cleanup for a separate commit.
