@@ -23,6 +23,7 @@ struct DirectChatStarterTests {
         )
 
         #expect(outcome == .opened(groupIdHex: "dm-1"))
+        #expect(appState.directChatPeerAccountId(accountRef: "account", groupIdHex: "dm-1") == alice)
         #expect(!starter.isCreating)
     }
 
@@ -45,7 +46,21 @@ struct DirectChatStarterTests {
 
         #expect(outcome == .created(groupIdHex: "new-group"))
         #expect(observedRefs == ["account", alice])
+        #expect(appState.directChatPeerAccountId(accountRef: "account", groupIdHex: "new-group") == alice)
         #expect(starter.creatingAccountIdHex == nil)
+    }
+
+    @Test func recentDirectPeerHandoffIsAccountScopedAndBounded() throws {
+        var store = RecentDirectChatPeerStore(maxAccounts: 1, maxGroupsPerAccount: 1)
+        store.record(accountRef: "first", groupIdHex: "old", peerAccountIdHex: alice)
+        store.record(accountRef: "first", groupIdHex: "new", peerAccountIdHex: "bob")
+
+        #expect(store.peerAccountId(accountRef: "first", groupIdHex: "old") == nil)
+        #expect(store.peerAccountId(accountRef: "first", groupIdHex: "new") == "bob")
+
+        store.record(accountRef: "second", groupIdHex: "other", peerAccountIdHex: "carol")
+        #expect(store.peerAccountId(accountRef: "first", groupIdHex: "new") == nil)
+        #expect(store.peerAccountId(accountRef: "second", groupIdHex: "other") == "carol")
     }
 
     @Test func secondTapIsIgnoredWhileTheFirstCreateIsInFlight() async throws {

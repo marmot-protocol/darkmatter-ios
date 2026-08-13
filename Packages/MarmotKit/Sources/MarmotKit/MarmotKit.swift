@@ -2709,7 +2709,7 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func unfollowUser(accountRef: String, userRef: String) async throws  -> [String]
 
     /**
-     * Remove this account's reaction from `target_message_id`.
+     * Remove all of this account's active reactions from `target_message_id`.
      */
     func unreactFromMessage(accountRef: String, groupIdHex: String, targetMessageId: String) async throws  -> SendSummaryFfi
 
@@ -5545,7 +5545,7 @@ open func unfollowUser(accountRef: String, userRef: String)async throws  -> [Str
 }
 
     /**
-     * Remove this account's reaction from `target_message_id`.
+     * Remove all of this account's active reactions from `target_message_id`.
      */
 open func unreactFromMessage(accountRef: String, groupIdHex: String, targetMessageId: String)async throws  -> SendSummaryFfi  {
     return
@@ -18378,8 +18378,6 @@ public enum GroupEventKindFfi {
     )
     case epochChanged(from: UInt64, to: UInt64
     )
-    case forkRecovered(sourceEpoch: UInt64, recoveredEpoch: UInt64, invalidatedCommitIdHex: String
-    )
     case commitRolledBack(invalidatedCommitIdHex: String
     )
     /**
@@ -18436,21 +18434,18 @@ public struct FfiConverterTypeGroupEventKindFfi: FfiConverterRustBuffer {
         case 8: return .epochChanged(from: try FfiConverterUInt64.read(from: &buf), to: try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 9: return .forkRecovered(sourceEpoch: try FfiConverterUInt64.read(from: &buf), recoveredEpoch: try FfiConverterUInt64.read(from: &buf), invalidatedCommitIdHex: try FfiConverterString.read(from: &buf)
+        case 9: return .commitRolledBack(invalidatedCommitIdHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 10: return .commitRolledBack(invalidatedCommitIdHex: try FfiConverterString.read(from: &buf)
+        case 10: return .groupStateInvalidated(epoch: try FfiConverterUInt64.read(from: &buf), invalidatedCommitIdHex: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .groupStateInvalidated(epoch: try FfiConverterUInt64.read(from: &buf), invalidatedCommitIdHex: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
+        case 11: return .groupUnrecoverable
+
+        case 12: return .pendingCommitRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
         )
 
-        case 12: return .groupUnrecoverable
-
-        case 13: return .pendingCommitRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
-        )
-
-        case 14: return .groupHydrationRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
+        case 13: return .groupHydrationRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -18510,36 +18505,29 @@ public struct FfiConverterTypeGroupEventKindFfi: FfiConverterRustBuffer {
             FfiConverterUInt64.write(to, into: &buf)
 
 
-        case let .forkRecovered(sourceEpoch,recoveredEpoch,invalidatedCommitIdHex):
-            writeInt(&buf, Int32(9))
-            FfiConverterUInt64.write(sourceEpoch, into: &buf)
-            FfiConverterUInt64.write(recoveredEpoch, into: &buf)
-            FfiConverterString.write(invalidatedCommitIdHex, into: &buf)
-
-
         case let .commitRolledBack(invalidatedCommitIdHex):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(invalidatedCommitIdHex, into: &buf)
 
 
         case let .groupStateInvalidated(epoch,invalidatedCommitIdHex,reason):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
             FfiConverterUInt64.write(epoch, into: &buf)
             FfiConverterString.write(invalidatedCommitIdHex, into: &buf)
             FfiConverterString.write(reason, into: &buf)
 
 
         case .groupUnrecoverable:
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(11))
 
 
         case let .pendingCommitRecovered(recoveredEpoch):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(12))
             FfiConverterUInt64.write(recoveredEpoch, into: &buf)
 
 
         case let .groupHydrationRecovered(recoveredEpoch):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(13))
             FfiConverterUInt64.write(recoveredEpoch, into: &buf)
 
         }
@@ -24987,7 +24975,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_unfollow_user() != 7605) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_unreact_from_message() != 11846) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_unreact_from_message() != 52209) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_update_group_avatar_url() != 57913) {

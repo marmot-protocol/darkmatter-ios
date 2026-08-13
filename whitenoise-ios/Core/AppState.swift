@@ -32,6 +32,47 @@ struct ForegroundMaintenanceTasks {
     let profileRefresh: Task<Void, Never>?
 }
 
+/// Bounded, account-scoped handoff from direct-chat creation to the chat-list
+/// projection. A newly created unnamed group reaches the list before its roster
+/// details do, even though the creation path already knows the other account.
+struct RecentDirectChatPeerStore {
+    private struct Entry: Equatable {
+        let groupIdHex: String
+        let peerAccountIdHex: String
+    }
+
+    private let maxAccounts: Int
+    private let maxGroupsPerAccount: Int
+    private var entriesByAccountRef: [String: [Entry]] = [:]
+    private var accountRecency: [String] = []
+
+    init(maxAccounts: Int = 4, maxGroupsPerAccount: Int = 64) {
+        self.maxAccounts = max(1, maxAccounts)
+        self.maxGroupsPerAccount = max(1, maxGroupsPerAccount)
+    }
+
+    mutating func record(accountRef: String, groupIdHex: String, peerAccountIdHex: String) {
+        guard !accountRef.isEmpty, !groupIdHex.isEmpty, !peerAccountIdHex.isEmpty else { return }
+        var entries = entriesByAccountRef[accountRef] ?? []
+        entries.removeAll { $0.groupIdHex == groupIdHex }
+        entries.append(Entry(groupIdHex: groupIdHex, peerAccountIdHex: peerAccountIdHex))
+        entriesByAccountRef[accountRef] = Array(entries.suffix(maxGroupsPerAccount))
+        touch(accountRef)
+        while accountRecency.count > maxAccounts {
+            entriesByAccountRef[accountRecency.removeFirst()] = nil
+        }
+    }
+
+    func peerAccountId(accountRef: String, groupIdHex: String) -> String? {
+        entriesByAccountRef[accountRef]?.last(where: { $0.groupIdHex == groupIdHex })?.peerAccountIdHex
+    }
+
+    private mutating func touch(_ accountRef: String) {
+        accountRecency.removeAll { $0 == accountRef }
+        accountRecency.append(accountRef)
+    }
+}
+
 /// Root observable state for the app.
 ///
 /// Holds the `Marmot` handle, the current set of `AccountSummaryFfi`, and
@@ -191,6 +232,7 @@ final class AppState {
     /// stays on AppState (below) as the observed token; the store reads/bumps it
     /// through its back-reference so SwiftUI observation is unchanged.
     @ObservationIgnored let profileStore = ProfileStore()
+    @ObservationIgnored private var recentDirectChatPeers = RecentDirectChatPeerStore()
     /// True only while `signOut()` is tearing down the departing account. Set
     /// before any of sign-out's `await` suspension points and cleared once the
     /// account is removed and `accounts` refreshed. `scheduleNativePushRegistrationIfEnabled()`
@@ -316,6 +358,22 @@ final class AppState {
 
     func noteProfileRefreshCompleted() {
         profileRefreshGeneration += 1
+    }
+
+    func noteDirectChatPeer(
+        accountRef: String,
+        groupIdHex: String,
+        peerAccountIdHex: String
+    ) {
+        recentDirectChatPeers.record(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            peerAccountIdHex: peerAccountIdHex
+        )
+    }
+
+    func directChatPeerAccountId(accountRef: String, groupIdHex: String) -> String? {
+        recentDirectChatPeers.peerAccountId(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
     /// Production entry point. Runtime construction belongs to bootstrap so the

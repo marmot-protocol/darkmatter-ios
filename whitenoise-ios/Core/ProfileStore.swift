@@ -178,6 +178,32 @@ final class ProfileStore {
         scheduleProfileProjectionLoad(forAccountIdHex: id, refreshAfterLoad: refreshAfterLoad)
     }
 
+    func seedDiscoveredProfile(_ profile: UserProfileMetadataFfi?, forAccountIdHex id: String) {
+        guard let profile, !id.isEmpty else { return }
+
+        // Search already completed the remote lookup. Cancel any older local
+        // hydration reservation so it cannot overwrite this explicit result
+        // with a stale empty projection after its suspension point returns.
+        if profileProjectionLoadVersions[id] != nil
+            || scheduledProfileProjectionLoadIDs.contains(id)
+            || queuedProfileProjectionLoadIDs.contains(id) {
+            _ = bumpProfileProjectionLoadVersion(forAccountIdHex: id)
+        }
+        queuedProfileProjectionLoadIDs.removeAll { $0 == id }
+        scheduledProfileProjectionLoadIDs.remove(id)
+        profileProjectionRefreshAfterLoadIDs.remove(id)
+
+        let existing = profileProjectionCache[id]
+        applyProfileProjection(
+            ProfileDisplayProjection(
+                profile: profile,
+                projectedName: existing?.projectedName,
+                localAccountLabel: existing?.localAccountLabel ?? localAccountLabel(forAccountIdHex: id)
+            ),
+            forAccountIdHex: id
+        )
+    }
+
     func warmLocalAccountProfileProjections() {
         for account in accounts {
             warmProfileProjection(forAccountIdHex: account.accountIdHex)

@@ -102,10 +102,10 @@ extension AppState {
         return nil
     }
 
-    /// Best-effort display name. Prefers the known name, then short-hex.
+    /// Best-effort display name. Prefers the known name, then canonical npub.
     @MainActor
     func displayName(forAccountIdHex id: String) -> String {
-        knownDisplayName(forAccountIdHex: id) ?? IdentityFormatter.short(id)
+        knownDisplayName(forAccountIdHex: id) ?? shortNpub(forAccountIdHex: id)
     }
 
     /// Display name for a markdown mention entity (npub/nprofile). nil when
@@ -147,6 +147,13 @@ extension AppState {
     @MainActor
     func warmProfileProjection(forAccountIdHex id: String, refreshAfterLoad: Bool = false) {
         profileStore.warmProfileProjection(forAccountIdHex: id, refreshAfterLoad: refreshAfterLoad)
+    }
+
+    /// Promotes profile metadata that was already resolved by recipient search
+    /// into the shared projection cache when the user acts on that result.
+    @MainActor
+    func seedDiscoveredProfile(_ profile: UserProfileMetadataFfi?, forAccountIdHex id: String) {
+        profileStore.seedDiscoveredProfile(profile, forAccountIdHex: id)
     }
 
     @MainActor

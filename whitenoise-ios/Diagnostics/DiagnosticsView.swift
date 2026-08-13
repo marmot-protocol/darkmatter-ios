@@ -146,8 +146,6 @@ struct DiagnosticsView: View {
             return "hydration quarantined"
         case .epochChanged:
             return "epoch changed"
-        case .forkRecovered:
-            return "fork recovered"
         case .commitRolledBack:
             return "commit rolled back"
         case .groupStateInvalidated:

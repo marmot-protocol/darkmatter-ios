@@ -514,7 +514,7 @@ struct ComposerMentionQueryTests {
         let candidate = try #require(ComposerMentionCandidate(member: member, appState: AppState()))
 
         #expect(candidate.npub == npub)
-        #expect(candidate.displayName == IdentityFormatter.short(accountIdHex))
+        #expect(candidate.displayName == IdentityFormatter.short(npub))
     }
 
     @Test func fallbackMemberCandidateRejectsInvalidAccountHex() {

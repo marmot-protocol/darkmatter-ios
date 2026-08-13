@@ -1750,6 +1750,24 @@ final class ConversationViewModel {
         ).tallies
     }
 
+    /// Marmot's un-react command removes every active reaction from this
+    /// account on the target message, regardless of which emoji was tapped.
+    nonisolated static func reactionRemovalsForUnreact(
+        target: String,
+        tallies: [ReactionTally],
+        sender: String
+    ) -> Set<ReactionRemoval> {
+        guard !target.isEmpty, !sender.isEmpty else { return [] }
+        return Set(tallies.compactMap { tally in
+            guard tally.mine else { return nil }
+            return ReactionRemoval(
+                targetMessageIdHex: target,
+                emoji: tally.emoji,
+                sender: sender
+            )
+        })
+    }
+
     /// Sender-level counterpart to `reactionTallies`. This is the canonical
     /// fold of Marmot's authenticated summary and the local optimistic overlay.
     nonisolated static func reactionDetails(
@@ -2367,23 +2385,22 @@ final class ConversationViewModel {
         // Optimistic state we can roll back on failure.
         var addedKey: String?
         var removedRecords: [String: AppMessageRecordFfi] = [:]
-        var removal: ReactionRemoval?
+        var removals: Set<ReactionRemoval> = []
         var clearedRemoval: ReactionRemoval?
 
         if alreadyMine {
-            removal = ReactionRemoval(
-                targetMessageIdHex: message.messageIdHex,
-                emoji: emoji,
+            removals = Self.reactionRemovalsForUnreact(
+                target: message.messageIdHex,
+                tallies: reactions(for: message.messageIdHex),
                 sender: me
             )
-            if let removal {
+            for removal in removals {
                 timelineStore.reactionProjections.insertRemoval(removal)
             }
-            // Un-react: drop my matching reaction record(s) for this target+emoji.
-            // The real un-react publishes a kind-5 delete of the reaction event id.
+            // Un-react removes every active reaction from this account on the
+            // target, including optimistic records for other emoji.
             removedRecords = timelineStore.reactionProjections.removeMatchingRecords(
                 target: message.messageIdHex,
-                emoji: emoji,
                 sender: me
             )
         } else {
@@ -2439,7 +2456,9 @@ final class ConversationViewModel {
         } catch {
             // Revert the optimistic change.
             if let addedKey { timelineStore.reactionProjections.removeRecord(forKey: addedKey) }
-            if let removal { timelineStore.reactionProjections.removeRemoval(removal) }
+            for removal in removals {
+                timelineStore.reactionProjections.removeRemoval(removal)
+            }
             if let clearedRemoval { timelineStore.reactionProjections.insertRemoval(clearedRemoval) }
             timelineStore.reactionProjections.restoreRecords(removedRecords)
             if timelineStore.recomputeReactions(for: [message.messageIdHex]) {

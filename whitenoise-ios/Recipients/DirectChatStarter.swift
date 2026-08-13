@@ -104,6 +104,11 @@ final class DirectChatStarter {
             return .failed(.other(message: L10n.string("No active account is selected.")))
         }
         if let existingGroupIdHex {
+            appState.noteDirectChatPeer(
+                accountRef: accountRef,
+                groupIdHex: existingGroupIdHex,
+                peerAccountIdHex: accountIdHex
+            )
             return .opened(groupIdHex: existingGroupIdHex)
         }
         creatingAccountIdHex = accountIdHex
@@ -131,6 +136,11 @@ final class DirectChatStarter {
                 description: nil
             )
 #endif
+            appState.noteDirectChatPeer(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                peerAccountIdHex: accountIdHex
+            )
             return .created(groupIdHex: groupIdHex)
         } catch {
             return .failed(StartChatFailurePresentation.failure(for: error))

@@ -123,7 +123,7 @@ enum GroupMemberDetailsPresentation {
         }
         let accountIdHex = profileAccountIdHex(for: member)
         return appState.knownDisplayName(forAccountIdHex: accountIdHex)
-            ?? IdentityFormatter.short(accountIdHex)
+            ?? appState.shortNpub(forAccountIdHex: accountIdHex)
     }
 
     @MainActor

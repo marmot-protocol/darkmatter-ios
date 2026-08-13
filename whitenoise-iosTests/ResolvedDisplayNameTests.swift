@@ -86,4 +86,21 @@ struct ResolvedDisplayNameTests {
         #expect(projection.knownDisplayName == "Local")
         #expect(!projection.hasRemoteIdentity)
     }
+
+    @Test func unknownAccountDisplaysCanonicalNpubInsteadOfHex() throws {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        let accountIdHex = try #require(NostrProfileReference.pubkeyHex(fromBech32: npub))
+        let appState = AppState()
+
+        #expect(appState.displayName(forAccountIdHex: accountIdHex) == IdentityFormatter.short(npub))
+    }
+
+    @Test func discoveredProfileIsImmediatelySharedWithOtherPresentationSurfaces() throws {
+        let appState = AppState()
+        let accountIdHex = String(repeating: "ab", count: 32)
+        appState.seedDiscoveredProfile(profile(displayName: "Alice"), forAccountIdHex: accountIdHex)
+
+        #expect(appState.knownDisplayName(forAccountIdHex: accountIdHex) == "Alice")
+        #expect(appState.cachedProfile(forAccountIdHex: accountIdHex)?.displayName == "Alice")
+    }
 }

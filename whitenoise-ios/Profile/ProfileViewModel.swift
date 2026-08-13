@@ -165,8 +165,14 @@ final class ProfileViewModel {
         }
     }
 
-    func message(npub: String, using appState: AppState, onOpen: (String) -> Void) async {
+    func message(
+        npub: String,
+        profile: UserProfileMetadataFfi? = nil,
+        using appState: AppState,
+        onOpen: (String) -> Void
+    ) async {
         guard let hex, !isPreparingConversationChoices else { return }
+        appState.seedDiscoveredProfile(profile, forAccountIdHex: hex)
         startPrompt = nil
         conversationChooser = nil
         isPreparingConversationChoices = true
@@ -212,7 +218,7 @@ final class ProfileViewModel {
                 targetAccountIdHex: hex,
                 memberRef: memberRef,
                 recipientName: appState.knownDisplayName(forAccountIdHex: hex)
-                    ?? IdentityFormatter.short(memberRef),
+                    ?? appState.shortNpub(forAccountIdHex: hex),
                 choices: choices
             )
             Haptics.selection()

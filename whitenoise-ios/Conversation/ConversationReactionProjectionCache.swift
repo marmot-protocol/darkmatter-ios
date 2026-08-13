@@ -101,11 +101,11 @@ final class ConversationReactionProjectionCache {
     }
 
     /// Removes (and returns) this sender's optimistic react records for a
-    /// target+emoji, so an "un-react" can roll them back on failure.
-    func removeMatchingRecords(target: String, emoji: String, sender: String) -> [String: AppMessageRecordFfi] {
+    /// target, so an "un-react" can roll them back on failure.
+    func removeMatchingRecords(target: String, sender: String) -> [String: AppMessageRecordFfi] {
         var removed: [String: AppMessageRecordFfi] = [:]
         for (key, record) in optimisticRecords {
-            guard record.sender == sender, record.plaintext == emoji,
+            guard record.sender == sender,
                   case .reaction(let recordTarget) = MessageSemantics.classify(record),
                   recordTarget == target
             else { continue }

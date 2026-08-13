@@ -81,6 +81,7 @@ final class ChatsListViewModel {
         let avatarSeed: String
         let title: String
         let isDirectMessage: Bool?
+        let directPeerAccountIdHex: String?
         let isMuted: Bool
         let previewText: String?
         let draftPreview: String?
@@ -93,6 +94,7 @@ final class ChatsListViewModel {
             avatarSeed: String? = nil,
             title: String,
             isDirectMessage: Bool? = nil,
+            directPeerAccountIdHex: String? = nil,
             isMuted: Bool = false,
             leaveRequestPending: Bool = false,
             draftSummary: MessageDraftSummaryFfi? = nil,
@@ -107,6 +109,7 @@ final class ChatsListViewModel {
             self.avatarSeed = avatarSeed ?? row.groupIdHex
             self.title = title
             self.isDirectMessage = isDirectMessage
+            self.directPeerAccountIdHex = directPeerAccountIdHex
             self.isMuted = isMuted
             self.leaveRequestPending = leaveRequestPending
             self.previewText = previewText
@@ -746,6 +749,7 @@ final class ChatsListViewModel {
             avatarSeed: display.avatarSeed,
             title: display.title,
             isDirectMessage: display.isDirectMessage,
+            directPeerAccountIdHex: display.directPeerAccountIdHex,
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
             } ?? false,
@@ -814,6 +818,13 @@ final class ChatsListViewModel {
             appState: appState,
             fallbackAvatarURL: fallbackAvatarURL,
             cachedDirectPeerAccountId: directPeerAccountIdByGroupId[row.groupIdHex]
+                ?? appState.flatMap { appState in
+                    guard let accountRef = appState.activeAccountRef else { return nil }
+                    return appState.directChatPeerAccountId(
+                        accountRef: accountRef,
+                        groupIdHex: row.groupIdHex
+                    )
+                }
         )
     }
 
@@ -822,6 +833,7 @@ final class ChatsListViewModel {
         let avatarURL: URL?
         let avatarSeed: String
         let isDirectMessage: Bool?
+        let directPeerAccountIdHex: String?
     }
 
     static func display(
@@ -834,15 +846,27 @@ final class ChatsListViewModel {
         if details == nil,
            let appState,
            row.conversationKind == .direct,
-           ContentSanitizer.groupName(row.groupName) == nil,
-           let cachedDirectPeerAccountId {
+           ContentSanitizer.groupName(row.groupName) == nil {
+            if let cachedDirectPeerAccountId {
+                return Display(
+                    title: appState.knownDisplayName(forAccountIdHex: cachedDirectPeerAccountId)
+                        ?? appState.shortNpub(forAccountIdHex: cachedDirectPeerAccountId),
+                    avatarURL: appState.avatarURL(forAccountIdHex: cachedDirectPeerAccountId)
+                        ?? fallbackAvatarURL,
+                    avatarSeed: cachedDirectPeerAccountId,
+                    isDirectMessage: true,
+                    directPeerAccountIdHex: cachedDirectPeerAccountId
+                )
+            }
+            // An unnamed MDK row's title is its MLS group id, not a user id.
+            // Keep that internal hex out of the UI while roster enrichment is
+            // still resolving the peer account.
             return Display(
-                title: appState.knownDisplayName(forAccountIdHex: cachedDirectPeerAccountId)
-                    ?? appState.shortNpub(forAccountIdHex: cachedDirectPeerAccountId),
-                avatarURL: appState.avatarURL(forAccountIdHex: cachedDirectPeerAccountId)
-                    ?? fallbackAvatarURL,
-                avatarSeed: cachedDirectPeerAccountId,
-                isDirectMessage: true
+                title: L10n.string("Direct message"),
+                avatarURL: fallbackAvatarURL,
+                avatarSeed: row.groupIdHex,
+                isDirectMessage: true,
+                directPeerAccountIdHex: nil
             )
         }
         guard let details, let appState else {
@@ -852,16 +876,19 @@ final class ChatsListViewModel {
                 avatarSeed: row.groupIdHex,
                 isDirectMessage: ContentSanitizer.groupName(row.groupName) == nil
                     ? nil
-                    : false
+                    : false,
+                directPeerAccountIdHex: nil
             )
         }
 
         let groupDisplay = Self.groupDisplay(for: details, appState: appState)
+        let directPeerAccountIdHex = groupDisplay.isDirectMessage ? groupDisplay.otherMember : nil
         return Display(
             title: GroupDisplay.title(for: groupDisplay, appState: appState),
             avatarURL: GroupDisplay.avatarURL(for: groupDisplay, appState: appState) ?? fallbackAvatarURL,
             avatarSeed: GroupDisplay.avatarSeed(for: groupDisplay),
-            isDirectMessage: groupDisplay.isDirectMessage
+            isDirectMessage: groupDisplay.isDirectMessage,
+            directPeerAccountIdHex: directPeerAccountIdHex
         )
     }
 

@@ -216,7 +216,14 @@ struct ProfileContentView: View {
                         isLoading: model.isPreparingConversationChoices
                             || model.starter.isCreating
                     ) {
-                        Task { await model.message(npub: npub, using: appState, onOpen: openChat) }
+                        Task {
+                            await model.message(
+                                npub: npub,
+                                profile: effectiveProfile,
+                                using: appState,
+                                onOpen: openChat
+                            )
+                        }
                     }
 
                     if showsNewConversationActions {

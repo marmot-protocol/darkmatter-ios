@@ -6167,6 +6167,24 @@ struct ChatsListProjectionTests {
         #expect(display.avatarURL?.absoluteString == avatar)
         #expect(display.avatarSeed == other)
         #expect(display.isDirectMessage == true)
+        #expect(display.directPeerAccountIdHex == other)
+    }
+
+    @Test func unresolvedDirectRowNeverExposesItsInternalGroupHexAsAUserIdentity() throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let groupId = hex("ad")
+        let row = chatListRow(
+            groupIdHex: groupId,
+            title: groupId,
+            groupName: "",
+            conversationKind: .direct
+        )
+
+        let display = ChatsListViewModel.display(for: row, details: nil, appState: appState)
+
+        #expect(display.title == L10n.string("Direct message"))
+        #expect(display.title != IdentityFormatter.short(groupId))
+        #expect(display.directPeerAccountIdHex == nil)
     }
 
     @Test func directPeerCacheIsAccountScopedBoundedAndKeepsRecentDirectRows() {
@@ -8178,15 +8196,14 @@ struct GroupManagementPresentationTests {
         )
     }
 
-    @Test func stagedMembersFallBackToShortIdWithNpubSubtitle() throws {
+    @Test func stagedMembersFallBackToNpubWithNpubSubtitle() throws {
         let appState = AppState(client: try MarmotClient.testClient())
         let account = hex("33")
         let member = stagedMember(accountIdHex: account)
 
-        // With no known profile, the staged-member name falls back to the short
-        // account id; the subtitle is the npub. (Name resolution from a profile
-        // is covered by ResolvedDisplayNameTests.)
-        #expect(AddMembersPresentation.displayName(for: member, appState: appState) == IdentityFormatter.short(account))
+        // With no known profile, both identity surfaces stay in canonical npub
+        // form. (Name resolution from a profile is covered separately.)
+        #expect(AddMembersPresentation.displayName(for: member, appState: appState) == appState.shortNpub(forAccountIdHex: account))
         #expect(AddMembersPresentation.secondaryIdentity(for: member).hasPrefix("npub1"))
     }
 

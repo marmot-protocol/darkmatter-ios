@@ -1281,6 +1281,8 @@ private struct ChatDestination: View {
                 chat: item.projectedGroup,
                 accountRef: appState.activeAccountRef,
                 initialTitle: item.title,
+                initialOtherMember: item.directPeerAccountIdHex,
+                initialMemberCount: item.isDirectMessage == true ? 2 : nil,
                 initialLeaveRequestPending: item.leaveRequestPending,
                 initialTargetMessageIdHex: target.messageIdHex,
                 initialUnreadMessageIdHex: target.unreadMessageIdHex,

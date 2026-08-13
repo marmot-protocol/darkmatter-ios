@@ -24,7 +24,7 @@ struct ComposerMentionCandidate: Identifiable, Equatable {
             appState.contactNickname(forAccountIdHex: accountIdHex)
             ?? ContentSanitizer.displayName(details.displayName)
             ?? appState.knownDisplayName(forAccountIdHex: accountIdHex)
-            ?? IdentityFormatter.short(accountIdHex)
+            ?? appState.shortNpub(forAccountIdHex: accountIdHex)
         avatarPictureURL = appState.avatarURL(forAccountIdHex: accountIdHex)
         id = memberIdHex
         displayNameLowercased = displayName.lowercased()

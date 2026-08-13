@@ -167,6 +167,23 @@ struct ReactionTargetTallyTests {
     private let otherTarget = String(repeating: "b", count: 64)
     private let groupId = String(repeating: "c", count: 64)
 
+    @Test func unreactOptimisticallyRemovesEveryReactionOwnedByTheSender() {
+        let removals = ConversationViewModel.reactionRemovalsForUnreact(
+            target: target,
+            tallies: [
+                ConversationViewModel.ReactionTally(emoji: "👍", count: 2, mine: true),
+                ConversationViewModel.ReactionTally(emoji: "🔥", count: 1, mine: true),
+                ConversationViewModel.ReactionTally(emoji: "👀", count: 1, mine: false),
+            ],
+            sender: me
+        )
+
+        #expect(removals == [
+            ReactionRemoval(targetMessageIdHex: target, emoji: "👍", sender: me),
+            ReactionRemoval(targetMessageIdHex: target, emoji: "🔥", sender: me),
+        ])
+    }
+
     private func optimisticReaction(
         id: String,
         emoji: String,
