@@ -26,6 +26,22 @@ nonisolated enum MediaUploadIntegrity {
     }
 }
 
+nonisolated enum SendAcceptanceAction: Equatable {
+    case confirmPublished(messageId: String?)
+    case awaitDurableProjection
+}
+
+nonisolated enum SendAcceptancePolicy {
+    static func action(for summary: SendSummaryFfi) -> SendAcceptanceAction {
+        switch summary.acceptDisposition {
+        case .published:
+            return .confirmPublished(messageId: summary.messageIds.first)
+        case .acceptedPending:
+            return .awaitDurableProjection
+        }
+    }
+}
+
 /// Owns the conversation composer's send pipeline: the in-flight send guard, the
 /// reply target, and the text/media send FFI orchestration. Optimistic rows are
 /// handed to `TimelineStore` (the overlay is timeline-mirror state, not composer
@@ -185,13 +201,14 @@ final class ComposerModel {
                     text: outgoing
                 )
             }
-            // A summary with zero publish reports means the engine sent
-            // nothing at all — defense-in-depth; delivery truth for committed
-            // sends is the timeline row's source id.
-            if summary.published == 0 {
-                timelineStore.markFailed(tempId: tempId)
-            } else {
-                timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: summary.messageIds.first)
+            switch SendAcceptancePolicy.action(for: summary) {
+            case .confirmPublished(let messageId):
+                timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: messageId)
+            case .awaitDurableProjection:
+                // Marmot durably accepted the intent but has not published it.
+                // Keep the optimistic row sending until the timeline projection
+                // supplies the durable pending row and eventual disposition.
+                break
             }
         } catch {
             timelineStore.markFailed(tempId: tempId)
@@ -282,13 +299,18 @@ final class ComposerModel {
                 recordedAt: now,
                 receivedAt: now
             )
-            if let sent = result.sent, sent.published == 0 {
-                // Zero publish reports — the upload may have succeeded but
-                // the engine sent no message. Show the failure, not a
-                // checkmark.
-                timelineStore.markFailed(tempId: tempId)
+            if let sent = result.sent,
+               case .awaitDurableProjection = SendAcceptancePolicy.action(for: sent) {
+                // Keep the staged media and optimistic row alive until Marmot's
+                // durable pending projection replaces them.
             } else {
-                let messageId = result.sent?.messageIds.first
+                let messageId: String?
+                if let sent = result.sent,
+                   case .confirmPublished(let publishedMessageId) = SendAcceptancePolicy.action(for: sent) {
+                    messageId = publishedMessageId
+                } else {
+                    messageId = nil
+                }
                 timelineStore.confirmSent(tempId: tempId, record: confirmed, messageId: messageId)
                 if let messageId, !messageId.isEmpty {
                     // Render the just-sent attachments immediately from the upload's

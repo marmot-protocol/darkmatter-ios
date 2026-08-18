@@ -19,6 +19,7 @@ struct AccountUnreadSummaryProjectionTests {
                 accountIdHex: account.accountIdHex,
                 unreadCount: 1,
                 unreadConversations: 1,
+                attentionOnlyConversations: 0,
                 hasUnread: true
             )],
             accounts: [account]
@@ -35,6 +36,7 @@ struct AccountUnreadSummaryProjectionTests {
                 accountIdHex: account.accountIdHex,
                 unreadCount: 2,
                 unreadConversations: 1,
+                attentionOnlyConversations: 0,
                 hasUnread: true
             )],
             accounts: [account],
@@ -77,11 +79,8 @@ struct AccountUnreadSummaryProjectionTests {
 
         #expect(summary.unreadCount == 0)
         #expect(summary.unreadConversations == 1)
+        #expect(summary.attentionOnlyConversations == 1)
         #expect(summary.hasUnread)
-        #expect(
-            ApplicationBadgeCountProjection
-                .supplementalUnreadConversationCount(in: rows) == 1
-        )
     }
 
     @Test func applicationBadgeAddsEverySupplementalConversationToMessageTotal() {
@@ -90,23 +89,23 @@ struct AccountUnreadSummaryProjectionTests {
                 accountIdHex: "account-a",
                 unreadCount: 4,
                 unreadConversations: 1,
+                attentionOnlyConversations: 2,
                 hasUnread: true
             ),
             AccountUnreadFfi(
                 accountIdHex: "account-b",
                 unreadCount: 0,
                 unreadConversations: 1,
+                attentionOnlyConversations: 1,
                 hasUnread: true
             ),
             AccountUnreadFfi(
                 accountIdHex: "account-c",
                 unreadCount: 0,
                 unreadConversations: 0,
+                attentionOnlyConversations: 0,
                 hasUnread: false
             ),
-        ], supplementalUnreadConversationCounts: [
-            "account-a": 2,
-            "account-b": 1,
         ])
 
         #expect(count == 7)
@@ -118,6 +117,7 @@ struct AccountUnreadSummaryProjectionTests {
                 accountIdHex: "account-a",
                 unreadCount: 0,
                 unreadConversations: 1,
+                attentionOnlyConversations: 1,
                 hasUnread: true
             ),
         ])
@@ -147,10 +147,11 @@ struct AccountUnreadSummaryProjectionTests {
             ),
         ]
 
-        #expect(
-            ApplicationBadgeCountProjection
-                .supplementalUnreadConversationCount(in: rows) == 1
+        let summary = AccountUnreadSummaryProjection.summary(
+            accountIdHex: "account-a",
+            rows: rows
         )
+        #expect(summary.attentionOnlyConversations == 1)
     }
 
     @Test func pendingInvitesContributeWithoutDoubleCountingUnreadMessages() {
@@ -179,21 +180,13 @@ struct AccountUnreadSummaryProjectionTests {
             accountIdHex: "account-a",
             rows: rows
         )
-        let supplementalCount = ApplicationBadgeCountProjection
-            .supplementalUnreadConversationCount(in: rows)
-
         #expect(summary.unreadCount == 2)
-        #expect(supplementalCount == 1)
-        #expect(
-            ApplicationBadgeCountProjection.contribution(
-                for: summary,
-                supplementalUnreadConversationCount: supplementalCount
-            ) == 3
-        )
+        #expect(summary.attentionOnlyConversations == 1)
+        #expect(ApplicationBadgeCountProjection.contribution(for: summary) == 3)
     }
 
     @MainActor
-    @Test func storeKeepsSupplementalContributionAcrossDurableSummaryRefresh() {
+    @Test func storeKeepsAttentionOnlyContributionAcrossDurableSummaryRefresh() {
         let account = AccountSummaryFfi(
             label: "account-a",
             accountIdHex: "account-a-id",
@@ -225,6 +218,7 @@ struct AccountUnreadSummaryProjectionTests {
                     accountIdHex: account.accountIdHex,
                     unreadCount: 6,
                     unreadConversations: 2,
+                    attentionOnlyConversations: 1,
                     hasUnread: true
                 ),
             ],
@@ -241,12 +235,14 @@ struct AccountUnreadSummaryProjectionTests {
                 accountIdHex: "account-a",
                 unreadCount: .max,
                 unreadConversations: 1,
+                attentionOnlyConversations: 0,
                 hasUnread: true
             ),
             AccountUnreadFfi(
                 accountIdHex: "account-b",
                 unreadCount: 1,
                 unreadConversations: 1,
+                attentionOnlyConversations: 0,
                 hasUnread: true
             ),
         ])
@@ -269,12 +265,14 @@ struct AccountUnreadSummaryProjectionTests {
                     accountIdHex: "account-a-id",
                     unreadCount: 3,
                     unreadConversations: 1,
+                    attentionOnlyConversations: 0,
                     hasUnread: true
                 ),
                 AccountUnreadFfi(
                     accountIdHex: "removed-account-id",
                     unreadCount: 9,
                     unreadConversations: 2,
+                    attentionOnlyConversations: 0,
                     hasUnread: true
                 ),
             ],

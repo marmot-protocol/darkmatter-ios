@@ -90,7 +90,6 @@ struct whitenoise_iosApp: App {
     init() {
         let appState = AppState()
         _appState = State(initialValue: appState)
-        MessageRetentionBackgroundRefresh.shared.configure(appState: appState)
     }
 
     var body: some Scene {
@@ -155,7 +154,6 @@ struct whitenoise_iosApp: App {
 
     @MainActor
     private func beginBackgroundRuntimeSuspension() {
-        MessageRetentionBackgroundRefresh.shared.schedule()
         let backgroundTask = BackgroundRuntimeSuspensionTask(name: "Suspend Marmot runtime")
         let suspensionTask = appState.startRuntimeSuspension()
         backgroundTask.endWhenSuspensionCompletes(suspensionTask)

@@ -85,6 +85,7 @@ extension AppGroupRecordFfi {
         disappearingMessageSecs: UInt64 = 0,
         archived: Bool,
         pendingConfirmation: Bool,
+        unrecoverable: Bool = false,
         selfMembership: SelfMembershipFfi = .member,
         leaveRequestPending: Bool = false,
         leaveRequestedAtMs: UInt64? = nil,
@@ -112,7 +113,7 @@ extension AppGroupRecordFfi {
             disappearingMessageSecs: disappearingMessageSecs,
             archived: archived,
             pendingConfirmation: pendingConfirmation,
-            unrecoverable: false,
+            unrecoverable: unrecoverable,
             selfMembership: selfMembership,
             leaveRequestPending: leaveRequestPending,
             leaveRequestedAtMs: leaveRequestedAtMs,
@@ -487,6 +488,7 @@ extension SendSummaryFfi {
         self.init(
             published: published,
             messageIds: messageIds,
+            acceptDisposition: .published,
             maintenanceDisposition: .ready
         )
     }

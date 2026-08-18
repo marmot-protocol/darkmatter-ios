@@ -4,6 +4,7 @@ import OSLog
 
 nonisolated struct GroupMembershipPageLoadResult {
     let memberIdsByGroupId: [String: [String]]
+    let adminIdsByGroupId: [String: [String]]
     let firstUnresolvedError: Error?
     let pageReadCount: Int
     let fallbackReadCount: Int
@@ -28,6 +29,7 @@ nonisolated enum GroupMembershipPageLoader {
         fallbackRead: (String) async throws -> [String]
     ) async throws -> GroupMembershipPageLoadResult {
         var memberIdsByGroupId: [String: [String]] = [:]
+        var adminIdsByGroupId: [String: [String]] = [:]
         var firstUnresolvedError: Error?
         var pageReadCount = 0
         var fallbackReadCount = 0
@@ -44,6 +46,7 @@ nonisolated enum GroupMembershipPageLoader {
                 }
                 for row in rows {
                     memberIdsByGroupId[row.groupIdHex] = row.memberIdsHex
+                    adminIdsByGroupId[row.groupIdHex] = row.adminIdsHex
                 }
                 continue
             } catch is CancellationError {
@@ -68,6 +71,7 @@ nonisolated enum GroupMembershipPageLoader {
 
         return GroupMembershipPageLoadResult(
             memberIdsByGroupId: memberIdsByGroupId,
+            adminIdsByGroupId: adminIdsByGroupId,
             firstUnresolvedError: firstUnresolvedError,
             pageReadCount: pageReadCount,
             fallbackReadCount: fallbackReadCount
@@ -303,10 +307,15 @@ final class RecipientDirectory {
                 ).map(\.memberIdHex)
             }
         )
-        let adminIdsByGroupId = if includeAdminMetadata {
-            try await loadAdminIds(client: client, accountRef: accountRef, rows: rows)
-        } else {
-            [String: [String]]()
+        var adminIdsByGroupId = membership.adminIdsByGroupId
+        if includeAdminMetadata {
+            let fallbackRows = rows.filter { adminIdsByGroupId[$0.groupIdHex] == nil }
+            let fallbackAdmins = try await loadAdminIds(
+                client: client,
+                accountRef: accountRef,
+                rows: fallbackRows
+            )
+            adminIdsByGroupId.merge(fallbackAdmins) { _, fallback in fallback }
         }
         let elapsed = startedAt.duration(to: .now).components
         let elapsedMs = Double(elapsed.seconds) * 1_000
@@ -319,7 +328,9 @@ final class RecipientDirectory {
             RecipientGroupSnapshot(
                 row: row,
                 memberIdsHex: membership.memberIdsByGroupId[row.groupIdHex] ?? [],
-                adminIdsHex: adminIdsByGroupId[row.groupIdHex] ?? []
+                adminIdsHex: includeAdminMetadata
+                    ? adminIdsByGroupId[row.groupIdHex] ?? []
+                    : []
             )
         }
     }

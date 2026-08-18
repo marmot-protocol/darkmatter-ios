@@ -141,6 +141,13 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
+    /// Reads one known chat-list row without transferring the complete list.
+    func chatListRow(accountRef: String, groupIdHex: String) async throws -> ChatListRowFfi? {
+        try await Task.detached(priority: .utility) { [marmot, accountRef, groupIdHex] in
+            try marmot.chatListRow(accountRef: accountRef, groupIdHex: groupIdHex)
+        }.value
+    }
+
     /// Reads metadata-only composer drafts off the main actor. Attachment
     /// plaintext is deliberately omitted by the binding until one conversation
     /// is opened.
@@ -186,29 +193,11 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
-    /// Reads the per-account unread aggregate and row-level supplemental
-    /// contributions off the main actor. The aggregate intentionally counts
-    /// messages, so chat-list rows supply pending invites and manual-only
-    /// reminders needed by iOS badge presentation.
-    func accountUnreadBadgeState() async throws -> AccountUnreadBadgeState {
+    /// Reads everything required for all account and application badges in one
+    /// local aggregate call, including manual-only and invitation attention.
+    func accountUnreadSummaries() async throws -> [AccountUnreadFfi] {
         try await Task.detached(priority: .utility) { [marmot] in
-            let summaries = try marmot.accountUnreadSummary()
-            var supplementalUnreadConversationCounts: [String: UInt64] = [:]
-            if let accounts = try? marmot.listAccounts() {
-                for account in accounts {
-                    guard let rows = try? marmot.chatList(
-                        accountRef: account.label,
-                        includeArchived: false
-                    ) else { continue }
-                    supplementalUnreadConversationCounts[account.accountIdHex] =
-                        ApplicationBadgeCountProjection
-                        .supplementalUnreadConversationCount(in: rows)
-                }
-            }
-            return AccountUnreadBadgeState(
-                summaries: summaries,
-                supplementalUnreadConversationCounts: supplementalUnreadConversationCounts
-            )
+            try marmot.accountUnreadSummary()
         }.value
     }
 
@@ -559,15 +548,33 @@ nonisolated final class MarmotClient: Sendable {
     ) async -> [String: ProfileDisplayProjection] {
         await Task.detached(priority: .utility) {
             var projections: [String: ProfileDisplayProjection] = [:]
-            for request in requests {
-                projections[request.accountIdHex] = ProfileDisplayProjection(
-                    profile: (try? marmot.userProfile(accountIdHex: request.accountIdHex)) ?? nil,
-                    projectedName: marmot.displayName(accountIdHex: request.accountIdHex),
-                    localAccountLabel: request.localAccountLabel
+            for start in stride(from: 0, to: requests.count, by: 100) {
+                let page = Array(requests[start..<min(start + 100, requests.count)])
+                let rows = try? marmot.cachedIdentityProjections(
+                    accountIdHexes: page.map(\.accountIdHex)
                 )
+                for (index, request) in page.enumerated() {
+                    let row = rows.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+                    let profile = row?.profile
+                    projections[request.accountIdHex] = ProfileDisplayProjection(
+                        profile: profile,
+                        projectedName: profile?.displayName ?? profile?.name,
+                        localAccountLabel: request.localAccountLabel ?? row?.localLabel
+                    )
+                }
             }
             return projections
         }.value
+    }
+
+    func existingDirectConversation(
+        accountRef: String,
+        peerAccountId: String
+    ) async throws -> ExistingDirectConversationFfi? {
+        try await marmot.existingDirectConversation(
+            accountRef: accountRef,
+            peerAccountId: peerAccountId
+        )
     }
 
     // MARK: - Group mutations & reads
@@ -882,6 +889,10 @@ nonisolated final class MarmotClient: Sendable {
             durationMs: durationMs,
             outcome: outcome
         )
+    }
+
+    func appPerformanceSnapshot() -> AppPerformanceSnapshotFfi {
+        marmot.appPerformanceSnapshot()
     }
 
     func configureTelemetryRuntime() async throws {

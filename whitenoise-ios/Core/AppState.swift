@@ -1143,13 +1143,11 @@ final class AppState {
         let generation = unreadSummaryRefreshGeneration
         let incrementalBaseline = accountUnreadStore.incrementalRevisionSnapshot()
         do {
-            let badgeState = try await summaryClient.accountUnreadBadgeState()
+            let summaries = try await summaryClient.accountUnreadSummaries()
             guard generation == unreadSummaryRefreshGeneration else { return }
             accountUnreadStore.refreshed(
-                from: badgeState.summaries,
+                from: summaries,
                 accounts: accounts,
-                supplementalUnreadConversationCounts:
-                    badgeState.supplementalUnreadConversationCounts,
                 preservingUpdatesAfter: incrementalBaseline
             )
             await synchronizeApplicationBadge()

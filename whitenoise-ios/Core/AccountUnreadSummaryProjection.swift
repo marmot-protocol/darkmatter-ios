@@ -1,11 +1,6 @@
 import Foundation
 import MarmotKit
 
-nonisolated struct AccountUnreadBadgeState {
-    let summaries: [AccountUnreadFfi]
-    let supplementalUnreadConversationCounts: [String: UInt64]
-}
-
 enum AccountUnreadSummaryProjection {
     static func byAccountId(
         _ summaries: [AccountUnreadFfi],
@@ -25,11 +20,21 @@ enum AccountUnreadSummaryProjection {
     ) -> AccountUnreadFfi where S.Element == ChatListRowFfi {
         var unreadCount: UInt64 = 0
         var unreadConversations: UInt64 = 0
+        var attentionOnlyConversations: UInt64 = 0
 
-        for row in rows where !row.archived && row.hasUnread {
+        for row in rows where !row.archived {
+            let needsAttention = row.hasUnread
+                || row.manuallyMarkedUnread
+                || row.pendingConfirmation
+            guard needsAttention else { continue }
             unreadCount = saturatedSum(unreadCount, row.unreadCount)
             if unreadConversations < UInt64.max {
                 unreadConversations += 1
+            }
+            if row.unreadCount == 0,
+               row.manuallyMarkedUnread || row.pendingConfirmation,
+               attentionOnlyConversations < UInt64.max {
+                attentionOnlyConversations += 1
             }
         }
 
@@ -37,6 +42,7 @@ enum AccountUnreadSummaryProjection {
             accountIdHex: accountIdHex,
             unreadCount: unreadCount,
             unreadConversations: unreadConversations,
+            attentionOnlyConversations: attentionOnlyConversations,
             hasUnread: unreadConversations > 0
         )
     }

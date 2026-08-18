@@ -93,6 +93,21 @@ struct NotificationContentDecoratorTests {
         ))
     }
 
+    @Test func timeoutDeliveryWaitsForExpirationCleanup() {
+        #expect(NotificationServiceTimeoutPolicy.canDeliver(
+            expirationInProgress: false,
+            completingExpiration: false
+        ))
+        #expect(!NotificationServiceTimeoutPolicy.canDeliver(
+            expirationInProgress: true,
+            completingExpiration: false
+        ))
+        #expect(NotificationServiceTimeoutPolicy.canDeliver(
+            expirationInProgress: true,
+            completingExpiration: true
+        ))
+    }
+
     @Test func notificationServiceDiagnosticSnapshotRoundTripsWithoutMessageData() {
         let suiteName = "notification-service-diagnostics-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

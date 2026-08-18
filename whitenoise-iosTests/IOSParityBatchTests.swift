@@ -204,13 +204,6 @@ struct IOSParityBatchTests {
         ) == .connecting)
     }
 
-    @Test func backgroundRefreshIdentifierTracksBundleFlavor() {
-        #expect(MessageRetentionBackgroundRefreshPolicy.taskIdentifier(
-            bundleIdentifier: "dev.ipf.whitenoise.ios.staging"
-        ) == "dev.ipf.whitenoise.ios.staging.retention-sweep")
-        #expect(MessageRetentionBackgroundRefreshPolicy.earliestDelay >= 15 * 60)
-    }
-
     @Test func mediaLocatorStaticValidationAllowsOnlyPublicHttpsBlossom() {
         #expect(EncryptedMediaLocatorValidation.isStaticallySafe([
             locator("https://media.example/blob"),

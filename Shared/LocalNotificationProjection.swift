@@ -28,52 +28,26 @@ nonisolated struct LocalNotificationPresentation: Equatable {
 }
 
 /// Projects Marmot's per-account unread aggregates into the single numeric
-/// badge iOS can render on the app icon. Row-derived supplemental counts supply
-/// pending invites and manual-only reminders that the message aggregate does
-/// not carry; the `hasUnread` fallback preserves attention when only the
-/// aggregate is available.
+/// badge iOS can render on the app icon. Marmot's aggregate carries pending
+/// invites and manual-only reminders without overlapping message totals.
 nonisolated enum ApplicationBadgeCountProjection {
-    static func count<S: Sequence>(
-        for summaries: S,
-        supplementalUnreadConversationCounts: [String: UInt64] = [:]
-    ) -> Int
+    static func count<S: Sequence>(for summaries: S) -> Int
     where S.Element == AccountUnreadFfi {
         var total: UInt64 = 0
         for summary in summaries {
-            let contribution = contribution(
-                for: summary,
-                supplementalUnreadConversationCount:
-                    supplementalUnreadConversationCounts[summary.accountIdHex, default: 0]
-            )
+            let contribution = contribution(for: summary)
             let (sum, overflow) = total.addingReportingOverflow(contribution)
             total = overflow ? UInt64.max : sum
         }
         return Int(min(total, UInt64(Int.max)))
     }
 
-    static func contribution(
-        for summary: AccountUnreadFfi,
-        supplementalUnreadConversationCount: UInt64 = 0
-    ) -> UInt64 {
+    static func contribution(for summary: AccountUnreadFfi) -> UInt64 {
         let (count, overflow) = summary.unreadCount.addingReportingOverflow(
-            supplementalUnreadConversationCount
+            summary.attentionOnlyConversations
         )
         let boundedCount = overflow ? UInt64.max : count
         return boundedCount == 0 && summary.hasUnread ? 1 : boundedCount
-    }
-
-    static func supplementalUnreadConversationCount<S: Sequence>(in rows: S) -> UInt64
-    where S.Element == ChatListRowFfi {
-        var count: UInt64 = 0
-        for row in rows
-        where !row.archived
-            && row.unreadCount == 0
-            && (row.manuallyMarkedUnread || row.pendingConfirmation) {
-            if count < UInt64.max {
-                count += 1
-            }
-        }
-        return count
     }
 }
 

@@ -3361,6 +3361,39 @@ struct ToastPresentationTests {
 }
 
 struct DiagnosticsPresentationTests {
+    @Test func performanceOperationTextReportsOnlyAggregateCounters() throws {
+        let snapshot = AppPerformanceOperationSnapshotFfi(
+            attempts: 3,
+            successes: 2,
+            failures: 1,
+            durationMs: DurationHistogramSnapshotFfi(
+                buckets: [DurationHistogramBucketFfi(upperBoundMs: 250, count: 2)],
+                overflowCount: 1,
+                sumMs: 875
+            )
+        )
+
+        let text = try #require(DiagnosticsView.performanceOperationText(
+            label: "message send",
+            snapshot: snapshot
+        ))
+
+        #expect(text == "[perf] message send: 3 attempts, 2 succeeded, 1 failed, 875 ms total")
+        #expect(DiagnosticsView.performanceOperationText(
+            label: "unused",
+            snapshot: AppPerformanceOperationSnapshotFfi(
+                attempts: 0,
+                successes: 0,
+                failures: 0,
+                durationMs: DurationHistogramSnapshotFfi(
+                    buckets: [],
+                    overflowCount: 0,
+                    sumMs: 0
+                )
+            )
+        ) == nil)
+    }
+
     @Test func diagnosticSelfSendReusesStoredGroupOnlyWhenPresentForAccount() throws {
         let suiteName = "DiagnosticSelfSendTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
@@ -5723,6 +5756,24 @@ struct AvatarBubbleTests {
 
 @MainActor
 struct ChatsListProjectionTests {
+
+    @Test func directPeerProjectionRequiresExactlySelfAndOneOtherMember() {
+        let me = hex("01")
+        let other = hex("02")
+
+        #expect(ChatsListViewModel.directPeerAccountId(
+            memberIdsHex: [me.uppercased(), other],
+            myAccountIdHex: me
+        ) == other)
+        #expect(ChatsListViewModel.directPeerAccountId(
+            memberIdsHex: [me, other, hex("03")],
+            myAccountIdHex: me
+        ) == nil)
+        #expect(ChatsListViewModel.directPeerAccountId(
+            memberIdsHex: [other, hex("03")],
+            myAccountIdHex: me
+        ) == nil)
+    }
 
     @Test func projectedRowsDriveActiveArchivedUnreadAndOrdering() throws {
         let viewModel = ChatsListViewModel(appState: AppState(client: try MarmotClient.testClient()))
@@ -10349,6 +10400,122 @@ struct ConversationInviteActionTests {
         #expect(!viewModel.canSendMessages)
         #expect(viewModel.inviteActionInFlight == nil)
     }
+
+    @Test func acceptRetriesOnceWhenWorkerIsDefinitelyBusy() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let pending = group(name: "invited", pendingConfirmation: true)
+        let viewModel = ConversationViewModel(appState: appState, group: pending)
+        var attempts = 0
+        var refreshes = 0
+        viewModel.acceptGroupInviteForTesting = { _, groupIdHex in
+            attempts += 1
+            if attempts == 1 {
+                throw MarmotKitError.AccountWorkerBusy
+            }
+            return group(name: "invited", id: groupIdHex)
+        }
+        viewModel.refreshInviteStateForTesting = {
+            refreshes += 1
+            return true
+        }
+
+        let updated = await viewModel.acceptInvite()
+
+        #expect(attempts == 2)
+        #expect(refreshes == 1)
+        #expect(updated?.pendingConfirmation == false)
+        #expect(!viewModel.hasPendingInvite)
+    }
+
+    @Test func acceptTimeoutRefreshesStateWithoutRetryingAmbiguousOperation() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let pending = group(name: "invited", pendingConfirmation: true)
+        let viewModel = ConversationViewModel(appState: appState, group: pending)
+        var attempts = 0
+        viewModel.acceptGroupInviteForTesting = { _, _ in
+            attempts += 1
+            throw MarmotKitError.AccountWorkerResponseTimedOut
+        }
+        viewModel.refreshInviteStateForTesting = {
+            viewModel.applyGroupRecord(group(name: "invited", id: pending.groupIdHex))
+            return true
+        }
+
+        let updated = await viewModel.acceptInvite()
+
+        #expect(attempts == 1)
+        #expect(updated?.pendingConfirmation == false)
+        #expect(!viewModel.hasPendingInvite)
+    }
+
+    @Test func unrecoverableGroupDisablesComposerBeforeSend() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group(name: "damaged", unrecoverable: true)
+        )
+
+        #expect(viewModel.isGroupUnrecoverable)
+        #expect(!viewModel.canSendMessages)
+        #expect(viewModel.inactiveGroupMessage?.contains("rejoined") == true)
+    }
+}
+
+struct MarmotKitMasterIntegrationTests {
+    @Test func sendAcceptancePolicyDistinguishesPublishedFromDurablyPending() {
+        let published = SendSummaryFfi(
+            published: 1,
+            messageIds: ["message-id"],
+            acceptDisposition: .published,
+            maintenanceDisposition: .ready
+        )
+        let pending = SendSummaryFfi(
+            published: 0,
+            messageIds: [],
+            acceptDisposition: .acceptedPending,
+            maintenanceDisposition: .postJoinRotationPendingRetryable
+        )
+
+        #expect(SendAcceptancePolicy.action(for: published) == .confirmPublished(messageId: "message-id"))
+        #expect(SendAcceptancePolicy.action(for: pending) == .awaitDurableProjection)
+    }
+
+    @Test func accountWorkerErrorsExposeRetrySafetySemantics() {
+        #expect(MarmotKitError.AccountWorkerBusy.isAccountWorkerBusy)
+        #expect(!MarmotKitError.AccountWorkerBusy.isAccountWorkerResponseTimedOut)
+        #expect(MarmotKitError.AccountWorkerResponseTimedOut.isAccountWorkerResponseTimedOut)
+        #expect(!MarmotKitError.AccountWorkerResponseTimedOut.isAccountWorkerBusy)
+    }
+
+    @Test func convergenceRetryPolicyRefreshesAmbiguousResultsAndStopsUnrecoverableGroups() {
+        #expect(DurableConvergenceRetryPolicy.action(
+            for: MarmotKitError.AccountWorkerBusy
+        ) == .retry)
+        #expect(DurableConvergenceRetryPolicy.action(
+            for: MarmotKitError.AccountWorkerResponseTimedOut
+        ) == .refreshBeforeRetry)
+        #expect(DurableConvergenceRetryPolicy.action(
+            for: MarmotKitError.GroupUnrecoverableRepairRequired(groupIdHex: "group")
+        ) == .stop)
+    }
+
+    @Test @MainActor func hostPerformanceSnapshotRoundTripsThroughBindings() throws {
+        let client = try MarmotClient.testClient()
+        let before = client.appPerformanceSnapshot().hostSplashReady
+
+        client.recordHostPerformance(
+            operation: .splashReady,
+            durationMs: 250,
+            outcome: .success
+        )
+        let after = client.appPerformanceSnapshot().hostSplashReady
+
+        #expect(after.attempts >= before.attempts + 1)
+        #expect(after.successes >= before.successes + 1)
+        #expect(after.durationMs.sumMs >= before.durationMs.sumMs + 250)
+    }
 }
 
 struct MediaAttachmentPolicyTests {
@@ -12753,6 +12920,7 @@ private func group(
     avatarUrl: String? = nil,
     archived: Bool = false,
     pendingConfirmation: Bool = false,
+    unrecoverable: Bool = false,
     selfMembership: SelfMembershipFfi = .member,
     leaveRequestPending: Bool = false,
     disbanding: Bool = false,
@@ -12775,6 +12943,7 @@ private func group(
         encryptedMedia: encryptedMedia,
         archived: archived,
         pendingConfirmation: pendingConfirmation,
+        unrecoverable: unrecoverable,
         selfMembership: selfMembership,
         leaveRequestPending: leaveRequestPending,
         leaveRequestedAtMs: leaveRequestPending ? 1_000 : nil,

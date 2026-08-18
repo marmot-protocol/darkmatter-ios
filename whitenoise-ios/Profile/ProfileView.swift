@@ -7,6 +7,12 @@ nonisolated enum ProfileReferenceResolution {
         // nprofile values cross the binding boundary as their canonical hex key.
         NostrProfileReference.memberRef(from: raw)
     }
+
+    static func accountIdHex(_ raw: String) -> String? {
+        guard let reference = referenceForResolution(raw) else { return nil }
+        return Hex.normalized32Bytes(reference)
+            ?? NostrProfileReference.pubkeyHex(fromBech32: reference)
+    }
 }
 
 /// Profile destination for QR scans and deep links: the reusable profile

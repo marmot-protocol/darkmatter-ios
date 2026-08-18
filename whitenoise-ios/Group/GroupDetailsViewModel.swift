@@ -888,6 +888,9 @@ final class GroupDetailsViewModel {
     }
 
     private func publishMessage(for summary: SendSummaryFfi) -> String {
+        if case .acceptedPending = summary.acceptDisposition {
+            return L10n.string("Saved and waiting to send.")
+        }
         guard summary.published > 0 else { return L10n.string("Saved locally.") }
         return L10n.plural("Published %lld updates.", Int64(clamping: summary.published))
     }

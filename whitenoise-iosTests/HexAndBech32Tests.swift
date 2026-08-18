@@ -124,4 +124,35 @@ struct ProfileReferenceResolutionTests {
 
         #expect(ProfileReferenceResolution.referenceForResolution("  \(npub)\n") == npub)
     }
+
+    @Test func resolvesValidatedNpubToHexWithoutAReadyMarmotRuntime() throws {
+        let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+        let expected = try #require(NostrProfileReference.pubkeyHex(fromBech32: npub))
+
+        #expect(ProfileReferenceResolution.accountIdHex(npub) == expected)
+        #expect(ProfileReferenceResolution.accountIdHex(expected.uppercased()) == expected)
+        #expect(ProfileReferenceResolution.accountIdHex("npub1invalid") == nil)
+    }
+
+    @Test func searchedPeerShowsStartConversationForAnotherLocalAccountButNotTheActiveAccount() {
+        let activeAccount = String(repeating: "11", count: 32)
+        let otherLocalAccount = String(repeating: "22", count: 32)
+
+        #expect(ProfilePrimaryActionPresentation.canMessage(
+            resolvedAccountIdHex: otherLocalAccount,
+            activeAccountIdHex: activeAccount
+        ))
+        #expect(!ProfilePrimaryActionPresentation.canMessage(
+            resolvedAccountIdHex: nil,
+            activeAccountIdHex: activeAccount
+        ))
+        #expect(!ProfilePrimaryActionPresentation.canMessage(
+            resolvedAccountIdHex: activeAccount.uppercased(),
+            activeAccountIdHex: activeAccount
+        ))
+        #expect(!ProfilePrimaryActionPresentation.canMessage(
+            resolvedAccountIdHex: otherLocalAccount,
+            activeAccountIdHex: nil
+        ))
+    }
 }

@@ -288,12 +288,12 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     /// failed read fails open (presents).
     private func routeIsArchived(_ route: LocalNotificationRoute) async -> Bool {
         guard let client = appState?.client,
-              let rows = try? await client.chatList(
+              let row = try? await client.chatListRow(
                   accountRef: route.accountRef,
-                  includeArchived: true
+                  groupIdHex: route.groupIdHex
               )
         else { return false }
-        return rows.contains { $0.groupIdHex == route.groupIdHex && $0.archived }
+        return row.archived
     }
 
     /// Resolve the mute key from the account id persisted with the notification.
@@ -487,7 +487,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         AppNotifications.shared.installDelegate()
-        MessageRetentionBackgroundRefresh.shared.register()
         return true
     }
 

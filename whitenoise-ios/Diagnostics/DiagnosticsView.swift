@@ -96,6 +96,70 @@ struct DiagnosticsView: View {
         }
     }
 
+    static func performanceSnapshotText(_ snapshot: AppPerformanceSnapshotFfi) -> [String] {
+        let operations: [(String, AppPerformanceOperationSnapshotFfi)] = [
+            ("app start", snapshot.appStart),
+            ("directory subscription", snapshot.directorySubscriptionSync),
+            ("account reconcile", snapshot.accountReconcile),
+            ("account open", snapshot.accountOpen),
+            ("account session open", snapshot.accountSessionOpen),
+            ("group hydration", snapshot.accountGroupHydration),
+            ("profile load", snapshot.accountProfileLoad),
+            ("group snapshot read", snapshot.accountGroupReadSnapshot),
+            ("transport activation", snapshot.accountTransportActivation),
+            ("subscription registration", snapshot.accountSubscriptionRegistration),
+            ("account catch-up", snapshot.accountCatchUp),
+            ("account sync", snapshot.accountSync),
+            ("account setup", snapshot.accountSetupAdvisoryStep),
+            ("message send", snapshot.outboundMessageSend),
+            ("group create queue", snapshot.groupCreateQueueWait),
+            ("group create key packages", snapshot.groupCreateKeyPackageLookup),
+            ("group create image", snapshot.groupCreateImageUpload),
+            ("group create MLS", snapshot.groupCreateMlsPreparePersist),
+            ("group create welcome", snapshot.groupCreateWelcomePublish),
+            ("group create projection", snapshot.groupCreateLocalProjectionSave),
+            ("group create subscriptions", snapshot.groupCreateSubscriptionRefresh),
+            ("group create catch-up", snapshot.groupCreatePostMutationCatchUp),
+            ("group create total", snapshot.groupCreateTotalCallerLatency),
+            ("invite members", snapshot.groupInviteMembers),
+            ("invite key packages", snapshot.groupInviteKeyPackageLookup),
+            ("invite routing", snapshot.groupInviteRoutingRefresh),
+            ("invite pre-send sync", snapshot.groupInvitePreSendSync),
+            ("invite publish", snapshot.groupInviteEnginePublish),
+            ("invite local refresh", snapshot.groupInviteLocalRefresh),
+            ("invite notification", snapshot.groupInviteNotificationTrigger),
+            ("invite catch-up", snapshot.groupInvitePostMutationCatchUp),
+            ("promote admin", snapshot.groupPromoteAdmin),
+            ("group details", snapshot.groupDetailsRead),
+            ("chat-list row", snapshot.chatListRowRead),
+            ("existing direct chat", snapshot.existingDirectConversationRead),
+            ("group MLS state", snapshot.groupMlsStateRead),
+            ("group roster", snapshot.groupRosterRead),
+            ("accept invite", snapshot.groupAcceptInvite),
+            ("media upload", snapshot.mediaUpload),
+            ("media download", snapshot.mediaDownload),
+            ("splash ready", snapshot.hostSplashReady),
+            ("foreground local ready", snapshot.hostForegroundLocalReady),
+        ]
+        var lines = operations.compactMap { label, operation in
+            performanceOperationText(label: label, snapshot: operation)
+        }
+        if snapshot.sqlcipherMigrationProbeRuns > 0 || snapshot.sqlcipherMigrationProbeSkips > 0 {
+            lines.append(
+                "[perf] SQLCipher migration probes: ran \(snapshot.sqlcipherMigrationProbeRuns), skipped \(snapshot.sqlcipherMigrationProbeSkips)"
+            )
+        }
+        return lines
+    }
+
+    static func performanceOperationText(
+        label: String,
+        snapshot: AppPerformanceOperationSnapshotFfi
+    ) -> String? {
+        guard snapshot.attempts > 0 else { return nil }
+        return "[perf] \(label): \(snapshot.attempts) attempts, \(snapshot.successes) succeeded, \(snapshot.failures) failed, \(snapshot.durationMs.sumMs) ms total"
+    }
+
     private static func plaintextSummary(_ plaintext: String) -> String {
         plaintext.isEmpty ? "(empty)" : "(\(plaintext.count) chars)"
     }

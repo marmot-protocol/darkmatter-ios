@@ -40,11 +40,7 @@ final class ProfileViewModel {
         conversationChooser = nil
         sharedGroups = []
         addableGroups = []
-        guard let reference = ProfileReferenceResolution.referenceForResolution(npub) else {
-            return
-        }
-        guard let client = try? appState.currentMarmotClient() else { return }
-        let resolvedHex = await client.accountIdHex(reference: reference)
+        let resolvedHex = ProfileReferenceResolution.accountIdHex(npub)
         guard !Task.isCancelled, generation == resolutionGeneration else { return }
         applyResolvedAccount(resolvedHex)
         guard let resolvedHex else { return }
@@ -180,7 +176,6 @@ final class ProfileViewModel {
 
         await directory.load(
             using: appState,
-            force: true,
             includeAdminMetadata: true
         )
         guard !Task.isCancelled else { return }

@@ -83,11 +83,22 @@ nonisolated enum NotificationServiceDiagnostics {
 }
 
 nonisolated enum NotificationServiceTimeoutPolicy {
+    /// Leaves enough of the system-owned NSE window to stop workers and close
+    /// SQLite before iOS is allowed to suspend the extension.
+    static let proactiveExpirationDelay: Duration = .seconds(18)
+
     static func shouldApplyTimeoutFallback(
         applyingFallbackForTimeout: Bool,
         didApplyRenderDecision: Bool
     ) -> Bool {
         applyingFallbackForTimeout && !didApplyRenderDecision
+    }
+
+    static func canDeliver(
+        expirationInProgress: Bool,
+        completingExpiration: Bool
+    ) -> Bool {
+        !expirationInProgress || completingExpiration
     }
 }
 

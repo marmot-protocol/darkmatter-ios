@@ -1,6 +1,21 @@
 import MarmotKit
 
 extension MarmotKitError {
+    var isGroupUnrecoverableRepairRequired: Bool {
+        if case .GroupUnrecoverableRepairRequired = self { return true }
+        return false
+    }
+
+    var isAccountWorkerBusy: Bool {
+        if case .AccountWorkerBusy = self { return true }
+        return false
+    }
+
+    var isAccountWorkerResponseTimedOut: Bool {
+        if case .AccountWorkerResponseTimedOut = self { return true }
+        return false
+    }
+
     var isRuntimeOwnershipContention: Bool {
         if case .RuntimeBusy = self { return true }
         return false

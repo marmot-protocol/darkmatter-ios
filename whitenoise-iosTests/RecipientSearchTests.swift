@@ -26,7 +26,11 @@ struct RecipientSearchTests {
             pageRead: { page in
                 requestedPages.append(page)
                 return page.map {
-                    AppGroupMemberIdsFfi(groupIdHex: $0, memberIdsHex: ["member-\($0)"])
+                    AppGroupMemberIdsFfi(
+                        groupIdHex: $0,
+                        memberIdsHex: ["member-\($0)"],
+                        adminIdsHex: ["admin-\($0)"]
+                    )
                 }
             },
             fallbackRead: { _ in
@@ -40,6 +44,8 @@ struct RecipientSearchTests {
         #expect(result.pageReadCount == 10)
         #expect(result.fallbackReadCount == 0)
         #expect(result.memberIdsByGroupId.count == 1_000)
+        #expect(result.adminIdsByGroupId.count == 1_000)
+        #expect(result.adminIdsByGroupId["group-42"] == ["admin-group-42"])
         #expect(result.firstUnresolvedError == nil)
     }
 
@@ -69,7 +75,11 @@ struct RecipientSearchTests {
         let result = try await GroupMembershipPageLoader.load(
             groupIdsHex: ids,
             pageRead: { _ in
-                [AppGroupMemberIdsFfi(groupIdHex: "wrong", memberIdsHex: [])]
+                [AppGroupMemberIdsFfi(
+                    groupIdHex: "wrong",
+                    memberIdsHex: [],
+                    adminIdsHex: []
+                )]
             },
             fallbackRead: { ["fallback-\($0)"] }
         )

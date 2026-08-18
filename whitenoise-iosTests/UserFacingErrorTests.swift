@@ -69,4 +69,29 @@ struct UserFacingErrorTests {
         #expect(presentation.message == "This chat is still catching up. Wait for it to finish, then resend your message.")
         #expect(!presentation.message.contains("group-id"))
     }
+
+    @Test func unrecoverableGroupExplainsThatRetryCannotRepairIt() {
+        let presentation = UserFacingError.present(
+            title: "Send failed",
+            error: MarmotKitError.GroupUnrecoverableRepairRequired(groupIdHex: "group-id")
+        )
+
+        #expect(presentation.message == "This conversation needs to be rejoined before you can send messages.")
+        #expect(!presentation.message.contains("group-id"))
+    }
+
+    @Test func accountWorkerErrorsDistinguishSafeRetryFromUnknownCompletion() {
+        let busy = UserFacingError.present(
+            title: "Operation failed",
+            error: MarmotKitError.AccountWorkerBusy
+        )
+        let timedOut = UserFacingError.present(
+            title: "Operation failed",
+            error: MarmotKitError.AccountWorkerResponseTimedOut
+        )
+
+        #expect(busy.message == "This account is still catching up. Try again in a moment.")
+        #expect(timedOut.message.contains("may have completed"))
+        #expect(timedOut.message.contains("before retrying"))
+    }
 }

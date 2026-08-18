@@ -76,8 +76,18 @@ struct UserFacingError: Equatable {
 
     private static func sendMessage(for error: Error) -> String? {
         guard let marmotError = error as? MarmotKitError else { return nil }
-        guard case .GroupSendQueueFull = marmotError else { return nil }
-        return L10n.string("This chat is still catching up. Wait for it to finish, then resend your message.")
+        switch marmotError {
+        case .GroupSendQueueFull:
+            return L10n.string("This chat is still catching up. Wait for it to finish, then resend your message.")
+        case .GroupUnrecoverableRepairRequired:
+            return L10n.string("This conversation needs to be rejoined before you can send messages.")
+        case .AccountWorkerBusy:
+            return L10n.string("This account is still catching up. Try again in a moment.")
+        case .AccountWorkerResponseTimedOut:
+            return L10n.string("The operation may have completed. Refreshing the conversation is required before retrying.")
+        default:
+            return nil
+        }
     }
 
     /// Runtime errors may include an nsec if input validation failed. Never

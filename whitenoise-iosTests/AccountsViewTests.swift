@@ -14,6 +14,7 @@ struct AccountsViewTests {
             accountIdHex: "account-a",
             unreadCount: unreadCount,
             unreadConversations: unreadCount > 0 ? 1 : 0,
+            attentionOnlyConversations: unreadCount == 0 && hasUnread ? 1 : 0,
             hasUnread: hasUnread
         )
     }

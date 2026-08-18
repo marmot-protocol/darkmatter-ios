@@ -74,7 +74,7 @@ final class NewChatFlowViewModel {
             return
         }
 
-        await directory.load(using: appState, force: true)
+        await directory.load(using: appState)
         guard !Task.isCancelled else { return }
         if let loadError = directory.loadError {
             presentChoiceLookupError(
@@ -273,55 +273,15 @@ final class NewChatFlowViewModel {
             return try await existingDirectChatGroupIdForTesting(normalized)
         }
 #endif
-        guard let accountRef = appState.activeAccountRef,
-              let myAccountIdHex = appState.activeAccount?.accountIdHex
-        else {
+        guard let accountRef = appState.activeAccountRef else {
             throw DirectChatLookupError.noActiveAccount
         }
         let client = try appState.currentMarmotClient()
-        let rows = try await client.chatList(accountRef: accountRef, includeArchived: true)
-        let candidates = rows
-            .filter {
-                DirectChatReuseLookup.shouldInspect(
-                    conversationKind: $0.conversationKind,
-                    selfMembership: $0.selfMembership
-                )
-            }
-            .sorted { $0.activitySortAt > $1.activitySortAt }
-
-        let membership = try await GroupMembershipPageLoader.load(
-            groupIdsHex: candidates.map(\.groupIdHex),
-            pageRead: { groupIdsHex in
-                try await client.groupMemberIdsPage(
-                    accountRef: accountRef,
-                    groupIdsHex: groupIdsHex
-                )
-            },
-            fallbackRead: { groupIdHex in
-                try await client.groupMembers(
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex
-                ).map(\.memberIdHex)
-            }
+        let existing = try await client.existingDirectConversation(
+            accountRef: accountRef,
+            peerAccountId: normalized
         )
-        let snapshots: [RecipientGroupSnapshot] = candidates.compactMap { row -> RecipientGroupSnapshot? in
-            guard let memberIdsHex = membership.memberIdsByGroupId[row.groupIdHex] else {
-                return nil
-            }
-            return RecipientGroupSnapshot(row: row, memberIdsHex: memberIdsHex)
-        }
-
-        if let existing = DirectChatReuseLookup.existingGroupId(
-            in: snapshots,
-            targetAccountIdHex: normalized,
-            myAccountIdHex: myAccountIdHex
-        ) {
-            return existing
-        }
-        if let firstReadError = membership.firstUnresolvedError {
-            throw firstReadError
-        }
-        return nil
+        return existing?.reusable == true ? existing?.groupIdHex : nil
     }
 
     // MARK: - Group selection

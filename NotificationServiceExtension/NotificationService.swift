@@ -12,6 +12,8 @@ final class NotificationService: UNNotificationServiceExtension {
     /// `finish` prefers it unless the timeout fallback rewrote the original.
     private var decoratedContent: UNNotificationContent?
     private var collectionTask: Task<Void, Never>?
+    private var expirationWatchdogTask: Task<Void, Never>?
+    private var expirationCleanupTask: Task<Void, Never>?
     private var additionalPresentationTask: Task<Void, Never>?
     private var avatarFetchTask: Task<[String: Data], Never>?
     private var activeMarmot: Marmot?
@@ -21,6 +23,7 @@ final class NotificationService: UNNotificationServiceExtension {
     private var diagnosticStartedAt = Date()
     private var diagnosticStage: NotificationServiceDiagnosticStage = .received
     private var didRecordDiagnostic = false
+    private var expirationInProgress = false
     private let maxNotificationServiceWaitMs = NotificationServiceProjection.maxWakeWaitMs
     private static let diagnosticLog = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios.NotificationService",
@@ -35,6 +38,9 @@ final class NotificationService: UNNotificationServiceExtension {
         bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         activeMarmot = nil
         activeMarmotNeedsShutdown = false
+        expirationWatchdogTask?.cancel()
+        expirationWatchdogTask = nil
+        expirationCleanupTask = nil
         additionalPresentationTask = nil
         avatarFetchTask = nil
         applicationBadgeCount = nil
@@ -43,28 +49,43 @@ final class NotificationService: UNNotificationServiceExtension {
         diagnosticStartedAt = Date()
         diagnosticStage = .received
         didRecordDiagnostic = false
+        expirationInProgress = false
 
         collectionTask = Task { [weak self] in
             await self?.collectAndDecorateNotification()
         }
+        expirationWatchdogTask = Task { [weak self] in
+            try? await Task.sleep(for: NotificationServiceTimeoutPolicy.proactiveExpirationDelay)
+            guard !Task.isCancelled else { return }
+            self?.beginExpirationCleanup()
+        }
     }
 
     override func serviceExtensionTimeWillExpire() {
+        beginExpirationCleanup()
+    }
+
+    private func beginExpirationCleanup() {
+        guard bestAttemptContent != nil, !expirationInProgress else { return }
+        expirationInProgress = true
         recordDiagnostic(outcome: .expired)
         collectionTask?.cancel()
         // Unblocks the additional-presentation task: it enqueues immediately
         // with whatever avatars have resolved instead of waiting out the
         // remaining fetch deadlines.
         avatarFetchTask?.cancel()
-        if let marmot = takeActiveMarmotForShutdown() {
-            // The content handler has an iOS-owned deadline. Deliver immediately;
-            // shutdown continues independently and releases its final handle when
-            // Rust returns.
-            Task.detached {
+        let marmot = takeActiveMarmotForShutdown()
+        let additionalPresentationTask = additionalPresentationTask
+        expirationCleanupTask = Task { [weak self] in
+            if let marmot {
                 try? await marmot.shutdownAndClose()
             }
+            await additionalPresentationTask?.value
+            self?.finish(
+                applyingFallbackForTimeout: true,
+                completingExpiration: true
+            )
         }
-        finish(applyingFallbackForTimeout: true)
     }
 
     private func collectAndDecorateNotification() async {
@@ -103,23 +124,7 @@ final class NotificationService: UNNotificationServiceExtension {
                 diagnosticStage = .collectionCompleted
                 if result.status != .failed,
                    let summaries = try? marmot.accountUnreadSummary() {
-                    var supplementalUnreadConversationCounts: [String: UInt64] = [:]
-                    if let accounts = try? marmot.listAccounts() {
-                        for account in accounts {
-                            guard let rows = try? marmot.chatList(
-                                accountRef: account.label,
-                                includeArchived: false
-                            ) else { continue }
-                            supplementalUnreadConversationCounts[account.accountIdHex] =
-                                ApplicationBadgeCountProjection
-                                .supplementalUnreadConversationCount(in: rows)
-                        }
-                    }
-                    let count = ApplicationBadgeCountProjection.count(
-                        for: summaries,
-                        supplementalUnreadConversationCounts:
-                            supplementalUnreadConversationCounts
-                    )
+                    let count = ApplicationBadgeCountProjection.count(for: summaries)
                     applicationBadgeCount = count
                     NotificationContentDecorator.applyApplicationBadgeCount(count, to: content)
                 }
@@ -374,7 +379,14 @@ final class NotificationService: UNNotificationServiceExtension {
         }
     }
 
-    private func finish(applyingFallbackForTimeout: Bool = false) {
+    private func finish(
+        applyingFallbackForTimeout: Bool = false,
+        completingExpiration: Bool = false
+    ) {
+        guard NotificationServiceTimeoutPolicy.canDeliver(
+            expirationInProgress: expirationInProgress,
+            completingExpiration: completingExpiration
+        ) else { return }
         guard let bestAttemptContent else { return }
         var deliverable: UNNotificationContent = bestAttemptContent
         if NotificationServiceTimeoutPolicy.shouldApplyTimeoutFallback(
@@ -387,11 +399,15 @@ final class NotificationService: UNNotificationServiceExtension {
         }
         self.bestAttemptContent = nil
         self.collectionTask = nil
+        self.expirationWatchdogTask?.cancel()
+        self.expirationWatchdogTask = nil
+        self.expirationCleanupTask = nil
         self.additionalPresentationTask = nil
         self.avatarFetchTask = nil
         self.applicationBadgeCount = nil
         self.didApplyRenderDecision = false
         self.decoratedContent = nil
+        self.expirationInProgress = false
         delivery.deliver(deliverable)
     }
 }

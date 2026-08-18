@@ -3,6 +3,21 @@ import Observation
 import MarmotKit
 import os
 
+nonisolated enum DurableConvergenceRetryAction: Equatable {
+    case retry
+    case refreshBeforeRetry
+    case stop
+}
+
+nonisolated enum DurableConvergenceRetryPolicy {
+    static func action(for error: Error) -> DurableConvergenceRetryAction {
+        guard let marmotError = error as? MarmotKitError else { return .retry }
+        if marmotError.isGroupUnrecoverableRepairRequired { return .stop }
+        if marmotError.isAccountWorkerResponseTimedOut { return .refreshBeforeRetry }
+        return .retry
+    }
+}
+
 enum ConversationInviteAction: Equatable {
     case accepting
     case declining
@@ -265,6 +280,7 @@ final class ConversationViewModel {
     var markedReadMessageIdsForTesting: Set<String> { readMarker.markedReadMessageIdsForTesting }
     var mediaItemProjectionBuildCountForTesting: Int { timelineStore.mediaProjections.buildCountForTesting }
     @ObservationIgnored var acceptGroupInviteForTesting: (@MainActor (String, String) async throws -> AppGroupRecordFfi)?
+    @ObservationIgnored var refreshInviteStateForTesting: (@MainActor () async -> Bool)?
     @ObservationIgnored var declineGroupInviteForTesting: (@MainActor (String, String) async throws -> GroupInviteDeclineResultFfi)?
 
     func insertMarkedReadMessageIdsForTesting(_ messageIds: Set<String>) {
@@ -430,10 +446,15 @@ final class ConversationViewModel {
         isGroupDisbanding || isGroupDisbanded
     }
 
+    var isGroupUnrecoverable: Bool {
+        group.unrecoverable || managementState?.lifecycleState == .unrecoverable
+    }
+
     var canSendMessages: Bool {
         guard !group.pendingConfirmation else { return false }
         guard !leaveRequestPending else { return false }
         guard !isGroupDisbandingOrDisbanded else { return false }
+        guard !isGroupUnrecoverable else { return false }
         return GroupManagementPresentation.isActiveMember(
             state: managementState,
             members: members,
@@ -453,6 +474,9 @@ final class ConversationViewModel {
         }
         if leaveRequestPending {
             return GroupManagementPresentation.leavingGroupComposerMessage
+        }
+        if isGroupUnrecoverable {
+            return L10n.string("This conversation needs to be rejoined before you can send messages.")
         }
         if group.selfMembership == .left {
             return GroupManagementPresentation.leftGroupComposerMessage
@@ -736,11 +760,13 @@ final class ConversationViewModel {
         }
         resetOptimisticState()
         error = nil
-        if canLoadLocalSnapshot, timeline.isEmpty {
+        if timeline.isEmpty {
             timelineStore.setLoading(true)
-            startInitialTimelineSnapshot(accountRef: accountRef)
         }
-        guard case .loadLocalSnapshot(startLiveWork: true) = startDecision else { return }
+        guard case .loadLocalSnapshot(startLiveWork: true) = startDecision else {
+            startInitialTimelineSnapshot(accountRef: accountRef)
+            return
+        }
         startLiveTimeline(accountRef: accountRef)
         startLiveGroupState(accountRef: accountRef)
         startDeferredGroupDetails(accountRef: accountRef)
@@ -906,9 +932,13 @@ final class ConversationViewModel {
             // catches and the window keeps retrying past those errors.
             var delivered = false
             var lastFailure: String?
-            for attempt in 0..<6 {
+            retryLoop: for attempt in 0..<6 {
                 if attempt > 0 {
-                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: 2_500_000_000)
+                    } catch {
+                        return
+                    }
                 }
                 do {
                     let summary = try await client.retryGroupConvergence(
@@ -920,8 +950,29 @@ final class ConversationViewModel {
                         break
                     }
                     lastFailure = nil
+                } catch is CancellationError {
+                    return
                 } catch {
-                    lastFailure = error.localizedDescription
+                    lastFailure = UserFacingError.present(
+                        title: L10n.string("Send failed"),
+                        error: error
+                    ).message
+                    switch DurableConvergenceRetryPolicy.action(for: error) {
+                    case .retry:
+                        continue
+                    case .refreshBeforeRetry:
+                        // The worker may have completed. Pull authoritative
+                        // state before another idempotent convergence attempt.
+                        await refreshTimelineTail()
+                        if timelineStore.undeliveredDurableMessageId(rowId: rowId) == nil {
+                            delivered = true
+                            break retryLoop
+                        }
+                    case .stop:
+                        // Repair-required groups need another member to
+                        // re-admit this device; retries cannot make progress.
+                        break retryLoop
+                    }
                 }
             }
             // The subscription may not push the healed row; pull it so the
@@ -1049,6 +1100,7 @@ final class ConversationViewModel {
         let groupIdHex = group.groupIdHex
         timelineTask = Task { [weak self, weak appState] in
             var retryDelay = Self.liveSubscriptionInitialRetryDelayNanoseconds
+            var startedStandaloneSnapshotFallback = false
             while !Task.isCancelled {
                 do {
                     guard let appState, appState.canUseRuntimeForForegroundWork else { return }
@@ -1088,6 +1140,11 @@ final class ConversationViewModel {
                     else { return }
                     self?.timelineStore.setLoading(false)
                     self?.error = error.localizedDescription
+                    if !startedStandaloneSnapshotFallback,
+                       self?.timeline.isEmpty == true {
+                        startedStandaloneSnapshotFallback = true
+                        self?.startInitialTimelineSnapshot(accountRef: accountRef)
+                    }
                 }
                 guard !Task.isCancelled,
                       appState?.canUseRuntimeForForegroundWork == true
@@ -2107,33 +2164,80 @@ final class ConversationViewModel {
         else { return nil }
         inviteActionInFlight = .accepting
         defer { inviteActionInFlight = nil }
-        do {
-            let updated: AppGroupRecordFfi
-#if DEBUG
-            if let acceptGroupInviteForTesting {
-                updated = try await acceptGroupInviteForTesting(accountRef, group.groupIdHex)
-            } else {
-                let client = try appState.currentMarmotClient()
-                updated = try await client.acceptGroupInvite(
+        for attempt in 0..<2 {
+            do {
+                let updated = try await performAcceptInvite(
                     accountRef: accountRef,
                     groupIdHex: group.groupIdHex
                 )
+                applyGroupRecord(updated)
+                Haptics.success()
+                return updated
+            } catch let error as MarmotKitError where error.isAccountWorkerBusy {
+                _ = await refreshInviteState()
+                if !hasPendingInvite {
+                    Haptics.success()
+                    return group
+                }
+                if attempt == 0 {
+                    do {
+                        try await Task.sleep(nanoseconds: 300_000_000)
+                    } catch {
+                        return nil
+                    }
+                    continue
+                }
+                Haptics.error()
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Couldn't accept invitation"),
+                    error: error
+                ))
+                return nil
+            } catch let error as MarmotKitError where error.isAccountWorkerResponseTimedOut {
+                _ = await refreshInviteState()
+                if !hasPendingInvite {
+                    Haptics.success()
+                    return group
+                }
+                Haptics.error()
+                appState.present(UserFacingError.toast(
+                    title: L10n.string("Couldn't confirm invitation"),
+                    error: error
+                ))
+                return nil
+            } catch {
+                Haptics.error()
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't accept invitation"), error: error))
+                return nil
             }
-#else
-            let client = try appState.currentMarmotClient()
-            updated = try await client.acceptGroupInvite(
-                accountRef: accountRef,
-                groupIdHex: group.groupIdHex
-            )
-#endif
-            applyGroupRecord(updated)
-            Haptics.success()
-            return updated
-        } catch {
-            Haptics.error()
-            appState.present(UserFacingError.toast(title: L10n.string("Couldn't accept invitation"), error: error))
-            return nil
         }
+        return nil
+    }
+
+    private func performAcceptInvite(
+        accountRef: String,
+        groupIdHex: String
+    ) async throws -> AppGroupRecordFfi {
+#if DEBUG
+        if let acceptGroupInviteForTesting {
+            return try await acceptGroupInviteForTesting(accountRef, groupIdHex)
+        }
+#endif
+        guard let appState else { throw CancellationError() }
+        let client = try appState.currentMarmotClient()
+        return try await client.acceptGroupInvite(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        )
+    }
+
+    private func refreshInviteState() async -> Bool {
+#if DEBUG
+        if let refreshInviteStateForTesting {
+            return await refreshInviteStateForTesting()
+        }
+#endif
+        return await refreshGroupManagement()
     }
 
     func declineInvite() async -> AppGroupRecordFfi? {

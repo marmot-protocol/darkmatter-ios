@@ -31,6 +31,9 @@ final class DiagnosticsViewModel {
         streaming = true
         defer { streaming = false }
         guard let client = try? appState.currentMarmotClient() else { return }
+        for line in DiagnosticsView.performanceSnapshotText(client.appPerformanceSnapshot()) {
+            append(line)
+        }
         let sub = client.subscribeEvents()
         for await event in SubscriptionDriver.events(sub) {
             append(DiagnosticsView.diagnosticText(for: event))

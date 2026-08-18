@@ -1,6 +1,19 @@
 import SwiftUI
 import MarmotKit
 
+nonisolated enum ProfilePrimaryActionPresentation {
+    static func canMessage(
+        resolvedAccountIdHex: String?,
+        activeAccountIdHex: String?
+    ) -> Bool {
+        guard
+            let resolvedAccountIdHex = resolvedAccountIdHex?.lowercased(),
+            let activeAccountIdHex = activeAccountIdHex?.lowercased()
+        else { return false }
+        return resolvedAccountIdHex != activeAccountIdHex
+    }
+}
+
 /// Moderation scope handed to the profile surface when it's opened from a
 /// group's member list. Actions come from the live management state; the
 /// mutations run through the details view model so permission enforcement
@@ -453,7 +466,10 @@ struct ProfileContentView: View {
     }
 
     private var canMessage: Bool {
-        model.hex != nil && !isSelf && appState.activeAccountRef != nil
+        ProfilePrimaryActionPresentation.canMessage(
+            resolvedAccountIdHex: model.hex,
+            activeAccountIdHex: appState.activeAccount?.accountIdHex
+        )
     }
 
     private var displayReference: String {
