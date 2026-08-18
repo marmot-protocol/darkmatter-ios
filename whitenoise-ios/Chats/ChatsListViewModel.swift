@@ -393,6 +393,28 @@ final class ChatsListViewModel {
         }
     }
 
+    /// Resolves one just-created or deep-linked destination directly from the
+    /// durable keyed projection instead of waiting for a broad subscription
+    /// update to happen to deliver it.
+    func refreshRow(groupIdHex: String) async {
+        guard let accountRef = currentAccount,
+              let appState,
+              appState.canUseRuntimeForLocalForegroundWork
+        else { return }
+        do {
+            guard let row = try await appState.currentMarmotClient().chatListRow(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex
+            ), currentAccount == accountRef
+            else { return }
+            applyChatListRow(row)
+        } catch is CancellationError {
+            return
+        } catch {
+            // The subscription remains authoritative and may still deliver it.
+        }
+    }
+
     /// O(1) lookup for a chat-list item by its group id, backed by the
     /// id-keyed `itemByGroupId` map. Views that resolve a single row by id
     /// (e.g. deep-link destinations) should use this instead of scanning the

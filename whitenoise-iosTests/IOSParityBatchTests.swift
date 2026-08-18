@@ -119,6 +119,34 @@ struct IOSParityBatchTests {
         #expect(openedGroupId == "group-with-image")
     }
 
+    @Test func newGroupOpensBeforeRetentionFollowupIsScheduled() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "active-account"
+        let model = NewChatFlowViewModel()
+        var events: [String] = []
+        var scheduledRetention: (UInt64, String, String)?
+        model.createGroupForTesting = { _, _, _, _ in "retained-group" }
+        model.scheduleRetentionForTesting = { seconds, accountRef, groupIdHex in
+            events.append("retention")
+            scheduledRetention = (seconds, accountRef, groupIdHex)
+        }
+
+        await model.createGroup(
+            name: "Retained",
+            description: "",
+            retentionSeconds: 86_400,
+            using: appState,
+            onOpen: { groupIdHex in
+                events.append("open:\(groupIdHex)")
+            }
+        )
+
+        #expect(events == ["open:retained-group", "retention"])
+        #expect(scheduledRetention?.0 == 86_400)
+        #expect(scheduledRetention?.1 == "active-account")
+        #expect(scheduledRetention?.2 == "retained-group")
+    }
+
     @Test func emptyGroupInviteRequiresConfirmedSoleMemberAdmin() {
         #expect(EmptyGroupConversationPresentation.canInvite(
             isSelfMember: true,

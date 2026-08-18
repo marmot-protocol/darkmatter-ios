@@ -30,6 +30,7 @@ struct ForegroundMaintenanceTasks {
     let notificationSubscription: Task<Void, Never>?
     let connectivityCatchUp: Task<Void, Never>?
     let profileRefresh: Task<Void, Never>?
+    let mutationFollowups: [Task<Void, Never>]
 }
 
 /// Bounded, account-scoped handoff from direct-chat creation to the chat-list
@@ -1055,10 +1056,12 @@ final class AppState {
         let connectivityCatchUp = notificationCoordinator.cancelConnectivityCatchUpWithoutAwaiting()
         notificationCoordinator.cancelNativePushRegistrationTaskWithoutAwaiting()
         retentionSweeper.cancelWithoutAwaiting()
+        let mutationFollowups = cancelForegroundMutationFollowups()
         return ForegroundMaintenanceTasks(
             notificationSubscription: notificationSubscription,
             connectivityCatchUp: connectivityCatchUp,
-            profileRefresh: pauseProfileFetchQueue()
+            profileRefresh: pauseProfileFetchQueue(),
+            mutationFollowups: mutationFollowups
         )
     }
 
@@ -1227,6 +1230,7 @@ final class AppState {
     @MainActor
     @discardableResult
     func importIdentity(_ identity: String) async throws -> AccountSummaryFfi {
+        let performance = HostActionPerformance.begin()
         let lease = try await runtimeLifecycle.beginUserInitiatedForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
@@ -1236,6 +1240,7 @@ final class AppState {
             bootstrapRelays: relays
         )
         await activateNewIdentity(summary)
+        HostActionPerformance.record("identity_import_to_ready", since: performance)
         return summary
     }
 
@@ -1245,6 +1250,7 @@ final class AppState {
     @MainActor
     @discardableResult
     func recoverIncompleteIdentity(_ identity: String) async throws -> AccountSummaryFfi {
+        let performance = HostActionPerformance.begin()
         let lease = try await runtimeLifecycle.beginUserInitiatedForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
@@ -1272,28 +1278,94 @@ final class AppState {
             }
         }
         await activateNewIdentity(summary)
+        HostActionPerformance.record("identity_recovery_to_ready", since: performance)
         return summary
     }
 
     @MainActor
     private func activateNewIdentity(_ summary: AccountSummaryFfi) async {
         cacheActivatedAccountSummaryIfNeeded(summary)
-        do {
-            try await refreshAccounts()
-        } catch {
-            updateProfileProjectionLocalAccountLabels()
-            warmProfileProjection(forAccountIdHex: summary.accountIdHex)
-        }
-
         activeAccountRef = summary.label
+        updateProfileProjectionLocalAccountLabels()
+        warmProfileProjection(forAccountIdHex: summary.accountIdHex)
         completeOnboardingAfterIdentityActivation(scheduleNativePushRegistration: false)
         // A new identity can also be created from the `.ready` shell left by a
         // sign-out of every account; the onboarding completion above is a no-op
         // there, so the stopped maintenance loops need the same restart as
         // `activateAccount`.
         restartReadyForegroundMaintenanceIfStopped()
-        await enableNotificationsByDefault(for: summary.label)
-        scheduleNativePushRegistrationIfEnabled()
+        scheduleNewIdentityMaintenance(summary)
+    }
+
+    @ObservationIgnored private var foregroundMutationFollowupTasks: [UUID: Task<Void, Never>] = [:]
+
+    private func scheduleNewIdentityMaintenance(_ summary: AccountSummaryFfi) {
+        scheduleForegroundMutationFollowup { [weak self] _ in
+            guard let self else { return }
+            try? await self.refreshAccounts(refreshUnreadSummaries: false)
+            guard !Task.isCancelled else { return }
+            self.scheduleAccountUnreadSummaryRefresh()
+        }
+        scheduleForegroundMutationFollowup { [weak self] _ in
+            guard let self else { return }
+            await self.enableNotificationsByDefault(for: summary.label)
+            guard !Task.isCancelled else { return }
+            self.scheduleNativePushRegistrationIfEnabled()
+        }
+    }
+
+    func scheduleCreatedGroupRetention(
+        seconds: UInt64,
+        accountRef: String,
+        groupIdHex: String
+    ) {
+        guard seconds > 0 else { return }
+        scheduleForegroundMutationFollowup { [weak self] client in
+            guard let self else { return }
+            do {
+                _ = try await client.updateMessageRetention(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex,
+                    disappearingMessageSecs: seconds
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.present(.warning(
+                    L10n.string("Disappearing messages weren't applied"),
+                    message: L10n.string("Retry")
+                ))
+            }
+        }
+    }
+
+    private func scheduleForegroundMutationFollowup(
+        operation: @escaping @MainActor (MarmotClient) async -> Void
+    ) {
+        guard let lease = try? runtimeLifecycle.beginForegroundRuntimeMutation() else { return }
+        let id = UUID()
+        let task = Task { @MainActor [self] in
+            if !Task.isCancelled {
+                await operation(lease.client)
+            }
+            finishForegroundMutationFollowup(id: id, lease: lease)
+        }
+        foregroundMutationFollowupTasks[id] = task
+    }
+
+    private func finishForegroundMutationFollowup(
+        id: UUID,
+        lease: ForegroundRuntimeMutationLease
+    ) {
+        foregroundMutationFollowupTasks.removeValue(forKey: id)
+        runtimeLifecycle.endForegroundRuntimeMutation(lease)
+    }
+
+    private func cancelForegroundMutationFollowups() -> [Task<Void, Never>] {
+        let tasks = Array(foregroundMutationFollowupTasks.values)
+        tasks.forEach { $0.cancel() }
+        return tasks
     }
 
     @MainActor
@@ -1324,6 +1396,19 @@ final class AppState {
         return RelaySettings.bootstrapRelays(from: lists)
     }
 
+    func relayPublishConfiguration(
+        for accountRef: String
+    ) async -> (publishRelays: [String], bootstrapRelays: [String]) {
+        guard let lists = await relayLists(for: accountRef) else {
+            return (MarmotClient.seedRelays, MarmotClient.seedRelays)
+        }
+        let publishRelays = RelaySettings.editableRelays(from: lists)
+        return (
+            publishRelays.isEmpty ? MarmotClient.seedRelays : publishRelays,
+            RelaySettings.bootstrapRelays(from: lists)
+        )
+    }
+
     func revealNsec(accountRef: String) async throws -> String {
         try await currentMarmotClient().revealNsec(accountRef: accountRef)
     }
@@ -1350,6 +1435,15 @@ final class AppState {
     }
 
     #if DEBUG
+    @MainActor
+    func scheduleForegroundMutationFollowupForTesting(
+        operation: @escaping @MainActor () async -> Void
+    ) {
+        scheduleForegroundMutationFollowup { _ in
+            await operation()
+        }
+    }
+
     /// Drives the suspend/resume lifecycle tasks to quiescence so tests can
     /// drive the real scene-phase entry points (`startRuntimeSuspension` /
     /// `startForegroundActivation`) and then await the terminal state. Forwards
@@ -1358,6 +1452,11 @@ final class AppState {
     @MainActor
     func drainRuntimeLifecycleTasksForTesting() async {
         await runtimeLifecycle.drainRuntimeLifecycleTasksForTesting()
+        let followups = Array(foregroundMutationFollowupTasks.values)
+        for task in followups {
+            await task.value
+        }
+        await notificationCoordinator.drainNativePushRegistrationTaskForTesting()
     }
 
     /// Drains the in-flight native-push registration task so

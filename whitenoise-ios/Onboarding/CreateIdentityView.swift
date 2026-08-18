@@ -82,7 +82,7 @@ struct CreateIdentityView: View {
                 }
             }
         }
-        .disabled(model.isSubmitting)
+        .disabled(model.isSavingProfile)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
                 Button {

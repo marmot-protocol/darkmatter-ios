@@ -34,6 +34,9 @@ final class NewChatFlowViewModel {
     @ObservationIgnored var createGroupWithInitialImageForTesting: (
         @MainActor (String, String, [String], String?, InitialGroupImageFfi) async throws -> String
     )?
+    @ObservationIgnored var scheduleRetentionForTesting: (
+        @MainActor (UInt64, String, String) -> Void
+    )?
 #endif
 
     var isBusy: Bool {
@@ -344,6 +347,7 @@ final class NewChatFlowViewModel {
         isCreatingGroup = true
         defer { isCreatingGroup = false }
         groupCreateError = nil
+        let performance = HostActionPerformance.begin()
         do {
             let normalizedDescription = NewGroupPresentation.normalizedDescription(description)
             let groupIdHex: String
@@ -383,18 +387,31 @@ final class NewChatFlowViewModel {
                 initialImage: image?.initialImage
             )
 #endif
-            if retentionSeconds > 0 {
-                let client = try appState.currentMarmotClient()
-                await applyRetention(
-                    seconds: retentionSeconds,
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex,
-                    client: client,
-                    using: appState
-                )
-            }
+            HostActionPerformance.groupBecameCanonical(
+                groupIdHex: groupIdHex,
+                since: performance
+            )
             Haptics.success()
             onOpen(groupIdHex)
+            if retentionSeconds > 0 {
+#if DEBUG
+                if let scheduleRetentionForTesting {
+                    scheduleRetentionForTesting(retentionSeconds, accountRef, groupIdHex)
+                } else {
+                    appState.scheduleCreatedGroupRetention(
+                        seconds: retentionSeconds,
+                        accountRef: accountRef,
+                        groupIdHex: groupIdHex
+                    )
+                }
+#else
+                appState.scheduleCreatedGroupRetention(
+                    seconds: retentionSeconds,
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+#endif
+            }
         } catch let marmotError as MarmotKitError {
             Haptics.error()
             if case .MissingKeyPackage(let account) = marmotError {
@@ -414,28 +431,6 @@ final class NewChatFlowViewModel {
         }
     }
 
-    /// The group exists once creation returns, so a retention failure must
-    /// not fail the flow — surface it and continue into the chat.
-    private func applyRetention(
-        seconds: UInt64,
-        accountRef: String,
-        groupIdHex: String,
-        client: MarmotClient,
-        using appState: AppState
-    ) async {
-        do {
-            _ = try await client.updateMessageRetention(
-                accountRef: accountRef,
-                groupIdHex: groupIdHex,
-                disappearingMessageSecs: seconds
-            )
-        } catch {
-            appState.present(.warning(
-                L10n.string("Disappearing messages weren't applied"),
-                message: L10n.string("Retry")
-            ))
-        }
-    }
 }
 
 private nonisolated enum DirectChatLookupError: LocalizedError {

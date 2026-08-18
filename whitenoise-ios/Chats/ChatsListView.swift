@@ -1297,6 +1297,9 @@ private struct ChatDestination: View {
                 onDraftChanged: { viewModel.refreshDisplayProjections() }
             )
             .id(target.groupIdHex)
+            .onAppear {
+                HostActionPerformance.conversationBecameVisible(groupIdHex: target.groupIdHex)
+            }
         } else if timedOut {
             // A slow network can take longer than the spin-wait to deliver the
             // chat-list row. Offer Retry instead of a dead end so the user can
@@ -1312,6 +1315,8 @@ private struct ChatDestination: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .task {
+                    await viewModel.refreshRow(groupIdHex: target.groupIdHex)
+                    guard viewModel.item(groupIdHex: target.groupIdHex) == nil else { return }
                     try? await Task.sleep(nanoseconds: 5_000_000_000)
                     timedOut = true
                 }

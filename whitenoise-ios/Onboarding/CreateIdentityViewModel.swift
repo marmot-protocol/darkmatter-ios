@@ -42,13 +42,12 @@ extension AppState: CreateIdentityServicing {
         accountRef: String,
         profile: UserProfileMetadataFfi
     ) async throws {
-        let relays = await relayPublishRelays(for: accountRef)
-        let bootstrapRelays = await relayBootstrapRelays(for: accountRef)
+        let relayConfiguration = await relayPublishConfiguration(for: accountRef)
         _ = try await currentMarmotClient().publishUserProfile(
             accountRef: accountRef,
             profile: profile,
-            defaultRelays: relays,
-            bootstrapRelays: bootstrapRelays
+            defaultRelays: relayConfiguration.publishRelays,
+            bootstrapRelays: relayConfiguration.bootstrapRelays
         )
     }
 }
@@ -118,6 +117,10 @@ final class CreateIdentityViewModel {
         phase == .creating || phase == .savingProfile
     }
 
+    var isSavingProfile: Bool {
+        phase == .savingProfile
+    }
+
     var isBusy: Bool {
         isPreparingAvatar || isSubmitting
     }
@@ -138,7 +141,7 @@ final class CreateIdentityViewModel {
     }
 
     func setAvatarDraft(_ draft: GroupImageUploadDraft?) {
-        guard !isSubmitting else { return }
+        guard !isSavingProfile else { return }
         avatarDraft = draft
         uploadedAvatarURL = nil
         avatarError = nil
@@ -157,7 +160,7 @@ final class CreateIdentityViewModel {
         fileName: String?,
         typeIdentifier: String?
     ) async {
-        guard !isBusy else { return }
+        guard !isPreparingAvatar, !isSavingProfile else { return }
         avatarError = nil
         isPreparingAvatar = true
         defer { isPreparingAvatar = false }
@@ -188,6 +191,7 @@ final class CreateIdentityViewModel {
     func prepare(using service: CreateIdentityServicing) async {
         guard !isBusy, !loadedExistingProfile else { return }
 
+        let performance = HostActionPerformance.begin()
         phase = .creating
         do {
             if createdIdentity == nil {
@@ -196,8 +200,10 @@ final class CreateIdentityViewModel {
             guard let createdIdentity else { return }
             try await loadExistingProfile(for: createdIdentity, using: service)
             phase = .editing
+            HostActionPerformance.record("identity_prepare", since: performance)
         } catch {
             phase = .creationFailed
+            HostActionPerformance.record("identity_prepare_failed", since: performance)
             Haptics.error()
         }
     }
@@ -213,13 +219,16 @@ final class CreateIdentityViewModel {
         }
 
         guard loadedExistingProfile, let createdIdentity else { return }
+        let performance = HostActionPerformance.begin()
         phase = .savingProfile
         do {
             try await savePendingProfile(for: createdIdentity, using: service)
             await service.completeIdentityProfileSetup(createdIdentity)
+            HostActionPerformance.record("identity_submit_to_ready", since: performance)
             Haptics.success()
             dismiss()
         } catch {
+            HostActionPerformance.record("identity_submit_failed", since: performance)
             phase = .profileSaveFailed
             Haptics.error()
         }

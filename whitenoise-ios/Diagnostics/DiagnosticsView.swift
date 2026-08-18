@@ -157,7 +157,30 @@ struct DiagnosticsView: View {
         snapshot: AppPerformanceOperationSnapshotFfi
     ) -> String? {
         guard snapshot.attempts > 0 else { return nil }
-        return "[perf] \(label): \(snapshot.attempts) attempts, \(snapshot.successes) succeeded, \(snapshot.failures) failed, \(snapshot.durationMs.sumMs) ms total"
+        let averageMs = snapshot.durationMs.sumMs / snapshot.attempts
+        let p50 = percentileText(snapshot.durationMs, percentile: 0.50)
+        let p95 = percentileText(snapshot.durationMs, percentile: 0.95)
+        return "[perf] \(label): \(snapshot.attempts) attempts, \(snapshot.successes) succeeded, \(snapshot.failures) failed, \(snapshot.durationMs.sumMs) ms total, \(averageMs) ms avg, p50 \(p50), p95 \(p95)"
+    }
+
+    static func percentileText(
+        _ histogram: DurationHistogramSnapshotFfi,
+        percentile: Double
+    ) -> String {
+        let sampleCount = histogram.buckets.reduce(UInt64.zero) { $0 &+ $1.count }
+            &+ histogram.overflowCount
+        guard sampleCount > 0 else { return "n/a" }
+        let clamped = min(1, max(0, percentile))
+        let rank = max(UInt64(1), UInt64(ceil(Double(sampleCount) * clamped)))
+        var cumulative: UInt64 = 0
+        for bucket in histogram.buckets {
+            cumulative &+= bucket.count
+            if cumulative >= rank {
+                return "≤\(bucket.upperBoundMs) ms"
+            }
+        }
+        guard let upperBound = histogram.buckets.last?.upperBoundMs else { return "overflow" }
+        return ">\(upperBound) ms"
     }
 
     private static func plaintextSummary(_ plaintext: String) -> String {

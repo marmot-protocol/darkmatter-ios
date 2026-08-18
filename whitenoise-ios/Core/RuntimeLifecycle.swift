@@ -1079,6 +1079,11 @@ final class RuntimeLifecycle {
         await appState?.cancelRetentionSweeps()
         await appState?.drainUnreadSummaryRefresh()
         await maintenanceTasks?.profileRefresh?.value
+        if let mutationFollowups = maintenanceTasks?.mutationFollowups {
+            for task in mutationFollowups {
+                await task.value
+            }
+        }
         await waitForForegroundRuntimeMutations()
     }
 

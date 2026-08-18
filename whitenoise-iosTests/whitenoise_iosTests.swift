@@ -184,6 +184,31 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    @Test func identityActivationReturnsBeforeNotificationDefaultsFinish() async throws {
+        let checkpoint = AsyncTestCheckpoint()
+        let notifications = AppNotifications(
+            requestAuthorizationHandler: {
+                await checkpoint.pause()
+                return false
+            },
+            authorizationStatusProvider: { .denied },
+            remoteNotificationRegistrar: {}
+        )
+        let appState = try testAppState(notifications: notifications)
+        await appState.bootstrap()
+        let summary = try await appState.createIdentityForProfileSetup()
+
+        await appState.completeIdentityProfileSetup(summary)
+
+        #expect(appState.phase == .ready)
+        #expect(appState.activeAccount?.label == summary.label)
+        await checkpoint.waitUntilPaused()
+
+        await checkpoint.release()
+        await appState.drainRuntimeLifecycleTasksForTesting()
+        await stopReadyRuntime(appState)
+    }
+
     @Test func createIdentityPublishesEngineDefaultPseudonymProfile() async throws {
         let appState = try testAppState()
         await appState.bootstrap()
@@ -354,6 +379,24 @@ struct AppStateBootstrapTests {
         #expect(appState.navigation.pendingChatId == nil)
         #expect(appState.navigation.pendingChatAccountRef == nil)
         #expect(appState.navigation.pendingChatMessageIdHex == nil)
+    }
+
+    @Test func deferredChatPresentationPublishesNavigationIntentImmediately() async throws {
+        let appState = try testAppState()
+        appState.accountStore.accounts = [
+            AccountSummaryFfi(
+                label: "account-a",
+                accountIdHex: hex("aa"),
+                localSigning: true,
+                signedOut: false,
+                running: true
+            )
+        ]
+        appState.activeAccountRef = "account-a"
+
+        DeferredChatPresentation.present(groupIdHex: "group-a", using: appState)
+
+        #expect(appState.navigation.pendingChatId == "group-a")
     }
 
     @Test func routedChatIgnoresMissingOrSignedOutAccounts() async throws {
@@ -3361,7 +3404,7 @@ struct ToastPresentationTests {
 }
 
 struct DiagnosticsPresentationTests {
-    @Test func performanceOperationTextReportsOnlyAggregateCounters() throws {
+    @Test func performanceOperationTextReportsAggregateLatencyShape() throws {
         let snapshot = AppPerformanceOperationSnapshotFfi(
             attempts: 3,
             successes: 2,
@@ -3378,7 +3421,9 @@ struct DiagnosticsPresentationTests {
             snapshot: snapshot
         ))
 
-        #expect(text == "[perf] message send: 3 attempts, 2 succeeded, 1 failed, 875 ms total")
+        #expect(
+            text == "[perf] message send: 3 attempts, 2 succeeded, 1 failed, 875 ms total, 291 ms avg, p50 ≤250 ms, p95 >250 ms"
+        )
         #expect(DiagnosticsView.performanceOperationText(
             label: "unused",
             snapshot: AppPerformanceOperationSnapshotFfi(
@@ -3392,6 +3437,17 @@ struct DiagnosticsPresentationTests {
                 )
             )
         ) == nil)
+    }
+
+    @Test func performancePercentilesHandleEmptyAndOverflowOnlyHistograms() {
+        #expect(DiagnosticsView.percentileText(
+            DurationHistogramSnapshotFfi(buckets: [], overflowCount: 0, sumMs: 0),
+            percentile: 0.95
+        ) == "n/a")
+        #expect(DiagnosticsView.percentileText(
+            DurationHistogramSnapshotFfi(buckets: [], overflowCount: 2, sumMs: 4_000),
+            percentile: 0.50
+        ) == "overflow")
     }
 
     @Test func diagnosticSelfSendReusesStoredGroupOnlyWhenPresentForAccount() throws {

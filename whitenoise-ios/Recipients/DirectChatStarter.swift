@@ -113,6 +113,7 @@ final class DirectChatStarter {
         }
         creatingAccountIdHex = accountIdHex
         defer { creatingAccountIdHex = nil }
+        let performance = HostActionPerformance.begin()
         do {
             let groupIdHex: String
 #if DEBUG
@@ -136,6 +137,10 @@ final class DirectChatStarter {
                 description: nil
             )
 #endif
+            HostActionPerformance.groupBecameCanonical(
+                groupIdHex: groupIdHex,
+                since: performance
+            )
             appState.noteDirectChatPeer(
                 accountRef: accountRef,
                 groupIdHex: groupIdHex,

@@ -38,6 +38,32 @@ struct CreateIdentityOnboardingTests {
         #expect(service.profileReadCount == 1)
     }
 
+    @Test func profileDraftRemainsEditableWhileIdentityCreationIsInFlight() async {
+        let gate = IdentityCreationGate()
+        let service = CreateIdentityServiceStub()
+        service.beforeCreateReturn = {
+            await gate.waitForRelease()
+        }
+        let model = CreateIdentityViewModel()
+
+        let preparation = Task { await model.prepare(using: service) }
+        await gate.waitUntilEntered()
+
+        #expect(model.phase == .creating)
+        #expect(!model.isSavingProfile)
+        model.displayName = "Alice"
+        model.about = "Written during setup"
+        model.setAvatarDraft(Self.avatarDraft)
+
+        await gate.release()
+        await preparation.value
+
+        #expect(model.displayName == "Alice")
+        #expect(model.about == "Written during setup")
+        #expect(model.avatarDraft == Self.avatarDraft)
+        #expect(model.phase == .editing)
+    }
+
     @Test func metadataMergePreservesUneditedFieldsAndDefaultName() throws {
         let existing = UserProfileMetadataFfi(
             name: "engine-name",
@@ -190,6 +216,7 @@ private final class CreateIdentityServiceStub: CreateIdentityServicing {
     private(set) var uploadCount = 0
     private(set) var publishCount = 0
     private(set) var completeCount = 0
+    var beforeCreateReturn: (() async -> Void)?
 
     let identity = AccountSummaryFfi(
         label: "created",
@@ -206,6 +233,7 @@ private final class CreateIdentityServiceStub: CreateIdentityServicing {
             createFailuresRemaining -= 1
             throw StubError.failed
         }
+        await beforeCreateReturn?()
         return identity
     }
 
@@ -247,5 +275,28 @@ private final class CreateIdentityServiceStub: CreateIdentityServicing {
 
     private enum StubError: Error {
         case failed
+    }
+}
+
+private actor IdentityCreationGate {
+    private var entered = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func waitForRelease() async {
+        entered = true
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func waitUntilEntered() async {
+        while !entered {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }

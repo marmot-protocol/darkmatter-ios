@@ -492,6 +492,7 @@ final class NotificationCoordinator {
         do {
             await cancelNativePushRegistrationTask()
             let granted = try await host.notifications.requestAuthorization()
+            try Task.checkCancellation()
             guard granted else {
                 _ = try? await host.currentMarmotClient()
                     .setLocalNotificationsEnabled(accountRef: accountRef, enabled: false)
@@ -500,6 +501,7 @@ final class NotificationCoordinator {
 
             _ = try await host.currentMarmotClient()
                 .setLocalNotificationsEnabled(accountRef: accountRef, enabled: true)
+            try Task.checkCancellation()
 
             guard NativePushServerConfig.current() != nil else { return }
             host.notifications.registerForRemoteNotifications()

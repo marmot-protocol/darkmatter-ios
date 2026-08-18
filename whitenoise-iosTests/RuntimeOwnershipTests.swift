@@ -137,6 +137,10 @@ struct RuntimeOwnershipTests {
                 accountRef: account.label,
                 groupIdsHex: [groupIdHex]
             )
+            let row = try await client.chatListRow(
+                accountRef: account.label,
+                groupIdHex: groupIdHex
+            )
 
             #expect(roster.groupIdHex == groupIdHex)
             #expect(roster.memberCount == 1)
@@ -144,6 +148,8 @@ struct RuntimeOwnershipTests {
             #expect(roster.members.count == 1)
             #expect(page.map(\.groupIdHex) == [groupIdHex])
             #expect(page.first?.memberIdsHex == roster.members.map(\.memberIdHex))
+            #expect(row?.groupIdHex == groupIdHex)
+            #expect(row?.groupName == "Local readiness")
             try await client.marmot.shutdownAndClose()
             #expect(client.marmot.storageIsClosed())
         } catch {
@@ -350,6 +356,29 @@ struct RuntimeOwnershipTests {
 
         #expect(appState.client == nil)
         #expect(releasedClient == nil)
+        #expect(marmot.storageIsClosed())
+    }
+
+    @Test func suspensionCancelsAndDrainsOwnedMutationFollowup() async throws {
+        var injectedClient: MarmotClient? = try MarmotClient.testClient()
+        let marmot = try #require(injectedClient?.marmot)
+        let gate = RuntimeRetryGate()
+        let appState = AppState(
+            client: injectedClient,
+            notifications: runtimeOwnershipDeniedNotifications()
+        )
+        injectedClient = nil
+        appState.setAppSceneActive(true)
+        await appState.bootstrap()
+
+        appState.scheduleForegroundMutationFollowupForTesting {
+            try? await gate.sleep(.seconds(30))
+        }
+        await gate.waitUntilEntered()
+
+        await appState.startRuntimeSuspension().value
+
+        #expect(appState.client == nil)
         #expect(marmot.storageIsClosed())
     }
 
