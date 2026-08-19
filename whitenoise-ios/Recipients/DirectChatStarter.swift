@@ -116,27 +116,43 @@ final class DirectChatStarter {
         let performance = HostActionPerformance.begin()
         do {
             let groupIdHex: String
+            var createdRow: ChatListRowFfi?
 #if DEBUG
             if let createGroupForTesting {
                 groupIdHex = try await createGroupForTesting(accountRef, memberRef)
             } else {
                 let client = try appState.currentMarmotClient()
-                groupIdHex = try await client.createGroup(
+                let created = try await client.createGroupWithOptionsDetailed(
                     accountRef: accountRef,
                     name: "",
                     memberRefs: [memberRef],
-                    description: nil
+                    options: CreateGroupOptionsFfi(
+                        description: nil,
+                        initialImage: nil,
+                        disappearingMessageSecs: 0
+                    )
                 )
+                groupIdHex = created.groupIdHex
+                createdRow = created.chatListRow
             }
 #else
             let client = try appState.currentMarmotClient()
-            groupIdHex = try await client.createGroup(
+            let created = try await client.createGroupWithOptionsDetailed(
                 accountRef: accountRef,
                 name: "",
                 memberRefs: [memberRef],
-                description: nil
+                options: CreateGroupOptionsFfi(
+                    description: nil,
+                    initialImage: nil,
+                    disappearingMessageSecs: 0
+                )
             )
+            groupIdHex = created.groupIdHex
+            createdRow = created.chatListRow
 #endif
+            if let createdRow {
+                appState.noteCreatedChatListRow(accountRef: accountRef, row: createdRow)
+            }
             HostActionPerformance.groupBecameCanonical(
                 groupIdHex: groupIdHex,
                 since: performance

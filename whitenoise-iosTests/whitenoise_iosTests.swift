@@ -169,7 +169,8 @@ struct AppStateBootstrapTests {
         let appState = try testAppState()
         await appState.bootstrap()
 
-        let summary = try await appState.createIdentityForProfileSetup()
+        let creation = try await appState.createIdentityForProfileSetup()
+        let summary = creation.account
 
         #expect(appState.phase == .onboarding)
         #expect(appState.activeAccount == nil)
@@ -196,7 +197,8 @@ struct AppStateBootstrapTests {
         )
         let appState = try testAppState(notifications: notifications)
         await appState.bootstrap()
-        let summary = try await appState.createIdentityForProfileSetup()
+        let creation = try await appState.createIdentityForProfileSetup()
+        let summary = creation.account
 
         await appState.completeIdentityProfileSetup(summary)
 
@@ -2067,12 +2069,40 @@ struct AppStateBootstrapTests {
         await appState.bootstrap()
         #expect(appState.phase == .onboarding)
         var accounts: [AccountSummaryFfi] = []
-        for _ in 0..<accountCount {
+        for index in 0..<accountCount {
             let account = try await appState.createIdentity()
             accounts.append(account)
+            if index + 1 < accountCount {
+                // The production API now returns at local readiness. MDK
+                // intentionally coalesces another generated-identity request
+                // until this background publication finishes, so wait for its
+                // local readiness projection before asking for an independent
+                // second test account.
+                try await waitForGeneratedAccountNetworkReadiness(
+                    appState: appState,
+                    accountRef: account.label
+                )
+            }
         }
         #expect(appState.phase == .ready)
         return (appState, accounts)
+    }
+
+    private func waitForGeneratedAccountNetworkReadiness(
+        appState: AppState,
+        accountRef: String
+    ) async throws {
+        for _ in 0..<300 {
+            switch try appState.marmot.accountSetupReadiness(accountRef: accountRef) {
+            case .networkReady:
+                return
+            case .recoveryRequired:
+                throw MarmotKitError.AccountSetupRetryRequired
+            case .initializing, .localReady, .publishing:
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        throw MarmotKitError.AccountSetupRetryRequired
     }
 
     private func deniedNotifications(

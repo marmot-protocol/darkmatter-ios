@@ -1996,16 +1996,16 @@ final class ConversationViewModel {
         do {
             let client = try appState.currentMarmotClient()
             let detailsStart = ContinuousClock.now
-            let details = try await client.groupDetails(
+            let snapshot = try await client.groupConversationSnapshot(
                 accountRef: accountRef,
                 groupIdHex: group.groupIdHex
             )
-            let state = try await client.groupManagementState(
-                accountRef: accountRef,
-                groupIdHex: group.groupIdHex
+            logLoadDuration("group.conversation_snapshot", since: detailsStart)
+            applyGroupDetails(
+                snapshot.details,
+                managementState: snapshot.managementState,
+                announceRosterChanges: announceRosterChanges
             )
-            logLoadDuration("group.details+management", since: detailsStart)
-            applyGroupDetails(details, managementState: state, announceRosterChanges: announceRosterChanges)
             return true
         } catch {
             return false

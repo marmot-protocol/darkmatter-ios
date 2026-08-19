@@ -397,8 +397,15 @@ final class ChatsListViewModel {
     /// durable keyed projection instead of waiting for a broad subscription
     /// update to happen to deliver it.
     func refreshRow(groupIdHex: String) async {
-        guard let accountRef = currentAccount,
-              let appState,
+        guard let accountRef = currentAccount, let appState else { return }
+        if let createdRow = appState.createdChatListRow(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        ) {
+            applyChatListRow(createdRow)
+            return
+        }
+        guard
               appState.canUseRuntimeForLocalForegroundWork
         else { return }
         do {

@@ -34,10 +34,12 @@ final class NewChatFlowViewModel {
     @ObservationIgnored var createGroupWithInitialImageForTesting: (
         @MainActor (String, String, [String], String?, InitialGroupImageFfi) async throws -> String
     )?
-    @ObservationIgnored var scheduleRetentionForTesting: (
-        @MainActor (UInt64, String, String) -> Void
+    @ObservationIgnored var createGroupWithOptionsForTesting: (
+        @MainActor (String, String, [String], CreateGroupOptionsFfi) async throws -> String
     )?
 #endif
+
+    @ObservationIgnored private var keyPackagePrewarmTask: Task<Void, Never>?
 
     var isBusy: Bool {
         choosingAccountIdHex != nil || starter.isCreating || isCreatingGroup
@@ -311,6 +313,23 @@ final class NewChatFlowViewModel {
         }
     }
 
+    func prewarmSelectedGroupMembers(using appState: AppState) {
+        keyPackagePrewarmTask?.cancel()
+        let memberRefs = groupSelection.memberRefs
+        guard !memberRefs.isEmpty else { return }
+        keyPackagePrewarmTask = Task { @MainActor [weak self, weak appState] in
+            guard let appState else { return }
+            _ = try? await appState.prewarmGroupMemberKeyPackages(memberRefs: memberRefs)
+            guard !Task.isCancelled else { return }
+            self?.keyPackagePrewarmTask = nil
+        }
+    }
+
+    func cancelGroupMemberPrewarm() {
+        keyPackagePrewarmTask?.cancel()
+        keyPackagePrewarmTask = nil
+    }
+
     /// Normalizes a resolved identifier through Marmot before selecting it so
     /// the staged member carries the validated reference form.
     func selectResolved(_ resolved: ResolvedRecipient, using appState: AppState) async {
@@ -350,9 +369,22 @@ final class NewChatFlowViewModel {
         let performance = HostActionPerformance.begin()
         do {
             let normalizedDescription = NewGroupPresentation.normalizedDescription(description)
+            let options = CreateGroupOptionsFfi(
+                description: normalizedDescription,
+                initialImage: image?.initialImage,
+                disappearingMessageSecs: retentionSeconds
+            )
             let groupIdHex: String
+            var createdRow: ChatListRowFfi?
 #if DEBUG
-            if let image, let createGroupWithInitialImageForTesting {
+            if let createGroupWithOptionsForTesting {
+                groupIdHex = try await createGroupWithOptionsForTesting(
+                    accountRef,
+                    normalizedName,
+                    groupSelection.memberRefs,
+                    options
+                )
+            } else if let image, let createGroupWithInitialImageForTesting {
                 groupIdHex = try await createGroupWithInitialImageForTesting(
                     accountRef,
                     normalizedName,
@@ -369,49 +401,35 @@ final class NewChatFlowViewModel {
                 )
             } else {
                 let client = try appState.currentMarmotClient()
-                groupIdHex = try await client.createGroupWithInitialImage(
+                let created = try await client.createGroupWithOptionsDetailed(
                     accountRef: accountRef,
                     name: normalizedName,
                     memberRefs: groupSelection.memberRefs,
-                    description: normalizedDescription,
-                    initialImage: image?.initialImage
+                    options: options
                 )
+                groupIdHex = created.groupIdHex
+                createdRow = created.chatListRow
             }
 #else
             let client = try appState.currentMarmotClient()
-            groupIdHex = try await client.createGroupWithInitialImage(
+            let created = try await client.createGroupWithOptionsDetailed(
                 accountRef: accountRef,
                 name: normalizedName,
                 memberRefs: groupSelection.memberRefs,
-                description: normalizedDescription,
-                initialImage: image?.initialImage
+                options: options
             )
+            groupIdHex = created.groupIdHex
+            createdRow = created.chatListRow
 #endif
+            if let createdRow {
+                appState.noteCreatedChatListRow(accountRef: accountRef, row: createdRow)
+            }
             HostActionPerformance.groupBecameCanonical(
                 groupIdHex: groupIdHex,
                 since: performance
             )
             Haptics.success()
             onOpen(groupIdHex)
-            if retentionSeconds > 0 {
-#if DEBUG
-                if let scheduleRetentionForTesting {
-                    scheduleRetentionForTesting(retentionSeconds, accountRef, groupIdHex)
-                } else {
-                    appState.scheduleCreatedGroupRetention(
-                        seconds: retentionSeconds,
-                        accountRef: accountRef,
-                        groupIdHex: groupIdHex
-                    )
-                }
-#else
-                appState.scheduleCreatedGroupRetention(
-                    seconds: retentionSeconds,
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex
-                )
-#endif
-            }
         } catch let marmotError as MarmotKitError {
             Haptics.error()
             if case .MissingKeyPackage(let account) = marmotError {

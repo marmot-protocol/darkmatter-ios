@@ -53,7 +53,10 @@ struct NewChatFlowView: View {
                         model: model,
                         onScan: { scanTarget = .groupPicker },
                         onCancel: { dismiss() },
-                        onNext: { path.append(.groupSetup) }
+                        onNext: {
+                            model.prewarmSelectedGroupMembers(using: appState)
+                            path.append(.groupSetup)
+                        }
                     )
                 case .groupSetup:
                     NewGroupSetupView(model: model, onOpen: open)
@@ -122,6 +125,7 @@ struct NewChatFlowView: View {
         }
         .onDisappear {
             model.messageUserSearch.cancel()
+            model.cancelGroupMemberPrewarm()
         }
     }
 

@@ -63,6 +63,20 @@ struct DirectChatStarterTests {
         #expect(store.peerAccountId(accountRef: "second", groupIdHex: "other") == "carol")
     }
 
+    @Test func createdChatRowHandoffIsAccountScopedAndBounded() {
+        var store = RecentCreatedChatRowStore(maximumRows: 1)
+        store.record(accountRef: "first", row: chatRow(id: "old"))
+        store.record(accountRef: "first", row: chatRow(id: "new"))
+
+        #expect(store.row(accountRef: "first", groupIdHex: "old") == nil)
+        #expect(store.row(accountRef: "first", groupIdHex: "new")?.title == "new")
+        #expect(store.row(accountRef: "second", groupIdHex: "new") == nil)
+
+        store.record(accountRef: "second", row: chatRow(id: "other"))
+        #expect(store.row(accountRef: "first", groupIdHex: "new") == nil)
+        #expect(store.row(accountRef: "second", groupIdHex: "other")?.title == "other")
+    }
+
     @Test func secondTapIsIgnoredWhileTheFirstCreateIsInFlight() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "account"
@@ -158,6 +172,38 @@ struct DirectChatStarterTests {
     @Test func promptKindFollowsTheFailureTaxonomy() {
         #expect(StartChatPrompt.kind(for: .missingSetup) == .invite)
         #expect(StartChatPrompt.kind(for: .other(message: "boom")) == .error(message: "boom"))
+    }
+
+    private func chatRow(id: String) -> ChatListRowFfi {
+        ChatListRowFfi(
+            groupIdHex: id,
+            pinned: false,
+            pinnedPosition: nil,
+            archived: false,
+            pendingConfirmation: false,
+            title: id,
+            groupName: id,
+            avatarUrl: nil,
+            avatar: nil,
+            lastMessage: nil,
+            unreadCount: 0,
+            hasUnread: false,
+            manuallyMarkedUnread: false,
+            unreadMentionCount: 0,
+            unreadMention: false,
+            firstUnreadMessageIdHex: nil,
+            lastReadMessageIdHex: nil,
+            lastReadTimelineAt: nil,
+            conversationCreatedAt: 1,
+            activitySortAt: 1,
+            updatedAt: 1,
+            selfMembership: .member,
+            conversationKind: .group,
+            muted: false,
+            mutedUntilMs: nil,
+            leaveRequestPending: false,
+            leaveRequestedAtMs: nil
+        )
     }
 
     private enum TestError: Error {

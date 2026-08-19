@@ -604,6 +604,30 @@ nonisolated final class MarmotClient: Sendable {
         )
     }
 
+    func createGroupWithOptionsDetailed(
+        accountRef: String,
+        name: String,
+        memberRefs: [String],
+        options: CreateGroupOptionsFfi
+    ) async throws -> CreatedGroupFfi {
+        try await marmot.createGroupWithOptionsDetailed(
+            accountRef: accountRef,
+            name: name,
+            memberRefs: memberRefs,
+            options: options
+        )
+    }
+
+    func prewarmGroupMemberKeyPackages(
+        accountRef: String,
+        memberRefs: [String]
+    ) async throws -> MemberKeyPackagePrewarmSummaryFfi {
+        try await marmot.prewarmGroupMemberKeyPackages(
+            accountRef: accountRef,
+            memberRefs: memberRefs
+        )
+    }
+
     func setGroupArchived(accountRef: String, groupIdHex: String, archived: Bool) async throws -> AppGroupRecordFfi {
         try await marmot.setGroupArchived(accountRef: accountRef, groupIdHex: groupIdHex, archived: archived)
     }
@@ -759,6 +783,16 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.groupManagementState(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func groupConversationSnapshot(
+        accountRef: String,
+        groupIdHex: String
+    ) async throws -> GroupConversationSnapshotFfi {
+        try await marmot.groupConversationSnapshot(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        )
+    }
+
     func groupMlsState(accountRef: String, groupIdHex: String) async throws -> AppGroupMlsStateFfi {
         try await marmot.groupMlsState(accountRef: accountRef, groupIdHex: groupIdHex)
     }
@@ -794,6 +828,16 @@ nonisolated final class MarmotClient: Sendable {
     /// `async throws`, so these forward directly without `Task.detached`.
     func publishUserProfile(accountRef: String, profile: UserProfileMetadataFfi, defaultRelays: [String], bootstrapRelays: [String]) async throws -> UserProfileMetadataFfi {
         try await marmot.publishUserProfile(accountRef: accountRef, profile: profile, defaultRelays: defaultRelays, bootstrapRelays: bootstrapRelays)
+    }
+
+    func publishUserProfileUsingAccountRelays(
+        accountRef: String,
+        profile: UserProfileMetadataFfi
+    ) async throws -> UserProfileMetadataFfi {
+        try await marmot.publishUserProfileUsingAccountRelays(
+            accountRef: accountRef,
+            profile: profile
+        )
     }
 
     func uploadProfileImage(

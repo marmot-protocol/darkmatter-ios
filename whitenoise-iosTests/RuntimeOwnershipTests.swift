@@ -122,12 +122,17 @@ struct RuntimeOwnershipTests {
                 defaultRelays: MarmotClient.seedRelays,
                 bootstrapRelays: MarmotClient.seedRelays
             )
-            let groupIdHex = try await client.createGroup(
+            let created = try await client.createGroupWithOptionsDetailed(
                 accountRef: account.label,
                 name: "Local readiness",
                 memberRefs: [],
-                description: "Available when create returns"
+                options: CreateGroupOptionsFfi(
+                    description: "Available when create returns",
+                    initialImage: nil,
+                    disappearingMessageSecs: 3_600
+                )
             )
+            let groupIdHex = created.groupIdHex
 
             let roster = try await client.groupRoster(
                 accountRef: account.label,
@@ -141,6 +146,10 @@ struct RuntimeOwnershipTests {
                 accountRef: account.label,
                 groupIdHex: groupIdHex
             )
+            let snapshot = try await client.groupConversationSnapshot(
+                accountRef: account.label,
+                groupIdHex: groupIdHex
+            )
 
             #expect(roster.groupIdHex == groupIdHex)
             #expect(roster.memberCount == 1)
@@ -150,6 +159,11 @@ struct RuntimeOwnershipTests {
             #expect(page.first?.memberIdsHex == roster.members.map(\.memberIdHex))
             #expect(row?.groupIdHex == groupIdHex)
             #expect(row?.groupName == "Local readiness")
+            #expect(created.chatListRow == row)
+            #expect(snapshot.details.group.groupIdHex == groupIdHex)
+            #expect(snapshot.details.group.disappearingMessageSecs == 3_600)
+            #expect(snapshot.managementState.myAccountIdHex == account.accountIdHex)
+            #expect(snapshot.managementState.isSelfAdmin)
             try await client.marmot.shutdownAndClose()
             #expect(client.marmot.storageIsClosed())
         } catch {

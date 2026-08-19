@@ -4,8 +4,7 @@ import UIKit
 
 @MainActor
 protocol CreateIdentityServicing: AnyObject {
-    func createIdentityForProfileSetup() async throws -> AccountSummaryFfi
-    func onboardingProfile(accountIdHex: String) async throws -> UserProfileMetadataFfi?
+    func createIdentityForProfileSetup() async throws -> IdentityCreationResultFfi
     func uploadOnboardingAvatar(
         accountRef: String,
         draft: GroupImageUploadDraft
@@ -18,10 +17,6 @@ protocol CreateIdentityServicing: AnyObject {
 }
 
 extension AppState: CreateIdentityServicing {
-    func onboardingProfile(accountIdHex: String) async throws -> UserProfileMetadataFfi? {
-        try await currentMarmotClient().userProfileForEditing(accountIdHex: accountIdHex)
-    }
-
     func uploadOnboardingAvatar(
         accountRef: String,
         draft: GroupImageUploadDraft
@@ -42,12 +37,9 @@ extension AppState: CreateIdentityServicing {
         accountRef: String,
         profile: UserProfileMetadataFfi
     ) async throws {
-        let relayConfiguration = await relayPublishConfiguration(for: accountRef)
-        _ = try await currentMarmotClient().publishUserProfile(
+        _ = try await currentMarmotClient().publishUserProfileUsingAccountRelays(
             accountRef: accountRef,
-            profile: profile,
-            defaultRelays: relayConfiguration.publishRelays,
-            bootstrapRelays: relayConfiguration.bootstrapRelays
+            profile: profile
         )
     }
 }
@@ -195,10 +187,10 @@ final class CreateIdentityViewModel {
         phase = .creating
         do {
             if createdIdentity == nil {
-                createdIdentity = try await service.createIdentityForProfileSetup()
+                let creation = try await service.createIdentityForProfileSetup()
+                createdIdentity = creation.account
+                applyExistingProfile(creation.profile)
             }
-            guard let createdIdentity else { return }
-            try await loadExistingProfile(for: createdIdentity, using: service)
             phase = .editing
             HostActionPerformance.record("identity_prepare", since: performance)
         } catch {
@@ -259,13 +251,6 @@ final class CreateIdentityViewModel {
         ).hasEdits || avatarDraft != nil
         guard needsProfileRead else { return }
 
-        if !loadedExistingProfile {
-            existingProfile = try await service.onboardingProfile(
-                accountIdHex: identity.accountIdHex
-            )
-            loadedExistingProfile = true
-        }
-
         if let avatarDraft, uploadedAvatarURL == nil {
             uploadedAvatarURL = try await service.uploadOnboardingAvatar(
                 accountRef: identity.label,
@@ -290,21 +275,12 @@ final class CreateIdentityViewModel {
         return normalized == prefilledDisplayName ? "" : displayName
     }
 
-    private func loadExistingProfile(
-        for identity: AccountSummaryFfi,
-        using service: CreateIdentityServicing
-    ) async throws {
-        guard !loadedExistingProfile else { return }
-
-        let profile = try await service.onboardingProfile(
-            accountIdHex: identity.accountIdHex
-        )
+    private func applyExistingProfile(_ profile: UserProfileMetadataFfi) {
         existingProfile = profile
         loadedExistingProfile = true
-
         guard ContentSanitizer.displayName(displayName) == nil else { return }
-        let generatedName = ContentSanitizer.displayName(profile?.displayName ?? "")
-            ?? ContentSanitizer.displayName(profile?.name ?? "")
+        let generatedName = ContentSanitizer.displayName(profile.displayName ?? "")
+            ?? ContentSanitizer.displayName(profile.name ?? "")
         guard let generatedName else { return }
         displayName = generatedName
         prefilledDisplayName = generatedName

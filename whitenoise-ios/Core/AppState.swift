@@ -74,6 +74,38 @@ struct RecentDirectChatPeerStore {
     }
 }
 
+/// Bounded handoff for the exact durable projection returned by detailed
+/// group creation. This lets navigation render without another FFI read while
+/// the chat-list subscription catches up.
+struct RecentCreatedChatRowStore {
+    private let maximumRows: Int
+    private var rowsByKey: [String: ChatListRowFfi] = [:]
+    private var recency: [String] = []
+
+    init(maximumRows: Int = 64) {
+        self.maximumRows = max(1, maximumRows)
+    }
+
+    mutating func record(accountRef: String, row: ChatListRowFfi) {
+        guard !accountRef.isEmpty, !row.groupIdHex.isEmpty else { return }
+        let key = Self.key(accountRef: accountRef, groupIdHex: row.groupIdHex)
+        rowsByKey[key] = row
+        recency.removeAll { $0 == key }
+        recency.append(key)
+        while recency.count > maximumRows {
+            rowsByKey[recency.removeFirst()] = nil
+        }
+    }
+
+    func row(accountRef: String, groupIdHex: String) -> ChatListRowFfi? {
+        rowsByKey[Self.key(accountRef: accountRef, groupIdHex: groupIdHex)]
+    }
+
+    private static func key(accountRef: String, groupIdHex: String) -> String {
+        "\(accountRef)\u{1f}\(groupIdHex)"
+    }
+}
+
 /// Root observable state for the app.
 ///
 /// Holds the `Marmot` handle, the current set of `AccountSummaryFfi`, and
@@ -234,6 +266,7 @@ final class AppState {
     /// through its back-reference so SwiftUI observation is unchanged.
     @ObservationIgnored let profileStore = ProfileStore()
     @ObservationIgnored private var recentDirectChatPeers = RecentDirectChatPeerStore()
+    @ObservationIgnored private var recentCreatedChatRows = RecentCreatedChatRowStore()
     /// True only while `signOut()` is tearing down the departing account. Set
     /// before any of sign-out's `await` suspension points and cleared once the
     /// account is removed and `accounts` refreshed. `scheduleNativePushRegistrationIfEnabled()`
@@ -247,6 +280,7 @@ final class AppState {
     /// reactivation awaits so rapid repeated taps cannot start duplicate sign-ins.
     /// MainActor-owned; mutated only by `activateAccount`.
     private var activatingAccountRefs = Set<String>()
+    @ObservationIgnored private var pendingAccountSetupReadiness: [String: AccountSetupReadinessFfi] = [:]
     /// Scene-phase flag. Owned here (not on `RuntimeLifecycle`) because many
     /// non-lifecycle gates read it (notification presentation, settings reads,
     /// push scheduling, routing); `RuntimeLifecycle` writes it through its
@@ -375,6 +409,14 @@ final class AppState {
 
     func directChatPeerAccountId(accountRef: String, groupIdHex: String) -> String? {
         recentDirectChatPeers.peerAccountId(accountRef: accountRef, groupIdHex: groupIdHex)
+    }
+
+    func noteCreatedChatListRow(accountRef: String, row: ChatListRowFfi) {
+        recentCreatedChatRows.record(accountRef: accountRef, row: row)
+    }
+
+    func createdChatListRow(accountRef: String, groupIdHex: String) -> ChatListRowFfi? {
+        recentCreatedChatRows.row(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
     /// Production entry point. Runtime construction belongs to bootstrap so the
@@ -1202,28 +1244,44 @@ final class AppState {
     @MainActor
     @discardableResult
     func createIdentity() async throws -> AccountSummaryFfi {
-        let summary = try await createIdentityForProfileSetup()
-        await completeIdentityProfileSetup(summary)
-        return summary
+        let creation = try await createIdentityForProfileSetup()
+        await completeIdentityProfileSetup(creation.account)
+        return creation.account
     }
 
     /// Creates the durable identity without routing out of onboarding. The
     /// sign-up profile flow uses the returned account to publish optional
     /// metadata, then calls `completeIdentityProfileSetup` exactly once.
     @MainActor
-    func createIdentityForProfileSetup() async throws -> AccountSummaryFfi {
+    func createIdentityForProfileSetup() async throws -> IdentityCreationResultFfi {
         let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let relays = MarmotClient.seedRelays
-        return try await lease.client.marmot.createIdentity(
+        let existingAccountLabels = Set(accounts.map(\.label))
+        let creation = try await lease.client.marmot.createIdentityWithProfile(
             defaultRelays: relays,
             bootstrapRelays: relays
         )
+        // MDK deliberately coalesces generated-identity calls while an earlier
+        // account is still publishing. Never let a second-account flow edit or
+        // activate that already-existing identity as though it were new.
+        guard !existingAccountLabels.contains(creation.account.label) else {
+            throw MarmotKitError.AccountSetupRetryRequired
+        }
+        pendingAccountSetupReadiness[creation.account.label] = creation.readiness
+        return creation
     }
 
     @MainActor
     func completeIdentityProfileSetup(_ summary: AccountSummaryFfi) async {
         await activateNewIdentity(summary)
+        if let readiness = pendingAccountSetupReadiness.removeValue(forKey: summary.label),
+           readiness != .networkReady {
+            present(.success(
+                L10n.string("Account created"),
+                message: L10n.string("Secure setup is finishing in the background.")
+            ))
+        }
     }
 
     /// Import an existing local-signing identity (nsec).
@@ -1314,30 +1372,18 @@ final class AppState {
         }
     }
 
-    func scheduleCreatedGroupRetention(
-        seconds: UInt64,
-        accountRef: String,
-        groupIdHex: String
-    ) {
-        guard seconds > 0 else { return }
-        scheduleForegroundMutationFollowup { [weak self] client in
-            guard let self else { return }
-            do {
-                _ = try await client.updateMessageRetention(
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex,
-                    disappearingMessageSecs: seconds
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                guard !Task.isCancelled else { return }
-                self.present(.warning(
-                    L10n.string("Disappearing messages weren't applied"),
-                    message: L10n.string("Retry")
-                ))
-            }
+    func prewarmGroupMemberKeyPackages(
+        memberRefs: [String]
+    ) async throws -> MemberKeyPackagePrewarmSummaryFfi {
+        guard let accountRef = activeAccountRef else {
+            throw MarmotKitError.UnknownAccount(accountRef: "")
         }
+        let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
+        defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
+        return try await lease.client.prewarmGroupMemberKeyPackages(
+            accountRef: accountRef,
+            memberRefs: memberRefs
+        )
     }
 
     private func scheduleForegroundMutationFollowup(
@@ -1385,28 +1431,9 @@ final class AppState {
         try? await currentMarmotClient().accountRelayLists(accountRef: accountRef)
     }
 
-    func relayPublishRelays(for accountRef: String) async -> [String] {
-        guard let lists = await relayLists(for: accountRef) else { return MarmotClient.seedRelays }
-        let relays = RelaySettings.editableRelays(from: lists)
-        return relays.isEmpty ? MarmotClient.seedRelays : relays
-    }
-
     func relayBootstrapRelays(for accountRef: String) async -> [String] {
         guard let lists = await relayLists(for: accountRef) else { return MarmotClient.seedRelays }
         return RelaySettings.bootstrapRelays(from: lists)
-    }
-
-    func relayPublishConfiguration(
-        for accountRef: String
-    ) async -> (publishRelays: [String], bootstrapRelays: [String]) {
-        guard let lists = await relayLists(for: accountRef) else {
-            return (MarmotClient.seedRelays, MarmotClient.seedRelays)
-        }
-        let publishRelays = RelaySettings.editableRelays(from: lists)
-        return (
-            publishRelays.isEmpty ? MarmotClient.seedRelays : publishRelays,
-            RelaySettings.bootstrapRelays(from: lists)
-        )
     }
 
     func revealNsec(accountRef: String) async throws -> String {

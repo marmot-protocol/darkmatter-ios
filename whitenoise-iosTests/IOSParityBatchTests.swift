@@ -63,11 +63,11 @@ struct IOSParityBatchTests {
         var capturedMemberRefs: [String]?
         var capturedDescription: String?
         var openedGroupId: String?
-        model.createGroupForTesting = { accountRef, name, memberRefs, description in
+        model.createGroupWithOptionsForTesting = { accountRef, name, memberRefs, options in
             capturedAccountRef = accountRef
             capturedName = name
             capturedMemberRefs = memberRefs
-            capturedDescription = description
+            capturedDescription = options.description
             return "empty-group"
         }
 
@@ -99,8 +99,8 @@ struct IOSParityBatchTests {
         )
         var capturedImage: InitialGroupImageFfi?
         var openedGroupId: String?
-        model.createGroupWithInitialImageForTesting = { _, _, _, _, image in
-            capturedImage = image
+        model.createGroupWithOptionsForTesting = { _, _, _, options in
+            capturedImage = options.initialImage
             return "group-with-image"
         }
 
@@ -119,16 +119,15 @@ struct IOSParityBatchTests {
         #expect(openedGroupId == "group-with-image")
     }
 
-    @Test func newGroupOpensBeforeRetentionFollowupIsScheduled() async throws {
+    @Test func newGroupCreationIncludesFoundingRetentionBeforeOpening() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "active-account"
         let model = NewChatFlowViewModel()
         var events: [String] = []
-        var scheduledRetention: (UInt64, String, String)?
-        model.createGroupForTesting = { _, _, _, _ in "retained-group" }
-        model.scheduleRetentionForTesting = { seconds, accountRef, groupIdHex in
-            events.append("retention")
-            scheduledRetention = (seconds, accountRef, groupIdHex)
+        var capturedOptions: CreateGroupOptionsFfi?
+        model.createGroupWithOptionsForTesting = { _, _, _, options in
+            capturedOptions = options
+            return "retained-group"
         }
 
         await model.createGroup(
@@ -141,10 +140,8 @@ struct IOSParityBatchTests {
             }
         )
 
-        #expect(events == ["open:retained-group", "retention"])
-        #expect(scheduledRetention?.0 == 86_400)
-        #expect(scheduledRetention?.1 == "active-account")
-        #expect(scheduledRetention?.2 == "retained-group")
+        #expect(events == ["open:retained-group"])
+        #expect(capturedOptions?.disappearingMessageSecs == 86_400)
     }
 
     @Test func emptyGroupInviteRequiresConfirmedSoleMemberAdmin() {

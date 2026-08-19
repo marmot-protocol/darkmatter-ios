@@ -238,6 +238,7 @@ struct ProfileContentView: View {
                             )
                         }
                     }
+                    .foregroundStyle(.white)
 
                     if showsNewConversationActions {
                         DetailsActionButton(
@@ -255,6 +256,7 @@ struct ProfileContentView: View {
                                 )
                             }
                         }
+                        .foregroundStyle(.white)
                     } else {
                         DetailsActionButton(
                             title: "New Group",

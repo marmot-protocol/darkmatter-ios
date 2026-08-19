@@ -20,7 +20,7 @@ struct CreateIdentityOnboardingTests {
         }
 
         #expect(service.createCount == 1)
-        #expect(service.profileReadCount == 1)
+        #expect(service.profileReadCount == 0)
         #expect(service.publishCount == 0)
         #expect(service.completeCount == 1)
         #expect(dismissed)
@@ -35,7 +35,7 @@ struct CreateIdentityOnboardingTests {
 
         #expect(model.displayName == "Alice")
         #expect(service.createCount == 1)
-        #expect(service.profileReadCount == 1)
+        #expect(service.profileReadCount == 0)
     }
 
     @Test func profileDraftRemainsEditableWhileIdentityCreationIsInFlight() async {
@@ -122,7 +122,7 @@ struct CreateIdentityOnboardingTests {
         }
 
         #expect(service.createCount == 1)
-        #expect(service.profileReadCount == 1)
+        #expect(service.profileReadCount == 0)
         #expect(service.uploadCount == 1)
         #expect(service.publishCount == 2)
         #expect(service.completeCount == 1)
@@ -227,26 +227,25 @@ private final class CreateIdentityServiceStub: CreateIdentityServicing {
         running: true
     )
 
-    func createIdentityForProfileSetup() async throws -> AccountSummaryFfi {
+    func createIdentityForProfileSetup() async throws -> IdentityCreationResultFfi {
         createCount += 1
         if createFailuresRemaining > 0 {
             createFailuresRemaining -= 1
             throw StubError.failed
         }
         await beforeCreateReturn?()
-        return identity
-    }
-
-    func onboardingProfile(accountIdHex: String) async throws -> UserProfileMetadataFfi? {
-        profileReadCount += 1
-        return UserProfileMetadataFfi(
-            name: "engine-name",
-            displayName: "Engine Name",
-            about: nil,
-            picture: nil,
-            banner: "https://example.com/banner.jpg",
-            nip05: "engine@example.com",
-            lud16: "engine@example.com"
+        return IdentityCreationResultFfi(
+            account: identity,
+            profile: UserProfileMetadataFfi(
+                name: "engine-name",
+                displayName: "Engine Name",
+                about: nil,
+                picture: nil,
+                banner: "https://example.com/banner.jpg",
+                nip05: "engine@example.com",
+                lud16: "engine@example.com"
+            ),
+            readiness: .localReady
         )
     }
 

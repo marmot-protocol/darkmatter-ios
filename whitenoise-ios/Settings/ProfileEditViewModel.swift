@@ -232,21 +232,15 @@ final class ProfileEditViewModel {
 
         do {
             let client = try appState.currentMarmotClient()
-            let relayConfiguration = await appState.relayPublishConfiguration(for: accountRef)
-            _ = try await client.publishUserProfile(
+            _ = try await client.publishUserProfileUsingAccountRelays(
                 accountRef: accountRef,
-                profile: normalizedMetadata.ffi,
-                defaultRelays: relayConfiguration.publishRelays,
-                bootstrapRelays: relayConfiguration.bootstrapRelays
+                profile: normalizedMetadata.ffi
             )
             await appState.reloadProfileProjection(forAccountIdHex: accountIdHex)
             Haptics.success()
             appState.present(.success(
                 L10n.string("Profile published"),
-                message: L10n.plural(
-                    "Your kind:0 metadata is live on %lld relays.",
-                    Int64(relayConfiguration.publishRelays.count)
-                )
+                message: L10n.string("Your kind:0 metadata is live on your account relays.")
             ))
         } catch {
             Haptics.error()
