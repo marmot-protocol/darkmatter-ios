@@ -57,6 +57,15 @@ struct GroupRelaysPresentationTests {
     @Test func cleanRelaysPassThroughUnchanged() {
         let clean = ["wss://relay.one.example", "wss://relay.two.example"]
         #expect(GroupRelaysPresentation.rows(for: clean) == clean)
+        #expect(GroupRelaysPresentation.summary(for: clean) == LocalizedNumberLabel.decimal(2))
+    }
+
+    @Test func emptyRelaySummaryMatchesTheDestinationEmptyState() {
+        #expect(GroupRelaysPresentation.summary(for: []) == GroupRelaysPresentation.emptyMessage)
+        #expect(
+            GroupRelaysPresentation.summary(for: ["\u{200B}"])
+                == GroupRelaysPresentation.emptyMessage
+        )
     }
 
     @Test func collapsesWhitespaceAndTrims() {

@@ -42,13 +42,13 @@ struct GroupDetailsView: View {
     @State private var model = GroupDetailsViewModel()
     @State private var sharedMediaGallery: MessageMediaGallery?
     /// Presents the tapped member contextually, with moderation scope.
-    /// Row tap opens the compact profile sheet with moderation scope.
-    @State private var memberSheetTarget: MemberProfileTarget?
+    @State private var memberProfileTarget: MemberProfileTarget?
     @State private var memberSearchText = ""
     @State private var membersExpanded = false
     @State private var showTechnicalDetails = false
     @State private var showNotifications = false
     @State private var showMediaLibrary = false
+    @State private var showRelays = false
     @State private var showContactProfile = false
     @State private var editingNickname = false
     @State private var nicknameDraft = ""
@@ -108,26 +108,16 @@ struct GroupDetailsView: View {
         .navigationTitle(isDirectMessage ? Text("Chat Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
-        .sheet(item: $memberSheetTarget) { target in
+        .navigationDestination(item: $memberProfileTarget) { target in
             // Resolve the live roster entry so promote/demote done from the
-            // sheet is reflected without reopening it.
+            // destination is reflected without reopening it.
             let member = viewModel.groupMemberDetails.first {
                 $0.memberIdHex == target.member.memberIdHex
             } ?? target.member
-            NavigationStack {
-                ProfileContentView(
-                    npub: member.npub,
-                    moderation: moderationContext(for: member)
-                )
-                .navigationTitle("Profile")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { memberSheetTarget = nil }
-                    }
-                }
-            }
-            .appAppearance()
+            profileDestination(
+                npub: member.npub,
+                moderation: moderationContext(for: member)
+            )
         }
         .navigationDestination(isPresented: $showContactProfile) {
             if let contactNpub {
@@ -166,7 +156,8 @@ struct GroupDetailsView: View {
                 showContactProfile = false
                 showNotifications = false
                 showMediaLibrary = false
-                memberSheetTarget = nil
+                showRelays = false
+                memberProfileTarget = nil
                 showStartGroupWithContact = false
                 showAddContactToGroup = false
             }
@@ -176,6 +167,9 @@ struct GroupDetailsView: View {
         }
         .navigationDestination(isPresented: $showMediaLibrary) {
             SharedMediaLibraryView(conversation: viewModel)
+        }
+        .navigationDestination(isPresented: $showRelays) {
+            GroupRelaysView(relays: viewModel.group.relays)
         }
         .toolbar {
             if !isDirectMessage && isAdmin {
@@ -800,7 +794,7 @@ struct GroupDetailsView: View {
                         GroupMemberDetailsRow(member: member)
                     } else {
                         Button {
-                            memberSheetTarget = MemberProfileTarget(member: member)
+                            memberProfileTarget = MemberProfileTarget(member: member)
                         } label: {
                             GroupMemberDetailsRow(member: member)
                                 .contentShape(Rectangle())
@@ -855,21 +849,25 @@ struct GroupDetailsView: View {
 
     private var relaysSection: some View {
         Section {
-            // Stable per-row identity by position. Sanitized display strings can
-            // collide, so using the rendered URL itself can duplicate identities.
-            ForEach(
-                Array(GroupRelaysPresentation.rows(for: viewModel.group.relays).enumerated()),
-                id: \.offset
-            ) { _, relay in
-                Text(relay)
-                    .font(.system(.subheadline, design: .monospaced))
-                    .foregroundStyle(
-                        relay == GroupRelaysPresentation.emptyMessage ? .secondary : .primary
-                    )
-                    .textSelection(.enabled)
+            Button {
+                showRelays = true
+            } label: {
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Text(GroupRelaysPresentation.summary(for: viewModel.group.relays))
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                } label: {
+                    Label("Relays", systemImage: "network")
+                }
+                .contentShape(.rect)
             }
+            .buttonStyle(.plain)
         } header: {
-            Text("Relays")
+            Text("Advanced")
         }
     }
 

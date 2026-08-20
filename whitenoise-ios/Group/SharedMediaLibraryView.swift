@@ -140,31 +140,21 @@ struct SharedMediaLibraryView: View {
     )
 
     var body: some View {
-        List {
-            Section {
-                Picker("Shared media type", selection: $category) {
-                    Text("Media").tag(SharedMediaLibraryPresentation.Category.media)
-                    Text("Voice").tag(SharedMediaLibraryPresentation.Category.voice)
-                    Text("Files").tag(SharedMediaLibraryPresentation.Category.files)
-                    Text("Links").tag(SharedMediaLibraryPresentation.Category.links)
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+        VStack(spacing: 0) {
+            Picker("Shared media type", selection: $category) {
+                Text("Media").tag(SharedMediaLibraryPresentation.Category.media)
+                Text("Voice").tag(SharedMediaLibraryPresentation.Category.voice)
+                Text("Files").tag(SharedMediaLibraryPresentation.Category.files)
+                Text("Links").tag(SharedMediaLibraryPresentation.Category.links)
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
 
-            switch category {
-            case .media:
-                mediaSections
-            case .voice:
-                voiceSection
-            case .files:
-                filesSection
-            case .links:
-                linksSection
-            }
+            Divider()
+            categoryContent
         }
-        .listStyle(.insetGrouped)
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Shared Media")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
@@ -183,12 +173,6 @@ struct SharedMediaLibraryView: View {
         .task(id: category) {
             if category == .links {
                 await model.loadLinks(groupIdHex: conversation.group.groupIdHex, using: appState)
-            }
-        }
-        .refreshable {
-            await model.load(groupIdHex: conversation.group.groupIdHex, using: appState, force: true)
-            if category == .links {
-                await model.loadLinks(groupIdHex: conversation.group.groupIdHex, using: appState, force: true)
             }
         }
         .fullScreenCover(item: $gallery) { gallery in
@@ -246,42 +230,90 @@ struct SharedMediaLibraryView: View {
     // MARK: - Media
 
     @ViewBuilder
-    private var mediaSections: some View {
+    private var categoryContent: some View {
+        switch category {
+        case .media:
+            mediaContent
+        case .voice:
+            List { voiceSection }
+                .listStyle(.insetGrouped)
+                .refreshable { await refresh() }
+        case .files:
+            List { filesSection }
+                .listStyle(.insetGrouped)
+                .refreshable { await refresh() }
+        case .links:
+            List { linksSection }
+                .listStyle(.insetGrouped)
+                .refreshable { await refresh() }
+        }
+    }
+
+    @ViewBuilder
+    private var mediaContent: some View {
         let visual = model.visualItems
         if model.isLoading && model.items.isEmpty {
-            loadingRow
+            centeredStatus {
+                ProgressView()
+            }
         } else if let error = model.loadError, model.items.isEmpty {
-            errorRow(error) {
-                Task { await model.load(groupIdHex: conversation.group.groupIdHex, using: appState, force: true) }
+            ContentUnavailableView {
+                Label("Shared media unavailable", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Retry") { Task { await refresh() } }
             }
         } else if visual.isEmpty {
-            emptyRow(title: "No photos or videos", systemImage: "photo.on.rectangle.angled")
+            ContentUnavailableView(
+                "No photos or videos",
+                systemImage: "photo.on.rectangle.angled"
+            )
         } else {
-            ForEach(model.visualMonthSections) { section in
-                Section {
-                    LazyVGrid(columns: columns, spacing: 3) {
-                        ForEach(section.items) { item in
-                            GroupSharedMediaThumbnail(
-                                item: item.attachment,
-                                onLoadMedia: mediaLoader
-                            ) { initialData in
-                                let attachments = visual.map(\.attachment)
-                                guard let gallery = MessageMediaGallery(
-                                    items: attachments,
-                                    initialItem: item.attachment,
-                                    initialMediaData: initialData
-                                ) else { return }
-                                self.gallery = gallery
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(model.visualMonthSections) { section in
+                        Text(section.title)
+                            .font(.headline)
+                            .padding(.horizontal, 16)
+
+                        LazyVGrid(columns: columns, spacing: 3) {
+                            ForEach(section.items) { item in
+                                GroupSharedMediaThumbnail(
+                                    item: item.attachment,
+                                    onLoadMedia: mediaLoader
+                                ) { initialData in
+                                    let attachments = visual.map(\.attachment)
+                                    guard let gallery = MessageMediaGallery(
+                                        items: attachments,
+                                        initialItem: item.attachment,
+                                        initialMediaData: initialData
+                                    ) else { return }
+                                    self.gallery = gallery
+                                }
                             }
                         }
+                        .padding(.horizontal, 3)
                     }
-                    .padding(.vertical, 2)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4))
-                    .listRowBackground(Color.clear)
-                } header: {
-                    Text(section.title)
                 }
+                .padding(.vertical, 16)
             }
+            .scrollIndicators(.hidden)
+            .refreshable { await refresh() }
+        }
+    }
+
+    private func centeredStatus<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func refresh() async {
+        await model.load(groupIdHex: conversation.group.groupIdHex, using: appState, force: true)
+        if category == .links {
+            await model.loadLinks(groupIdHex: conversation.group.groupIdHex, using: appState, force: true)
         }
     }
 

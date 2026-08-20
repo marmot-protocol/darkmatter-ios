@@ -192,4 +192,11 @@ enum GroupRelaysPresentation {
         let sanitized = relays.compactMap { ContentSanitizer.relayDisplayLine($0, maxLength: 120) }
         return sanitized.isEmpty ? [emptyMessage] : sanitized
     }
+
+    static func summary(for relays: [String]) -> String {
+        let count = rows(for: relays).filter { $0 != emptyMessage }.count
+        return count == 0
+            ? emptyMessage
+            : LocalizedNumberLabel.decimal(UInt64(count))
+    }
 }
