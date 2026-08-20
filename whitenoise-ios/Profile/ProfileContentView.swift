@@ -71,6 +71,7 @@ struct ProfileContentView: View {
 
             primaryActionSection
             aboutSection
+            identityValuesSection
             publicProfileSection
             moderationSection
             sharedGroupsSection
@@ -167,7 +168,7 @@ struct ProfileContentView: View {
                     title: title,
                     pictureURL: ContentSanitizer.imageURL(effectiveProfile?.picture)
                 )
-                .frame(width: 96, height: 96)
+                .frame(width: 104, height: 104)
 
                 Text(title)
                     .font(.title2.weight(.semibold))
@@ -183,7 +184,7 @@ struct ProfileContentView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if let nip05 = declaredNip05 {
+                if about == nil, let nip05 = declaredNip05 {
                     HStack(spacing: 5) {
                         Text(nip05)
                             .font(.callout)
@@ -198,11 +199,9 @@ struct ProfileContentView: View {
                     }
                 }
 
-                CopyableIdentityChip(
-                    display: IdentityFormatter.short(displayReference, head: 12, tail: 10),
-                    copyValue: displayReference,
-                    copiedToastTitle: L10n.string("npub")
-                )
+                if about == nil {
+                    identityChip
+                }
 
                 if model.hex == nil {
                     Label("Couldn't read this profile code.", systemImage: "exclamationmark.triangle")
@@ -286,10 +285,46 @@ struct ProfileContentView: View {
     @ViewBuilder
     private var aboutSection: some View {
         if let about {
-            Section("About") {
+            Section {
                 Text(about)
-                    .font(.callout)
+                    .font(.subheadline)
+                    .italic()
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
+            .listRowBackground(Color(uiColor: .quaternarySystemFill).opacity(0.5))
+        }
+    }
+
+    @ViewBuilder
+    private var identityValuesSection: some View {
+        if about != nil {
+            Section {
+                VStack(spacing: 8) {
+                    if let nip05 = declaredNip05 {
+                        HStack(spacing: 5) {
+                            Text(nip05)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            if model.verifiedNip05 == nip05 {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.tint)
+                                    .accessibilityLabel("Verified address")
+                            }
+                        }
+                    }
+
+                    identityChip
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 8)
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
         }
     }
 
@@ -311,7 +346,7 @@ struct ProfileContentView: View {
 
     @ViewBuilder
     private var sharedGroupsSection: some View {
-        if let hex = model.hex, !isSelf {
+        if let hex = model.hex, canMessage {
             GroupsInCommonSection(
                 contactAccountIdHex: hex,
                 contactNpub: displayReference,
@@ -479,8 +514,12 @@ struct ProfileContentView: View {
         return npub
     }
 
-    private var isSelf: Bool {
-        guard let hex = model.hex else { return false }
-        return appState.accounts.contains { $0.accountIdHex == hex }
+    private var identityChip: some View {
+        CopyableIdentityChip(
+            display: IdentityFormatter.short(displayReference, head: 12, tail: 10),
+            copyValue: displayReference,
+            copiedToastTitle: L10n.string("npub")
+        )
     }
+
 }
