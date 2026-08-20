@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AVKit
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -14,6 +15,44 @@ nonisolated enum ComposerMediaDraftPresentation {
             return attachments
         }
         return attachments.filter { $0.id != inlineAudio.id }
+    }
+}
+
+nonisolated enum ComposerMediaDraftLayout {
+    static let previewHeight: CGFloat = 112
+    static let minimumPreviewWidth: CGFloat = 68
+    static let maximumPreviewWidth: CGFloat = 200
+    static let cornerRadius: CGFloat = 14
+    static let shelfPadding: CGFloat = 8
+    static let itemSpacing: CGFloat = 8
+    static let utilityPreviewHeight: CGFloat = 72
+    static let minimumUtilityPreviewWidth: CGFloat = 104
+    static let maximumUtilityPreviewWidth: CGFloat = 160
+
+    static func previewWidth(dim: String?, thumbnailSize: CGSize?) -> CGFloat {
+        let ratio = aspectRatio(dim: dim) ?? thumbnailSize.flatMap { size in
+            guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else {
+                return nil
+            }
+            return size.width / size.height
+        } ?? 1
+        return min(maximumPreviewWidth, max(minimumPreviewWidth, previewHeight * ratio))
+            .rounded(.toNearestOrAwayFromZero)
+    }
+
+    static func aspectRatio(dim: String?) -> CGFloat? {
+        guard let dim else { return nil }
+        let parts = dim.lowercased().split(separator: "x", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              let width = Double(parts[0]),
+              let height = Double(parts[1]),
+              width.isFinite,
+              height.isFinite,
+              width > 0,
+              height > 0
+        else { return nil }
+        let ratio = CGFloat(width / height)
+        return ratio.isFinite && ratio > 0 ? ratio : nil
     }
 }
 
@@ -56,57 +95,72 @@ struct VideoPreviewPlayOverlay: View {
 struct MediaDraftStrip: View {
     let attachments: [MediaDraftAttachment]
     let onRemove: (MediaDraftAttachment.ID) -> Void
+    let onPreviewVisual: (MediaDraftAttachment.ID) -> Void
 
-    private let visualPreviewSideLength: CGFloat = 68
+    private var containsVisualMedia: Bool {
+        attachments.contains { $0.kind == .image || $0.kind == .video }
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            LazyHStack(spacing: ComposerMediaDraftLayout.itemSpacing) {
                 ForEach(attachments) { attachment in
                     ZStack(alignment: .topTrailing) {
                         preview(for: attachment)
 
-                        Button {
+                        ComposerAttachmentRemoveButton(
+                            accessibilityLabel: "Remove \(attachment.fileName)",
+                            overlaysMedia: attachment.kind == .image || attachment.kind == .video
+                        ) {
                             onRemove(attachment.id)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 19, weight: .semibold))
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(Color(.systemBackground), Color.primary.opacity(0.82))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Remove attachment")
-                        .offset(x: 7, y: -7)
                     }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(ComposerMediaDraftLayout.shelfPadding)
         }
-        .background(Color(.systemBackground).opacity(0.86))
+        .frame(height: containsVisualMedia
+            ? ComposerMediaDraftLayout.previewHeight + (ComposerMediaDraftLayout.shelfPadding * 2)
+            : ComposerMediaDraftLayout.utilityPreviewHeight + (ComposerMediaDraftLayout.shelfPadding * 2))
+        .clipShape(.rect(topLeadingRadius: 22, topTrailingRadius: 22))
+        .overlay(alignment: .bottom) {
+            if containsVisualMedia {
+                Divider()
+                    .padding(.horizontal, 12)
+            }
+        }
     }
 
     @ViewBuilder
     private func preview(for attachment: MediaDraftAttachment) -> some View {
         switch attachment.kind {
         case .image, .video:
-            ZStack {
-                thumbnail(for: attachment)
-                if attachment.kind == .video {
-                    VideoPreviewPlayOverlay(
-                        diameter: VideoPreviewOverlayPresentation.diameter(
-                            for: CGSize(width: visualPreviewSideLength, height: visualPreviewSideLength)
+            Button {
+                onPreviewVisual(attachment.id)
+            } label: {
+                let width = ComposerMediaDraftLayout.previewWidth(
+                    dim: attachment.dim,
+                    thumbnailSize: attachment.thumbnail?.size
+                )
+                ZStack {
+                    thumbnail(for: attachment)
+                    if attachment.kind == .video {
+                        VideoPreviewPlayOverlay(
+                            diameter: VideoPreviewOverlayPresentation.diameter(
+                                for: CGSize(width: width, height: ComposerMediaDraftLayout.previewHeight)
+                            )
                         )
-                    )
+                    }
+                }
+                .frame(width: width, height: ComposerMediaDraftLayout.previewHeight)
+                .clipShape(.rect(cornerRadius: ComposerMediaDraftLayout.cornerRadius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: ComposerMediaDraftLayout.cornerRadius)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                 }
             }
-            .frame(width: visualPreviewSideLength, height: visualPreviewSideLength)
-            .clipShape(.rect(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Preview \(attachment.fileName)")
         case .audio:
             HStack(spacing: 8) {
                 Image(systemName: "mic.fill")
@@ -121,10 +175,15 @@ struct MediaDraftStrip: View {
                 .frame(width: 82, height: 34)
             }
             .padding(.horizontal, 10)
-            .frame(width: 142, height: 68)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+            .frame(
+                minWidth: ComposerMediaDraftLayout.minimumUtilityPreviewWidth,
+                maxWidth: ComposerMediaDraftLayout.maximumUtilityPreviewWidth,
+                minHeight: ComposerMediaDraftLayout.utilityPreviewHeight,
+                maxHeight: ComposerMediaDraftLayout.utilityPreviewHeight
+            )
+            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             }
         case .document, .unsupported:
@@ -138,10 +197,15 @@ struct MediaDraftStrip: View {
             }
             .foregroundStyle(.secondary)
             .padding(8)
-            .frame(width: 112, height: 68)
-            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 8))
+            .frame(
+                minWidth: ComposerMediaDraftLayout.minimumUtilityPreviewWidth,
+                maxWidth: ComposerMediaDraftLayout.maximumUtilityPreviewWidth,
+                minHeight: ComposerMediaDraftLayout.utilityPreviewHeight,
+                maxHeight: ComposerMediaDraftLayout.utilityPreviewHeight
+            )
+            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 10))
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
             }
         }
@@ -159,6 +223,381 @@ struct MediaDraftStrip: View {
                 Image(systemName: attachment.kind.systemImageName)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+private struct ComposerAttachmentRemoveButton: View {
+    let accessibilityLabel: String
+    let overlaysMedia: Bool
+    let action: () -> Void
+
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(fill)
+                Circle()
+                    .stroke(stroke, lineWidth: 0.5)
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(glyph)
+            }
+            .frame(width: 20, height: 20)
+            .shadow(color: overlaysMedia ? .black.opacity(0.16) : .clear, radius: 1, y: 0.5)
+            .padding([.top, .trailing], 6)
+            .frame(width: 44, height: 44, alignment: .topTrailing)
+            .contentShape(.rect)
+        }
+        .buttonStyle(ComposerAttachmentRemoveButtonStyle())
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var fill: Color {
+        overlaysMedia
+            ? .black.opacity(colorSchemeContrast == .increased ? 0.74 : 0.58)
+            : .secondary.opacity(0.22)
+    }
+
+    private var stroke: Color {
+        overlaysMedia
+            ? .white.opacity(colorSchemeContrast == .increased ? 0.52 : 0.32)
+            : .primary.opacity(0.08)
+    }
+
+    private var glyph: Color {
+        overlaysMedia ? .white.opacity(0.96) : .primary.opacity(0.72)
+    }
+}
+
+private struct ComposerAttachmentRemoveButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
+            .animation(.smooth(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+nonisolated struct ComposerMediaSelection: Identifiable {
+    let attachments: [MediaDraftAttachment]
+    let initialItemID: MediaDraftAttachment.ID
+
+    init?(attachments: [MediaDraftAttachment], initialItemID: MediaDraftAttachment.ID) {
+        let visualAttachments = attachments.filter { $0.kind == .image || $0.kind == .video }
+        guard visualAttachments.contains(where: { $0.id == initialItemID }) else { return nil }
+        self.attachments = visualAttachments
+        self.initialItemID = initialItemID
+    }
+
+    var id: MediaDraftAttachment.ID { initialItemID }
+
+    func applying(
+        includedItemIDs: Set<MediaDraftAttachment.ID>,
+        to allAttachments: [MediaDraftAttachment]
+    ) -> [MediaDraftAttachment] {
+        let reviewedItemIDs = Set(attachments.map(\.id))
+        return allAttachments.filter { attachment in
+            !reviewedItemIDs.contains(attachment.id) || includedItemIDs.contains(attachment.id)
+        }
+    }
+}
+
+struct ComposerMediaPreviewView: View {
+    let selection: ComposerMediaSelection
+    let onConfirm: (Set<MediaDraftAttachment.ID>) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedItemID: MediaDraftAttachment.ID
+    @State private var includedItemIDs: Set<MediaDraftAttachment.ID>
+
+    private enum Layout {
+        static let thumbnailHeight: CGFloat = 44
+        static let thumbnailMinimumWidth: CGFloat = 32
+        static let thumbnailMaximumWidth: CGFloat = 72
+        static let thumbnailCornerRadius: CGFloat = 7
+        static let thumbnailSpacing: CGFloat = 6
+        static let thumbnailHorizontalMargin: CGFloat = 32
+        static let thumbnailVerticalPadding: CGFloat = 14
+        static let selectedThumbnailScale: CGFloat = 1.08
+        static let inclusionControlSize: CGFloat = 22
+        static let inclusionControlHitSize: CGFloat = 44
+
+        static var navigatorHeight: CGFloat {
+            thumbnailHeight * selectedThumbnailScale + thumbnailVerticalPadding * 2
+        }
+    }
+
+    init(
+        selection: ComposerMediaSelection,
+        onConfirm: @escaping (Set<MediaDraftAttachment.ID>) -> Void
+    ) {
+        self.selection = selection
+        self.onConfirm = onConfirm
+        _selectedItemID = State(initialValue: selection.initialItemID)
+        _includedItemIDs = State(initialValue: Set(selection.attachments.map(\.id)))
+    }
+
+    var body: some View {
+        NavigationStack {
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    mediaPager
+                        .frame(
+                            width: proxy.size.width,
+                            height: max(1, proxy.size.height - thumbnailNavigatorHeight)
+                        )
+
+                    if selection.attachments.count > 1 {
+                        thumbnailNavigator
+                            .frame(height: Layout.navigatorHeight)
+                    }
+                }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label(L10n.string("Cancel"), systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .accessibilityLabel(L10n.string("Cancel"))
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        onConfirm(includedItemIDs)
+                        dismiss()
+                    } label: {
+                        Label(L10n.string("Apply"), systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel(L10n.string("Apply"))
+                }
+            }
+            .navigationTitle(L10n.string("Preview"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .background(Color(.systemBackground).ignoresSafeArea())
+    }
+
+    private var thumbnailNavigatorHeight: CGFloat {
+        selection.attachments.count > 1 ? Layout.navigatorHeight : 0
+    }
+
+    private var mediaPager: some View {
+        TabView(selection: $selectedItemID) {
+            ForEach(Array(selection.attachments.enumerated()), id: \.element.id) { index, attachment in
+                GeometryReader { proxy in
+                    let mediaSize = fittedMediaSize(for: attachment, in: proxy.size)
+                    ZStack(alignment: .bottomTrailing) {
+                        ComposerMediaPreviewPage(
+                            attachment: attachment,
+                            isSelected: attachment.id == selectedItemID
+                        )
+                        .frame(width: mediaSize.width, height: mediaSize.height)
+
+                        inclusionButton(for: attachment)
+                    }
+                    .frame(width: mediaSize.width, height: mediaSize.height)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(
+                        L10n.formatted(
+                            "%@, %@ of %@",
+                            arguments: [
+                                attachment.fileName,
+                                LocalizedNumberLabel.decimal(UInt64(index + 1)),
+                                LocalizedNumberLabel.decimal(UInt64(selection.attachments.count)),
+                            ],
+                            locale: AppLanguage.currentLocale
+                        )
+                    )
+                }
+                .tag(attachment.id)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+    }
+
+    private func inclusionButton(for attachment: MediaDraftAttachment) -> some View {
+        let isIncluded = includedItemIDs.contains(attachment.id)
+        return Button {
+            withAnimation(.snappy) {
+                if isIncluded {
+                    includedItemIDs.remove(attachment.id)
+                } else {
+                    includedItemIDs.insert(attachment.id)
+                }
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isIncluded ? Color.accentColor : Color.black.opacity(0.36))
+                Circle()
+                    .stroke(.white, lineWidth: 1.5)
+                if isIncluded {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: Layout.inclusionControlSize, height: Layout.inclusionControlSize)
+            .shadow(color: .black.opacity(0.22), radius: 1.5, y: 0.5)
+            .frame(width: Layout.inclusionControlHitSize, height: Layout.inclusionControlHitSize)
+            .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(attachment.fileName) in message")
+        .accessibilityValue(isIncluded ? L10n.string("Included") : L10n.string("Not included"))
+    }
+
+    private var thumbnailNavigator: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: Layout.thumbnailSpacing) {
+                    ForEach(selection.attachments) { attachment in
+                        Button {
+                            withAnimation(.snappy) {
+                                selectedItemID = attachment.id
+                            }
+                        } label: {
+                            MediaApprovalThumbnail(attachment: attachment)
+                                .frame(width: thumbnailWidth(for: attachment), height: Layout.thumbnailHeight)
+                                .clipShape(.rect(cornerRadius: Layout.thumbnailCornerRadius))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius)
+                                        .strokeBorder(
+                                            attachment.id == selectedItemID ? Color.accentColor : .clear,
+                                            lineWidth: 2
+                                        )
+                                }
+                                .opacity(includedItemIDs.contains(attachment.id) ? 1 : 0.42)
+                                .scaleEffect(attachment.id == selectedItemID ? Layout.selectedThumbnailScale : 1)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Show \(attachment.fileName)")
+                        .id(attachment.id)
+                    }
+                }
+                .padding(.horizontal, Layout.thumbnailHorizontalMargin)
+                .padding(.vertical, Layout.thumbnailVerticalPadding)
+            }
+            .onChange(of: selectedItemID) { _, itemID in
+                withAnimation(.snappy) {
+                    proxy.scrollTo(itemID, anchor: .center)
+                }
+            }
+            .task {
+                await Task.yield()
+                proxy.scrollTo(selectedItemID, anchor: .center)
+            }
+        }
+        .background(Color(.systemBackground))
+    }
+
+    private func thumbnailWidth(for attachment: MediaDraftAttachment) -> CGFloat {
+        let ratio = ComposerMediaDraftLayout.aspectRatio(dim: attachment.dim)
+            ?? attachment.thumbnail.map { $0.size.width / max(1, $0.size.height) }
+            ?? 1
+        return min(
+            Layout.thumbnailMaximumWidth,
+            max(Layout.thumbnailMinimumWidth, Layout.thumbnailHeight * ratio)
+        )
+    }
+
+    private func fittedMediaSize(for attachment: MediaDraftAttachment, in availableSize: CGSize) -> CGSize {
+        let availableWidth = max(1, availableSize.width)
+        let availableHeight = max(1, availableSize.height)
+        let ratio = ComposerMediaDraftLayout.aspectRatio(dim: attachment.dim)
+            ?? attachment.thumbnail.map { $0.size.width / max(1, $0.size.height) }
+            ?? 1
+        let availableRatio = availableWidth / availableHeight
+        if availableRatio > ratio {
+            return CGSize(width: availableHeight * ratio, height: availableHeight)
+        }
+        return CGSize(width: availableWidth, height: availableWidth / ratio)
+    }
+}
+
+private struct ComposerMediaPreviewPage: View {
+    let attachment: MediaDraftAttachment
+    let isSelected: Bool
+
+    @State private var image: UIImage?
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if attachment.kind == .video {
+                if let player {
+                    VideoPlayer(player: player)
+                } else if let thumbnail = attachment.thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    ProgressView().tint(.white)
+                }
+            } else if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else if let thumbnail = attachment.thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .task(id: attachment.id) {
+            await prepareMedia()
+        }
+        .onChange(of: isSelected) { _, selected in
+            if selected {
+                player?.play()
+            } else {
+                player?.pause()
+            }
+        }
+        .onDisappear {
+            player?.pause()
+            player?.replaceCurrentItem(with: nil)
+            player = nil
+        }
+    }
+
+    private func prepareMedia() async {
+        if attachment.kind == .image {
+            let longestEdge = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
+            image = await MessageMediaFullscreenPresentation.decodedImage(
+                from: attachment.data,
+                maxPixelSize: MessageMediaFullscreenPresentation.fullscreenMaxPixelSize(
+                    forLongestScreenEdge: longestEdge
+                ),
+                scale: UIScreen.main.scale
+            )
+            return
+        }
+        guard attachment.kind == .video else { return }
+        let producerEpoch = MessageMediaCache.currentProducerEpoch()
+        guard let url = await MediaPlaybackFileStore.fileURL(
+            for: attachment.displayItem,
+            data: attachment.data,
+            producerEpoch: producerEpoch
+        ), !Task.isCancelled else { return }
+        let next = AVPlayer(url: url)
+        player = next
+        if isSelected {
+            next.play()
         }
     }
 }

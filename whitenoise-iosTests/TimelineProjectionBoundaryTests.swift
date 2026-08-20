@@ -100,6 +100,41 @@ struct TimelineProjectionBoundaryTests {
         #expect(preview.text == "target body")
     }
 
+    @Test func projectedReplyPreviewCarriesResolvedMediaWithoutAnotherLookup() throws {
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: testGroup()
+        )
+        let targetID = hexId(11)
+        let reference = mediaReference(sourceEpoch: 23)
+        let reply = timelineRecord(
+            messageIdHex: hexId(12),
+            plaintext: "reply body",
+            replyToMessageIdHex: targetID,
+            replyPreview: TimelineReplyPreviewFfi(
+                messageIdHex: targetID,
+                sender: hexId(10),
+                plaintext: "",
+                kind: MessageSemantics.kindChat,
+                mediaJson: nil,
+                media: [reference],
+                agentTextStreamJson: nil,
+                deleted: false
+            )
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [reply], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        let replyRecord = try #require(viewModel.record(for: reply.messageIdHex))
+        let preview = try #require(viewModel.replyPreview(for: replyRecord))
+        #expect(preview.media?.reference == reference)
+        #expect(preview.media?.id.contains(targetID) == true)
+        #expect(viewModel.mediaItemProjectionBuildCountForTesting == 0)
+    }
+
     @Test func markdownProjectionCacheSkipsUnchangedWindowRows() throws {
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),

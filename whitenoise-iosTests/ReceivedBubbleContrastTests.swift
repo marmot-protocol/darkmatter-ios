@@ -2,8 +2,7 @@ import Testing
 import UIKit
 @testable import whitenoise_ios
 
-/// #4 — other-user bubbles must use a higher-contrast fill in dark mode (a
-/// lighter system gray) so they stand off the conversation background.
+/// Other-user bubbles use the prototype's opaque semantic gray surface.
 @MainActor
 struct ReceivedBubbleContrastTests {
 
@@ -11,13 +10,20 @@ struct ReceivedBubbleContrastTests {
         #expect(MessageBubble.receivedBubbleColor(dark: true) == UIColor.systemGray5)
     }
 
-    @Test func lightModeIsUnchanged() {
-        #expect(MessageBubble.receivedBubbleColor(dark: false) == UIColor.secondarySystemBackground)
+    @Test func lightModeUsesPrototypeGray() {
+        #expect(MessageBubble.receivedBubbleColor(dark: false) == UIColor.systemGray5)
     }
 }
 
 @MainActor
 struct MessageBubbleReplyChromeTests {
+
+    @Test func bubbleChromeUsesPrototypeMetrics() {
+        #expect(MessageBubbleReplyLayout.bodyHorizontalInset == 12)
+        #expect(MessageBubbleReplyLayout.bodyTopInset == 8)
+        #expect(MessageBubbleReplyLayout.bodyBottomInset == 8)
+        #expect(ChatBubbleMetrics.cornerRadius == 18)
+    }
 
     @Test func replyHeaderUsesBalancedPaddingAndExtraBodyGap() {
         #expect(MessageBubbleReplyLayout.headerVerticalInset > 0)
@@ -28,7 +34,7 @@ struct MessageBubbleReplyChromeTests {
 
     @Test func receivedReplyHeaderContrastsWithBubbleFill() {
         #expect(MessageBubble.receivedReplyHeaderColor(dark: true) == UIColor.systemGray4)
-        #expect(MessageBubble.receivedReplyHeaderColor(dark: false) == UIColor.systemGray5)
+        #expect(MessageBubble.receivedReplyHeaderColor(dark: false) == UIColor.systemGray4)
         #expect(MessageBubble.receivedReplyHeaderColor(dark: true) != MessageBubble.receivedBubbleColor(dark: true))
         #expect(MessageBubble.receivedReplyHeaderColor(dark: false) != MessageBubble.receivedBubbleColor(dark: false))
     }
@@ -36,6 +42,44 @@ struct MessageBubbleReplyChromeTests {
     @Test func sentReplyHeaderUsesSubtleOverlay() {
         #expect(MessageBubbleReplyLayout.sentHeaderOverlayOpacity > 0)
         #expect(MessageBubbleReplyLayout.sentHeaderOverlayOpacity < 0.25)
+    }
+}
+
+struct MessageBubbleMetadataLayoutTests {
+    @Test func timestampsUseConversationCenterEdgeWithoutReactions() {
+        #expect(MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: true, hasReactions: false))
+        #expect(!MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: false, hasReactions: false))
+    }
+
+    @Test func reactionsMoveTimestampsToTheOuterEdge() {
+        #expect(!MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: true, hasReactions: true))
+        #expect(MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: false, hasReactions: true))
+    }
+
+    @Test func chromeWidthTracksItsWidestChildAndHonorsTheProposal() {
+        #expect(MessageBubbleChromeSizing.width(
+            proposedWidth: 320,
+            bubbleWidth: 140,
+            metadataWidth: 180
+        ) == 180)
+        #expect(MessageBubbleChromeSizing.width(
+            proposedWidth: 150,
+            bubbleWidth: 280,
+            metadataWidth: 180
+        ) == 150)
+        #expect(MessageBubbleChromeSizing.width(
+            proposedWidth: nil,
+            bubbleWidth: 140,
+            metadataWidth: 180
+        ) == 180)
+    }
+
+    @Test func chromeHeightAddsBubbleMetadataAndSpacing() {
+        #expect(MessageBubbleChromeSizing.height(
+            bubbleHeight: 44,
+            metadataHeight: 14,
+            spacing: 3
+        ) == 61)
     }
 }
 

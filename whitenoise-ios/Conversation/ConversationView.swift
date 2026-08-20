@@ -506,9 +506,7 @@ struct ConversationView: View {
     @StateObject private var voiceRecorder = VoiceMessageRecorder()
     @State private var showCameraCapture = false
     @State private var showPhotoLibraryPicker = false
-    @State private var showMediaApproval = false
-    @State private var mediaApprovalDrafts: [MediaDraftAttachment] = []
-    @State private var mediaApprovalCaption = ""
+    @State private var composerMediaSelection: ComposerMediaSelection?
     @State private var showFileImporter = false
     @State private var showLocationPicker = false
     @State private var showContactPicker = false
@@ -901,19 +899,10 @@ struct ConversationView: View {
                 )
                 .ignoresSafeArea()
             }
-            .fullScreenCover(isPresented: $showMediaApproval) {
-                MediaApprovalView(
-                    attachments: $mediaApprovalDrafts,
-                    caption: $mediaApprovalCaption,
-                    reservedAttachmentCount: mediaDrafts.count,
-                    isSending: viewModel?.sendInFlight ?? false,
-                    onAddSelections: addMediaApprovalSelections,
-                    onSelectionError: { error in
-                        appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
-                    },
-                    onCancel: dismissMediaApproval,
-                    onSend: sendApprovedMedia
-                )
+            .fullScreenCover(item: $composerMediaSelection) { selection in
+                ComposerMediaPreviewView(selection: selection) { includedItemIDs in
+                    applyComposerMediaSelection(selection, includedItemIDs: includedItemIDs)
+                }
                 .appAppearance()
             }
             .sheet(isPresented: $showLocationPicker) {
@@ -1038,40 +1027,25 @@ struct ConversationView: View {
             VStack(spacing: 0) {
                 if let viewModel, let editSession {
                     editBar(for: editSession, viewModel: viewModel)
-                } else if let viewModel,
-                          let replyTargetMessageIdHex = viewModel.replyTargetMessageIdHex
-                {
-                    replyBar(
-                        for: viewModel.replyingTo ?? viewModel.record(for: replyTargetMessageIdHex),
-                        viewModel: viewModel
-                    )
                 }
                 let inlineAudioDraft = ComposerMediaDraftPresentation.inlineAudioDraft(in: mediaDrafts)
                 let mentionCandidates = inlineAudioDraft == nil ? (viewModel?.mentionCandidates(for: draft) ?? []) : []
                 let stripAttachments = ComposerMediaDraftPresentation.stripAttachments(from: mediaDrafts)
-                if !stripAttachments.isEmpty {
-                    MediaDraftStrip(attachments: stripAttachments) { id in
-                        removeMediaDraft(id)
-                    }
-                }
-                if voiceRecorder.isActive {
-                    VoiceRecordingBanner(
-                        samples: voiceRecorder.waveformSamples,
-                        durationSeconds: voiceRecorder.durationSeconds,
-                        isLocked: voiceRecorder.isLocked,
-                        onCancel: cancelVoiceRecording,
-                        onStop: stopLockedVoiceRecording
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
                 ComposerBar(
                     draft: $draft,
                     isSending: (viewModel?.sendInFlight ?? false) || editSaveInFlight,
                     hasAttachments: !mediaDrafts.isEmpty,
                     audioDraft: inlineAudioDraft,
+                    preparedAttachments: stripAttachments,
+                    replyPreview: editSession == nil
+                        ? viewModel.flatMap(composerReplyPreview(viewModel:))
+                        : nil,
                     mediaEnabled: editSession == nil && (viewModel?.canSendMediaAttachments ?? false),
                     disabledMessage: viewModel?.inactiveGroupMessage,
                     voiceRecordingActive: voiceRecorder.isActive,
+                    voiceRecordingLocked: voiceRecorder.isLocked,
+                    voiceRecordingSamples: voiceRecorder.waveformSamples,
+                    voiceRecordingDurationSeconds: voiceRecorder.durationSeconds,
                     focusRequest: composerFocusRequest,
                     dismissRequest: composerDismissRequest,
                     mentionCandidates: mentionCandidates,
@@ -1087,6 +1061,11 @@ struct ConversationView: View {
                     onShareContact: openContactPicker,
                     onPasteImage: pasteImage,
                     onRemoveAudioDraft: removeMediaDraft,
+                    onRemovePreparedAttachment: removeMediaDraft,
+                    onPreviewPreparedMedia: previewPreparedMedia,
+                    onCancelReply: { viewModel?.restoreReplyTarget(messageIdHex: nil) },
+                    onCancelVoiceRecording: cancelVoiceRecording,
+                    onStopVoiceRecording: stopLockedVoiceRecording,
                     onVoicePressBegan: beginVoicePress,
                     onVoiceDragChanged: updateVoiceDrag,
                     onVoicePressEnded: endVoicePress,
@@ -1234,75 +1213,21 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity, minHeight: 32)
     }
 
-    private func replyBar(
-        for record: AppMessageRecordFfi?,
-        viewModel: ConversationViewModel
-    ) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Color.accentColor)
-                .frame(width: 3, height: 34)
-            VStack(alignment: .leading, spacing: 1) {
-                if let record {
-                    Text(L10n.formatted(
-                        "Replying to %@",
-                        appState.displayName(forAccountIdHex: record.sender)
-                    ))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
-                    Text(ContentSanitizer.compactSingleLine(
-                        viewModel.displayBody(of: record),
-                        maxLength: 100
-                    ) ?? "")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .shadow(color: .black.opacity(0.22), radius: 1, y: 1)
-                } else {
-                    Text(L10n.string("Reply"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .shadow(color: .black.opacity(0.28), radius: 1.5, y: 1)
-                }
-            }
-            Spacer()
-            Button {
-                viewModel.restoreReplyTarget(messageIdHex: nil)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: replyCloseIconSize, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-                    .frame(
-                        width: replyCloseHitSize,
-                        height: replyCloseHitSize,
-                        alignment: ReplyPreviewLayout.closeAlignment.swiftUI
-                    )
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Cancel reply")
+    private func composerReplyPreview(viewModel: ConversationViewModel) -> ComposerReplyPreview? {
+        guard let messageIdHex = viewModel.replyTargetMessageIdHex else { return nil }
+        guard let record = viewModel.replyingTo ?? viewModel.record(for: messageIdHex) else {
+            return ComposerReplyPreview(title: L10n.string("Reply"), body: "")
         }
-        .padding(.leading, ReplyPreviewLayout.leadingContentInset)
-        .padding(.trailing, ReplyPreviewLayout.closeTrailingInset)
-        .padding(.top, ReplyPreviewLayout.contentTopInset)
-        .padding(.bottom, ReplyPreviewLayout.contentBottomInset)
-        .background {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.regularMaterial)
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(.secondarySystemBackground).opacity(0.82))
-            }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-        }
-        .padding(.horizontal, ReplyPreviewLayout.outerHorizontalInset)
-        .padding(.top, ReplyPreviewLayout.outerTopInset)
-        .padding(.bottom, ReplyPreviewLayout.outerBottomInset)
+        return ComposerReplyPreview(
+            title: L10n.formatted(
+                "Replying to %@",
+                appState.displayName(forAccountIdHex: record.sender)
+            ),
+            body: ContentSanitizer.compactSingleLine(
+                viewModel.displayBody(of: record),
+                maxLength: 100
+            ) ?? ""
+        )
     }
 
     private func editBar(for session: ComposerEditSession, viewModel: ConversationViewModel) -> some View {
@@ -2426,9 +2351,7 @@ struct ConversationView: View {
         cancelVoiceRecording()
         showCameraCapture = false
         showPhotoLibraryPicker = false
-        showMediaApproval = false
-        mediaApprovalDrafts.removeAll()
-        mediaApprovalCaption = ""
+        composerMediaSelection = nil
         showFileImporter = false
         showLocationPicker = false
         showContactPicker = false
@@ -2565,7 +2488,7 @@ struct ConversationView: View {
         Task { @MainActor in
             do {
                 let attachment = try await MediaDraftProcessor.preparedAttachment(from: image, fileName: nil)
-                presentMediaApproval([attachment])
+                try appendMediaDraft(attachment)
             } catch is CancellationError {
                 return
             } catch {
@@ -2606,68 +2529,22 @@ struct ConversationView: View {
                 }
             }
             guard !prepared.isEmpty else { return }
-            presentMediaApproval(prepared)
+            appendPreparedVisualDrafts(prepared)
         }
     }
 
-    private func presentMediaApproval(_ attachments: [MediaDraftAttachment]) {
-        guard !attachments.isEmpty else { return }
-        mediaApprovalDrafts = attachments
-        mediaApprovalCaption = draft
-        showMediaApproval = true
-    }
-
-    private func addMediaApprovalSelections(_ selections: [PhotoLibrarySelection]) {
-        let availableSlots = max(
-            0,
-            MediaDraftProcessor.maxAttachmentCount - mediaDrafts.count - mediaApprovalDrafts.count
-        )
-        guard availableSlots > 0 else {
+    private func appendPreparedVisualDrafts(_ attachments: [MediaDraftAttachment]) {
+        let availableSlots = max(0, MediaDraftProcessor.maxAttachmentCount - mediaDrafts.count)
+        let accepted = Array(attachments.prefix(availableSlots))
+        guard !accepted.isEmpty else {
             presentMaxAttachmentWarning()
             return
         }
-        let selected = Array(selections.prefix(availableSlots))
-        if selected.count < selections.count {
+        mediaDrafts.append(contentsOf: accepted)
+        if accepted.count < attachments.count {
             presentMaxAttachmentWarning()
         }
-
-        Task { @MainActor in
-            for selection in selected {
-                do {
-                    let attachment = try await MediaDraftProcessor.preparedAttachment(
-                        from: selection.data,
-                        fileName: selection.fileName,
-                        typeIdentifier: selection.typeIdentifier
-                    )
-                    mediaApprovalDrafts.append(attachment)
-                } catch is CancellationError {
-                    return
-                } catch {
-                    appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
-                }
-            }
-        }
-    }
-
-    private func dismissMediaApproval() {
-        showMediaApproval = false
-        mediaApprovalDrafts.removeAll()
-        mediaApprovalCaption = ""
-    }
-
-    private func sendApprovedMedia() {
-        guard let viewModel,
-              viewModel.canSendMessages,
-              !viewModel.sendInFlight,
-              !mediaApprovalDrafts.isEmpty
-        else { return }
-        let attachments = mediaApprovalDrafts
-        let caption = viewModel.consumeComposerText(mediaApprovalCaption) ?? ""
-        draft = ""
-        dismissMediaApproval()
-        Task {
-            await viewModel.sendPreparedMedia(attachments, caption: caption)
-        }
+        composerFocusRequest += 1
     }
 
     private func addFileImporterResult(_ result: Result<[URL], Error>) {
@@ -2786,6 +2663,23 @@ struct ConversationView: View {
 
     private func removeMediaDraft(_ id: MediaDraftAttachment.ID) {
         mediaDrafts.removeAll { $0.id == id }
+    }
+
+    private func previewPreparedMedia(_ id: MediaDraftAttachment.ID) {
+        composerMediaSelection = ComposerMediaSelection(
+            attachments: mediaDrafts,
+            initialItemID: id
+        )
+    }
+
+    private func applyComposerMediaSelection(
+        _ selection: ComposerMediaSelection,
+        includedItemIDs: Set<MediaDraftAttachment.ID>
+    ) {
+        mediaDrafts = selection.applying(
+            includedItemIDs: includedItemIDs,
+            to: mediaDrafts
+        )
     }
 
     private func presentMaxAttachmentWarning() {

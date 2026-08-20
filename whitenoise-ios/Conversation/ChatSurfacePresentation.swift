@@ -67,25 +67,93 @@ nonisolated enum ChatBubbleMetrics {
     static let cornerRadius: CGFloat = 18
 }
 
-nonisolated enum MessageBubbleTextLayout {
-    static func canAttemptInlineFooter(
-        text: String,
-        isCollapsed: Bool,
-        isSingleParagraph: Bool
-    ) -> Bool {
-        guard !isCollapsed, isSingleParagraph, !text.contains("\n") else { return false }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty
+enum MessageBubblePalette {
+    static let sentBackground = Color.primary
+    static let sentForeground = Color(uiColor: .systemBackground)
+    static let receivedBackground = Color(uiColor: .systemGray5)
+    static let receivedForeground = Color(uiColor: .label)
+}
+
+nonisolated enum MessageMetadataRowArrangement {
+    static func timestampOnLeadingEdge(isFromMe: Bool, hasReactions: Bool) -> Bool {
+        isFromMe != hasReactions
+    }
+}
+
+nonisolated enum MessageBubbleChromeSizing {
+    static func width(
+        proposedWidth: CGFloat?,
+        bubbleWidth: CGFloat,
+        metadataWidth: CGFloat
+    ) -> CGFloat {
+        let idealWidth = max(0, bubbleWidth, metadataWidth)
+        guard let proposedWidth, proposedWidth.isFinite else { return idealWidth }
+        return min(max(0, proposedWidth), idealWidth)
     }
 
-    static func stackedWidth(
-        proposedWidth: CGFloat?,
-        bodyWidth: CGFloat,
-        footerWidth: CGFloat
+    static func height(
+        bubbleHeight: CGFloat,
+        metadataHeight: CGFloat,
+        spacing: CGFloat
     ) -> CGFloat {
-        let contentWidth = max(bodyWidth, footerWidth)
-        guard let proposedWidth, proposedWidth.isFinite else { return contentWidth }
-        return min(max(0, proposedWidth), contentWidth)
+        max(0, bubbleHeight) + max(0, spacing) + max(0, metadataHeight)
+    }
+}
+
+struct MessageBubbleChromeLayout: Layout {
+    let isFromMe: Bool
+    var spacing: CGFloat = 3
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        guard subviews.count == 2 else { return .zero }
+
+        let widthProposal = ProposedViewSize(width: proposal.width, height: nil)
+        let bubbleSize = subviews[0].sizeThatFits(widthProposal)
+        let metadataIdealSize = subviews[1].sizeThatFits(.unspecified)
+        let width = MessageBubbleChromeSizing.width(
+            proposedWidth: proposal.width,
+            bubbleWidth: bubbleSize.width,
+            metadataWidth: metadataIdealSize.width
+        )
+        let resolvedProposal = ProposedViewSize(width: width, height: nil)
+        let resolvedBubbleSize = subviews[0].sizeThatFits(resolvedProposal)
+        let resolvedMetadataSize = subviews[1].sizeThatFits(resolvedProposal)
+
+        return CGSize(
+            width: width,
+            height: MessageBubbleChromeSizing.height(
+                bubbleHeight: resolvedBubbleSize.height,
+                metadataHeight: resolvedMetadataSize.height,
+                spacing: spacing
+            )
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+
+        let resolvedProposal = ProposedViewSize(width: bounds.width, height: nil)
+        let bubbleSize = subviews[0].sizeThatFits(resolvedProposal)
+        let bubbleX = isFromMe ? bounds.maxX - bubbleSize.width : bounds.minX
+        subviews[0].place(
+            at: CGPoint(x: bubbleX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bubbleSize.width, height: bubbleSize.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + bubbleSize.height + spacing),
+            anchor: .topLeading,
+            proposal: resolvedProposal
+        )
     }
 }
 
@@ -241,7 +309,6 @@ struct MessageMetadataFooter: View {
     let isEdited: Bool
     let status: MessageStatus
     let isFromMe: Bool
-    let usesLightForeground: Bool
     var showsDeliveryStatus: Bool = true
     var showsExpirationTimer: Bool = false
     var onViewEditHistory: (() -> Void)?
@@ -250,9 +317,8 @@ struct MessageMetadataFooter: View {
         .value(for: status, isFromMe: isFromMe)
     }
 
-    private var foreground: Color {
-        if presentation.isFailure { return .red }
-        return usesLightForeground ? .white.opacity(0.76) : .secondary
+    private var resolvedForeground: Color {
+        presentation.isFailure ? .red : .secondary
     }
 
     var body: some View {
@@ -279,7 +345,7 @@ struct MessageMetadataFooter: View {
             }
         }
         .font(.caption2)
-        .foregroundStyle(foreground)
+        .foregroundStyle(resolvedForeground)
         .fixedSize(horizontal: true, vertical: true)
     }
 }

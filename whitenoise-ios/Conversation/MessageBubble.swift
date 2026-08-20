@@ -23,10 +23,10 @@ final class ConversationMediaLoader {
 }
 
 enum MessageBubbleReplyLayout {
-    static let bodyHorizontalInset: CGFloat = 14
-    static let bodyTopInset: CGFloat = 9
+    static let bodyHorizontalInset = ChatBubbleMetrics.horizontalInset
+    static let bodyTopInset = ChatBubbleMetrics.verticalInset
     static let bodyTopInsetAfterReply: CGFloat = 11
-    static let bodyBottomInset: CGFloat = 9
+    static let bodyBottomInset = ChatBubbleMetrics.verticalInset
     static let headerHorizontalInset = bodyHorizontalInset
     static let headerVerticalInset: CGFloat = 8
     static let sentHeaderOverlayOpacity = 0.16
@@ -45,57 +45,6 @@ private struct ReplyHeaderWidthPreferenceKey: PreferenceKey {
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
-    }
-}
-
-private struct MessageBodyFooterLayout: Layout {
-    let spacing: CGFloat
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        guard subviews.count == 2 else { return .zero }
-
-        let widthProposal = ProposedViewSize(width: proposal.width, height: nil)
-        let bodySize = subviews[0].sizeThatFits(widthProposal)
-        let footerIdealSize = subviews[1].sizeThatFits(.unspecified)
-        let width = MessageBubbleTextLayout.stackedWidth(
-            proposedWidth: proposal.width,
-            bodyWidth: bodySize.width,
-            footerWidth: footerIdealSize.width
-        )
-        let resolvedProposal = ProposedViewSize(width: width, height: nil)
-        let resolvedBodySize = subviews[0].sizeThatFits(resolvedProposal)
-        let resolvedFooterSize = subviews[1].sizeThatFits(resolvedProposal)
-
-        return CGSize(
-            width: width,
-            height: resolvedBodySize.height + spacing + resolvedFooterSize.height
-        )
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        guard subviews.count == 2 else { return }
-
-        let resolvedProposal = ProposedViewSize(width: bounds.width, height: nil)
-        let bodySize = subviews[0].sizeThatFits(resolvedProposal)
-        subviews[0].place(
-            at: bounds.origin,
-            anchor: .topLeading,
-            proposal: resolvedProposal
-        )
-        subviews[1].place(
-            at: CGPoint(x: bounds.minX, y: bounds.minY + bodySize.height + spacing),
-            anchor: .topLeading,
-            proposal: resolvedProposal
-        )
     }
 }
 
@@ -120,7 +69,7 @@ nonisolated enum MessageBodyCollapsePresentation {
 
 /// One chat bubble. Aligned right for our own messages, left for everyone
 /// else. Renders an optional quoted reply header, the message body, a
-/// time/delivery caption, and any reaction chips.
+/// external time/delivery metadata, and any reaction chips.
 struct MessageBubble: View {
     @Environment(AppState.self) private var appState
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -130,7 +79,7 @@ struct MessageBubble: View {
     var debugStyle: MessageDebugStyle? = nil
     var isDeleted: Bool = false
     var isEdited: Bool = false
-    var replyPreview: (name: String, text: String)? = nil
+    var replyPreview: ConversationReplyPreview? = nil
     var mediaItems: [MessageMediaAttachment] = []
     var markdownBlocks: [MarkdownDisplayBlock]? = nil
     var reactions: [ConversationViewModel.ReactionTally] = []
@@ -242,39 +191,9 @@ struct MessageBubble: View {
                         .padding(.leading, 12)
                 }
 
-                if isDeleted {
-                    deletedBubble
-                } else if !mediaItems.isEmpty, showsStandardBody {
-                    mediaMessageContent
-                } else if let standaloneEmoji {
-                    if status == .failed {
-                        standaloneEmojiContent(standaloneEmoji)
-                            .contentShape(.rect)
-                            .onTapGesture { onFailedTap?() }
-                    } else {
-                        standaloneEmojiContent(standaloneEmoji)
-                            .opacity(status == .sending ? 0.7 : 1)
-                    }
-
-                    if !reactions.isEmpty {
-                        reactionChips
-                    }
-                } else {
-                    // The tap gesture exists only on failed rows — a
-                    // recognizer on every bubble steals touches from the
-                    // timeline's scroll/keyboard handling.
-                    if status == .failed {
-                        textBubble
-                            .contentShape(.rect)
-                            .onTapGesture { onFailedTap?() }
-                    } else {
-                        textBubble
-                            .opacity(status == .sending ? 0.7 : 1)
-                    }
-
-                    if !reactions.isEmpty, showsStandardBody {
-                        reactionChips
-                    }
+                MessageBubbleChromeLayout(isFromMe: isFromMe) {
+                    messageSurface
+                    bubbleMetadataRow
                 }
 
                 // Media rows have no bubble tap for the failed dialog, and the
@@ -319,47 +238,61 @@ struct MessageBubble: View {
         }
     }
 
-    private func standaloneEmojiContent(_ emoji: String) -> some View {
-        VStack(spacing: 1) {
-            Text(emoji)
-                .font(.system(size: SingleEmojiMessagePresentation.fontSize))
-                .lineLimit(1)
-                .fixedSize()
-
-            standaloneEmojiMetadataFooter
+    @ViewBuilder
+    private var messageSurface: some View {
+        if isDeleted {
+            deletedBubble
+        } else if !mediaItems.isEmpty, showsStandardBody {
+            mediaMessageContent
+        } else if let standaloneEmoji {
+            if status == .failed {
+                standaloneEmojiContent(standaloneEmoji)
+                    .contentShape(.rect)
+                    .onTapGesture { onFailedTap?() }
+            } else {
+                standaloneEmojiContent(standaloneEmoji)
+                    .opacity(status == .sending ? 0.7 : 1)
+            }
+        } else {
+            // The tap gesture exists only on failed rows — a recognizer on
+            // every bubble steals touches from timeline scrolling.
+            if status == .failed {
+                textBubble
+                    .contentShape(.rect)
+                    .onTapGesture { onFailedTap?() }
+            } else {
+                textBubble
+                    .opacity(status == .sending ? 0.7 : 1)
+            }
         }
-        .padding(.horizontal, 6)
-        .accessibilityElement(children: .combine)
+    }
+
+    private func standaloneEmojiContent(_ emoji: String) -> some View {
+        Text(emoji)
+            .font(.system(size: SingleEmojiMessagePresentation.fontSize))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .accessibilityElement(children: .combine)
     }
 
     private var deletedBubble: some View {
-        // Single row at the original font: icon + label on the left, the
-        // timestamp inline to the right (no new line). The delivery checkmark
-        // stays dropped — it means nothing on a removed message.
         HStack(spacing: 6) {
             Image(systemName: "trash")
             Text("This message was deleted")
-            MessageMetadataFooter(
-                time: timeLabel,
-                isEdited: false,
-                status: status,
-                isFromMe: isFromMe,
-                usesLightForeground: usesSentBubbleForeground,
-                showsDeliveryStatus: MessageTombstonePresentation.showsDeliveryStatus(isDeleted: isDeleted)
-            )
         }
         .font(.callout)
         .italic()
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
+        .padding(.horizontal, ChatBubbleMetrics.horizontalInset)
+        .padding(.vertical, ChatBubbleMetrics.verticalInset)
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: ChatBubbleMetrics.cornerRadius, style: .continuous)
                 .stroke(Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
         )
     }
 
-    private func replyHeader(_ preview: (name: String, text: String)) -> some View {
+    private func replyHeader(_ preview: ConversationReplyPreview) -> some View {
         Button(action: onReplyPreviewTap) {
             quoted(preview)
                 .padding(.horizontal, MessageBubbleReplyLayout.headerHorizontalInset)
@@ -402,18 +335,14 @@ struct MessageBubble: View {
                 }
             } else if let debugStyle {
                 debugPayload(debugStyle)
-                messageMetadataFooter
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
-                    .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
             }
         }
         .font(.body)
         .background { bubbleLayerBackground(hasReply: replyPreview != nil) }
-        .clipShape(.rect(cornerRadius: 18))
+        .clipShape(.rect(cornerRadius: ChatBubbleMetrics.cornerRadius, style: .continuous))
         .overlay {
             if let debugStyle {
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: ChatBubbleMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(debugStyle.category.accentColor.opacity(0.75), lineWidth: 2)
             }
         }
@@ -434,11 +363,8 @@ struct MessageBubble: View {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Label(L10n.string("Location"), systemImage: "mappin.and.ellipse")
                     .font(.subheadline.weight(.semibold))
-                Spacer(minLength: 8)
-                messageMetadataFooter
-                    .fixedSize()
             }
-            .foregroundStyle(isFromMe ? Color.white : Color.primary)
+            .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : MessageBubblePalette.receivedForeground)
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
         }
@@ -465,7 +391,7 @@ struct MessageBubble: View {
     private func debugTagsFooter(_ style: MessageDebugStyle) -> some View {
         Text(style.tagsSummary)
             .font(.caption2.monospaced())
-            .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.78) : Color.secondary)
+            .foregroundStyle(usesSentBubbleForeground ? MessageBubblePalette.sentForeground.opacity(0.78) : Color.secondary)
             .textSelection(.enabled)
             .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
             .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
@@ -475,16 +401,16 @@ struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(style.detailText)
                 .font(.caption.monospaced())
-                .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.95) : Color.primary)
+                .foregroundStyle(usesSentBubbleForeground ? MessageBubblePalette.sentForeground.opacity(0.95) : Color.primary)
                 .textSelection(.enabled)
             Text(style.tagsSummary)
                 .font(.caption2.monospaced())
-                .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.82) : Color.secondary)
+                .foregroundStyle(usesSentBubbleForeground ? MessageBubblePalette.sentForeground.opacity(0.82) : Color.secondary)
                 .textSelection(.enabled)
             if !record.messageIdHex.isEmpty {
                 Text("id: \(record.messageIdHex)")
                     .font(.caption2.monospaced())
-                    .foregroundStyle(usesSentBubbleForeground ? Color.white.opacity(0.72) : Color.secondary.opacity(0.8))
+                    .foregroundStyle(usesSentBubbleForeground ? MessageBubblePalette.sentForeground.opacity(0.72) : Color.secondary.opacity(0.8))
                     .textSelection(.enabled)
             }
         }
@@ -500,7 +426,6 @@ struct MessageBubble: View {
                 items: mediaItems,
                 isFromMe: isFromMe,
                 maxWidth: mediaGridWidth,
-                reservesAudioMetadataFooterSpace: reservesAudioMetadataFooterSpace,
                 onLoadMedia: onLoadMedia,
                 onOpenImage: { item, data in
                     mediaGallery = MessageMediaGallery(
@@ -527,71 +452,50 @@ struct MessageBubble: View {
                         .allowsHitTesting(false)
                 }
             }
-            .overlay(alignment: .bottomTrailing) {
-                if !hasVisibleBodyText && replyPreview == nil {
-                    if reservesAudioMetadataFooterSpace {
-                        messageMetadataFooter
-                            .padding(6)
-                    } else {
-                        mediaOverlayMetadataFooter
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 4)
-                            .background(.black.opacity(0.42), in: Capsule())
-                            .padding(6)
-                    }
-                }
-            }
 
             if let replyPreview {
                 VStack(alignment: .leading, spacing: 0) {
                     replyHeader(replyPreview)
                     if hasVisibleBodyText {
                         messageBodyText(hasReply: true)
-                    } else {
-                        messageMetadataFooter
-                            .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
-                            .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
                     }
                 }
                 .font(.body)
                 .background { bubbleLayerBackground(hasReply: true) }
-                .clipShape(.rect(cornerRadius: 18))
+                .clipShape(.rect(cornerRadius: ChatBubbleMetrics.cornerRadius, style: .continuous))
             } else if hasVisibleBodyText {
                 textBubble
             }
         }
         .opacity(status == .sending ? 0.7 : 1)
-
-        if !reactions.isEmpty {
-            reactionChips
-        }
     }
 
     private var mediaGridWidth: CGFloat {
         sizeClass == .regular ? 340 : 276
     }
 
-    private var reservesAudioMetadataFooterSpace: Bool {
-        MessageAudioBubblePresentation.shouldReserveMetadataFooter(
-            mediaKinds: mediaItems.map(\.kind),
-            hasVisibleBodyText: hasVisibleBodyText,
-            hasReply: replyPreview != nil
-        )
-    }
-
-    private func quoted(_ preview: (name: String, text: String)) -> some View {
-        HStack(spacing: 6) {
+    private func quoted(_ preview: ConversationReplyPreview) -> some View {
+        HStack(alignment: .top, spacing: 7) {
             Capsule()
-                .fill(isFromMe ? Color.white.opacity(0.8) : Color.accentColor)
+                .fill(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.8) : Color.accentColor)
                 .frame(width: 3)
             VStack(alignment: .leading, spacing: 1) {
                 Text(preview.name)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(isFromMe ? Color.white.opacity(0.95) : Color.primary)
+                    .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.95) : Color.primary)
                 Text(preview.text)
                     .font(.caption)
-                    .foregroundStyle(isFromMe ? Color.white.opacity(0.82) : Color.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.82) : Color.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 4)
+            if let media = preview.media {
+                MessageReplyMediaThumbnail(
+                    item: media,
+                    isFromMe: isFromMe,
+                    onLoadMedia: onLoadMedia
+                )
             }
         }
         // Without this the width-only Capsule is greedy vertically and stretches
@@ -604,62 +508,11 @@ struct MessageBubble: View {
             sanitizedBodyText,
             isExpanded: isBodyExpanded
         )
-        let canAttemptInlineFooter = MessageBubbleTextLayout.canAttemptInlineFooter(
-            text: sanitizedBodyText,
-            isCollapsed: isCollapsed,
-            isSingleParagraph: isSingleParagraphBody
-        )
         let replyContentWidth = hasReply && replyHeaderWidth > 0
             ? max(0, replyHeaderWidth - (MessageBubbleReplyLayout.bodyHorizontalInset * 2))
             : 0
-        return Group {
-            if canAttemptInlineFooter {
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .lastTextBaseline, spacing: 7) {
-                        messageBodyContent
-                            .fixedSize(horizontal: true, vertical: true)
-                        messageMetadataFooter
-                            .fixedSize()
-                    }
-                    .frame(
-                        minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
-                        alignment: .leading
-                    )
-
-                    stackedMessageBody(
-                        isCollapsed: isCollapsed,
-                        replyContentWidth: replyContentWidth
-                    )
-                }
-            } else {
-                stackedMessageBody(
-                    isCollapsed: isCollapsed,
-                    replyContentWidth: replyContentWidth
-                )
-            }
-        }
-        .foregroundStyle(isFromMe ? Color.white : Color.primary)
-        .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
-        .padding(.top, hasReply ? MessageBubbleReplyLayout.bodyTopInsetAfterReply : MessageBubbleReplyLayout.bodyTopInset)
-        .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
-    }
-
-    private var isSingleParagraphBody: Bool {
-        guard let markdownBlocks else { return true }
-        guard markdownBlocks.count == 1, case .paragraph = markdownBlocks[0] else { return false }
-        return true
-    }
-
-    private func stackedMessageBody(
-        isCollapsed: Bool,
-        replyContentWidth: CGFloat
-    ) -> some View {
-        MessageBodyFooterLayout(spacing: 5) {
+        return VStack(alignment: .leading, spacing: 5) {
             messageBodyContent
-                .frame(
-                    minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
-                    alignment: .leading
-                )
                 .frame(
                     maxHeight: isCollapsed ? MessageBodyCollapsePresentation.collapsedBodyMaxHeight : nil,
                     alignment: .topLeading
@@ -681,28 +534,25 @@ struct MessageBubble: View {
                     }
                 }
 
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
-                if isCollapsed {
-                    Button {
-                        isBodyExpanded = true
-                    } label: {
-                        Text(L10n.string("Read more"))
-                            .font(.footnote.weight(.semibold))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(isFromMe ? Color.white.opacity(0.9) : Color.accentColor)
+            if isCollapsed {
+                Button {
+                    isBodyExpanded = true
+                } label: {
+                    Text(L10n.string("Read more"))
+                        .font(.footnote.weight(.semibold))
                 }
-
-                Spacer(minLength: 8)
-                messageMetadataFooter
-                    .fixedSize()
+                .buttonStyle(.plain)
+                .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.9) : Color.accentColor)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(
             minWidth: replyContentWidth > 0 ? replyContentWidth : nil,
             alignment: .leading
         )
+        .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : MessageBubblePalette.receivedForeground)
+        .padding(.horizontal, MessageBubbleReplyLayout.bodyHorizontalInset)
+        .padding(.top, hasReply ? MessageBubbleReplyLayout.bodyTopInsetAfterReply : MessageBubbleReplyLayout.bodyTopInset)
+        .padding(.bottom, MessageBubbleReplyLayout.bodyBottomInset)
     }
 
     @ViewBuilder
@@ -710,9 +560,9 @@ struct MessageBubble: View {
         if let blocks = markdownBlocks {
             MarkdownMessageView(
                 blocks: blocks,
-                quoteBar: isFromMe ? Color.white.opacity(0.8) : Color.accentColor
+                quoteBar: isFromMe ? MessageBubblePalette.sentForeground.opacity(0.8) : Color.accentColor
             )
-            .tint(isFromMe ? Color.white : Color.accentColor)
+            .tint(isFromMe ? MessageBubblePalette.sentForeground : Color.accentColor)
             .environment(\.openURL, OpenURLAction(handler: handleMessageLink))
         } else {
             // Records without parsed tokens (non-chat kinds, optimistic
@@ -751,7 +601,7 @@ struct MessageBubble: View {
     @ViewBuilder
     private var replyHeaderBackground: some View {
         if isFromMe {
-            Color.white.opacity(MessageBubbleReplyLayout.sentHeaderOverlayOpacity)
+            MessageBubblePalette.sentForeground.opacity(MessageBubbleReplyLayout.sentHeaderOverlayOpacity)
         } else {
             Color(UIColor { traits in
                 Self.receivedReplyHeaderColor(dark: traits.userInterfaceStyle == .dark)
@@ -770,8 +620,50 @@ struct MessageBubble: View {
     }
 
     @ViewBuilder
-    private var reactionChips: some View {
-        if let summary = ReactionSummaryPresentation.value(from: reactions) {
+    private var bubbleMetadataRow: some View {
+        if reactions.isEmpty {
+            metadataCandidate(maximumVisibleEmojis: nil)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                metadataCandidate(maximumVisibleEmojis: 3)
+                metadataCandidate(maximumVisibleEmojis: 2)
+                metadataCandidate(maximumVisibleEmojis: 1)
+            }
+        }
+    }
+
+    private func metadataCandidate(maximumVisibleEmojis: Int?) -> some View {
+        let hasReactions = maximumVisibleEmojis != nil && !reactions.isEmpty
+        let timestampOnLeading = MessageMetadataRowArrangement.timestampOnLeadingEdge(
+            isFromMe: isFromMe,
+            hasReactions: hasReactions
+        )
+
+        return HStack(spacing: 8) {
+            if timestampOnLeading {
+                messageMetadataFooter
+                Spacer(minLength: 8)
+                if let maximumVisibleEmojis {
+                    reactionChip(maximumVisibleEmojis: maximumVisibleEmojis)
+                }
+            } else {
+                if let maximumVisibleEmojis {
+                    reactionChip(maximumVisibleEmojis: maximumVisibleEmojis)
+                }
+                Spacer(minLength: 8)
+                messageMetadataFooter
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, ChatBubbleMetrics.horizontalInset)
+    }
+
+    @ViewBuilder
+    private func reactionChip(maximumVisibleEmojis: Int) -> some View {
+        if let summary = ReactionSummaryPresentation.value(
+            from: reactions,
+            maximumVisibleEmojis: maximumVisibleEmojis
+        ) {
             Button {
                 onShowReactionDetails(nil)
             } label: {
@@ -799,9 +691,7 @@ struct MessageBubble: View {
             .accessibilityLabel(L10n.string("Reactions"))
             .accessibilityValue(L10n.formatted("%lld", Int64(summary.totalCount)))
             .accessibilityAddTraits(summary.mine ? .isSelected : [])
-            .padding(isFromMe ? .trailing : .leading, 10)
-            .offset(y: -6)
-            .padding(.bottom, -6)
+            .fixedSize()
         }
     }
 
@@ -811,31 +701,7 @@ struct MessageBubble: View {
             isEdited: isEdited && !isDeleted,
             status: status,
             isFromMe: isFromMe,
-            usesLightForeground: usesSentBubbleForeground,
-            showsExpirationTimer: hasExpirationTimer,
-            onViewEditHistory: onViewEditHistory
-        )
-    }
-
-    private var mediaOverlayMetadataFooter: some View {
-        MessageMetadataFooter(
-            time: timeLabel,
-            isEdited: isEdited && !isDeleted,
-            status: status,
-            isFromMe: isFromMe,
-            usesLightForeground: true,
-            showsExpirationTimer: hasExpirationTimer,
-            onViewEditHistory: onViewEditHistory
-        )
-    }
-
-    private var standaloneEmojiMetadataFooter: some View {
-        MessageMetadataFooter(
-            time: timeLabel,
-            isEdited: isEdited,
-            status: status,
-            isFromMe: isFromMe,
-            usesLightForeground: false,
+            showsDeliveryStatus: MessageTombstonePresentation.showsDeliveryStatus(isDeleted: isDeleted),
             showsExpirationTimer: hasExpirationTimer,
             onViewEditHistory: onViewEditHistory
         )
@@ -854,30 +720,20 @@ struct MessageBubble: View {
                     : UIColor.secondarySystemBackground
             })
         } else if isFromMe {
-            LinearGradient(
-                colors: [.blue, .indigo],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            MessageBubblePalette.sentBackground
         } else {
-            Color(UIColor { traits in
-                Self.receivedBubbleColor(dark: traits.userInterfaceStyle == .dark)
-            })
+            MessageBubblePalette.receivedBackground
         }
     }
 
-    /// Fill for an incoming (other-user) message bubble. In dark mode the old
-    /// `tertiarySystemBackground` sat too close to the elevated conversation
-    /// background, so received bubbles barely stood out (#4). Use a lighter
-    /// system gray that clearly separates the bubble while keeping the white
-    /// message text well above the WCAG AA contrast ratio. Light mode is
-    /// unchanged.
+    /// Incoming bubbles use the prototype's opaque system-gray surface in both
+    /// appearances. Keeping this semantic avoids a per-row appearance branch.
     static func receivedBubbleColor(dark: Bool) -> UIColor {
-        dark ? .systemGray5 : .secondarySystemBackground
+        .systemGray5
     }
 
     static func receivedReplyHeaderColor(dark: Bool) -> UIColor {
-        dark ? .systemGray4 : .systemGray5
+        .systemGray4
     }
 
     static func timeLabel(recordedAt: UInt64, locale: Locale = .autoupdatingCurrent) -> String {
@@ -1071,77 +927,55 @@ private struct MessageMediaGrid: View {
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
 
-    private let spacing: CGFloat = 2
     private let cornerRadius: CGFloat = 14
 
     private var visibleItems: [MessageMediaAttachment] {
         Array(items.prefix(MessageMediaGridPresentation.visibleCount(totalCount: items.count)))
     }
 
-    private var hiddenCount: Int {
-        MessageMediaGridPresentation.hiddenCount(totalCount: items.count)
-    }
-
-    private var columnCount: Int {
-        MessageMediaGridPresentation.columnCount(totalCount: items.count)
-    }
-
-    private var rowCount: Int {
-        MessageMediaGridPresentation.rowCount(totalCount: items.count)
-    }
-
-    private var tileSize: CGFloat {
-        let totalSpacing = CGFloat(columnCount - 1) * spacing
-        return (maxWidth - totalSpacing) / CGFloat(columnCount)
-    }
-
-    private var gridHeight: CGFloat {
-        CGFloat(rowCount) * tileSize + CGFloat(rowCount - 1) * spacing
-    }
-
-    private var rowStarts: [Int] {
-        Array(stride(from: 0, to: visibleItems.count, by: columnCount))
+    private var layout: MessageMediaGridLayout {
+        MessageMediaGridPresentation.layout(totalCount: items.count, maxWidth: maxWidth)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: spacing) {
-            ForEach(rowStarts, id: \.self) { rowStart in
-                HStack(spacing: spacing) {
-                    ForEach(0..<columnCount, id: \.self) { column in
-                        tile(at: rowStart + column)
-                    }
+        let resolvedLayout = layout
+        let resolvedItems = visibleItems
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(resolvedLayout.frames.enumerated()), id: \.offset) { index, frame in
+                if index < resolvedItems.count {
+                    tile(
+                        item: resolvedItems[index],
+                        size: frame.size,
+                        hiddenCount: index == resolvedItems.count - 1
+                            ? resolvedLayout.overflowCount
+                            : 0
+                    )
+                    .position(x: frame.midX, y: frame.midY)
                 }
-                .frame(width: maxWidth, alignment: .leading)
             }
         }
-        .frame(width: maxWidth, height: gridHeight, alignment: .topLeading)
+        .frame(width: resolvedLayout.size.width, height: resolvedLayout.size.height, alignment: .topLeading)
+        .clipShape(.rect(cornerRadius: cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .strokeBorder(Color.primary.opacity(isFromMe ? 0.16 : 0.08), lineWidth: 1)
         }
     }
 
-    @ViewBuilder
-    private func tile(at index: Int) -> some View {
-        if index < visibleItems.count {
-            let roundedCorners = MessageMediaGridPresentation.roundedCorners(
-                totalCount: items.count,
-                tileIndex: index
-            )
-            MessageMediaTile(
-                item: visibleItems[index],
-                isFromMe: isFromMe,
-                size: CGSize(width: tileSize, height: tileSize),
-                hiddenCount: index == visibleItems.count - 1 ? hiddenCount : 0,
-                onLoadMedia: onLoadMedia,
-                onOpenImage: onOpenImage,
-                onOpenVideo: onOpenVideo
-            )
-            .messageMediaTileCornerClip(roundedCorners, radius: cornerRadius)
-        } else {
-            Color.clear
-                .frame(width: tileSize, height: tileSize)
-        }
+    private func tile(
+        item: MessageMediaAttachment,
+        size: CGSize,
+        hiddenCount: Int
+    ) -> some View {
+        MessageMediaTile(
+            item: item,
+            isFromMe: isFromMe,
+            size: size,
+            hiddenCount: hiddenCount,
+            onLoadMedia: onLoadMedia,
+            onOpenImage: onOpenImage,
+            onOpenVideo: onOpenVideo
+        )
     }
 }
 
@@ -1193,7 +1027,6 @@ private struct MessageMediaAttachmentContent: View {
     let items: [MessageMediaAttachment]
     let isFromMe: Bool
     let maxWidth: CGFloat
-    let reservesAudioMetadataFooterSpace: Bool
     let onLoadMedia: ConversationMediaLoader
     let onOpenImage: (MessageMediaAttachment, Data) -> Void
     let onOpenVideo: (MessageMediaAttachment) -> Void
@@ -1263,7 +1096,6 @@ private struct MessageMediaAttachmentContent: View {
                             item: item,
                             isFromMe: isFromMe,
                             width: maxWidth,
-                            reservesMetadataFooterSpace: reservesAudioMetadataFooterSpace,
                             onLoadMedia: onLoadMedia
                         )
                     case .document, .unsupported:
@@ -1372,8 +1204,15 @@ nonisolated struct MessageMediaTileCornerRadii: Equatable, Sendable {
     }
 }
 
+nonisolated struct MessageMediaGridLayout: Equatable {
+    let size: CGSize
+    let frames: [CGRect]
+    let overflowCount: Int
+}
+
 enum MessageMediaGridPresentation {
     static let maxVisibleItems = 5
+    private static let referenceWidth: CGFloat = 256
 
     static func visibleCount(totalCount: Int) -> Int {
         min(max(totalCount, 0), maxVisibleItems)
@@ -1381,6 +1220,66 @@ enum MessageMediaGridPresentation {
 
     static func hiddenCount(totalCount: Int) -> Int {
         max(0, totalCount - maxVisibleItems)
+    }
+
+    static func layout(totalCount: Int, maxWidth: CGFloat) -> MessageMediaGridLayout {
+        let count = max(0, totalCount)
+        let width = max(1, maxWidth)
+        let scale = width / referenceWidth
+        let referenceFrames: [CGRect]
+        let referenceHeight: CGFloat
+
+        switch count {
+        case 0:
+            referenceHeight = 0
+            referenceFrames = []
+        case 1:
+            referenceHeight = referenceWidth
+            referenceFrames = [CGRect(x: 0, y: 0, width: 256, height: 256)]
+        case 2:
+            referenceHeight = 127
+            referenceFrames = [
+                CGRect(x: 0, y: 0, width: 127, height: 127),
+                CGRect(x: 129, y: 0, width: 127, height: 127),
+            ]
+        case 3:
+            referenceHeight = 170
+            referenceFrames = [
+                CGRect(x: 0, y: 0, width: 170, height: 170),
+                CGRect(x: 172, y: 0, width: 84, height: 84),
+                CGRect(x: 172, y: 86, width: 84, height: 84),
+            ]
+        case 4:
+            referenceHeight = 256
+            referenceFrames = [
+                CGRect(x: 0, y: 0, width: 127, height: 127),
+                CGRect(x: 129, y: 0, width: 127, height: 127),
+                CGRect(x: 0, y: 129, width: 127, height: 127),
+                CGRect(x: 129, y: 129, width: 127, height: 127),
+            ]
+        default:
+            referenceHeight = 213
+            referenceFrames = [
+                CGRect(x: 0, y: 0, width: 127, height: 127),
+                CGRect(x: 129, y: 0, width: 127, height: 127),
+                CGRect(x: 0, y: 129, width: 84, height: 84),
+                CGRect(x: 86, y: 129, width: 84, height: 84),
+                CGRect(x: 172, y: 129, width: 84, height: 84),
+            ]
+        }
+
+        return MessageMediaGridLayout(
+            size: CGSize(width: count == 0 ? 0 : width, height: referenceHeight * scale),
+            frames: referenceFrames.map { frame in
+                CGRect(
+                    x: frame.minX * scale,
+                    y: frame.minY * scale,
+                    width: frame.width * scale,
+                    height: frame.height * scale
+                )
+            },
+            overflowCount: hiddenCount(totalCount: count)
+        )
     }
 
     static func columnCount(totalCount: Int) -> Int {
@@ -1508,12 +1407,10 @@ nonisolated enum MessageMediaThumbnailPresentation {
 }
 
 nonisolated enum MessageAudioBubblePresentation {
-    static func shouldReserveMetadataFooter(
-        mediaKinds: [MediaAttachmentKind],
-        hasVisibleBodyText: Bool,
-        hasReply: Bool
-    ) -> Bool {
-        mediaKinds == [.audio] && !hasVisibleBodyText && !hasReply
+    static func playbackIconName(isPlaying: Bool, didFail: Bool) -> String {
+        if isPlaying { return "pause.fill" }
+        if didFail { return "arrow.clockwise" }
+        return "play.fill"
     }
 
     static func cacheKey(for item: MessageMediaAttachment) -> String {
@@ -1749,6 +1646,136 @@ private struct MessageMediaPlaceholderBackground: View {
             guard !Task.isCancelled else { return }
             image = decoded
         }
+    }
+}
+
+/// Compact, non-interactive media identity for a quoted message. It reuses the
+/// same bounded thumbnail caches and conversation media loader as the full row,
+/// so a reply never introduces a second decrypt/download path.
+private struct MessageReplyMediaThumbnail: View {
+    let item: MessageMediaAttachment
+    let isFromMe: Bool
+    let onLoadMedia: ConversationMediaLoader
+
+    @Environment(\.displayScale) private var displayScale
+    @State private var image: UIImage?
+    @State private var loadedItemID: String?
+
+    private let side: CGFloat = 38
+
+    var body: some View {
+        ZStack {
+            if loadedItemID == item.id, let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if item.isImage || item.isVideo {
+                MessageMediaPlaceholderBackground(
+                    thumbhash: item.reference?.thumbhash,
+                    fallbackSystemName: item.isVideo ? "play.rectangle" : "photo",
+                    width: side,
+                    height: side
+                )
+            } else {
+                Color.primary.opacity(isFromMe ? 0.10 : 0.08)
+                Image(systemName: item.isAudio ? "waveform" : "doc.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : Color.secondary)
+            }
+
+            if item.isVideo {
+                Image(systemName: "play.fill")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.45), radius: 1)
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(.rect(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+        }
+        .task(id: item.id) {
+            await loadThumbnailIfAllowed()
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func loadThumbnailIfAllowed() async {
+        loadedItemID = nil
+        image = nil
+
+        if let thumbnail = item.thumbnail {
+            image = thumbnail
+            loadedItemID = item.id
+            return
+        }
+
+        let maxPixelSize = max(1, Int(ceil(side * displayScale)))
+        if item.isImage {
+            let cacheKey = MessageMediaThumbnailPresentation.cacheKey(for: item)
+            if let cached = MessageMediaThumbnailDecoder.cachedThumbnail(
+                for: cacheKey,
+                maxPixelSize: maxPixelSize
+            ) {
+                image = cached.image
+                loadedItemID = item.id
+                return
+            }
+            guard MediaAutoDownloadStore.shared.shouldAutoDownload(.image) else { return }
+            guard let data = await mediaData() else { return }
+            guard let thumbnail = await MessageMediaThumbnailDecoder.image(
+                data: data,
+                maxPixelSize: maxPixelSize,
+                scale: displayScale
+            ), !Task.isCancelled else { return }
+            MessageMediaThumbnailDecoder.store(
+                thumbnail,
+                sourceData: data,
+                for: cacheKey,
+                maxPixelSize: maxPixelSize
+            )
+            image = thumbnail
+            loadedItemID = item.id
+            return
+        }
+
+        guard item.isVideo else { return }
+        let cacheKey = MessageVideoThumbnailPresentation.cacheKey(for: item)
+        if let cached = MessageVideoThumbnailDecoder.cachedThumbnail(
+            for: cacheKey,
+            maxPixelSize: maxPixelSize
+        ) {
+            image = cached
+            loadedItemID = item.id
+            return
+        }
+        guard MediaAutoDownloadStore.shared.shouldAutoDownload(.video) else { return }
+        guard let data = await mediaData() else { return }
+        let producerEpoch = MessageMediaCache.currentProducerEpoch()
+        guard let url = await MediaPlaybackFileStore.fileURL(
+            for: item,
+            data: data,
+            producerEpoch: producerEpoch
+        ), !Task.isCancelled else { return }
+        guard let thumbnail = await MessageVideoThumbnailDecoder.thumbnail(
+            url: url,
+            maxPixelSize: maxPixelSize,
+            scale: displayScale
+        ), !Task.isCancelled else { return }
+        MessageVideoThumbnailDecoder.store(
+            thumbnail,
+            for: cacheKey,
+            maxPixelSize: maxPixelSize
+        )
+        image = thumbnail
+        loadedItemID = item.id
+    }
+
+    private func mediaData() async -> Data? {
+        if let localData = item.localData { return localData }
+        return try? await onLoadMedia.data(for: item)
     }
 }
 
@@ -2239,7 +2266,6 @@ private struct MessageAudioAttachmentView: View {
     let item: MessageMediaAttachment
     let isFromMe: Bool
     let width: CGFloat
-    let reservesMetadataFooterSpace: Bool
     let onLoadMedia: ConversationMediaLoader
 
     @State private var player: AVAudioPlayer?
@@ -2255,14 +2281,11 @@ private struct MessageAudioAttachmentView: View {
     @State private var audioSessionLease: VoiceAudioSession.Lease?
 
     @ScaledMetric(relativeTo: .subheadline)
-    private var playButtonSize: CGFloat = 36
+    private var playIconSize: CGFloat = 18
     @ScaledMetric(relativeTo: .caption)
     private var speedBadgeWidth: CGFloat = 38
     @ScaledMetric(relativeTo: .caption)
     private var speedBadgeHeight: CGFloat = 28
-    @ScaledMetric(relativeTo: .caption2)
-    private var metadataFooterReservedHeight: CGFloat = 20
-
     private let speeds: [Float] = [1, 1.5, 2]
     private var metadataCacheKey: String {
         MessageAudioBubblePresentation.cacheKey(for: item)
@@ -2272,13 +2295,11 @@ private struct MessageAudioAttachmentView: View {
         item: MessageMediaAttachment,
         isFromMe: Bool,
         width: CGFloat,
-        reservesMetadataFooterSpace: Bool,
         onLoadMedia: ConversationMediaLoader
     ) {
         self.item = item
         self.isFromMe = isFromMe
         self.width = width
-        self.reservesMetadataFooterSpace = reservesMetadataFooterSpace
         self.onLoadMedia = onLoadMedia
         _durationSeconds = State(initialValue: item.durationSeconds)
         _waveformSamples = State(initialValue: item.waveformSamples.isEmpty ? MediaWaveformAnalyzer.fallback() : item.waveformSamples)
@@ -2293,13 +2314,16 @@ private struct MessageAudioAttachmentView: View {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
-                            Image(systemName: isPlaying ? "pause.fill" : didFail ? "arrow.clockwise" : "play.fill")
-                                .font(.subheadline.weight(.bold))
+                            Image(systemName: MessageAudioBubblePresentation.playbackIconName(
+                                isPlaying: isPlaying,
+                                didFail: didFail
+                            ))
+                            .font(.system(size: playIconSize, weight: .semibold))
                         }
                     }
-                    .frame(width: playButtonSize, height: playButtonSize)
-                    .foregroundStyle(isFromMe ? Color.accentColor : Color.white)
-                    .background(isFromMe ? Color.white.opacity(0.95) : Color.accentColor, in: Circle())
+                    .frame(width: 44, height: 44)
+                    .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : Color.primary)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
@@ -2308,14 +2332,14 @@ private struct MessageAudioAttachmentView: View {
                     AudioWaveformView(
                         samples: waveformSamples,
                         progress: progress,
-                        barColor: isFromMe ? Color.white.opacity(0.58) : Color.secondary.opacity(0.45),
-                        playedColor: isFromMe ? Color.white : Color.accentColor
+                        barColor: isFromMe ? MessageBubblePalette.sentForeground.opacity(0.58) : Color.secondary.opacity(0.45),
+                        playedColor: isFromMe ? MessageBubblePalette.sentForeground : Color.accentColor
                     )
                     .frame(height: 28)
                     if let durationLabel = MessageAudioBubblePresentation.durationLabel(durationSeconds ?? item.durationSeconds) {
                         Text(durationLabel)
                             .font(.caption2.monospacedDigit())
-                            .foregroundStyle(isFromMe ? Color.white.opacity(0.75) : Color.secondary)
+                            .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.75) : Color.secondary)
                     }
                 }
 
@@ -2323,24 +2347,19 @@ private struct MessageAudioAttachmentView: View {
                     Text(speedLabel)
                         .font(.caption.weight(.bold))
                         .frame(width: speedBadgeWidth, height: speedBadgeHeight)
-                        .background(isFromMe ? Color.white.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
+                        .background(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.18) : Color.primary.opacity(0.08), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(isFromMe ? Color.white : Color.primary)
+                .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : Color.primary)
                 .accessibilityLabel("Playback speed")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
 
-            if reservesMetadataFooterSpace {
-                Color.clear
-                    .frame(height: metadataFooterReservedHeight)
-                    .accessibilityHidden(true)
-            }
         }
         .frame(width: width)
         .frame(minHeight: 68)
-        .background(isFromMe ? Color.accentColor : Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+        .background(isFromMe ? MessageBubblePalette.sentBackground : MessageBubblePalette.receivedBackground, in: .rect(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16)
                 .strokeBorder(Color.primary.opacity(isFromMe ? 0.12 : 0.08), lineWidth: 1)
@@ -2631,9 +2650,9 @@ private struct MessageDocumentAttachmentView: View {
             HStack(spacing: 11) {
                 Image(systemName: item.kind.systemImageName)
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(isFromMe ? Color.white : Color.accentColor)
+                    .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : Color.accentColor)
                     .frame(width: iconTileSize, height: iconTileSize)
-                    .background(isFromMe ? Color.white.opacity(0.15) : Color.accentColor.opacity(0.10), in: .rect(cornerRadius: 8))
+                    .background(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.15) : Color.accentColor.opacity(0.10), in: .rect(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.fileName)
@@ -2642,24 +2661,24 @@ private struct MessageDocumentAttachmentView: View {
                         .multilineTextAlignment(.leading)
                     Text(fileDetail)
                         .font(.caption2)
-                        .foregroundStyle(isFromMe ? Color.white.opacity(0.74) : Color.secondary)
+                        .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground.opacity(0.74) : Color.secondary)
                 }
                 Spacer(minLength: 0)
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(isFromMe ? .white : .accentColor)
+                        .tint(isFromMe ? MessageBubblePalette.sentForeground : .accentColor)
                 } else if didFail {
                     Image(systemName: "arrow.clockwise")
                         .font(.subheadline.weight(.semibold))
                 }
             }
-            .foregroundStyle(isFromMe ? Color.white : Color.primary)
+            .foregroundStyle(isFromMe ? MessageBubblePalette.sentForeground : Color.primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .frame(width: width)
             .frame(minHeight: 66)
-            .background(isFromMe ? Color.accentColor : Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
+            .background(isFromMe ? MessageBubblePalette.sentBackground : MessageBubblePalette.receivedBackground, in: .rect(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(Color.primary.opacity(isFromMe ? 0.12 : 0.08), lineWidth: 1)

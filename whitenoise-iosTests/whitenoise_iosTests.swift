@@ -3399,6 +3399,34 @@ struct ComposerInputChromeTests {
         #expect(fill.base == .black)
         #expect(fill.opacity == 0.26)
     }
+
+    @Test func compactComposerMetricsMatchThePrototypeWithoutShrinkingHitTargets() {
+        #expect(ComposerInputChrome.controlSize == 44)
+        #expect(ComposerInputChrome.sendButtonSize == 32)
+        #expect(ComposerInputChrome.cornerRadius == 22)
+        #expect(ComposerInputChrome.rowSpacing == 8)
+        #expect(ComposerInputChrome.inputSpacing == 4)
+        #expect(ComposerInputChrome.horizontalInset == 16)
+        #expect(ComposerInputChrome.verticalInset == 6)
+    }
+
+    @Test func sendButtonStaysMonochromeAcrossAppearances() {
+        let light = ComposerSendButtonAppearance.colorScheme(.light)
+        let dark = ComposerSendButtonAppearance.colorScheme(.dark)
+
+        #expect(light.fill == .black)
+        #expect(light.symbol == .white)
+        #expect(dark.fill == .white)
+        #expect(dark.symbol == .black)
+    }
+
+    @Test func voiceRecordingControlsKeepCancelAvailableAndGateStopOnLock() {
+        #expect(!ComposerVoiceChromePresentation.showsCancel(isActive: false))
+        #expect(ComposerVoiceChromePresentation.showsCancel(isActive: true))
+        #expect(!ComposerVoiceChromePresentation.showsStop(isActive: false, isLocked: true))
+        #expect(!ComposerVoiceChromePresentation.showsStop(isActive: true, isLocked: false))
+        #expect(ComposerVoiceChromePresentation.showsStop(isActive: true, isLocked: true))
+    }
 }
 
 @MainActor
@@ -11165,6 +11193,35 @@ struct MessageMediaGridPresentationTests {
         #expect(MessageMediaGridPresentation.rowCount(totalCount: 10) == 3)
     }
 
+    @Test func galleryCompositionMatchesDesignedTwoThreeAndFiveItemFrames() {
+        let two = MessageMediaGridPresentation.layout(totalCount: 2, maxWidth: 256)
+        #expect(two.size == CGSize(width: 256, height: 127))
+        #expect(two.frames == [
+            CGRect(x: 0, y: 0, width: 127, height: 127),
+            CGRect(x: 129, y: 0, width: 127, height: 127),
+        ])
+
+        let three = MessageMediaGridPresentation.layout(totalCount: 3, maxWidth: 256)
+        #expect(three.size == CGSize(width: 256, height: 170))
+        #expect(three.frames == [
+            CGRect(x: 0, y: 0, width: 170, height: 170),
+            CGRect(x: 172, y: 0, width: 84, height: 84),
+            CGRect(x: 172, y: 86, width: 84, height: 84),
+        ])
+
+        let overflow = MessageMediaGridPresentation.layout(totalCount: 7, maxWidth: 256)
+        #expect(overflow.size == CGSize(width: 256, height: 213))
+        #expect(overflow.frames.count == 5)
+        #expect(overflow.overflowCount == 2)
+    }
+
+    @Test func galleryCompositionScalesToTheAvailableBubbleWidth() {
+        let layout = MessageMediaGridPresentation.layout(totalCount: 2, maxWidth: 128)
+        #expect(layout.size == CGSize(width: 128, height: 63.5))
+        #expect(layout.frames[0] == CGRect(x: 0, y: 0, width: 63.5, height: 63.5))
+        #expect(layout.frames[1] == CGRect(x: 64.5, y: 0, width: 63.5, height: 63.5))
+    }
+
     @Test func gridRoundsOnlyOuterTileCorners() {
         let single = MessageMediaGridPresentation.roundedCorners(totalCount: 1, tileIndex: 0)
         #expect(single.topLeading)
@@ -11413,30 +11470,11 @@ struct VideoPreviewOverlayPresentationTests {
 }
 
 struct MessageAudioBubblePresentationTests {
-    @Test func singleUncaptionedAudioReservesSpaceForMessageMetadata() {
-        #expect(MessageAudioBubblePresentation.shouldReserveMetadataFooter(
-            mediaKinds: [.audio],
-            hasVisibleBodyText: false,
-            hasReply: false
-        ))
-    }
-
-    @Test func captionedRepliedAndMixedMediaDoNotReserveAudioFooterSpace() {
-        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
-            mediaKinds: [.audio],
-            hasVisibleBodyText: true,
-            hasReply: false
-        ))
-        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
-            mediaKinds: [.audio],
-            hasVisibleBodyText: false,
-            hasReply: true
-        ))
-        #expect(!MessageAudioBubblePresentation.shouldReserveMetadataFooter(
-            mediaKinds: [.audio, .document],
-            hasVisibleBodyText: false,
-            hasReply: false
-        ))
+    @Test func playbackIconReflectsPlayerState() {
+        #expect(MessageAudioBubblePresentation.playbackIconName(isPlaying: false, didFail: false) == "play.fill")
+        #expect(MessageAudioBubblePresentation.playbackIconName(isPlaying: true, didFail: false) == "pause.fill")
+        #expect(MessageAudioBubblePresentation.playbackIconName(isPlaying: false, didFail: true) == "arrow.clockwise")
+        #expect(MessageAudioBubblePresentation.playbackIconName(isPlaying: true, didFail: true) == "pause.fill")
     }
 
     @Test func missingDurationDoesNotReserveLabelSpace() {
@@ -11495,6 +11533,52 @@ struct MessageAudioBubblePresentationTests {
             dim: reference?.dim,
             localData: nil
         )
+    }
+}
+
+struct ComposerMediaDraftLayoutTests {
+    @Test func visualPreviewPreservesAspectRatioWithinShelfBounds() {
+        #expect(ComposerMediaDraftLayout.previewWidth(dim: "1600x900", thumbnailSize: nil) == 199)
+        #expect(ComposerMediaDraftLayout.previewWidth(dim: "400x1200", thumbnailSize: nil) == 68)
+        #expect(ComposerMediaDraftLayout.previewWidth(dim: "4000x500", thumbnailSize: nil) == 200)
+    }
+
+    @Test func malformedDimensionsUsePreparedThumbnailOrSquareFallback() {
+        #expect(ComposerMediaDraftLayout.previewWidth(
+            dim: "not-dimensions",
+            thumbnailSize: CGSize(width: 150, height: 100)
+        ) == 168)
+        #expect(ComposerMediaDraftLayout.previewWidth(dim: "0x10", thumbnailSize: nil) == 112)
+    }
+
+    @Test func mediaSelectionReviewsOnlyVisualDraftsAndPreservesOtherAttachmentOrder() throws {
+        let firstImage = MediaDraftAttachment(
+            fileName: "first.jpg",
+            mediaType: "image/jpeg",
+            data: Data([1]),
+            dim: "100x100"
+        )
+        let document = MediaDraftAttachment(
+            fileName: "notes.txt",
+            mediaType: "text/plain",
+            data: Data([2]),
+            dim: nil
+        )
+        let video = MediaDraftAttachment(
+            fileName: "clip.mp4",
+            mediaType: "video/mp4",
+            data: Data([3]),
+            dim: "1920x1080"
+        )
+        let all = [firstImage, document, video]
+        let selection = try #require(ComposerMediaSelection(
+            attachments: all,
+            initialItemID: firstImage.id
+        ))
+
+        #expect(selection.attachments.map(\.id) == [firstImage.id, video.id])
+        #expect(selection.applying(includedItemIDs: [video.id], to: all).map(\.id) == [document.id, video.id])
+        #expect(selection.applying(includedItemIDs: [], to: all).map(\.id) == [document.id])
     }
 }
 

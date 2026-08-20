@@ -564,7 +564,7 @@ final class ConversationViewModel {
         timelineStore.records(forRowFrameKeys: rowFrameKeys)
     }
 
-    func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
+    func replyPreview(for record: AppMessageRecordFfi) -> ConversationReplyPreview? {
         timelineStore.replyPreview(for: record)
     }
 

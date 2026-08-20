@@ -35,11 +35,58 @@ nonisolated enum ComposerInputChrome {
             OverlayFill(base: .systemBackground, opacity: 0.88)
         }
     }
+
+    static let controlSize: CGFloat = 44
+    static let rowSpacing: CGFloat = 8
+    static let inputSpacing: CGFloat = 4
+    static let horizontalInset: CGFloat = 16
+    static let verticalInset: CGFloat = 6
+    static let sendButtonSize: CGFloat = 32
+    static let cornerRadius: CGFloat = 22
+}
+
+nonisolated struct ComposerSendButtonAppearance: Equatable {
+    enum Tone: Equatable {
+        case black
+        case white
+
+        var color: Color {
+            switch self {
+            case .black: .black
+            case .white: .white
+            }
+        }
+    }
+
+    let fill: Tone
+    let symbol: Tone
+
+    static func colorScheme(_ colorScheme: ColorScheme) -> ComposerSendButtonAppearance {
+        colorScheme == .dark
+            ? ComposerSendButtonAppearance(fill: .white, symbol: .black)
+            : ComposerSendButtonAppearance(fill: .black, symbol: .white)
+    }
+}
+
+nonisolated struct ComposerReplyPreview: Equatable {
+    let title: String
+    let body: String
+}
+
+nonisolated enum ComposerVoiceChromePresentation {
+    static func showsCancel(isActive: Bool) -> Bool {
+        isActive
+    }
+
+    static func showsStop(isActive: Bool, isLocked: Bool) -> Bool {
+        isActive && isLocked
+    }
 }
 
 nonisolated enum ComposerSideIconTone: Equatable {
     case primary
     case disabled
+    case destructive
 
     var color: Color {
         switch self {
@@ -47,6 +94,8 @@ nonisolated enum ComposerSideIconTone: Equatable {
             Color.primary
         case .disabled:
             Color.secondary.opacity(0.45)
+        case .destructive:
+            Color.red
         }
     }
 }
@@ -96,7 +145,6 @@ private enum ComposerAttachmentAction {
 
 enum ComposerAccessoryPanel: Equatable {
     case attachments
-    case emoji
 }
 
 nonisolated enum AudioDurationLabel {
@@ -139,13 +187,19 @@ nonisolated enum ComposerAudioDraftPreviewPresentation {
 
 /// Conversation composer with attachment, emoji, text, send, and voice controls.
 struct ComposerBar: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var draft: String
     let isSending: Bool
     let hasAttachments: Bool
     let audioDraft: MediaDraftAttachment?
+    let preparedAttachments: [MediaDraftAttachment]
+    let replyPreview: ComposerReplyPreview?
     let mediaEnabled: Bool
     let disabledMessage: String?
     let voiceRecordingActive: Bool
+    let voiceRecordingLocked: Bool
+    let voiceRecordingSamples: [CGFloat]
+    let voiceRecordingDurationSeconds: Double
     let focusRequest: Int
     let dismissRequest: Int
     let mentionCandidates: [ComposerMentionCandidate]
@@ -159,6 +213,11 @@ struct ComposerBar: View {
     let onShareContact: () -> Void
     let onPasteImage: (UIImage) -> Void
     let onRemoveAudioDraft: (MediaDraftAttachment.ID) -> Void
+    let onRemovePreparedAttachment: (MediaDraftAttachment.ID) -> Void
+    let onPreviewPreparedMedia: (MediaDraftAttachment.ID) -> Void
+    let onCancelReply: () -> Void
+    let onCancelVoiceRecording: () -> Void
+    let onStopVoiceRecording: () -> Void
     let onVoicePressBegan: () -> Void
     let onVoiceDragChanged: (CGSize) -> Void
     let onVoicePressEnded: () -> Void
@@ -174,19 +233,15 @@ struct ComposerBar: View {
     @State private var localFocusRequest = 0
 
     @ScaledMetric(relativeTo: .body)
-    private var controlSize = BottomInputChromeLayout.controlSize
+    private var controlSize = ComposerInputChrome.controlSize
     @ScaledMetric(relativeTo: .body)
-    private var inlineSendSize = BottomInputChromeLayout.inlineSendSize
+    private var inlineSendSize = ComposerInputChrome.sendButtonSize
     @ScaledMetric(relativeTo: .body)
     private var fieldFontSize = BottomInputChromeLayout.fieldFontSize
     @ScaledMetric(relativeTo: .body)
     private var sideControlIconSize = BottomInputChromeLayout.sideControlIconSize
     @ScaledMetric(relativeTo: .body)
-    private var inlineEmojiIconSize = BottomInputChromeLayout.inlineEmojiIconSize
-    @ScaledMetric(relativeTo: .body)
     private var inlineSendIconSize = BottomInputChromeLayout.inlineSendIconSize
-    @ScaledMetric(relativeTo: .body)
-    private var inlineAccessoryWidth = BottomInputChromeLayout.inlineAccessoryWidth
 
     private var inputEnabled: Bool { disabledMessage == nil }
 
@@ -198,26 +253,37 @@ struct ComposerBar: View {
                 }
 
                 if ComposerAvailabilityPresentation.showsInput(disabledMessage: disabledMessage) {
-                    HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                        bottomInputGlassContainer {
-                            attachmentButton
-                        }
-                        bottomInputGlassContainer {
-                            HStack(alignment: .bottom, spacing: BottomInputChromeLayout.rowSpacing) {
-                                inputCapsule
-                                trailingActionSlot
-                                    .animation(.easeInOut(duration: 0.22), value: showsMic)
-                                    .animation(.easeInOut(duration: 0.22), value: showsSend)
+                    bottomInputGlassContainer(spacing: ComposerInputChrome.rowSpacing) {
+                        HStack(alignment: .bottom, spacing: ComposerInputChrome.rowSpacing) {
+                            if ComposerVoiceChromePresentation.showsCancel(isActive: voiceRecordingActive) {
+                                recordingCancelButton
+                            } else {
+                                attachmentButton
                             }
+                            VStack(spacing: 0) {
+                                preparedContent
+
+                                HStack(alignment: .bottom, spacing: ComposerInputChrome.inputSpacing) {
+                                    inputCapsule
+                                    trailingActionSlot
+                                        .animation(.easeInOut(duration: 0.22), value: showsMic)
+                                        .animation(.easeInOut(duration: 0.22), value: showsSend)
+                                }
+                            }
+                            .frame(minHeight: controlSize)
+                            .frame(maxWidth: .infinity)
+                            .compatibleInputRoundedChrome(
+                                cornerRadius: controlSize / 2,
+                                interactive: false
+                            )
                         }
                     }
                 } else if let disabledMessage {
                     inactiveComposerMessage(disabledMessage)
                 }
             }
-            .padding(.horizontal, BottomInputChromeLayout.keyboardOpenHorizontalInset)
-            .padding(.top, BottomInputChromeLayout.topInset)
-            .padding(.bottom, BottomInputChromeLayout.bottomInset)
+            .padding(.horizontal, ComposerInputChrome.horizontalInset)
+            .padding(.vertical, ComposerInputChrome.verticalInset)
 
             reservedBottomPane
         }
@@ -335,7 +401,12 @@ struct ComposerBar: View {
 
     private var inputCapsule: some View {
         HStack(alignment: audioDraft == nil ? .bottom : .center, spacing: 0) {
-            if let audioDraft {
+            if voiceRecordingActive {
+                ComposerVoiceRecordingInput(
+                    samples: voiceRecordingSamples,
+                    durationSeconds: voiceRecordingDurationSeconds
+                )
+            } else if let audioDraft {
                 ComposerAudioDraftInput(
                     attachment: audioDraft,
                     onRemove: { onRemoveAudioDraft(audioDraft.id) }
@@ -376,62 +447,70 @@ struct ComposerBar: View {
                     .accessibilityLabel(L10n.string("Expand editor"))
                 }
 
-                emojiButton
             }
 
         }
         .frame(minHeight: controlSize)
         .frame(maxWidth: .infinity)
-        .compatibleInputRoundedChrome(cornerRadius: controlSize / 2, interactive: false)
     }
 
-    private var emojiButton: some View {
-        Button {
-            Haptics.tap()
-            toggleEmojiPanel()
-        } label: {
-            Image(systemName: emojiButtonSystemImage)
-                .font(.system(size: inlineEmojiIconSize))
-                .foregroundStyle(.secondary)
-                .frame(width: inlineAccessoryWidth, height: controlSize)
+    @ViewBuilder
+    private var preparedContent: some View {
+        if !preparedAttachments.isEmpty {
+            MediaDraftStrip(
+                attachments: preparedAttachments,
+                onRemove: onRemovePreparedAttachment,
+                onPreviewVisual: onPreviewPreparedMedia
+            )
+        }
+
+        if let replyPreview {
+            ComposerReplyPreviewView(
+                preview: replyPreview,
+                onCancel: onCancelReply
+            )
+        }
+    }
+
+    private var recordingCancelButton: some View {
+        Button(action: onCancelVoiceRecording) {
+            sideCircleIcon(
+                "xmark",
+                weight: .semibold,
+                size: sideControlIconSize,
+                tone: .destructive
+            )
         }
         .buttonStyle(.plain)
-        .padding(.trailing, 4)
-        .accessibilityLabel(
-            activeAccessoryPanel == .emoji
-                ? L10n.string("Show keyboard")
-                : L10n.string("Emoji and stickers")
-        )
+        .contentShape(Circle())
+        .accessibilityLabel("Cancel recording")
     }
 
     private var attachmentButtonSystemImage: String {
         activeAccessoryPanel == .attachments
             ? "keyboard"
-            : "paperclip"
-    }
-
-    private var emojiButtonSystemImage: String {
-        activeAccessoryPanel == .emoji
-            ? "keyboard"
-            : "face.smiling"
+            : "plus"
     }
 
     private var sendButton: some View {
-        Button(action: triggerSend) {
+        let appearance = ComposerSendButtonAppearance.colorScheme(colorScheme)
+
+        return Button(action: triggerSend) {
             Group {
                 if isSending {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(.white)
+                        .tint(appearance.symbol.color)
                 } else {
-                    Image(systemName: "paperplane.fill")
+                    Image(systemName: "arrow.up")
                         .font(.system(size: inlineSendIconSize, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .offset(x: -1, y: 1)
+                        .foregroundStyle(appearance.symbol.color)
                 }
             }
             .frame(width: inlineSendSize, height: inlineSendSize)
-            .background(Circle().fill(Color.accentColor))
+            .background(Circle().fill(appearance.fill.color))
+            .frame(width: controlSize, height: controlSize)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.return, modifiers: .command)
@@ -442,25 +521,38 @@ struct ComposerBar: View {
 
     @ViewBuilder
     private var trailingActionSlot: some View {
-        if showsSend {
+        if ComposerVoiceChromePresentation.showsStop(
+            isActive: voiceRecordingActive,
+            isLocked: voiceRecordingLocked
+        ) {
+            Button(action: onStopVoiceRecording) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: inlineSendIconSize, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: inlineSendSize, height: inlineSendSize)
+                    .background(Color.red, in: Circle())
+                    .frame(width: controlSize, height: controlSize)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Finish recording")
+        } else if showsSend {
             sendButton
-                .frame(width: controlSize, height: controlSize)
                 .transition(.scale(scale: 0.88).combined(with: .opacity))
         } else if showsMic {
-            sideCircleIcon(
-                "mic.fill",
-                weight: .semibold,
-                size: sideControlIconSize,
-                tone: inputEnabled ? .primary : .disabled
-            )
-            .scaleEffect(voiceRecordingActive ? 1.08 : 1)
-            .contentShape(Circle())
-            .gesture(voiceGesture)
-            .accessibilityLabel("Voice message")
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .trailing).combined(with: .opacity)
-            ))
+            Image(systemName: "waveform")
+                .font(.system(size: sideControlIconSize, weight: .semibold))
+                .foregroundStyle(
+                    inputEnabled
+                        ? ComposerSideIconTone.primary.color
+                        : ComposerSideIconTone.disabled.color
+                )
+                .frame(width: controlSize, height: controlSize)
+                .scaleEffect(voiceRecordingActive ? 1.08 : 1)
+                .contentShape(Rectangle())
+                .gesture(voiceGesture)
+                .accessibilityLabel("Voice message")
+                .transition(.identity)
         }
     }
 
@@ -572,24 +664,6 @@ struct ComposerBar: View {
                 onShareLocation: { selectAttachmentAction(.location) },
                 onShareContact: { selectAttachmentAction(.contact) }
             )
-        case .emoji:
-            ComposerEmojiPanel(
-                onPick: { emoji in
-                    draft.append(emoji)
-                },
-                onDeleteBackward: {
-                    guard !draft.isEmpty else { return }
-                    draft.removeLast()
-                }
-            )
-        }
-    }
-
-    private func toggleEmojiPanel() {
-        if activeAccessoryPanel == .emoji {
-            restoreKeyboardFromAccessoryPanel()
-        } else {
-            presentAccessoryPanel(.emoji)
         }
     }
 
@@ -677,7 +751,85 @@ struct ComposerBar: View {
     }
 }
 
+private struct ComposerReplyPreviewView: View {
+    let preview: ComposerReplyPreview
+    let onCancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preview.title)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                if !preview.body.isEmpty {
+                    Text(preview.body)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 32)
+        }
+        .padding(.leading, 20)
+        .padding(.trailing, 4)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemFill), in: .rect(cornerRadius: 12))
+        .overlay(alignment: .leading) {
+            Capsule()
+                .fill(.secondary)
+                .frame(width: 3)
+                .padding(.leading, 10)
+                .padding(.vertical, 8)
+        }
+        .overlay(alignment: .topTrailing) {
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Cancel reply")
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+}
+
+private struct ComposerVoiceRecordingInput: View {
+    let samples: [CGFloat]
+    let durationSeconds: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AudioWaveformView(
+                samples: samples,
+                progress: 0,
+                barColor: Color.red.opacity(0.78),
+                playedColor: .red,
+                mode: .liveRecording
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 30)
+
+            Text(AudioDurationLabel.label(for: durationSeconds))
+                .font(.body.monospacedDigit())
+                .foregroundStyle(.red)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.leading, 14)
+        .frame(maxWidth: .infinity, minHeight: ComposerInputChrome.controlSize)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(verbatim: "Recording, \(AudioDurationLabel.label(for: durationSeconds))"))
+    }
+}
+
 private struct ComposerAudioDraftInput: View {
+    @Environment(\.colorScheme) private var colorScheme
     let attachment: MediaDraftAttachment
     let onRemove: () -> Void
 
@@ -709,7 +861,7 @@ private struct ComposerAudioDraftInput: View {
                     if isLoading {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(.white)
+                            .tint(.primary)
                     } else {
                         Image(systemName: ComposerAudioDraftPreviewPresentation.playIconName(
                             isPlaying: isPlaying,
@@ -718,9 +870,9 @@ private struct ComposerAudioDraftInput: View {
                         .font(.footnote.weight(.bold))
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .frame(width: draftControlSize, height: draftControlSize)
-                .background(Color.accentColor, in: Circle())
+                .background(.quaternary, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isPlaying ? "Pause audio message" : "Play audio message")
@@ -728,16 +880,18 @@ private struct ComposerAudioDraftInput: View {
             AudioWaveformView(
                 samples: attachment.waveformSamples,
                 progress: progress,
-                barColor: Color.accentColor.opacity(0.88),
-                playedColor: Color.accentColor
+                barColor: colorScheme == .dark ? .white : .black,
+                playedColor: colorScheme == .dark ? .white : .black
             )
             .frame(maxWidth: .infinity)
             .frame(height: 30)
 
             Text(ComposerAudioDraftPreviewPresentation.durationLabel(attachment.durationSeconds))
-                .font(.caption.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 42, alignment: .trailing)
+                .font(.body.monospacedDigit())
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
         }
         .padding(.leading, 8)
         .padding(.trailing, 6)

@@ -3,6 +3,12 @@ import Observation
 import OSLog
 import MarmotKit
 
+nonisolated struct ConversationReplyPreview: Equatable {
+    let name: String
+    let text: String
+    let media: MessageMediaAttachment?
+}
+
 /// Owns the conversation's merged timeline: the durable message mirror, the
 /// optimistic overlays (pending sends, session system events, stream/debug
 /// rows), the row-display projection caches (markdown / media / reaction /
@@ -225,7 +231,8 @@ final class TimelineStore {
             kind: UInt64,
             tokenBlockCount: Int,
             tokensTruncated: Bool,
-            mediaCount: Int,
+            mediaJson: String?,
+            media: [MediaAttachmentReferenceFfi],
             deleted: Bool
         )
         case loadedTarget(record: MessageTimelineSignature, deleted: Bool)
@@ -239,7 +246,7 @@ final class TimelineStore {
 
     private struct ReplyPreviewDisplayCacheEntry {
         let key: ReplyPreviewDisplayCacheKey
-        let value: (name: String, text: String)
+        let value: ConversationReplyPreview
     }
 
     private struct GroupSystemDisplayCacheKey: Equatable {
@@ -294,8 +301,9 @@ final class TimelineStore {
         return rowFrameKeys.compactMap { messageByRowFrameKey[$0] }
     }
 
-    /// The quoted preview (sender name + text) for a reply bubble, if resolvable.
-    func replyPreview(for record: AppMessageRecordFfi) -> (name: String, text: String)? {
+    /// The quoted preview for a reply bubble, including MDK's already-resolved
+    /// first media reference so rendering it never needs another metadata read.
+    func replyPreview(for record: AppMessageRecordFfi) -> ConversationReplyPreview? {
         _ = timelineProjectionGeneration
         guard let targetId = replyTargetId(for: record) else {
             return nil
@@ -310,7 +318,8 @@ final class TimelineStore {
                     kind: preview.kind,
                     tokenBlockCount: preview.contentTokens.blocks.count,
                     tokensTruncated: preview.contentTokens.truncated,
-                    mediaCount: preview.media.count,
+                    mediaJson: preview.mediaJson,
+                    media: preview.media,
                     deleted: preview.deleted
                 )
             )
@@ -322,7 +331,13 @@ final class TimelineStore {
                 MessagePreview.body(preview, mentionDisplayName: mentionDisplayNameResolver),
                 maxLength: 120
             ) ?? ""
-            let value = (name: name, text: text)
+            let media = preview.deleted
+                ? nil
+                : MessageMediaAttachment.displayItems(
+                    from: preview.media,
+                    ownerId: "reply:\(record.messageIdHex):\(targetId)"
+                ).first
+            let value = ConversationReplyPreview(name: name, text: text, media: media)
             replyPreviewDisplayCache[record.messageIdHex] = ReplyPreviewDisplayCacheEntry(key: key, value: value)
             return value
         }
@@ -346,7 +361,13 @@ final class TimelineStore {
         let text = targetDeleted
             ? L10n.string("This message was deleted")
             : ContentSanitizer.compactSingleLine(displayBody(of: target), maxLength: 120) ?? ""
-        let value = (name: name, text: text)
+        let media = targetDeleted
+            ? nil
+            : mediaProjections.build(
+                for: target,
+                ownerId: "reply:\(record.messageIdHex):\(targetId)"
+            ).first
+        let value = ConversationReplyPreview(name: name, text: text, media: media)
         replyPreviewDisplayCache[record.messageIdHex] = ReplyPreviewDisplayCacheEntry(key: key, value: value)
         return value
     }

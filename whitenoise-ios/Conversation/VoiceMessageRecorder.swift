@@ -317,84 +317,6 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
     }
 }
 
-struct VoiceRecordingBanner: View {
-    let samples: [CGFloat]
-    let durationSeconds: Double
-    let isLocked: Bool
-    let onCancel: () -> Void
-    let onStop: () -> Void
-
-    @ScaledMetric(relativeTo: .subheadline)
-    private var stopIconSize: CGFloat = 14
-    @ScaledMetric(relativeTo: .subheadline)
-    private var controlSlotSize: CGFloat = 34
-
-    var body: some View {
-        HStack(spacing: 10) {
-            if isLocked {
-                Button(action: onCancel) {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.red)
-                        .frame(width: controlSlotSize, height: controlSlotSize)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Cancel recording")
-            } else {
-                Image(systemName: "lock.open")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: controlSlotSize, height: controlSlotSize)
-            }
-
-            AudioWaveformView(
-                samples: samples,
-                progress: 0,
-                barColor: Color.accentColor.opacity(0.72),
-                playedColor: Color.accentColor,
-                mode: .liveRecording
-            )
-            .frame(height: 34)
-
-            Text(Self.durationLabel(durationSeconds))
-                .font(.caption.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .trailing)
-
-            if isLocked {
-                Button(action: onStop) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: stopIconSize, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: controlSlotSize, height: controlSlotSize)
-                        .background(Color.accentColor, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Finish recording")
-            } else {
-                Image(systemName: "arrow.up")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: controlSlotSize, height: controlSlotSize)
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(.regularMaterial, in: .rect(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 4)
-        .padding(.bottom, 2)
-    }
-
-    private static func durationLabel(_ duration: Double) -> String {
-        AudioDurationLabel.label(for: duration)
-    }
-}
-
 nonisolated enum AudioWaveformMode {
     case playback
     case liveRecording
@@ -480,6 +402,7 @@ struct AudioWaveformView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+        .clipped()
         .accessibilityHidden(true)
     }
 }
