@@ -11,110 +11,83 @@ struct ProfileEditView: View {
     @State private var model = ProfileEditViewModel()
     @State private var showImagePicker = false
     @State private var showMoreFields = false
+    @State private var isEditing = false
+    @State private var editSnapshot: ProfileEditDraftSnapshot?
 
     var body: some View {
         @Bindable var model = model
         return Form {
-            Section {
-                if let active = appState.activeAccount {
-                    Button {
-                        showImagePicker = true
-                    } label: {
-                        VStack(spacing: 7) {
-                            AvatarBubble(
-                                seed: active.accountIdHex,
-                                title: model.displayName.isEmpty
-                                    ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
-                                    : model.displayName,
-                                pictureURL: ContentSanitizer.imageURL(model.picture)
-                            )
-                            .frame(width: 80, height: 80)
-                            .overlay(alignment: .bottomTrailing) {
-                                Image(systemName: "camera.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(7)
-                                    .background(Color.accentColor, in: Circle())
-                                    .overlay {
-                                        Circle().strokeBorder(Color(.systemBackground), lineWidth: 2)
-                                    }
-                            }
+            avatarSection
 
-                            Text("Tap to change profile image")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .disabled(
-                        model.isPublishing
-                            || model.isUploadingPicture
-                            || model.loadedAccountIdHex != active.accountIdHex
-                    )
+            Section("Name") {
+                if isEditing {
+                    TextField("Name", text: $model.displayName)
+                } else {
+                    Text(model.displayName.isEmpty ? L10n.string("Not set") : model.displayName)
+                        .foregroundStyle(model.displayName.isEmpty ? .secondary : .primary)
                 }
             }
 
-            Section("Profile") {
-                TextField("Display name", text: $model.displayName)
-                TextField("About", text: $model.about, axis: .vertical)
-                    .lineLimit(2...5)
-                TextField("NIP-05 (name@domain)", text: $model.nip05)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                if let invalidNip05Message = model.invalidNip05Message {
+            Section {
+                if isEditing {
+                    TextField("Verified Nostr Address", text: $model.nip05)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } else {
+                    Text(model.nip05.isEmpty ? L10n.string("Not set") : model.nip05)
+                        .foregroundStyle(model.nip05.isEmpty ? .secondary : .primary)
+                }
+                if let invalidNip05Message = model.invalidNip05Message, isEditing {
                     Label(invalidNip05Message, systemImage: "exclamationmark.triangle.fill")
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
-
-                DisclosureGroup(isExpanded: $showMoreFields) {
-                    TextField("Profile Image URL", text: $model.picture)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    if let invalidPictureMessage = model.invalidPictureMessage {
-                        Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-
-                    TextField("Banner Image URL", text: $model.banner)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                    if let invalidBannerMessage = model.invalidBannerMessage {
-                        Label(invalidBannerMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                } label: {
-                    Text("More")
-                        .foregroundStyle(Color.accentColor)
+            } header: {
+                Text("Verified Nostr Address")
+            } footer: {
+                if isEditing && model.invalidNip05Message != nil {
+                    Text("Enter an address like name@example.com.")
                 }
             }
 
-            Section {
-                Button {
-                    Task { await model.publish(using: appState) }
-                } label: {
-                    HStack {
-                        if model.isPublishing {
-                            ProgressView().controlSize(.small)
+            Section("About") {
+                if isEditing {
+                    TextField("A little about you", text: $model.about, axis: .vertical)
+                        .lineLimit(3...6)
+                } else {
+                    Text(model.about.isEmpty ? L10n.string("A little about you") : model.about)
+                        .foregroundStyle(model.about.isEmpty ? .secondary : .primary)
+                }
+            }
+
+            if isEditing {
+                Section {
+                    DisclosureGroup(isExpanded: $showMoreFields) {
+                        TextField("Profile Image URL", text: $model.picture)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        if let invalidPictureMessage = model.invalidPictureMessage {
+                            Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
                         }
-                        Text(model.isPublishing ? L10n.string("Publishing…") : L10n.string("Save profile"))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 2)
+
+                        TextField("Banner Image URL", text: $model.banner)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                        if let invalidBannerMessage = model.invalidBannerMessage {
+                            Label(invalidBannerMessage, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    } label: {
+                        Text("More")
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .disabled(saveDisabled)
-                .listRowBackground(Color.clear)
             }
 
             if model.error != nil {
@@ -131,6 +104,34 @@ struct ProfileEditView: View {
         }
         .localizedNavigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(isEditing)
+        .toolbar {
+            if isEditing {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: cancelEditing)
+                        .disabled(model.isPublishing || model.isUploadingPicture)
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                if isEditing {
+                    Button(model.isPublishing ? "Publishing…" : "Done") {
+                        Task {
+                            await model.publish(using: appState)
+                            if model.error == nil {
+                                isEditing = false
+                                editSnapshot = nil
+                            }
+                        }
+                    }
+                    .onboardingPrimaryButtonStyle()
+                    .disabled(saveDisabled)
+                } else {
+                    Button("Edit", action: beginEditing)
+                        .disabled(model.loadedAccountIdHex == nil)
+                }
+            }
+        }
         .task(id: appState.activeAccount?.accountIdHex) { await model.loadExisting(using: appState) }
         .sheet(isPresented: $showImagePicker) {
             if let active = appState.activeAccount {
@@ -149,6 +150,53 @@ struct ProfileEditView: View {
         }
     }
 
+    @ViewBuilder
+    private var avatarSection: some View {
+        if let active = appState.activeAccount {
+            Section {
+                VStack(spacing: 0) {
+                    AvatarBubble(
+                        seed: active.accountIdHex,
+                        title: model.displayName.isEmpty
+                            ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
+                            : model.displayName,
+                        pictureURL: ContentSanitizer.imageURL(model.picture)
+                    )
+                    .frame(width: 112, height: 112)
+
+                    if isEditing {
+                        Button(model.picture.isEmpty ? "Add Photo" : "Change Photo") {
+                            showImagePicker = true
+                        }
+                        .onboardingSecondaryButtonStyle()
+                        .padding(.top)
+                        .disabled(
+                            model.isPublishing
+                                || model.isUploadingPicture
+                                || model.loadedAccountIdHex != active.accountIdHex
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    private func beginEditing() {
+        editSnapshot = ProfileEditDraftSnapshot(model: model)
+        isEditing = true
+    }
+
+    private func cancelEditing() {
+        editSnapshot?.restore(model)
+        model.error = nil
+        editSnapshot = nil
+        showMoreFields = false
+        isEditing = false
+    }
+
     /// Stays in the view because it also reads `appState.activeAccountRef`; the
     /// draft validation it consults lives on the model's `currentDraft`.
     private var saveDisabled: Bool {
@@ -156,7 +204,32 @@ struct ProfileEditView: View {
             || model.isUploadingPicture
             || appState.activeAccountRef == nil
             || model.loadedAccountIdHex != appState.activeAccount?.accountIdHex
+            || ContentSanitizer.displayName(model.displayName) == nil
             || model.currentDraft.validationError != nil
+    }
+}
+
+private struct ProfileEditDraftSnapshot {
+    let displayName: String
+    let about: String
+    let picture: String
+    let banner: String
+    let nip05: String
+
+    init(model: ProfileEditViewModel) {
+        displayName = model.displayName
+        about = model.about
+        picture = model.picture
+        banner = model.banner
+        nip05 = model.nip05
+    }
+
+    func restore(_ model: ProfileEditViewModel) {
+        model.displayName = displayName
+        model.about = about
+        model.picture = picture
+        model.banner = banner
+        model.nip05 = nip05
     }
 }
 
@@ -201,7 +274,6 @@ nonisolated enum ProfileEditFieldSeeding {
 }
 
 nonisolated struct ProfileEditFormFields: Equatable {
-    var name: String?
     var displayName: String
     var about: String
     var picture: String
@@ -210,8 +282,9 @@ nonisolated struct ProfileEditFormFields: Equatable {
     var lud16: String
 
     init(profile: UserProfileMetadataFfi) {
-        name = profile.name
-        displayName = profile.displayName ?? ""
+        displayName = ContentSanitizer.displayName(profile.displayName)
+            ?? ContentSanitizer.displayName(profile.name)
+            ?? ""
         about = profile.about ?? ""
         picture = profile.picture ?? ""
         banner = profile.banner ?? ""
@@ -227,7 +300,6 @@ nonisolated enum ProfileEditMetadataField: Equatable {
 }
 
 nonisolated struct ProfileEditMetadataDraft: Equatable {
-    var name: String?
     var displayName: String
     var about: String
     var picture: String
@@ -238,7 +310,6 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
     var preservedLud16: String?
 
     init(
-        name: String?,
         displayName: String,
         about: String,
         picture: String,
@@ -246,7 +317,6 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
         nip05: String,
         preservedLud16: String?
     ) {
-        self.name = name
         self.displayName = displayName
         self.about = about
         self.picture = picture
@@ -270,11 +340,11 @@ nonisolated struct ProfileEditMetadataDraft: Equatable {
 
     var normalizedMetadata: ProfileEditMetadata? {
         guard validationError == nil else { return nil }
-        let name = ContentSanitizer.displayName(self.name)
-        let displayName = ContentSanitizer.displayName(self.displayName)
+        let normalizedName = ContentSanitizer.displayName(displayName)
         return ProfileEditMetadata(
-            name: name,
-            displayName: displayName,
+            // One visible Name field must not leave a stale alternate name.
+            name: normalizedName,
+            displayName: normalizedName,
             about: ContentSanitizer.multilineText(about),
             picture: normalizedPictureURL,
             banner: normalizedBannerURL,
@@ -418,6 +488,7 @@ struct ProfileImagePickerSheet: View {
             }
         }
         .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isUploading)
         .sheet(isPresented: $showPhotoPicker) {
             PhotoLibraryPickerView(

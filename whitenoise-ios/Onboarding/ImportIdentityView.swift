@@ -1,24 +1,50 @@
+import MarmotKit
 import SwiftUI
 import UIKit
-import MarmotKit
 
 /// Import an existing local-signing Nostr identity. `npub...` is only a public
 /// identity and is intentionally not accepted as a sign-in credential.
 struct ImportIdentityView: View {
+    private enum KeyState {
+        case empty
+        case invalid
+        case valid
+    }
+
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var model = ImportIdentityViewModel()
+    @State private var isKeyFocused = false
+    @State private var pasteRequest = 0
+    @State private var showScanner = false
+
+    let showsCloseButton: Bool
+    let onPreferredSheetExpansionChange: (Bool) -> Void
+
+    init(
+        showsCloseButton: Bool = false,
+        onPreferredSheetExpansionChange: @escaping (Bool) -> Void = { _ in }
+    ) {
+        self.showsCloseButton = showsCloseButton
+        self.onPreferredSheetExpansionChange = onPreferredSheetExpansionChange
+    }
+
+    private var normalizedIdentity: String {
+        model.identity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var keyState: KeyState {
+        guard !normalizedIdentity.isEmpty else { return .empty }
+        return Self.isPlausibleNsec(normalizedIdentity) ? .valid : .invalid
+    }
 
     private var canSubmit: Bool {
-        !model.isImporting && Self.isPlausibleNsec(model.identity)
+        !model.isImporting && keyState == .valid
     }
 
     /// A bech32 `nsec` is a fixed-width encoding of a 32-byte key: the `nsec1`
     /// human-readable prefix plus 58 data/checksum characters, 63 in total.
-    /// Gating on `hasPrefix("nsec")` alone enabled Import for incomplete input
-    /// like `nsec` or `nsecfoo` (issue #40); require the full canonical shape so
-    /// the button only enables once a complete key has been entered.
     static func isPlausibleNsec(_ raw: String) -> Bool {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.hasPrefix("nsec1") && trimmed.count == 63
@@ -30,9 +56,6 @@ struct ImportIdentityView: View {
         return trimmed
     }
 
-    /// Login/parse errors can echo the rejected input in their description;
-    /// redact anything secret-shaped (bech32 nsec runs, long hex runs) before
-    /// the message reaches a persistent label or toast.
     static func redactedImportError(_ message: String) -> String {
         message
             .replacing(/nsec1[a-z0-9]+/.ignoresCase(), with: "nsec1…")
@@ -41,47 +64,107 @@ struct ImportIdentityView: View {
 
     var body: some View {
         @Bindable var model = model
-        return Form {
-            Section {
-                PasteAwareNsecTextArea(
-                    text: $model.identity,
-                    placeholder: "nsec1…",
-                    onPaste: { token, resultingIdentity in
-                        // Capture the clipboard generation at the moment of a
-                        // genuine user paste, then tie it to the post-paste
-                        // field value so later edits cannot clear stale data.
-                        model.recordPastedClipboardToken(token, resultingIdentity: resultingIdentity)
-                    }
-                )
-                .privacySensitive()
-            } header: {
-                Text("Identity")
-            } footer: {
-                Text("Paste your nsec (bech32 secret key). Public npub values are for sharing and cannot sign in.")
-                    .font(.footnote)
-            }
 
-            Section {
-                Button {
-                    Task { await model.runImport(using: appState, dismiss: { dismiss() }) }
-                } label: {
-                    HStack {
-                        if model.isImporting {
-                            ProgressView().controlSize(.small)
+        ScrollView {
+            VStack(alignment: .leading) {
+                Text("Private Key")
+                    .font(.headline)
+                    .padding(.leading)
+
+                HStack {
+                    privateKeyField(identity: $model.identity)
+
+                    if !model.isImporting && (isKeyFocused || normalizedIdentity.isEmpty) {
+                        Button {
+                            if isKeyFocused {
+                                isKeyFocused = false
+                            } else {
+                                showScanner = true
+                            }
+                        } label: {
+                            Image(systemName: isKeyFocused ? "xmark" : "qrcode.viewfinder")
+                                .contentTransition(.symbolEffect(.replace))
                         }
-                        Text(model.isImporting ? L10n.string("Importing…") : L10n.string("Import"))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 2)
+                        .compatibleGlassCircleButtonStyle()
+                        .controlSize(.large)
+                        .transition(.opacity)
+                        .accessibilityLabel(isKeyFocused ? "Dismiss Keyboard" : "Scan QR Code")
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!canSubmit)
-            }
+                .animation(.default, value: isKeyFocused)
+                .animation(.default, value: normalizedIdentity.isEmpty)
 
+                if keyState == .invalid {
+                    Text("That private key isn't valid. Check it and try again.")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.leading)
+                } else {
+                    Text("It starts with nsec.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading)
+                }
+            }
+            .safeAreaPadding(.horizontal)
+            .safeAreaPadding(.top)
         }
-        .navigationTitle("Import Identity")
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Sign In")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsCloseButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                    .disabled(model.isImporting)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                Task {
+                    await model.runImport(using: appState, dismiss: { dismiss() })
+                }
+            } label: {
+                Text("Sign In")
+                    .hidden()
+            }
+            .onboardingPrimaryButtonStyle()
+            .controlSize(.extraLarge)
+            .onboardingFlexibleButtonSizing()
+            .disabled(!canSubmit && !model.isImporting)
+            .overlay {
+                OnboardingPrimaryActionLabel(
+                    title: "Sign In",
+                    isLoading: model.isImporting,
+                    isActionEnabled: keyState == .valid || model.isImporting
+                )
+                .allowsHitTesting(false)
+            }
+            .allowsHitTesting(!model.isImporting)
+            .accessibilityLabel(model.isImporting ? "Signing In" : "Sign In")
+            .accessibilityValue(model.isImporting ? "In progress" : "")
+            .safeAreaPadding(.horizontal)
+            .safeAreaPadding(.bottom)
+        }
+        .navigationDestination(isPresented: $showScanner) {
+            PrivateKeyQRScanner { payload in
+                model.clearPastedClipboardToken()
+                model.identity = payload.trimmingCharacters(in: .whitespacesAndNewlines)
+                showScanner = false
+            }
+        }
+        .onChange(of: showScanner) {
+            onPreferredSheetExpansionChange(showScanner || isKeyFocused)
+        }
+        .onChange(of: isKeyFocused) {
+            onPreferredSheetExpansionChange(showScanner || isKeyFocused)
+        }
         .interactiveDismissDisabled(model.isImporting)
         .alert(
             "Recover incomplete setup?",
@@ -99,127 +182,200 @@ struct ImportIdentityView: View {
         .onDisappear {
             model.scrubDismissedImportState()
         }
+        .background(.background)
+    }
+
+    private func privateKeyField(identity: Binding<String>) -> some View {
+        HStack(spacing: 0) {
+            PasteAwareSecureField(
+                text: identity,
+                isFocused: $isKeyFocused,
+                pasteRequest: pasteRequest,
+                onPaste: { token, resultingIdentity in
+                    model.recordPastedClipboardToken(
+                        token,
+                        resultingIdentity: resultingIdentity
+                    )
+                },
+                onSubmit: {
+                    guard canSubmit else { return }
+                    Task {
+                        await model.runImport(using: appState, dismiss: { dismiss() })
+                    }
+                }
+            )
+            .privacySensitive()
+
+            if !model.isImporting {
+                Button {
+                    if normalizedIdentity.isEmpty {
+                        pasteRequest &+= 1
+                    } else {
+                        model.identity = ""
+                        model.clearPastedClipboardToken()
+                    }
+                } label: {
+                    Image(systemName: normalizedIdentity.isEmpty
+                        ? "doc.on.clipboard"
+                        : "xmark.circle.fill")
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 44, height: 44)
+                .accessibilityLabel(normalizedIdentity.isEmpty ? "Paste" : "Clear")
+            }
+        }
+        .padding(.leading)
+        .frame(height: 50)
+        .background(Color(uiColor: .secondarySystemFill), in: .capsule)
+        .disabled(model.isImporting)
+        .contentShape(.capsule)
+        .onTapGesture {
+            guard !model.isImporting else { return }
+            isKeyFocused = true
+        }
     }
 }
 
-/// Multi-line nsec entry field backed by a `UITextView` so we can intercept
-/// genuine user paste events. SwiftUI's `TextField` gives no paste hook, and we
-/// must capture the pasteboard generation only when the user actually pastes —
-/// not on every keystroke/autofill — so a later clipboard wipe can prove it
-/// still owns the pasted secret without reading `.string` (#409).
-private struct PasteAwareNsecTextArea: UIViewRepresentable {
+private struct PasteAwareSecureField: UIViewRepresentable {
     @Binding var text: String
-    let placeholder: String
+    @Binding var isFocused: Bool
+    let pasteRequest: Int
     let onPaste: (SensitiveClipboard.Token?, String) -> Void
-
-    /// Keep the editor visibly distinct from a single-line field before input.
-    private static let minimumLineCount: CGFloat = 3
+    let onSubmit: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
-    }
-
-    func makeUIView(context: Context) -> PasteInterceptingTextView {
-        let textView = PasteInterceptingTextView()
-        textView.onPaste = onPaste
-        textView.delegate = context.coordinator
-        textView.isScrollEnabled = false
-        textView.backgroundColor = .clear
-        textView.textContainerInset = .zero
-        textView.textContainer.lineFragmentPadding = 0
-        textView.textContainer.lineBreakMode = .byCharWrapping
-        textView.textContainer.widthTracksTextView = true
-        textView.adjustsFontForContentSizeCategory = true
-        textView.font = UIFontMetrics(forTextStyle: .body)
-            .scaledFont(for: .monospacedSystemFont(ofSize: UIFont.preferredFont(forTextStyle: .body).pointSize, weight: .regular))
-        textView.autocapitalizationType = .none
-        textView.autocorrectionType = .no
-        textView.spellCheckingType = .no
-        textView.smartInsertDeleteType = .no
-        textView.textContentType = .none
-        textView.accessibilityLabel = L10n.string("Identity")
-        textView.accessibilityHint = L10n.string("Paste your nsec secret key.")
-        textView.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let placeholderLabel = UILabel()
-        placeholderLabel.text = placeholder
-        placeholderLabel.font = textView.font
-        placeholderLabel.adjustsFontForContentSizeCategory = true
-        placeholderLabel.textColor = .placeholderText
-        placeholderLabel.numberOfLines = 0
-        placeholderLabel.isAccessibilityElement = false
-        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
-        textView.addSubview(placeholderLabel)
-        NSLayoutConstraint.activate([
-            placeholderLabel.topAnchor.constraint(equalTo: textView.topAnchor),
-            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
-            placeholderLabel.trailingAnchor.constraint(lessThanOrEqualTo: textView.trailingAnchor)
-        ])
-        context.coordinator.placeholderLabel = placeholderLabel
-
-        textView.text = text
-        placeholderLabel.isHidden = !text.isEmpty
-        return textView
-    }
-
-    func updateUIView(_ uiView: PasteInterceptingTextView, context: Context) {
-        uiView.onPaste = onPaste
-        if uiView.text != text {
-            uiView.text = text
-        }
-        context.coordinator.placeholderLabel?.isHidden = !uiView.text.isEmpty
-    }
-
-    func sizeThatFits(
-        _ proposal: ProposedViewSize,
-        uiView: PasteInterceptingTextView,
-        context: Context
-    ) -> CGSize? {
-        guard let width = proposal.width else { return nil }
-        let fittingSize = CGSize(width: width, height: .greatestFiniteMagnitude)
-        let contentHeight = uiView.sizeThatFits(fittingSize).height
-        let lineHeight = uiView.font?.lineHeight
-            ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
-        return CGSize(
-            width: width,
-            height: max(contentHeight, lineHeight * Self.minimumLineCount)
+        Coordinator(
+            text: $text,
+            isFocused: $isFocused,
+            initialPasteRequest: pasteRequest,
+            onSubmit: onSubmit
         )
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
-        @Binding private var text: String
-        weak var placeholderLabel: UILabel?
+    func makeUIView(context: Context) -> PasteInterceptingSecureTextField {
+        let field = PasteInterceptingSecureTextField()
+        field.delegate = context.coordinator
+        field.onPaste = onPaste
+        field.isSecureTextEntry = true
+        field.placeholder = L10n.string("Enter private key")
+        field.autocapitalizationType = .none
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.smartInsertDeleteType = .no
+        field.textContentType = nil
+        field.returnKeyType = .go
+        field.adjustsFontForContentSizeCategory = true
+        field.font = UIFont.preferredFont(forTextStyle: .body)
+        field.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textChanged(_:)),
+            for: .editingChanged
+        )
+        field.text = text
+        return field
+    }
 
-        init(text: Binding<String>) {
+    func updateUIView(_ field: PasteInterceptingSecureTextField, context: Context) {
+        field.onPaste = onPaste
+        if field.text != text {
+            field.text = text
+        }
+        if isFocused, !field.isFirstResponder {
+            field.becomeFirstResponder()
+        } else if !isFocused, field.isFirstResponder {
+            field.resignFirstResponder()
+        }
+        if context.coordinator.lastPasteRequest != pasteRequest {
+            context.coordinator.lastPasteRequest = pasteRequest
+            field.paste(nil)
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        @Binding private var text: String
+        @Binding private var isFocused: Bool
+        let onSubmit: () -> Void
+        var lastPasteRequest = 0
+
+        init(
+            text: Binding<String>,
+            isFocused: Binding<Bool>,
+            initialPasteRequest: Int,
+            onSubmit: @escaping () -> Void
+        ) {
             _text = text
+            _isFocused = isFocused
+            lastPasteRequest = initialPasteRequest
+            self.onSubmit = onSubmit
         }
 
-        func textViewDidChange(_ textView: UITextView) {
-            text = textView.text
-            placeholderLabel?.isHidden = !textView.text.isEmpty
+        @objc func textChanged(_ field: UITextField) {
+            text = field.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            isFocused = true
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            isFocused = false
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            onSubmit()
+            return true
         }
     }
 }
 
-/// `UITextView` subclass that snapshots the clipboard generation on a genuine
-/// user paste. `paste(_:)` fires ONLY for user-initiated paste (⌘V,
-/// context-menu Paste, the paste button) — never for typing, autofill,
-/// dictation, or drag-and-drop — so this is the trustworthy signal for the
-/// `SensitiveClipboard` clear gate.
-private final class PasteInterceptingTextView: UITextView {
+private final class PasteInterceptingSecureTextField: UITextField {
     var onPaste: ((SensitiveClipboard.Token?, String) -> Void)?
 
     override func paste(_ sender: Any?) {
         let priorText = text ?? ""
         let priorLength = (priorText as NSString).length
         let fieldWasEmpty = priorText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let replacesWholeField = selectedRange.location == 0 && selectedRange.length == priorLength
-
-        // Snapshot the generation BEFORE the paste mutates anything; capture
-        // reads only changeCount metadata (no `.string`, no banner).
+        let replacesWholeField = selectedTextRange.map {
+            offset(from: beginningOfDocument, to: $0.start) == 0
+                && offset(from: $0.start, to: $0.end) == priorLength
+        } ?? false
         let token = SensitiveClipboard.capture()
         super.paste(sender)
+        sendActions(for: .editingChanged)
         onPaste?(fieldWasEmpty || replacesWholeField ? token : nil, text ?? "")
+    }
+}
+
+private struct PrivateKeyQRScanner: View {
+    @State private var error: String?
+
+    let onScan: (String) -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            QRScannerView(
+                onScan: { payload in
+                    onScan(payload)
+                },
+                onError: { error = $0 }
+            )
+            .ignoresSafeArea()
+
+            if let error {
+                ContentUnavailableView {
+                    Label("QR Scanning Unavailable", systemImage: "camera.fill")
+                } description: {
+                    Text(error)
+                }
+                .foregroundStyle(.white)
+                .padding()
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }

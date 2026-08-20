@@ -5004,7 +5004,6 @@ struct ProfileEditViewTests {
 
     @Test func profileMetadataDraftSanitizesEditableFields() throws {
         let draft = ProfileEditMetadataDraft(
-            name: " alice\u{202E}\n ",
             displayName: " Alice\u{202E}\nEvil ",
             about: String(repeating: "a", count: ContentSanitizer.maxAboutLength + 25),
             picture: "",
@@ -5014,7 +5013,7 @@ struct ProfileEditViewTests {
 
         let metadata = try #require(draft.normalizedMetadata)
 
-        #expect(metadata.name == "alice")
+        #expect(metadata.name == "Alice Evil")
         #expect(metadata.displayName == "Alice Evil")
         #expect(metadata.about?.count == ContentSanitizer.maxAboutLength)
         #expect(metadata.nip05 == "alice@example.com")
@@ -5024,7 +5023,6 @@ struct ProfileEditViewTests {
         // lud16 is not editable here; whatever the profile already had must
         // round-trip unchanged so a kind:0 replacement never wipes it.
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: "",
@@ -5040,7 +5038,7 @@ struct ProfileEditViewTests {
 
     @Test func profileMetadataDraftRejectsInvalidNip05BeforePublish() {
         let invalidNip05 = ProfileEditMetadataDraft(
-            name: nil, displayName: "", about: "", picture: "", nip05: "alice example.com",
+            displayName: "", about: "", picture: "", nip05: "alice example.com",
             preservedLud16: nil
         )
 

@@ -16,7 +16,7 @@ struct IdentityView: View {
             if let active = appState.activeAccount {
                 Section {
                     CopyableValueRow(
-                        label: "Public key",
+                        label: "Hex",
                         display: IdentityFormatter.short(active.accountIdHex),
                         copyValue: active.accountIdHex
                     )
@@ -25,6 +25,13 @@ struct IdentityView: View {
                         display: appState.shortNpub(forAccountIdHex: active.accountIdHex),
                         copyValue: appState.npub(forAccountIdHex: active.accountIdHex)
                     )
+                } header: {
+                    Text("Public Key")
+                } footer: {
+                    Text("Share this key so people can find and connect with you.")
+                }
+
+                Section {
                     LabeledContent("Local signing") {
                         Image(systemName: active.localSigning ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(active.localSigning ? .green : .red)
@@ -33,6 +40,8 @@ struct IdentityView: View {
                         Text(active.running ? L10n.string("Online") : L10n.string("Idle"))
                             .foregroundStyle(active.running ? .green : .secondary)
                     }
+                } header: {
+                    Text("Key Status")
                 } footer: {
                     Text("“Online” means this account's runtime worker is active in the app right now (subscribed to its relays). It doesn't reflect key access.")
                         .font(.footnote)
@@ -44,7 +53,7 @@ struct IdentityView: View {
                             model.exportError = nil
                             model.showRawExportConfirm = true
                         } label: {
-                            Label("Export raw nsec", systemImage: "key.fill")
+                            Label("Export Private Key", systemImage: "arrow.down.document")
                         }
                         .disabled(model.exportInFlight)
 
@@ -52,7 +61,7 @@ struct IdentityView: View {
                             model.exportError = nil
                             model.showEncryptedExportSheet = true
                         } label: {
-                            Label("Export encrypted nsec", systemImage: "lock.fill")
+                            Label("Export Encrypted Private Key", systemImage: "lock.doc")
                         }
                         .disabled(model.exportInFlight)
 
@@ -66,7 +75,7 @@ struct IdentityView: View {
                                 .font(.callout)
                         }
                     } header: {
-                        Text("Backup")
+                        Text("Export")
                     } footer: {
                         Text("Raw export reveals your private key in plaintext and permanently marks it as handled insecurely. Encrypted export creates an ncryptsec1 backup protected by your passphrase without revealing the raw key.")
                             .font(.footnote)
@@ -79,7 +88,7 @@ struct IdentityView: View {
                 }
             }
         }
-        .localizedNavigationTitle("Identity")
+        .localizedNavigationTitle("Profile Keys")
         .navigationBarTitleDisplayMode(.inline)
         .fullScreenCover(isPresented: $model.showRawExportConfirm) {
             FullScreenConfirmationDialog(
@@ -108,6 +117,8 @@ struct IdentityView: View {
                 }
             )
             .appAppearance()
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: Binding(
             get: { model.exportShareText != nil },

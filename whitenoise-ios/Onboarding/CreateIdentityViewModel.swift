@@ -57,9 +57,12 @@ nonisolated struct OnboardingProfileMetadataDraft: Equatable {
 
     func merging(with existing: UserProfileMetadataFfi?) -> UserProfileMetadataFfi? {
         guard hasEdits else { return nil }
+        let editedName = normalizedDisplayName
         return UserProfileMetadataFfi(
-            name: existing?.name,
-            displayName: normalizedDisplayName ?? existing?.displayName,
+            // The single onboarding Name field is authoritative for both
+            // Nostr spellings whenever the user changes it.
+            name: editedName ?? existing?.name,
+            displayName: editedName ?? existing?.displayName,
             about: normalizedAbout ?? existing?.about,
             picture: uploadedPictureURL ?? existing?.picture,
             banner: existing?.banner,

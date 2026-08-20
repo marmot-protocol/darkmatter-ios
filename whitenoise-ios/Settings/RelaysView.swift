@@ -10,6 +10,7 @@ import MarmotKit
 struct RelaysView: View {
     @Environment(AppState.self) private var appState
     @State private var model = RelaysViewModel()
+    @State private var isShowingAddRelay = false
 
     var body: some View {
         Form {
@@ -27,6 +28,14 @@ struct RelaysView: View {
         }
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
+        .sheet(isPresented: $isShowingAddRelay) {
+            AddRelaySettingsSheet(existingRelays: model.currentRelays) { url in
+                model.pendingUrl = url
+                model.addPending(using: appState)
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     // MARK: - Account relays
@@ -58,27 +67,12 @@ struct RelaysView: View {
                 }
                 .onDelete { model.deleteRelays(at: $0, using: appState) }
 
-                HStack {
-                    TextField(
-                        "wss://relay.example.com",
-                        text: Binding(get: { model.pendingUrl }, set: { model.pendingUrl = $0 })
-                    )
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .font(.system(.body, design: .monospaced))
-                        .disabled(model.isSaving || model.lists == nil)
-                    Button {
-                        model.addPending(using: appState)
-                    } label: {
-                        Image(systemName: "plus.circle.fill").foregroundStyle(.tint)
-                    }
-                    .buttonStyle(.borderless)
-                    .frame(width: 44, height: 44)
-                    .contentShape(.rect)
-                    .accessibilityLabel(L10n.string("Add"))
-                    .disabled(!model.canAdd)
+                Button {
+                    isShowingAddRelay = true
+                } label: {
+                    Label("Add Relay", systemImage: "plus.circle")
                 }
+                .disabled(model.isSaving || model.lists == nil)
             }
 
             if model.saveError == L10n.string("Keep at least one relay."),
@@ -148,5 +142,52 @@ struct RelaysView: View {
                     .background(.quaternary, in: Capsule())
             }
         }
+    }
+}
+
+private struct AddRelaySettingsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var url = ""
+    let existingRelays: [String]
+    let onAdd: (String) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("wss://relay.example.com", text: $url)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.body.monospaced())
+                } header: {
+                    Text("Relay URL")
+                } footer: {
+                    Text("Use a secure WebSocket relay URL beginning with wss://.")
+                }
+            }
+            .localizedNavigationTitle("Add Relay")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        onAdd(url)
+                        dismiss()
+                    }
+                    .onboardingPrimaryButtonStyle()
+                    .disabled(!canAdd)
+                }
+            }
+        }
+    }
+
+    private var canAdd: Bool {
+        guard let normalized = RelaySettings.normalizedRelayURL(url) else {
+            return false
+        }
+        return !existingRelays.contains(normalized)
     }
 }

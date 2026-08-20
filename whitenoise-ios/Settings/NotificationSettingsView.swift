@@ -1,54 +1,38 @@
 import SwiftUI
 import UserNotifications
 import MarmotKit
+import UIKit
 
 struct NotificationSettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.openURL) private var openURL
     @State private var model = NotificationSettingsViewModel()
 
     var body: some View {
         Form {
+            permissionSection
+
             Section {
-                Toggle("Local notifications", isOn: Binding(
+                Toggle("Local Notifications", isOn: Binding(
                     get: { model.settings?.localNotificationsEnabled ?? false },
                     set: { enabled in Task { await model.setLocalNotifications(enabled, using: appState) } }
                 ))
                 .disabled(model.isSaving || model.settings == nil)
+            } footer: {
+                Text("Creates message notifications on this iPhone. Without Native Push, delivery may wait until White Noise is active.")
+            }
 
-                Toggle("Native push", isOn: Binding(
+            Section {
+                Toggle("Native Push", isOn: Binding(
                     get: { model.settings?.nativePushEnabled ?? false },
                     set: { enabled in Task { await model.setNativePush(enabled, using: appState) } }
                 ))
                 .disabled(model.nativePushToggleDisabled)
-            } header: {
-                Text("Delivery")
             } footer: {
-                Text(deliveryFooter)
+                Text("Uses a generic wake-up signal to check for new messages in the background. Message details stay on this iPhone.")
             }
 
-            Section("Status") {
-                LabeledContent("Permission") {
-                    Text(model.authorizationStatus.displayName)
-                        .foregroundStyle(.secondary)
-                }
-
-                LabeledContent("Notifications") {
-                    Label(
-                        notificationStatusText,
-                        systemImage: notificationStatusIcon
-                    )
-                    .foregroundStyle(notificationStatusColor)
-                }
-
-                if model.settings != nil && notificationSetupNeedsAttention {
-                    Button {
-                        Task { await checkNotificationSetup() }
-                    } label: {
-                        Label("Try Again", systemImage: "checkmark.shield")
-                    }
-                    .disabled(model.isSaving)
-                }
-            }
+            statusSection
 
             if appState.developerMode {
                 Section("Developer") {
@@ -110,6 +94,78 @@ struct NotificationSettingsView: View {
         }
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
         .refreshable { await model.reload(using: appState) }
+    }
+
+    @ViewBuilder
+    private var statusSection: some View {
+        if model.settings != nil && notificationSetupNeedsAttention {
+            Section("Status") {
+                statusRows
+
+                Button {
+                    Task { await checkNotificationSetup() }
+                } label: {
+                    Label("Try Again", systemImage: "checkmark.shield")
+                }
+                .disabled(model.isSaving)
+            }
+        } else {
+            Section("Status") {
+                statusRows
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusRows: some View {
+        LabeledContent("Permission") {
+            Text(model.authorizationStatus.displayName)
+                .foregroundStyle(.secondary)
+        }
+
+        LabeledContent("Notifications") {
+            Label(
+                notificationStatusText,
+                systemImage: notificationStatusIcon
+            )
+            .foregroundStyle(notificationStatusColor)
+        }
+    }
+
+    @ViewBuilder
+    private var permissionSection: some View {
+        switch model.authorizationStatus {
+        case .notDetermined:
+            Section {
+                Label("Allow notifications to use these options.", systemImage: "bell.badge")
+                Button("Allow Notifications") {
+                    Task { await model.setLocalNotifications(true, using: appState) }
+                }
+                .disabled(model.isSaving)
+            }
+        case .denied:
+            Section {
+                Label {
+                    VStack(alignment: .leading) {
+                        Text("Notifications are off")
+                            .foregroundStyle(.primary)
+                        Text("Turn them on in iOS Settings to use these options.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "bell.slash")
+                        .foregroundStyle(.secondary)
+                }
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                        openURL(url)
+                    }
+                }
+            }
+        default:
+            EmptyView()
+        }
     }
 
     private var notificationSetupNeedsAttention: Bool {
@@ -202,12 +258,6 @@ struct NotificationSettingsView: View {
         return true
     }
 
-    private var deliveryFooter: String {
-        if NativePushServerConfig.current() == nil {
-            return L10n.string("Native push is unavailable in this build until a White Noise push server public key is configured.")
-        }
-        return L10n.string("Native push registers only an encrypted APNS token with White Noise. Apple receives generic notification wakes.")
-    }
 }
 
 private extension UNAuthorizationStatus {

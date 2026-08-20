@@ -6,6 +6,12 @@ import UIKit
 
 @MainActor
 struct CreateIdentityOnboardingTests {
+    @Test func onlySignInPrefersTheCompactSheetHeight() {
+        #expect(!OnboardingSheetContent.welcome.prefersCompactHeight)
+        #expect(OnboardingSheetContent.signIn.prefersCompactHeight)
+        #expect(!OnboardingSheetContent.signUp.prefersCompactHeight)
+    }
+
     @Test func blankDraftDoesNotReplaceEngineProfileDefaults() async {
         let service = CreateIdentityServiceStub()
         let model = CreateIdentityViewModel()
@@ -64,7 +70,7 @@ struct CreateIdentityOnboardingTests {
         #expect(model.phase == .editing)
     }
 
-    @Test func metadataMergePreservesUneditedFieldsAndDefaultName() throws {
+    @Test func metadataMergePreservesUneditedFieldsAndSynchronizesEditedName() throws {
         let existing = UserProfileMetadataFfi(
             name: "engine-name",
             displayName: "Engine Name",
@@ -88,7 +94,7 @@ struct CreateIdentityOnboardingTests {
         )
         let merged = try #require(edited.merging(with: existing))
 
-        #expect(merged.name == "engine-name")
+        #expect(merged.name == "Alice")
         #expect(merged.displayName == "Alice")
         #expect(merged.about == "Hello")
         #expect(merged.picture == "https://example.com/new.jpg")

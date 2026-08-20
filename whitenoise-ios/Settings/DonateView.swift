@@ -3,6 +3,7 @@ import SwiftUI
 /// Support surface reachable from Settings: the project's public donation
 /// addresses, each with a scannable QR and a tap-to-copy monospaced row.
 struct DonateView: View {
+    @State private var selectedMethodID = DonatePresentation.lightning.id
     @State private var qrImages: [String: UIImage] = [:]
     @State private var copiedMethodID: String?
     @State private var copyResetTask: Task<Void, Never>?
@@ -10,27 +11,42 @@ struct DonateView: View {
     var body: some View {
         Form {
             Section {
-                VStack(spacing: 12) {
-                    Image(systemName: "heart.fill")
-                        .font(.title2)
-                        .foregroundStyle(.pink)
-                        .padding(14)
-                        .background(.pink.opacity(0.12), in: .circle)
-                        .accessibilityHidden(true)
-                    Text("White Noise is free and open source. Donations keep it that way.")
-                        .font(.callout)
+                VStack(spacing: 8) {
+                    Image(systemName: "heart")
+                        .font(.largeTitle)
+                        .foregroundStyle(.primary)
+                    Text("Support White Noise")
+                        .font(.headline)
+                    Text("White Noise is free and open source. Donations help us improve it and keep it available to everyone.")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
+                .accessibilityElement(children: .combine)
             }
             .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
 
-            methodSection(DonatePresentation.lightning, header: Text("Lightning address"))
-            methodSection(DonatePresentation.bitcoinSilentPayment, header: Text("Bitcoin silent payment"))
+            if let selectedMethod {
+                methodSection(selectedMethod)
+            }
         }
         .localizedNavigationTitle("Donate")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Donation method", selection: $selectedMethodID) {
+                    Text("Lightning").tag(DonatePresentation.lightning.id)
+                    Text("Bitcoin").tag(DonatePresentation.bitcoinSilentPayment.id)
+                }
+                .labelsHidden()
+                .pickerStyle(.palette)
+                .controlSize(.extraLarge)
+                .frame(width: 180)
+            }
+        }
         .task {
             for method in DonatePresentation.methods where qrImages[method.id] == nil {
                 qrImages[method.id] = QRCode.image(from: method.qrPayload)
@@ -41,17 +57,27 @@ struct DonateView: View {
         }
     }
 
-    private func methodSection(_ method: DonatePresentation.Method, header: Text) -> some View {
+    private var selectedMethod: DonatePresentation.Method? {
+        DonatePresentation.methods.first { $0.id == selectedMethodID }
+    }
+
+    private func methodSection(_ method: DonatePresentation.Method) -> some View {
         Section {
-            VStack(spacing: 14) {
-                qrCard(for: method, label: header)
+            VStack(spacing: 0) {
+                qrCard(for: method, label: Text(method.id == DonatePresentation.lightning.id ? "Lightning Address QR code" : "Bitcoin Silent Payment QR code"))
                 copyRow(for: method)
+                    .padding(.top, 18)
+
+                Text(method.id == DonatePresentation.lightning.id ? "Lightning Address" : "Bitcoin Silent Payment")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 6)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-        } header: {
-            header
         }
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets())
     }
 
     @ViewBuilder
@@ -92,6 +118,7 @@ struct DonateView: View {
                     .font(.caption)
                     .foregroundStyle(copied ? Color.green : Color.accentColor)
             }
+            .frame(maxWidth: .infinity)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

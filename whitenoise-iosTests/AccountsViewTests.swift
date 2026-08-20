@@ -42,4 +42,14 @@ struct AccountsViewTests {
             UnreadCountBadge.label(for: $0, locale: Locale(identifier: "en_US"))
         } == "99+")
     }
+
+    @Test func compactSheetFitsOneOrTwoProfiles() {
+        #expect(!AccountsView.prefersFullHeight(accountCount: 1))
+        #expect(!AccountsView.prefersFullHeight(accountCount: 2))
+    }
+
+    @Test func fullHeightSheetClearsActionsForThreeOrMoreProfiles() {
+        #expect(AccountsView.prefersFullHeight(accountCount: 3))
+        #expect(AccountsView.prefersFullHeight(accountCount: 12))
+    }
 }

@@ -8,37 +8,7 @@ struct DataAndStorageView: View {
     @State private var store = MediaAutoDownloadStore.shared
 
     var body: some View {
-        List {
-            Section {
-                ForEach(MediaQuality.allCases, id: \.self) { level in
-                    Button {
-                        quality = level
-                        MediaQualityStore.setQuality(level)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(qualityTitle(level))
-                                    .foregroundStyle(.primary)
-                                Text(qualitySubtitle(level))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if quality == level {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                        }
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } header: {
-                Text("Media send quality")
-            } footer: {
-                Text("Quality is a ceiling — smaller media is never upscaled. Identifying photo metadata, like location, is always removed before sending at every quality level.")
-            }
-
+        Form {
             Section {
                 ForEach(MediaAutoDownloadType.allCases, id: \.self) { type in
                     NavigationLink {
@@ -52,18 +22,31 @@ struct DataAndStorageView: View {
                         }
                     }
                 }
-                Button(role: .destructive) {
+                Button {
                     store.resetToDefaults()
                 } label: {
-                    Text("Reset auto-download settings")
+                    Text("Reset Auto-Download Settings")
+                }
+                .disabled(store.matrix == .defaultMatrix)
+            } header: {
+                Text("Auto-Download")
+            } footer: {
+                Text("Media that isn't downloaded automatically shows a download button.")
+            }
+
+            Section {
+                NavigationLink {
+                    SentMediaQualityView(quality: $quality)
+                } label: {
+                    LabeledContent("Sent Media Quality", value: qualityTitle(quality))
                 }
             } header: {
-                Text("Media auto-download")
+                Text("Sent Media")
             } footer: {
-                Text("Media that isn't downloaded automatically shows a download button instead.")
+                Text("Choose the quality for photos and videos you send.")
             }
         }
-        .localizedNavigationTitle("Data and storage")
+        .localizedNavigationTitle("Data Usage")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -99,6 +82,65 @@ struct DataAndStorageView: View {
         case .audio: return L10n.string("Audio")
         case .video: return L10n.string("Videos")
         case .document: return L10n.string("Files")
+        }
+    }
+}
+
+private struct SentMediaQualityView: View {
+    @Binding var quality: MediaQuality
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(MediaQuality.allCases, id: \.self) { level in
+                    Button {
+                        quality = level
+                        MediaQualityStore.setQuality(level)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(title(level))
+                                    .foregroundStyle(.primary)
+                                Text(subtitle(level))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if quality == level {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(quality == level ? .isSelected : [])
+                }
+            } header: {
+                Text("Photos and Videos")
+            } footer: {
+                Text("Higher quality uses more data. Identifying photo metadata, like location, is always removed before sending.")
+            }
+        }
+        .localizedNavigationTitle("Sent Media Quality")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func title(_ level: MediaQuality) -> String {
+        switch level {
+        case .low: L10n.string("Low")
+        case .standard: L10n.string("Standard")
+        case .high: L10n.string("High")
+        case .original: L10n.string("Original")
+        }
+    }
+
+    private func subtitle(_ level: MediaQuality) -> String {
+        switch level {
+        case .low: L10n.string("Smallest data use")
+        case .standard: L10n.string("Balanced quality and data use")
+        case .high: L10n.string("Sharper photos, more data")
+        case .original: L10n.string("Full resolution, metadata still removed")
         }
     }
 }

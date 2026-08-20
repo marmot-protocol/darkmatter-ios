@@ -11,7 +11,6 @@ import MarmotKit
 @MainActor
 @Observable
 final class ProfileEditViewModel {
-    var existingName: String?
     var displayName = ""
     var about = ""
     var picture = ""
@@ -38,7 +37,6 @@ final class ProfileEditViewModel {
 
     var currentDraft: ProfileEditMetadataDraft {
         ProfileEditMetadataDraft(
-            name: existingName,
             displayName: displayName,
             about: about,
             picture: picture,
@@ -113,7 +111,6 @@ final class ProfileEditViewModel {
         )
         lastAttemptedAccountIdHex = id
         if isDifferentAccount {
-            existingName = nil
             existingLud16 = nil
             displayName = ""
             about = ""
@@ -140,7 +137,6 @@ final class ProfileEditViewModel {
             loadedAccountIdHex = nil
             error = L10n.string("Couldn't load your profile. Close and reopen this screen to retry.")
         case .enableFirstPublish:
-            existingName = nil
             existingLud16 = nil
             // A same-account retry after a failed read keeps the form (no
             // account change), so the stale failure message must clear here —
@@ -151,7 +147,6 @@ final class ProfileEditViewModel {
             guard let profile else { return }
             error = nil
             let formFields = ProfileEditFormFields(profile: profile)
-            existingName = formFields.name
             existingLud16 = formFields.lud16.isEmpty ? nil : formFields.lud16
             // Cross-account resets already happened when the window opened,
             // so seeding only has the same-account case left: typed input

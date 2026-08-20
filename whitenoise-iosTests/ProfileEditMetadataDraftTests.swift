@@ -93,7 +93,7 @@ struct ProfileEditMetadataDraftTests {
         #expect(model.loadedAccountIdHex == nil)
     }
 
-    @Test func formFieldsPreserveNameWithoutSeedingDisplayNameFromIt() {
+    @Test func formFieldsFallBackToNameWhenDisplayNameIsMissing() {
         let profile = UserProfileMetadataFfi(
             name: "alice",
             displayName: nil,
@@ -105,14 +105,26 @@ struct ProfileEditMetadataDraftTests {
         )
 
         let formFields = ProfileEditFormFields(profile: profile)
-        #expect(formFields.name == "alice")
-        #expect(formFields.displayName == "")
+        #expect(formFields.displayName == "alice")
         #expect(formFields.banner == "https://example.com/banner.png")
     }
 
-    @Test func preservesExistingNameWhenDisplayNameChanges() throws {
+    @Test func formFieldsPreferDisplayNameWhenBothNamesDiffer() {
+        let profile = UserProfileMetadataFfi(
+            name: "old-generated-name",
+            displayName: "Current Name",
+            about: nil,
+            picture: nil,
+            banner: nil,
+            nip05: nil,
+            lud16: nil
+        )
+
+        #expect(ProfileEditFormFields(profile: profile).displayName == "Current Name")
+    }
+
+    @Test func publishesEditedNameToBothNostrNameFields() throws {
         let draft = ProfileEditMetadataDraft(
-            name: "alice",
             displayName: "Alice 🎉",
             about: "",
             picture: "",
@@ -121,15 +133,14 @@ struct ProfileEditMetadataDraftTests {
         )
 
         let metadata = try #require(draft.normalizedMetadata)
-        #expect(metadata.name == "alice")
+        #expect(metadata.name == "Alice 🎉")
         #expect(metadata.displayName == "Alice 🎉")
         #expect(metadata.nip05 == "alice@example.com")
     }
 
-    @Test func doesNotInventNameFromDisplayName() throws {
+    @Test func blankVisibleNameClearsBothNostrNameFields() throws {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
-            displayName: "Alice 🎉",
+            displayName: "   ",
             about: "",
             picture: "",
             nip05: "",
@@ -138,12 +149,11 @@ struct ProfileEditMetadataDraftTests {
 
         let metadata = try #require(draft.normalizedMetadata)
         #expect(metadata.name == nil)
-        #expect(metadata.displayName == "Alice 🎉")
+        #expect(metadata.displayName == nil)
     }
 
     @Test func normalizesValidHttpsPictureURL() throws {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: " https://cdn.example.com/avatar.png ",
@@ -157,7 +167,6 @@ struct ProfileEditMetadataDraftTests {
 
     @Test func normalizesValidHttpsBannerURL() throws {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: "",
@@ -173,7 +182,6 @@ struct ProfileEditMetadataDraftTests {
 
     @Test func rejectsInvalidPictureURLBeforePublish() {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: "http://legacy.example/a.png",
@@ -187,7 +195,6 @@ struct ProfileEditMetadataDraftTests {
 
     @Test func blankPictureClearsPublishedMetadata() throws {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: "   ",
@@ -201,7 +208,6 @@ struct ProfileEditMetadataDraftTests {
 
     @Test func rejectsInvalidBannerURLBeforePublish() {
         let draft = ProfileEditMetadataDraft(
-            name: nil,
             displayName: "Alice",
             about: "",
             picture: "",

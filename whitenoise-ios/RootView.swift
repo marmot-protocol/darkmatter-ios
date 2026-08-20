@@ -37,7 +37,9 @@ struct RootView: View {
             case .bootstrap:
                 BootstrapSplash()
             case .onboarding:
-                WelcomeView()
+                NavigationStack {
+                    WelcomeView()
+                }
             case .profileSelection:
                 SignedOutProfilesView()
             case .main:

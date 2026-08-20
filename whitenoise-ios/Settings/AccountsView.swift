@@ -3,37 +3,65 @@ import MarmotKit
 
 struct AccountsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var showAdd = false
+    let showsCloseButton: Bool
+
+    init(showsCloseButton: Bool = false) {
+        self.showsCloseButton = showsCloseButton
+    }
 
     var body: some View {
-        Form {
+        List {
             Section {
-                Button {
-                    showAdd = true
-                } label: {
-                    Label("Add Profile", systemImage: "plus.circle.fill")
-                }
-            }
-
-            Section {
-                ForEach(appState.accounts, id: \.label) { account in
+                ForEach(orderedAccounts, id: \.label) { account in
                     Button {
-                        Task { await appState.activateAccount(account.label) }
+                        Task {
+                            await appState.activateAccount(account.label)
+                            if appState.activeAccountRef == account.label, showsCloseButton {
+                                dismiss()
+                            }
+                        }
                     } label: {
                         AccountSummaryRow(account: account)
                     }
                     .buttonStyle(.plain)
+                    .disabled(appState.isAccountExitInProgress)
                 }
             }
         }
-        .localizedNavigationTitle("Profiles")
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemGroupedBackground))
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button {
+                showAdd = true
+            } label: {
+                Label("Add Profile", systemImage: "person.crop.circle.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .onboardingPrimaryButtonStyle()
+            .controlSize(.extraLarge)
+            .padding()
+            .background(.bar)
+        }
+        .localizedNavigationTitle("Switch Profile")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsCloseButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                }
+            }
+        }
         .task { await appState.refreshAccountUnreadSummaries() }
         .sheet(isPresented: $showAdd) {
-            NavigationStack {
-                WelcomeView()
-            }
-            .appAppearance()
+            AddProfileSheet()
         }
         // Close the add-account sheet as soon as a new identity lands, so the
         // user returns straight to the (updated) accounts list rather than
@@ -41,6 +69,24 @@ struct AccountsView: View {
         .onChange(of: appState.accounts.count) { _, _ in
             if showAdd { showAdd = false }
         }
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
+        .presentationDetents(accountSheetDetents)
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.resizes)
+    }
+
+    private var accountSheetDetents: Set<PresentationDetent> {
+        Self.prefersFullHeight(accountCount: appState.accounts.count)
+            ? [.large]
+            : [.medium, .large]
+    }
+
+    private var orderedAccounts: [AccountSummaryFfi] {
+        guard let activeAccountRef = appState.activeAccountRef else {
+            return appState.accounts
+        }
+        return appState.accounts.filter { $0.label == activeAccountRef }
+            + appState.accounts.filter { $0.label != activeAccountRef }
     }
 
     /// The unread count a Profiles row shows for an account, or `nil` when the
@@ -48,6 +94,10 @@ struct AccountsView: View {
     static func unreadBadgeCount(for summary: AccountUnreadFfi?) -> UInt64? {
         guard let summary, summary.hasUnread else { return nil }
         return max(summary.unreadCount, 1)
+    }
+
+    static func prefersFullHeight(accountCount: Int) -> Bool {
+        accountCount >= 3
     }
 }
 
@@ -57,20 +107,7 @@ struct AccountSummaryRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AvatarBubble(
-                seed: account.accountIdHex,
-                title: appState.displayName(forAccountIdHex: account.accountIdHex),
-                pictureURL: appState.avatarURL(forAccountIdHex: account.accountIdHex)
-            )
-            .frame(width: 40, height: 40)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(appState.displayName(forAccountIdHex: account.accountIdHex))
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(appState.shortNpub(forAccountIdHex: account.accountIdHex))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
+            AccountIdentitySummary(account: account, avatarSize: 48)
             Spacer()
             HStack(spacing: 8) {
                 if let unreadCount = appState.accountUnreadBadgeCount(
@@ -161,13 +198,41 @@ struct SignedOutProfilesView: View {
         }
         .task { await appState.refreshAccountUnreadSummaries() }
         .sheet(isPresented: $showAdd) {
-            NavigationStack {
-                WelcomeView()
-            }
-            .appAppearance()
+            AddProfileSheet()
         }
         .onChange(of: appState.accounts.count) { _, _ in
             if showAdd { showAdd = false }
         }
+    }
+}
+
+struct AddProfileSheet: View {
+    @State private var content = OnboardingSheetContent.welcome
+    @State private var selectedDetent = PresentationDetent.large
+
+    var body: some View {
+        NavigationStack {
+            WelcomeView(
+                onSheetContentChange: { content in
+                    self.content = content
+                    selectedDetent = content.prefersCompactHeight ? .medium : .large
+                },
+                onSignInExpansionChange: { isExpanded in
+                    selectedDetent = isExpanded ? .large : .medium
+                }
+            )
+        }
+        .appAppearance()
+        .presentationDetents(supportedDetents, selection: $selectedDetent)
+        .presentationDragIndicator(.visible)
+        .presentationContentInteraction(.resizes)
+        .onDisappear {
+            content = .welcome
+            selectedDetent = .large
+        }
+    }
+
+    private var supportedDetents: Set<PresentationDetent> {
+        content.prefersCompactHeight ? [.medium, .large] : [.large]
     }
 }

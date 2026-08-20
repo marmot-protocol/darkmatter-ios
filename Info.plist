@@ -1,8 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-	<dict>
-		<key>UILaunchScreen</key>
+<dict>
+	<key>AppGroupIdentifier</key>
+	<string>$(APP_GROUP_IDENTIFIER)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(WN_URL_SCHEME)</string>
+				<string>$(WN_LEGACY_URL_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
+	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
@@ -11,45 +31,23 @@
 		<key>UIImageRespectsSafeAreaInsets</key>
 		<true/>
 	</dict>
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>INSendMessageIntent</string>
-	</array>
+	<key>WNFlavor</key>
+	<string>$(WN_FLAVOR)</string>
+	<key>WNLegacyURLScheme</key>
+	<string>$(WN_LEGACY_URL_SCHEME)</string>
+	<key>WNURLScheme</key>
+	<string>$(WN_URL_SCHEME)</string>
+	<key>WhiteNoiseAuditLogBearerToken</key>
+	<string>$(WHITENOISE_AUDIT_LOG_BEARER_TOKEN)</string>
 	<key>WhiteNoisePushRelayHint</key>
 	<string>$(WHITENOISE_PUSH_RELAY_HINT)</string>
 	<key>WhiteNoisePushServerPubkeyHex</key>
 	<string>$(WHITENOISE_PUSH_SERVER_PUBKEY_HEX)</string>
-	<key>WhiteNoiseTelemetryOTLPEndpoint</key>
-	<string>$(WHITENOISE_OTLP_ENDPOINT)</string>
 	<key>WhiteNoiseTelemetryBearerToken</key>
 	<string>$(WHITENOISE_OTLP_BEARER_TOKEN)</string>
-	<key>WhiteNoiseAuditLogBearerToken</key>
-	<string>$(WHITENOISE_AUDIT_LOG_BEARER_TOKEN)</string>
 	<key>WhiteNoiseTelemetryEnvironment</key>
 	<string>$(WHITENOISE_TELEMETRY_ENVIRONMENT)</string>
-	<key>CFBundleDisplayName</key>
-	<string>$(WN_DISPLAY_NAME)</string>
-	<key>AppGroupIdentifier</key>
-	<string>$(APP_GROUP_IDENTIFIER)</string>
-	<key>WNURLScheme</key>
-	<string>$(WN_URL_SCHEME)</string>
-	<key>WNLegacyURLScheme</key>
-	<string>$(WN_LEGACY_URL_SCHEME)</string>
-	<key>WNFlavor</key>
-	<string>$(WN_FLAVOR)</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>$(WN_URL_SCHEME)</string>
-				<string>$(WN_LEGACY_URL_SCHEME)</string>
-			</array>
-		</dict>
-	</array>
+	<key>WhiteNoiseTelemetryOTLPEndpoint</key>
+	<string>$(WHITENOISE_OTLP_ENDPOINT)</string>
 </dict>
 </plist>

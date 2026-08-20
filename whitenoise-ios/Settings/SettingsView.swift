@@ -1,220 +1,106 @@
 import SwiftUI
 import MarmotKit
 
+private enum SettingsDestination: String, CaseIterable, Hashable {
+    case profile
+    case profileKeys
+    case notifications
+    case appearance
+    case privacyAndSecurity
+    case dataUsage
+    case relays
+    case support
+    case donate
+    case developerTools
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .profile: "Profile"
+        case .profileKeys: "Profile Keys"
+        case .notifications: "Notifications"
+        case .appearance: "Appearance"
+        case .privacyAndSecurity: "Privacy & Security"
+        case .dataUsage: "Data Usage"
+        case .relays: "Relays"
+        case .support: "Chat with support"
+        case .donate: "Donate"
+        case .developerTools: "Developer Tools"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .profile: "person.crop.circle"
+        case .profileKeys: "key"
+        case .notifications: "bell"
+        case .appearance: "circle.lefthalf.filled"
+        case .privacyAndSecurity: "hand.raised"
+        case .dataUsage: "externaldrive"
+        case .relays: "antenna.radiowaves.left.and.right"
+        case .support: "message"
+        case .donate: "heart"
+        case .developerTools: "wrench.and.screwdriver"
+        }
+    }
+}
+
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    @State private var showQR = false
-    @State private var showProfileEdit = false
     @State private var showAccounts = false
+    @State private var showAddProfile = false
     @State private var showAccountActions = false
     @State private var presentWipeAfterActionsDismiss = false
     @State private var wipeModel = SignOutAndWipeModel()
-    @State private var supportChatModel = SupportChatViewModel()
-    @State private var supportChatRequestID: UUID?
 
     var body: some View {
         Form {
             Section {
-                if let active = appState.activeAccount {
-                    VStack(spacing: 12) {
-                        HStack(spacing: 12) {
-                            Button {
-                                showProfileEdit = true
-                            } label: {
-                                HStack(spacing: 12) {
-                                    AvatarBubble(
-                                        seed: active.accountIdHex,
-                                        title: appState.displayName(forAccountIdHex: active.accountIdHex),
-                                        pictureURL: appState.avatarURL(forAccountIdHex: active.accountIdHex)
-                                    )
-                                    .frame(width: 44, height: 44)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(appState.displayName(forAccountIdHex: active.accountIdHex))
-                                            .font(.headline)
-                                        Text(appState.shortNpub(forAccountIdHex: active.accountIdHex))
-                                            .font(.caption.monospaced())
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 8)
-                                    Image(systemName: "chevron.right")
-                                        .font(.footnote.weight(.semibold))
-                                        .foregroundStyle(.tertiary)
-                                }
-                                .contentShape(.rect)
-                            }
-                            .buttonStyle(.plain)
+                activeProfileRow
+                profileManagementRow
+            }
 
-                            Button {
-                                showQR = true
-                            } label: {
-                                Image(systemName: "qrcode")
-                                    .font(.title3)
-                                    .foregroundStyle(.tint)
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("My QR code")
-                        }
+            destinationSection([
+                .profile,
+                .profileKeys,
+                .notifications,
+                .appearance,
+                .privacyAndSecurity,
+                .dataUsage,
+                .relays,
+            ])
 
-                        Button {
-                            showAccounts = true
-                        } label: {
-                            HStack(spacing: 6) {
-                                Text("Switch Profile")
-                                Image(systemName: "arrow.up.arrow.down")
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                    }
-                    .padding(.vertical, 2)
-                }
+            destinationSection([.support, .donate, .developerTools])
 
-                NavigationLink {
-                    IdentityView()
-                } label: {
-                    Label("Profile keys", systemImage: "key.fill")
-                }
-
-                NavigationLink {
-                    RelaysView()
-                } label: {
-                    Label("Relays", systemImage: "antenna.radiowaves.left.and.right")
-                }
-
-                NavigationLink {
-                    KeyPackagesView()
-                } label: {
-                    Label("Key Packages", systemImage: "key.icloud.fill")
-                }
-
+            Section {
                 Button {
                     showAccountActions = true
                 } label: {
-                    HStack {
-                        Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                            .foregroundStyle(.red)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                    }
+                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
                 }
                 .disabled(appState.activeAccount == nil)
-            } header: {
-                Text("Profile")
             } footer: {
-                Text("Sign out while keeping this profile on the device, or permanently remove its local data.")
-                    .font(.footnote)
+                Text("White Noise · \(appVersion)")
+                    .frame(maxWidth: .infinity)
             }
-
-            Section("App") {
-                NavigationLink {
-                    AppearanceSettingsView()
-                } label: {
-                    Label("Appearance", systemImage: "paintbrush.fill")
-                }
-
-                NavigationLink {
-                    DataAndStorageView()
-                } label: {
-                    Label("Data and storage", systemImage: "arrow.up.arrow.down.circle.fill")
-                }
-
-                NavigationLink {
-                    NotificationSettingsView()
-                } label: {
-                    Label("Notifications", systemImage: "bell.badge.fill")
-                }
-
-                NavigationLink {
-                    PrivacySecuritySettingsView()
-                } label: {
-                    Label("Privacy & Security", systemImage: "hand.raised.fill")
-                }
-            }
-
-            Section("Support") {
-                Button {
-                    supportChatRequestID = UUID()
-                } label: {
-                    HStack {
-                        Label("Chat with support", systemImage: "message.fill")
-                        Spacer()
-                        if supportChatModel.phase == .loading
-                            || supportChatModel.phase == .routing {
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(
-                    supportChatModel.phase == .loading
-                        || supportChatModel.phase == .routing
-                )
-                .buttonStyle(.plain)
-
-                NavigationLink {
-                    DonateView()
-                } label: {
-                    Label("Donate", systemImage: "heart.fill")
-                }
-            }
-
-            Section("About") {
-                LabeledContent("Version") {
-                    Text(appVersion)
-                        .foregroundStyle(.secondary)
-                }
-                HStack(spacing: 8) {
-                    Text("Built on")
-                    Spacer(minLength: 8)
-                    Text(marmotBuildLabel)
-                        .font(.callout.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .allowsTightening(true)
-                }
-            }
-
         }
         .localizedNavigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .task(id: appState.activeAccount?.accountIdHex) {
             guard let id = appState.activeAccount?.accountIdHex else { return }
             await appState.reloadProfileProjection(forAccountIdHex: id)
         }
-        .task(id: supportChatRequestID) {
-            guard supportChatRequestID != nil else { return }
-            await supportChatModel.start(using: appState) {
-                appState.presentChat(groupIdHex: $0)
+        .sheet(isPresented: $showAccounts) {
+            NavigationStack {
+                AccountsView(showsCloseButton: true)
             }
+            .appAppearance()
         }
-        .alert(
-            SupportChatPresentation.failureTitle,
-            isPresented: supportFailureBinding
-        ) {
-            Button("Try Again") {
-                supportChatRequestID = UUID()
-            }
-            Button("Cancel", role: .cancel) {
-                supportChatModel.dismissFailure()
-            }
-        } message: {
-            Text(SupportChatPresentation.failureMessage)
-        }
-        .interactiveDismissDisabled(supportChatModel.isCreatingChat)
-        .navigationDestination(isPresented: $showProfileEdit) {
-            ProfileEditView()
-        }
-        .navigationDestination(isPresented: $showAccounts) {
-            AccountsView()
-        }
-        .sheet(isPresented: $showQR) {
-            if let hex = appState.activeAccount?.accountIdHex {
-                ProfileQRView(accountIdHex: hex)
-            }
+        .sheet(isPresented: $showAddProfile) {
+            AddProfileSheet()
         }
         .sheet(isPresented: $showAccountActions, onDismiss: {
             guard presentWipeAfterActionsDismiss else { return }
@@ -253,6 +139,112 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var activeProfileRow: some View {
+        if let active = appState.activeAccount {
+            NavigationLink {
+                ShareAndConnectView(accountIdHex: active.accountIdHex)
+            } label: {
+                HStack(spacing: 12) {
+                    AccountIdentitySummary(account: active, avatarSize: 56)
+                    Spacer()
+                    Image(systemName: "qrcode")
+                        .foregroundStyle(.primary)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityLabel(
+                L10n.formatted(
+                    "Open Share and Connect for %@",
+                    appState.displayName(forAccountIdHex: active.accountIdHex)
+                )
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var profileManagementRow: some View {
+        if inactiveAccounts.isEmpty {
+            Button {
+                showAddProfile = true
+            } label: {
+                Label("Add Profile", systemImage: "person.crop.circle.badge.plus")
+                    .foregroundStyle(.primary)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        } else if inactiveAccounts.count == 1, let alternate = inactiveAccounts.first {
+            Button {
+                showAccounts = true
+            } label: {
+                HStack(spacing: 12) {
+                    AccountIdentitySummary(account: alternate, avatarSize: 56)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(.primary)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button {
+                showAccounts = true
+            } label: {
+                HStack {
+                    AccountAvatarStack(accounts: inactiveAccounts)
+                    Text("Switch Profile")
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .foregroundStyle(.primary)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func destinationSection(_ destinations: [SettingsDestination]) -> some View {
+        Section {
+            ForEach(destinations, id: \.self) { destination in
+                NavigationLink {
+                    destinationView(destination)
+                } label: {
+                    Label(destination.title, systemImage: destination.symbol)
+                        .foregroundStyle(.primary)
+                }
+                .accessibilityIdentifier("settings.\(destination.rawValue)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func destinationView(_ destination: SettingsDestination) -> some View {
+        switch destination {
+        case .profile: ProfileEditView()
+        case .profileKeys: IdentityView()
+        case .notifications: NotificationSettingsView()
+        case .appearance: AppearanceSettingsView()
+        case .privacyAndSecurity: PrivacySecuritySettingsView()
+        case .dataUsage: DataAndStorageView()
+        case .relays: RelaysView()
+        case .support: SupportChatView()
+        case .donate: DonateView()
+        case .developerTools: DeveloperToolsSettingsView()
+        }
+    }
+
+    private var inactiveAccounts: [AccountSummaryFfi] {
+        appState.accounts.filter { $0.label != appState.activeAccountRef }
+    }
+
     private var appVersion: String {
         let dict = Bundle.main.infoDictionary
         let version = dict?["CFBundleShortVersionString"] as? String ?? "—"
@@ -260,24 +252,66 @@ struct SettingsView: View {
         return "\(version) (\(build))"
     }
 
-    private var supportFailureBinding: Binding<Bool> {
-        Binding(
-            get: { supportChatModel.phase == .failed },
-            set: { isPresented in
-                if !isPresented {
-                    supportChatModel.dismissFailure()
+}
+
+struct AccountIdentitySummary: View {
+    @Environment(AppState.self) private var appState
+    let account: AccountSummaryFfi
+    let avatarSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 12) {
+            AvatarBubble(
+                seed: account.accountIdHex,
+                title: appState.displayName(forAccountIdHex: account.accountIdHex),
+                pictureURL: appState.avatarURL(forAccountIdHex: account.accountIdHex)
+            )
+            .frame(width: avatarSize, height: avatarSize)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appState.displayName(forAccountIdHex: account.accountIdHex))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(appState.shortNpub(forAccountIdHex: account.accountIdHex))
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct AccountAvatarStack: View {
+    @Environment(AppState.self) private var appState
+    let accounts: [AccountSummaryFfi]
+
+    var body: some View {
+        HStack(spacing: -10) {
+            ForEach(accounts.prefix(3), id: \.label) { account in
+                AvatarBubble(
+                    seed: account.accountIdHex,
+                    title: appState.displayName(forAccountIdHex: account.accountIdHex),
+                    pictureURL: appState.avatarURL(forAccountIdHex: account.accountIdHex)
+                )
+                .frame(width: 32, height: 32)
+                .background(Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
+                .overlay {
+                    Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2)
                 }
             }
-        )
-    }
 
-    private var marmotBuildLabel: String {
-        // Compile-time constant regenerated by sync-bindings.sh; always
-        // present (the MARMOT_VERSION text file isn't bundled into the app).
-        MarmotKitBuildLabel.text(
-            tag: MarmotKitVersion.mdkTag,
-            sha: MarmotKitVersion.mdkSHA
-        )
+            if accounts.count > 3 {
+                Text("+\(accounts.count - 3)")
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                    .frame(width: 32, height: 32)
+                    .background(Color(uiColor: .systemGray5), in: Circle())
+                    .overlay {
+                        Circle().stroke(Color(uiColor: .secondarySystemGroupedBackground), lineWidth: 2)
+                    }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -307,31 +341,40 @@ private struct AccountActionsSheet: View {
     let onSignOut: () -> Void
     let onWipe: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var showSignOutConfirmation = false
+    @State private var shouldWipeData = true
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 28) {
-                    actionBlock(
-                        title: "Sign Out",
-                        description: "Keep this profile's keys, messages, media, and settings on this device.",
-                        systemImage: "rectangle.portrait.and.arrow.right",
-                        tint: .accentColor
-                    ) {
-                        showSignOutConfirmation = true
-                    }
-
-                    actionBlock(
-                        title: "Sign Out & Wipe",
-                        description: "Permanently remove this profile and its local data from this device.",
-                        systemImage: "trash.fill",
-                        tint: .red,
-                        action: onWipe
+            Form {
+                Section {
+                    Toggle("Wipe Data From This Device", isOn: $shouldWipeData)
+                } footer: {
+                    Text(
+                        shouldWipeData
+                            ? "This profile and all local data will be permanently removed. Previous chats won’t return."
+                            : "This profile and its local data will stay on this device."
                     )
                 }
-                .padding(.horizontal, 24)
-                .padding(.vertical, 28)
+
+                Section {
+                    Button(role: .destructive) {
+                        shouldWipeData ? onWipe() : onSignOut()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isBusy {
+                                ProgressView().tint(.white)
+                            }
+                            Text("Sign Out")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .tint(.red)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                    .disabled(isBusy)
+                }
             }
             .localizedNavigationTitle("Sign Out")
             .navigationBarTitleDisplayMode(.inline)
@@ -341,54 +384,9 @@ private struct AccountActionsSheet: View {
                         .disabled(isBusy)
                 }
             }
-            .confirmationDialog(
-                "Sign out of this profile?",
-                isPresented: $showSignOutConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Sign Out", action: onSignOut)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("You can sign back in without importing your keys again.")
-            }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isBusy)
-    }
-
-    private func actionBlock(
-        title: LocalizedStringKey,
-        description: LocalizedStringKey,
-        systemImage: String,
-        tint: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button(action: action) {
-                HStack(spacing: 10) {
-                    if isBusy {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: systemImage)
-                    }
-                    Text(title)
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
-            .tint(tint)
-            .foregroundStyle(.white)
-            .disabled(isBusy)
-
-            Text(description)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-        }
     }
 }

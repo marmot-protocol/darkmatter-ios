@@ -1,77 +1,66 @@
-import SwiftUI
 import PhotosUI
+import SwiftUI
+import UniformTypeIdentifiers
 
-/// Generate a brand-new Nostr identity. The keypair is created and stored in
-/// the iOS Keychain inside marmot-app; we never see the nsec in Swift.
-///
-/// On success the parent routes automatically: during onboarding the app
-/// advances to the main UI; when adding an account, the Accounts sheet
-/// dismisses back to the accounts list. There's no intermediate "created"
-/// screen.
+/// Creates the real Marmot identity while presenting the designer-approved
+/// Sign Up hierarchy from the onboarding prototype.
 struct CreateIdentityView: View {
+    private enum Field {
+        case name
+        case about
+    }
+
+    private enum PendingPhotoSource {
+        case photos
+        case files
+    }
+
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
     @State private var model = CreateIdentityViewModel()
+    @State private var pendingPhotoSource: PendingPhotoSource?
     @State private var showAvatarDisclosure = false
     @State private var showPhotoPicker = false
+    @State private var showFileImporter = false
+    @State private var showWebImagePicker = false
     @State private var cropSource: AvatarImageCropSource?
+    @FocusState private var focusedField: Field?
+
+    let showsCloseButton: Bool
+
+    init(showsCloseButton: Bool = false) {
+        self.showsCloseButton = showsCloseButton
+    }
 
     var body: some View {
         @Bindable var model = model
-        Form {
-            Section {
-                VStack(spacing: 12) {
-                    AvatarBubble(
-                        seed: model.displayName.isEmpty ? "new-profile" : model.displayName,
-                        title: model.displayName.isEmpty
-                            ? L10n.string("New profile")
-                            : model.displayName,
-                        pictureImage: model.avatarDraft?.thumbnail
-                    )
-                    .frame(width: 80, height: 80)
-                    .overlay {
-                        if model.isPreparingAvatar {
-                            ProgressView()
-                        }
-                    }
-                    .accessibilityLabel(
-                        model.avatarDraft == nil
-                            ? L10n.string("Profile avatar preview")
-                            : L10n.string("Selected profile photo")
-                    )
 
-                    if model.avatarDraft == nil {
-                        Button("Choose Avatar") {
-                            showAvatarDisclosure = true
-                        }
-                    } else {
-                        Button("Change Avatar") {
-                            showAvatarDisclosure = true
-                        }
-                        Button("Remove Avatar", role: .destructive) {
-                            model.setAvatarDraft(nil)
-                        }
-                    }
-                }
-                .disabled(model.isPreparingAvatar)
+        Form {
+            avatarSection
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-                if let avatarError = model.avatarError {
-                    Label(avatarError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            }
-
-            Section("Profile") {
+            Section("Name") {
                 TextField("Name", text: $model.displayName)
                     .textContentType(.name)
-                TextField("About (Optional)", text: $model.about, axis: .vertical)
-                    .lineLimit(2...5)
+                    .submitLabel(.next)
+                    .focused($focusedField, equals: .name)
+                    .onSubmit { focusedField = .about }
+                    .listRowBackground(Color(uiColor: .secondarySystemFill))
+            }
+
+            Section("About") {
+                TextField(
+                    "A little about you",
+                    text: $model.about,
+                    axis: .vertical
+                )
+                .lineLimit(3...6)
+                .focused($focusedField, equals: .about)
+                .accessibilityLabel("About")
+                .listRowBackground(Color(uiColor: .secondarySystemFill))
             }
 
             if let failureMessage = model.failureMessage {
@@ -83,9 +72,29 @@ struct CreateIdentityView: View {
             }
         }
         .disabled(model.isSavingProfile)
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Sign Up")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(!model.allowsBackNavigation)
+        .toolbar {
+            if showsCloseButton && model.allowsBackNavigation {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
+                }
+            }
+        }
+        .interactiveDismissDisabled(!model.allowsBackNavigation)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
                 Button {
+                    focusedField = nil
                     Task {
                         if model.phase == .creationFailed {
                             await model.prepare(using: appState)
@@ -94,19 +103,24 @@ struct CreateIdentityView: View {
                         }
                     }
                 } label: {
-                    HStack {
-                        if model.isBusy {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(primaryActionTitle)
-                            .frame(maxWidth: .infinity)
-                    }
+                    Text(primaryActionTitle)
+                        .hidden()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(model.isBusy)
+                .onboardingPrimaryButtonStyle()
+                .controlSize(.extraLarge)
+                .onboardingFlexibleButtonSizing()
+                .disabled(model.isBusy || !hasValidName)
+                .overlay {
+                    OnboardingPrimaryActionLabel(
+                        title: LocalizedStringKey(primaryActionTitle),
+                        isLoading: model.isSubmitting,
+                        isActionEnabled: hasValidName
+                    )
+                    .allowsHitTesting(false)
+                }
                 .accessibilityLabel(primaryActionTitle)
+                .accessibilityIdentifier("sign-up.create")
+                .accessibilityValue(model.isSubmitting ? "In progress" : "")
 
                 if model.phase == .profileSaveFailed {
                     Button("Continue") {
@@ -121,25 +135,29 @@ struct CreateIdentityView: View {
                     .disabled(model.isBusy)
                 }
             }
-            .padding()
-            .background(.bar)
+            .safeAreaPadding(.horizontal)
+            .safeAreaPadding(.bottom)
         }
-        .navigationTitle("Sign Up")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(!model.allowsBackNavigation)
-        .interactiveDismissDisabled(!model.allowsBackNavigation)
         .task {
             await model.prepare(using: appState)
         }
-        .alert("Choose Avatar", isPresented: $showAvatarDisclosure) {
+        .alert("Your avatar is public", isPresented: $showAvatarDisclosure) {
             Button("Continue") {
-                showPhotoPicker = true
+                switch pendingPhotoSource {
+                case .photos:
+                    showPhotoPicker = true
+                case .files:
+                    showFileImporter = true
+                case nil:
+                    break
+                }
+                pendingPhotoSource = nil
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                pendingPhotoSource = nil
+            }
         } message: {
-            Text(
-                "Your avatar is public. The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
-            )
+            Text("The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy.")
         }
         .sheet(isPresented: $showPhotoPicker) {
             PhotoLibraryPickerView(
@@ -155,11 +173,23 @@ struct CreateIdentityView: View {
                     )
                 },
                 onError: model.setAvatarPreparationError,
-                onDismiss: {
-                    showPhotoPicker = false
-                }
+                onDismiss: { showPhotoPicker = false }
             )
             .ignoresSafeArea()
+        }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.image],
+            allowsMultipleSelection: false
+        ) { result in
+            prepareImportedFile(result)
+        }
+        .sheet(isPresented: $showWebImagePicker) {
+            OnboardingAvatarWebImagePicker { url in
+                prepareWebImage(url)
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .fullScreenCover(item: $cropSource) { source in
             AvatarImageCropEditor(source: source) { source, croppedData in
@@ -172,15 +202,125 @@ struct CreateIdentityView: View {
                 }
             }
         }
+        .background(.background)
+    }
+
+    private var avatarSection: some View {
+        VStack(spacing: 0) {
+            OnboardingAvatarPreview(
+                name: model.displayName,
+                image: model.avatarDraft?.thumbnail
+            )
+            .containerRelativeFrame(.horizontal, count: 3, span: 1, spacing: 0)
+
+            Menu {
+                Button {
+                    requestPhotoSource(.photos)
+                } label: {
+                    Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                }
+
+                Button {
+                    requestPhotoSource(.files)
+                } label: {
+                    Label("Choose from Files", systemImage: "folder")
+                }
+
+                Button {
+                    showWebImagePicker = true
+                } label: {
+                    Label("Find Image on Web", systemImage: "globe")
+                }
+
+                if model.avatarDraft != nil {
+                    Divider()
+                    Button("Remove Photo", systemImage: "trash", role: .destructive) {
+                        model.setAvatarDraft(nil)
+                    }
+                }
+            } label: {
+                Text(model.avatarDraft == nil ? "Add Photo" : "Change Photo")
+            }
+            .onboardingSecondaryButtonStyle()
+            .padding(.top)
+            .disabled(model.isPreparingAvatar)
+
+            if model.isPreparingAvatar {
+                ProgressView("Preparing Photo")
+                    .font(.footnote)
+                    .padding(.top)
+            }
+
+            if let avatarError = model.avatarError {
+                Text(avatarError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.top)
+            }
+        }
     }
 
     private var primaryActionTitle: String {
-        if model.isSubmitting {
-            return L10n.string("Signing Up…")
-        }
+        if model.isSubmitting { return L10n.string("Signing Up…") }
         if model.phase == .creationFailed || model.phase == .profileSaveFailed {
             return L10n.string("Retry")
         }
         return L10n.string("Sign Up")
+    }
+
+    private var hasValidName: Bool {
+        ContentSanitizer.displayName(model.displayName) != nil
+    }
+
+    private func requestPhotoSource(_ source: PendingPhotoSource) {
+        pendingPhotoSource = source
+        showAvatarDisclosure = true
+    }
+
+    private func prepareImportedFile(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            Task { await loadImportedFile(url) }
+        case .failure(let error):
+            model.setAvatarPreparationError(error)
+        }
+    }
+
+    private func loadImportedFile(_ url: URL) async {
+        let hasAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess { url.stopAccessingSecurityScopedResource() }
+        }
+        do {
+            let data = try await Task.detached(priority: .userInitiated) {
+                try Data(contentsOf: url)
+            }.value
+            cropSource = AvatarImageCropSource(
+                data: data,
+                fileName: url.lastPathComponent,
+                typeIdentifier: nil,
+                sourceURL: url
+            )
+        } catch {
+            model.setAvatarPreparationError(error)
+        }
+    }
+
+    private func prepareWebImage(_ url: URL) {
+        Task {
+            do {
+                let data = try await RemoteImageFetch.imageData(for: url)
+                cropSource = AvatarImageCropSource(
+                    data: data,
+                    fileName: url.lastPathComponent,
+                    typeIdentifier: nil,
+                    sourceURL: url
+                )
+            } catch {
+                model.setAvatarPreparationError(error)
+            }
+        }
     }
 }

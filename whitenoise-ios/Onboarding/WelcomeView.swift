@@ -1,66 +1,134 @@
 import SwiftUI
 
-/// First-launch entry point. Two paths: generate a brand-new Nostr
-/// identity, or import an existing local-signing identity by pasting an nsec.
+/// First-launch and add-profile entry point. First launch presents bounded
+/// sheets; Add Profile pushes into the sheet's existing navigation stack.
 struct WelcomeView: View {
-    @State private var showCreate = false
-    @State private var showImport = false
+    private enum SheetRoute: Identifiable {
+        case signIn
+        case signUp
+
+        var id: Self { self }
+    }
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var sheetRoute: SheetRoute?
+    @State private var showSignIn = false
+    @State private var showSignUp = false
+    @State private var selectedSheetDetent = PresentationDetent.large
+
+    let onSheetContentChange: (OnboardingSheetContent) -> Void
+    let onSignInExpansionChange: (Bool) -> Void
+
+    init(
+        onSheetContentChange: @escaping (OnboardingSheetContent) -> Void = { _ in },
+        onSignInExpansionChange: @escaping (Bool) -> Void = { _ in }
+    ) {
+        self.onSheetContentChange = onSheetContentChange
+        self.onSignInExpansionChange = onSignInExpansionChange
+    }
+
+    private var accentColor: Color {
+        colorScheme == .dark ? .white : .black
+    }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Spacer()
+        VStack(spacing: 0) {
+            Spacer()
 
-                VStack(spacing: 18) {
-                    VStack(spacing: 12) {
-                        Image("WnLogo")
-                            .accessibilityHidden(true)
+            Image("WhiteNoiseMark")
+                .resizable()
+                .scaledToFit()
+                .containerRelativeFrame(.horizontal, count: 2, span: 1, spacing: 0)
+                .accessibilityLabel("White Noise")
 
-                        Text("White Noise")
-                            .font(.largeTitle.weight(.semibold))
-                    }
+            Spacer()
 
-                    Text("End-to-end encrypted group messaging.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+            VStack {
+                Button("Sign In") {
+                    open(.signIn)
                 }
+                .onboardingSecondaryButtonStyle()
+                .accessibilityIdentifier("welcome.sign-in")
 
-                Spacer()
-            }
-            .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 14) {
-                    Button {
-                        showCreate = true
-                    } label: {
-                        Text("Create New Identity")
-                            .font(.body.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-
-                    Button {
-                        showImport = true
-                    } label: {
-                        Text("Import Existing nsec")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 4)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                Button {
+                    open(.signUp)
+                } label: {
+                    Text("Sign Up")
+                        .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 32)
+                .onboardingPrimaryButtonStyle()
+                .accessibilityIdentifier("welcome.sign-up")
             }
-            .navigationDestination(isPresented: $showCreate) {
-                CreateIdentityView()
+            .controlSize(.extraLarge)
+            .onboardingFlexibleButtonSizing()
+        }
+        .safeAreaPadding(.horizontal)
+        .safeAreaPadding(.bottom)
+        .background(.background)
+        .tint(accentColor)
+        .navigationDestination(isPresented: $showSignIn) {
+            ImportIdentityView(
+                onPreferredSheetExpansionChange: updateSignInExpansion
+            )
+        }
+        .navigationDestination(isPresented: $showSignUp) {
+            CreateIdentityView()
+        }
+        .sheet(item: $sheetRoute) { route in
+            NavigationStack {
+                switch route {
+                case .signIn:
+                    ImportIdentityView(
+                        showsCloseButton: true,
+                        onPreferredSheetExpansionChange: updateSignInExpansion
+                    )
+                case .signUp:
+                    CreateIdentityView(showsCloseButton: true)
+                }
             }
-            .navigationDestination(isPresented: $showImport) {
-                ImportIdentityView()
+            .tint(accentColor)
+            .appAppearance()
+            .presentationDetents(
+                route == .signIn ? [.medium, .large] : [.large],
+                selection: $selectedSheetDetent
+            )
+            .presentationDragIndicator(.visible)
+            .presentationContentInteraction(.resizes)
+        }
+        .onChange(of: showSignIn) {
+            if !showSignIn {
+                onSheetContentChange(.welcome)
+                onSignInExpansionChange(false)
             }
         }
+        .onChange(of: showSignUp) {
+            if !showSignUp {
+                onSheetContentChange(.welcome)
+            }
+        }
+    }
+
+    private func open(_ route: SheetRoute) {
+        selectedSheetDetent = route == .signIn ? .medium : .large
+        if appState.accounts.isEmpty {
+            sheetRoute = route
+        } else {
+            switch route {
+            case .signIn:
+                onSheetContentChange(.signIn)
+                onSignInExpansionChange(false)
+                showSignIn = true
+            case .signUp:
+                onSheetContentChange(.signUp)
+                showSignUp = true
+            }
+        }
+    }
+
+    private func updateSignInExpansion(_ isExpanded: Bool) {
+        selectedSheetDetent = isExpanded ? .large : .medium
+        onSignInExpansionChange(isExpanded)
     }
 }

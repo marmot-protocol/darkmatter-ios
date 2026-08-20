@@ -33,10 +33,7 @@ struct AppearanceSettingsView: View {
                         }
                     }
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } header: {
-                Text("Language")
+                .pickerStyle(.navigationLink)
             } footer: {
                 Text("System follows your device language. Other choices update White Noise immediately.")
             }
