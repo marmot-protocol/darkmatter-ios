@@ -105,7 +105,7 @@ struct GroupDetailsView: View {
                 }
             }
         }
-        .navigationTitle(isDirectMessage ? Text("Contact Info") : Text("Group Info"))
+        .navigationTitle(isDirectMessage ? Text("Chat Info") : Text("Group Info"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .sheet(item: $memberSheetTarget) { target in
@@ -483,7 +483,7 @@ struct GroupDetailsView: View {
                 ? nil
                 : GroupDisplay.avatarURL(for: groupDisplay, appState: appState)
         )
-        .frame(width: 88, height: 88)
+        .frame(width: 104, height: 104)
     }
 
     private var contactIdentitySection: some View {
@@ -498,7 +498,7 @@ struct GroupDetailsView: View {
                             title: contactTitle,
                             pictureURL: contactAccountIdHex.flatMap { appState.avatarURL(forAccountIdHex: $0) }
                         )
-                        .frame(width: 88, height: 88)
+                        .frame(width: 104, height: 104)
 
                         Text(contactTitle)
                             .font(.title2.weight(.semibold))
@@ -545,18 +545,14 @@ struct GroupDetailsView: View {
 
     private var actionsRowSection: some View {
         Section {
-            HStack(spacing: 10) {
-                if !isDirectMessage,
-                   GroupManagementPresentation.canInvite(
-                       state: viewModel.managementState,
-                       fallbackIsAdmin: isAdmin
-                   ) {
+            HStack(spacing: 12) {
+                if isDirectMessage {
                     DetailsActionButton(
-                        title: "Add",
-                        systemImage: "person.crop.circle.badge.plus",
-                        isDisabled: model.membershipActionInFlight,
+                        title: "About",
+                        systemImage: "person.crop.circle",
+                        isDisabled: contactNpub == nil,
                         appearance: .circular,
-                        action: { model.showAddMembers = true }
+                        action: { showContactProfile = true }
                     )
                 }
                 DetailsActionButton(
@@ -566,20 +562,18 @@ struct GroupDetailsView: View {
                     action: { model.setMuted(!model.isMuted, using: appState) }
                 )
                 DetailsActionButton(
+                    title: "Disappearing",
+                    systemImage: "timer",
+                    isDisabled: !isAdmin || model.membershipActionInFlight,
+                    appearance: .circular,
+                    action: { model.showRetentionEditor = true }
+                )
+                DetailsActionButton(
                     title: "Search",
                     systemImage: "magnifyingglass",
                     appearance: .circular,
                     action: openConversationSearch
                 )
-                if isDirectMessage {
-                    DetailsActionButton(
-                        title: "Nickname",
-                        systemImage: "pencil",
-                        isDisabled: !canEditNickname,
-                        appearance: .circular,
-                        action: beginEditingNickname
-                    )
-                }
             }
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
@@ -689,6 +683,21 @@ struct GroupDetailsView: View {
             }
             .buttonStyle(.plain)
 
+            if isDirectMessage {
+                Button(action: beginEditingNickname) {
+                    settingsRow(title: "Nickname", systemImage: "pencil") {
+                        HStack(spacing: 6) {
+                            Text(nickname ?? L10n.string("None"))
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(!canEditNickname)
+            }
+
             Button {
                 Task { await model.setArchived(!viewModel.group.archived, using: appState) }
             } label: {
@@ -760,6 +769,18 @@ struct GroupDetailsView: View {
             isExpanded: membersExpanded
         )
         return Section {
+            if GroupManagementPresentation.canInvite(
+                state: viewModel.managementState,
+                fallbackIsAdmin: isAdmin
+            ) {
+                Button {
+                    model.showAddMembers = true
+                } label: {
+                    Label("Add People", systemImage: "person.badge.plus")
+                }
+                .disabled(model.membershipActionInFlight)
+            }
+
             if details.count > GroupMemberOrdering.previewCount {
                 memberSearchField
             }
