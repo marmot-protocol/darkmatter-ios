@@ -50,9 +50,21 @@ private struct ReplySwipeModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         if isEnabled {
-            content
+            ZStack(alignment: .leading) {
+                if offset > 0 {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: ReplySwipe.maximumFeedbackOffset)
+                        .opacity(min(1, offset / ReplySwipe.maximumFeedbackOffset))
+                        .scaleEffect(offset >= ReplySwipe.maximumFeedbackOffset ? 1 : 0.82)
+                        .accessibilityHidden(true)
+                }
+
+                content
+                    .offset(x: offset)
+            }
                 .contentShape(.rect)
-                .offset(x: offset)
                 .gesture(
                     ReplySwipePanGesture(
                         onChanged: handleSwipeChange,

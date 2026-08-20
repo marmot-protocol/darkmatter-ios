@@ -3427,6 +3427,11 @@ struct ComposerInputChromeTests {
         #expect(!ComposerVoiceChromePresentation.showsStop(isActive: true, isLocked: false))
         #expect(ComposerVoiceChromePresentation.showsStop(isActive: true, isLocked: true))
     }
+
+    @Test func activeVoiceRecordingHidesButDoesNotReplaceTheFocusedTextEntry() {
+        #expect(ComposerVoiceChromePresentation.textEntryOpacity(isActive: false) == 1)
+        #expect(ComposerVoiceChromePresentation.textEntryOpacity(isActive: true) == 0)
+    }
 }
 
 @MainActor

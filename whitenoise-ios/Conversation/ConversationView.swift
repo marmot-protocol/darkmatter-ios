@@ -577,7 +577,14 @@ struct ConversationView: View {
     private struct ActionsTarget: Identifiable {
         let record: AppMessageRecordFfi
         let status: MessageStatus
+        let rowId: String?
         let id = UUID()
+
+        init(record: AppMessageRecordFfi, status: MessageStatus, rowId: String? = nil) {
+            self.record = record
+            self.status = status
+            self.rowId = rowId
+        }
     }
 
     private struct FailedSendTarget: Identifiable {
@@ -722,7 +729,11 @@ struct ConversationView: View {
             // button can resign the keyboard before popping so it no longer
             // flashes mid-screen during the transition.
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 0) { conversationHeaderBar }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if viewModel?.search.isActive != true {
+                    conversationHeaderBar
+                }
+            }
             // An isPresented push fights navigation-path swaps: unwind it
             // before the pending chat replaces the stack, or the details page
             // re-asserts itself over the new conversation.
@@ -1019,7 +1030,9 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var composerArea: some View {
-        if isSelectingMessages, let viewModel {
+        if let viewModel, viewModel.search.isActive {
+            ConversationSearchControls(search: viewModel.search)
+        } else if isSelectingMessages, let viewModel {
             messageSelectionBar(viewModel: viewModel)
         } else if let viewModel, viewModel.hasPendingInvite {
             inviteResponseArea(viewModel: viewModel)
@@ -1100,7 +1113,7 @@ struct ConversationView: View {
             anyHasText: bodies.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         )
 
-        return HStack(spacing: 0) {
+        return HStack(spacing: 10) {
             Button(role: .destructive) {
                 guard canDelete else { return }
                 showBatchDeleteConfirmation = true
@@ -1115,13 +1128,24 @@ struct ConversationView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(canDelete && !batchDeleteInFlight ? Color.red : Color.secondary.opacity(0.4))
+            .background(.regularMaterial, in: .circle)
+            .overlay {
+                Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
             .disabled(!canDelete || batchDeleteInFlight)
             .accessibilityLabel(L10n.string("Delete selected messages"))
 
             Spacer(minLength: 0)
 
             Text(L10n.plural("%lld selected", Int64(records.count)))
-                .font(.subheadline.weight(.semibold))
+                .font(.body.weight(.medium))
+                .contentTransition(.numericText())
+                .padding(.horizontal, 18)
+                .frame(minHeight: 44)
+                .background(.regularMaterial, in: .capsule)
+                .overlay {
+                    Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
 
             Spacer(minLength: 0)
 
@@ -1137,6 +1161,10 @@ struct ConversationView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(canCopy ? Color.accentColor : Color.secondary.opacity(0.4))
+            .background(.regularMaterial, in: .circle)
+            .overlay {
+                Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
             .disabled(!canCopy)
             .accessibilityLabel(L10n.string("Copy selected messages"))
 
@@ -1151,15 +1179,15 @@ struct ConversationView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(canForward ? Color.accentColor : Color.secondary.opacity(0.4))
+            .background(.regularMaterial, in: .circle)
+            .overlay {
+                Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
             .disabled(!canForward)
             .accessibilityLabel(L10n.string("Forward selected messages"))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 2)
-        .background(.bar)
-        .overlay(alignment: .top) {
-            Divider()
-        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
     }
 
     private func inviteResponseArea(viewModel: ConversationViewModel) -> some View {
@@ -1774,6 +1802,11 @@ struct ConversationView: View {
             ? MessageSemantics.debugStyle(for: record)
             : nil
         let allowsActions = debugStyle?.isUserVisibleBubble ?? true
+        let interactionsEnabled = !isSelectingMessages
+            && !viewModel.search.isActive
+            && actionsTarget == nil
+            && allowsActions
+            && !viewModel.isDeleted(record.messageIdHex)
         MessageBubble(
             record: record,
             status: status,
@@ -1805,7 +1838,7 @@ struct ConversationView: View {
                 : nil
         )
         .replySwipeToReply(
-            isEnabled: !isSelectingMessages && allowsActions && canReply(to: record, viewModel: viewModel)
+            isEnabled: interactionsEnabled && canReply(to: record, viewModel: viewModel)
         ) {
             beginReply(to: record, viewModel: viewModel)
         }
@@ -1853,11 +1886,17 @@ struct ConversationView: View {
             }
         ) {
             guard !isSelectingMessages,
+                  !viewModel.search.isActive,
                   allowsActions,
                   !record.messageIdHex.isEmpty,
                   !viewModel.isDeleted(record.messageIdHex) else { return }
             Haptics.tap()
-            presentActions(for: record, status: status, rowFrameKey: item.rowFrameKey)
+            presentActions(
+                for: record,
+                status: status,
+                rowId: item.id,
+                rowFrameKey: item.rowFrameKey
+            )
             finishActionFrameMeasurement(rowFrameKey: item.rowFrameKey)
         }
         .popover(
@@ -1865,7 +1904,28 @@ struct ConversationView: View {
             attachmentAnchor: .point(actionsAbove ? .top : .bottom),
             arrowEdge: actionsAbove ? .bottom : .top
         ) {
-            actionsMenu(for: record, status: status, viewModel: viewModel)
+            actionsMenu(for: record, status: status, rowId: item.id, viewModel: viewModel)
+        }
+        .accessibilityActions {
+            if interactionsEnabled {
+                Button("Show actions") {
+                    presentActions(
+                        for: record,
+                        status: status,
+                        rowId: item.id,
+                        rowFrameKey: item.rowFrameKey
+                    )
+                }
+                if canReply(to: record, viewModel: viewModel) {
+                    Button("Reply") { beginReply(to: record, viewModel: viewModel) }
+                }
+                if !record.plaintext.isEmpty {
+                    Button("Copy") {
+                        SensitiveClipboard.copyLocalOnly(viewModel.displayBody(of: record))
+                        Haptics.tap()
+                    }
+                }
+            }
         }
     }
 
@@ -2602,17 +2662,27 @@ struct ConversationView: View {
     }
 
     private func endVoicePress() {
-        guard let result = voiceRecorder.endPress() else { return }
+        let shouldDismissKeyboard = voiceRecorder.hasStartedRecording
+        let result = voiceRecorder.endPress()
+        if shouldDismissKeyboard {
+            dismissKeyboard()
+        }
+        guard let result else { return }
         addVoiceRecording(result)
     }
 
     private func stopLockedVoiceRecording() {
         guard let result = voiceRecorder.stopLockedRecording() else { return }
+        dismissKeyboard()
         addVoiceRecording(result)
     }
 
     private func cancelVoiceRecording() {
+        let shouldDismissKeyboard = voiceRecorder.hasStartedRecording
         voiceRecorder.cancel()
+        if shouldDismissKeyboard {
+            dismissKeyboard()
+        }
     }
 
     private func addVoiceRecording(_ result: VoiceRecordingResult) {
@@ -2897,29 +2967,44 @@ struct ConversationView: View {
     private func presentActions(
         for record: AppMessageRecordFfi,
         status: MessageStatus,
+        rowId: String,
         rowFrameKey: String
     ) {
+        guard let viewModel else { return }
+        let canRetry = status == .failed && viewModel.canRetryFailedSend(rowId: rowId)
+        let menuEstimate = MessageActionsPresentation.estimatedHeight(
+            canRetry: canRetry,
+            canInteract: viewModel.canSendMessages,
+            canForward: MessageForwardingPolicy.forwardableText(for: record) != nil,
+            canEdit: MessageEditingPolicy.canEdit(
+                record,
+                isDeleted: viewModel.isDeleted(record.messageIdHex),
+                canSendMessages: viewModel.canSendMessages
+            ),
+            canViewEditHistory: viewModel.hasEditHistory(record.messageIdHex),
+            canDelete: viewModel.deleteCapability(for: record).canDelete
+        )
         let placement = MessageActionsPlacement.resolve(
             rowFrame: rowFrames.frames[rowFrameKey],
             contentTopY: contentTopY,
             contentBottomY: contentBottomY,
-            menuEstimate: Self.actionsMenuEstimate
+            menuEstimate: menuEstimate
         )
 
         switch placement {
         case .below:
             actionsAbove = false
             actionsCentered = false
-            actionsTarget = ActionsTarget(record: record, status: status)
+            actionsTarget = ActionsTarget(record: record, status: status, rowId: rowId)
         case .above:
             actionsAbove = true
             actionsCentered = false
-            actionsTarget = ActionsTarget(record: record, status: status)
+            actionsTarget = ActionsTarget(record: record, status: status, rowId: rowId)
         case .centered:
             actionsAbove = false
             withAnimation(.easeOut(duration: 0.15)) {
                 actionsCentered = true
-                actionsTarget = ActionsTarget(record: record, status: status)
+                actionsTarget = ActionsTarget(record: record, status: status, rowId: rowId)
             }
         }
     }
@@ -2945,7 +3030,12 @@ struct ConversationView: View {
                 Color.black.opacity(0.18)
                     .ignoresSafeArea()
                     .onTapGesture { dismissActions() }
-                actionsMenu(for: target.record, status: target.status, viewModel: viewModel)
+                actionsMenu(
+                    for: target.record,
+                    status: target.status,
+                    rowId: target.rowId,
+                    viewModel: viewModel
+                )
                     .background(.regularMaterial, in: .rect(cornerRadius: 16))
                     .shadow(radius: 24, y: 8)
             }
@@ -2958,9 +3048,11 @@ struct ConversationView: View {
     private func actionsMenu(
         for record: AppMessageRecordFfi,
         status: MessageStatus,
+        rowId: String? = nil,
         viewModel: ConversationViewModel
     ) -> some View {
         MessageActionsMenu(
+            canRetry: rowId.map { viewModel.canRetryFailedSend(rowId: $0) } ?? false,
             canInteract: viewModel.canSendMessages,
             canForward: MessageForwardingPolicy.forwardableText(for: record) != nil,
             canEdit: MessageEditingPolicy.canEdit(
@@ -2971,6 +3063,12 @@ struct ConversationView: View {
             canViewEditHistory: viewModel.hasEditHistory(record.messageIdHex),
             canDelete: viewModel.deleteCapability(for: record).canDelete,
             quickReactions: appState.quickReactions,
+            selectedReaction: viewModel.reactions(for: record.messageIdHex).first(where: \.mine)?.emoji,
+            onRetry: {
+                guard let rowId else { return }
+                dismissActions()
+                Task { await viewModel.retryFailedSend(rowId: rowId) }
+            },
             onReact: { emoji in
                 Task { await viewModel.toggleReaction(emoji, on: record) }
                 appState.addRecentReaction(emoji)
@@ -3021,10 +3119,6 @@ struct ConversationView: View {
         )
     }
 
-    /// Approximate height of the actions popover (reaction row + action rows +
-    /// arrow). If neither end of the bubble has at least this much room, the
-    /// menu is centered over the bubble instead of anchored to it.
-    private static let actionsMenuEstimate: CGFloat = 430
 }
 
 /// Holds the latest on-screen frame of each message row. A reference type so

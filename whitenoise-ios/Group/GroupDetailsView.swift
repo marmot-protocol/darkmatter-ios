@@ -555,17 +555,20 @@ struct GroupDetailsView: View {
                         title: "Add",
                         systemImage: "person.crop.circle.badge.plus",
                         isDisabled: model.membershipActionInFlight,
+                        appearance: .circular,
                         action: { model.showAddMembers = true }
                     )
                 }
                 DetailsActionButton(
                     title: model.isMuted ? "Unmute" : "Mute",
                     systemImage: model.isMuted ? "bell.fill" : "bell.slash",
+                    appearance: .circular,
                     action: { model.setMuted(!model.isMuted, using: appState) }
                 )
                 DetailsActionButton(
                     title: "Search",
                     systemImage: "magnifyingglass",
+                    appearance: .circular,
                     action: openConversationSearch
                 )
                 if isDirectMessage {
@@ -573,6 +576,7 @@ struct GroupDetailsView: View {
                         title: "Nickname",
                         systemImage: "pencil",
                         isDisabled: !canEditNickname,
+                        appearance: .circular,
                         action: beginEditingNickname
                     )
                 }

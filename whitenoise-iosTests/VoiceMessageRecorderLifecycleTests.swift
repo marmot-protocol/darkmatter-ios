@@ -59,4 +59,11 @@ struct VoiceMessageRecorderLifecycleTests {
         #expect(!recorder.isActive)
     }
 
+    @Test func keyboardDismissalWaitsUntilRecordingActuallyStarted() {
+        #expect(!VoiceMessageRecorder.RecordingState.idle.hasStartedRecording)
+        #expect(!VoiceMessageRecorder.RecordingState.pressing.hasStartedRecording)
+        #expect(VoiceMessageRecorder.RecordingState.recording(locked: false).hasStartedRecording)
+        #expect(VoiceMessageRecorder.RecordingState.recording(locked: true).hasStartedRecording)
+    }
+
 }

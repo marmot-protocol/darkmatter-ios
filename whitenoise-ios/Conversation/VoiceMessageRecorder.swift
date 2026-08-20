@@ -66,6 +66,11 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
             guard case .recording(let locked) = self else { return false }
             return locked
         }
+
+        var hasStartedRecording: Bool {
+            guard case .recording = self else { return false }
+            return true
+        }
     }
 
     enum Failure: LocalizedError {
@@ -96,6 +101,7 @@ final class VoiceMessageRecorder: NSObject, ObservableObject {
 
     var isActive: Bool { state.isActive }
     var isLocked: Bool { state.isLocked }
+    var hasStartedRecording: Bool { state.hasStartedRecording }
 
     isolated deinit {
         if state.isActive || recorder != nil || recordingURL != nil || holdTask != nil || meterTask != nil {

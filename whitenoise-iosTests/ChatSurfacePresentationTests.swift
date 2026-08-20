@@ -192,6 +192,30 @@ struct ChatSurfacePresentationTests {
         #expect(!MessageSelectionPolicy.canDelete(selectedCount: 2, allDeletable: false))
     }
 
+    @Test func messageActionsEstimateTracksOnlyVisibleRows() {
+        let compact = MessageActionsPresentation.estimatedHeight(
+            canRetry: false,
+            canInteract: false,
+            canForward: false,
+            canEdit: false,
+            canViewEditHistory: false,
+            canDelete: false
+        )
+        let expanded = MessageActionsPresentation.estimatedHeight(
+            canRetry: true,
+            canInteract: true,
+            canForward: true,
+            canEdit: true,
+            canViewEditHistory: true,
+            canDelete: true
+        )
+
+        #expect(compact == 3 * MessageActionsPresentation.actionHeight + MessageActionsPresentation.verticalChrome)
+        #expect(expanded == compact
+            + 6 * MessageActionsPresentation.actionHeight
+            + MessageActionsPresentation.reactionHeight)
+    }
+
     @Test func conversationDateHeadersCategorizeTodayYesterdayAndOlderDates() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -81,6 +81,10 @@ nonisolated enum ComposerVoiceChromePresentation {
     static func showsStop(isActive: Bool, isLocked: Bool) -> Bool {
         isActive && isLocked
     }
+
+    static func textEntryOpacity(isActive: Bool) -> Double {
+        isActive ? 0 : 1
+    }
 }
 
 nonisolated enum ComposerSideIconTone: Equatable {
@@ -401,56 +405,68 @@ struct ComposerBar: View {
 
     private var inputCapsule: some View {
         HStack(alignment: audioDraft == nil ? .bottom : .center, spacing: 0) {
-            if voiceRecordingActive {
-                ComposerVoiceRecordingInput(
-                    samples: voiceRecordingSamples,
-                    durationSeconds: voiceRecordingDurationSeconds
-                )
-            } else if let audioDraft {
+            if let audioDraft, !voiceRecordingActive {
                 ComposerAudioDraftInput(
                     attachment: audioDraft,
                     onRemove: { onRemoveAudioDraft(audioDraft.id) }
                 )
                 .transition(.opacity)
             } else {
-                ZStack(alignment: .topLeading) {
-                    if draft.isEmpty {
-                        Text(L10n.string("Message"))
-                            .font(.system(size: fieldFontSize))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, BottomInputChromeLayout.fieldVerticalPadding)
+                ZStack {
+                    composerTextEntry
+                        .opacity(ComposerVoiceChromePresentation.textEntryOpacity(isActive: voiceRecordingActive))
+                        .allowsHitTesting(!voiceRecordingActive)
+                        .accessibilityHidden(voiceRecordingActive)
+
+                    if voiceRecordingActive {
+                        ComposerVoiceRecordingInput(
+                            samples: voiceRecordingSamples,
+                            durationSeconds: voiceRecordingDurationSeconds
+                        )
                     }
-
-                    ComposerTextInput(
-                        text: $draft,
-                        isFocused: $isTextInputFocused,
-                        fontSize: fieldFontSize,
-                        focusRequest: focusRequest &* 1_000 &+ localFocusRequest,
-                        onPasteImage: onPasteImage,
-                        onBeginEditing: restoreKeyboardAfterTextInputTap
-                    )
                 }
-                .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if ComposerExpandedEditorPresentation.shouldShowExpandButton(for: draft) {
-                    Button {
-                        Haptics.tap()
-                        showExpandedEditor = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 30, height: controlSize)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.string("Expand editor"))
-                }
-
             }
-
         }
         .frame(minHeight: controlSize)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var composerTextEntry: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                if draft.isEmpty {
+                    Text(L10n.string("Message"))
+                        .font(.system(size: fieldFontSize))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, BottomInputChromeLayout.fieldVerticalPadding)
+                }
+
+                ComposerTextInput(
+                    text: $draft,
+                    isFocused: $isTextInputFocused,
+                    fontSize: fieldFontSize,
+                    focusRequest: focusRequest &* 1_000 &+ localFocusRequest,
+                    onPasteImage: onPasteImage,
+                    onBeginEditing: restoreKeyboardAfterTextInputTap
+                )
+            }
+            .padding(.leading, BottomInputChromeLayout.fieldLeadingPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if ComposerExpandedEditorPresentation.shouldShowExpandButton(for: draft) {
+                Button {
+                    Haptics.tap()
+                    showExpandedEditor = true
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: controlSize)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.string("Expand editor"))
+            }
+        }
         .frame(maxWidth: .infinity)
     }
 

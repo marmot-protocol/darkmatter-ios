@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The in-conversation search bar pinned under the navigation bar: query
-/// field, match counter, previous/next match navigation, and the budgeted
-/// "Search older messages" continuation.
+/// Search entry pinned under the conversation header. Result navigation lives
+/// in `ConversationSearchControls`, where the composer normally sits.
 struct ConversationSearchBar: View {
     @Bindable var search: ConversationSearchModel
     let onClose: () -> Void
@@ -13,7 +12,7 @@ struct ConversationSearchBar: View {
     private var closeIconSize: CGFloat = 18
 
     var body: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 6) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .font(.subheadline.weight(.medium))
@@ -25,21 +24,31 @@ struct ConversationSearchBar: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($isFieldFocused)
-                counter
-                navigationButtons
-                closeButton
+                if !search.query.isEmpty {
+                    Button {
+                        search.query = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
             }
             .padding(.leading, 14)
             .padding(.trailing, 6)
-            .padding(.vertical, 6)
-            if search.showsOlderContinuation {
-                olderContinuationRow
+            .frame(minHeight: 46)
+            .background(.regularMaterial, in: .capsule)
+            .overlay {
+                Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
+
+            closeButton
         }
-        .background(.bar)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
         .onAppear {
             // Focus lands after the inset has been laid out, mirroring the
             // chat-list search field's deferred focus.
@@ -50,65 +59,96 @@ struct ConversationSearchBar: View {
         }
     }
 
-    @ViewBuilder
-    private var counter: some View {
-        if search.hasQuery {
-            if let position = search.displayPosition {
-                Text(L10n.formatted("%1$lld of %2$lld", Int64(position), Int64(search.matches.count)))
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            } else {
-                Text(L10n.string("No matches"))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .fixedSize()
-            }
-        }
-    }
-
-    private var navigationButtons: some View {
-        HStack(spacing: 0) {
-            Button {
-                Task { await search.goToOlderMatch() }
-            } label: {
-                Image(systemName: "chevron.up")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!search.canGoToOlderMatch || search.isPagingOlder)
-            .accessibilityLabel("Previous match")
-
-            Button {
-                search.goToNewerMatch()
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 34, height: 34)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!search.canGoToNewerMatch || search.isPagingOlder)
-            .accessibilityLabel("Next match")
-        }
-        .foregroundStyle(.primary)
-    }
-
     private var closeButton: some View {
         Button(action: onClose) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: closeIconSize))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
+            Image(systemName: "xmark")
+                .font(.system(size: closeIconSize, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(.regularMaterial, in: .circle)
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Close search")
+    }
+}
+
+struct ConversationSearchControls: View {
+    @Bindable var search: ConversationSearchModel
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack {
+                HStack(spacing: 0) {
+                    searchButton(
+                        systemImage: "chevron.up",
+                        accessibilityLabel: "Previous match",
+                        disabled: !search.canGoToOlderMatch || search.isPagingOlder
+                    ) {
+                        Task { await search.goToOlderMatch() }
+                    }
+                    searchButton(
+                        systemImage: "chevron.down",
+                        accessibilityLabel: "Next match",
+                        disabled: !search.canGoToNewerMatch || search.isPagingOlder
+                    ) {
+                        search.goToNewerMatch()
+                    }
+                }
+                .background(.regularMaterial, in: .capsule)
+                .overlay {
+                    Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+
+                Spacer(minLength: 8)
+
+                if search.hasQuery {
+                    resultCount
+                        .padding(.horizontal, 18)
+                        .frame(minHeight: 44)
+                        .background(.regularMaterial, in: .capsule)
+                        .overlay {
+                            Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                        }
+                }
+            }
+
+            if search.showsOlderContinuation {
+                olderContinuationRow
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var resultCount: some View {
+        if let position = search.displayPosition {
+            Text(L10n.formatted("%1$lld of %2$lld", Int64(position), Int64(search.matches.count)))
+                .contentTransition(.numericText())
+        } else {
+            Text(L10n.string("No matches"))
+        }
+    }
+
+    private func searchButton(
+        systemImage: String,
+        accessibilityLabel: LocalizedStringKey,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var olderContinuationRow: some View {
@@ -124,11 +164,11 @@ struct ConversationSearchBar: View {
                     .font(.footnote.weight(.medium))
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 7)
+            .frame(minHeight: 38)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.tint)
+        .foregroundStyle(Color.accentColor)
         .disabled(search.isPagingOlder)
     }
 }
