@@ -61,7 +61,7 @@ struct NewGroupPickerView: View {
             }
             ToolbarItem(placement: .principal) {
                 VStack(spacing: 0) {
-                    Text("Add Members")
+                    Text("New Group")
                         .font(.headline)
                     Text(L10n.plural("%lld selected", Int64(model.groupSelection.count)))
                         .font(.caption2)
@@ -69,7 +69,7 @@ struct NewGroupPickerView: View {
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Next", action: onNext)
+                Button("Continue", action: onNext)
                     .disabled(model.isBusy || appState.activeAccountRef == nil)
             }
         }

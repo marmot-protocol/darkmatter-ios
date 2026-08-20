@@ -221,7 +221,7 @@ struct NewMessageScreen: View {
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("New Message")
+        .navigationTitle("New Chat")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

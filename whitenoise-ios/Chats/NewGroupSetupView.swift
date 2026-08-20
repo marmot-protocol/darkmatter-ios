@@ -1,15 +1,16 @@
 import SwiftUI
 import MarmotKit
 
-/// Step two of New Group: name card, disappearing-messages preset, and the
-/// removable member rail. Group-name semantics are unchanged — an unnamed
-/// group with one member renders as a direct message.
+/// Step two of New Group: image, metadata, disappearing-messages preset, and
+/// a review of the selected people. Group-name semantics are unchanged — an
+/// unnamed group with one member renders as a direct message.
 struct NewGroupSetupView: View {
     @Environment(AppState.self) private var appState
     @Bindable var model: NewChatFlowViewModel
     let onOpen: (String) -> Void
 
     @State private var name = ""
+    @State private var description = ""
     @State private var retentionSeconds: UInt64 = 0
     @State private var showRetentionPicker = false
     @State private var groupImage: GroupImageUploadDraft?
@@ -18,7 +19,7 @@ struct NewGroupSetupView: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 14) {
+                VStack(spacing: 12) {
                     Button {
                         showGroupImagePicker = true
                     } label: {
@@ -36,18 +37,40 @@ struct NewGroupSetupView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 104, height: 104)
                     .disabled(model.isCreatingGroup)
                     .accessibilityLabel("Set group image")
-                    TextField(
-                        model.groupSelection.isEmpty
-                            ? L10n.string("Group name")
-                            : L10n.string("Group name (optional)"),
-                        text: $name
-                    )
-                        .disabled(model.isCreatingGroup)
+
+                    Button(groupImage == nil ? "Add Photo" : "Change Photo") {
+                        showGroupImagePicker = true
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isCreatingGroup)
                 }
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+
+            Section {
+                TextField(
+                    model.groupSelection.isEmpty
+                        ? L10n.string("Group name")
+                        : L10n.string("Group name (optional)"),
+                    text: $name
+                )
+                    .textContentType(.organizationName)
+                    .disabled(model.isCreatingGroup)
+
+                TextField(
+                    L10n.string("Description"),
+                    text: $description,
+                    axis: .vertical
+                )
+                .lineLimit(2...5)
+                .disabled(model.isCreatingGroup)
+            } header: {
+                Text("Group Details")
             } footer: {
                 if model.groupSelection.isEmpty {
                     Text("A group name is required when creating it without members.")
@@ -74,23 +97,21 @@ struct NewGroupSetupView: View {
                 .disabled(model.isCreatingGroup)
             }
 
-            Section {
-                Group {
-                    if model.groupSelection.isEmpty {
-                        Label("You can add members after creating the group.", systemImage: "person.badge.plus")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        SelectedRecipientRail(members: model.groupSelection.members) { member in
-                            model.groupSelection.remove(accountIdHex: member.accountIdHex)
+            Section("People") {
+                if model.groupSelection.isEmpty {
+                    Label("You can add members after creating the group.", systemImage: "person.badge.plus")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.groupSelection.members, id: \.accountIdHex) { member in
+                        RecipientRow(
+                            accountIdHex: member.accountIdHex,
+                            npub: member.npub
+                        ) {
+                            EmptyView()
                         }
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
                     }
                 }
-                .disabled(model.isCreatingGroup)
-            } header: {
-                Text(L10n.plural("%lld members", Int64(model.groupSelection.count)))
             }
 
             if let error = model.groupCreateError {
@@ -100,7 +121,8 @@ struct NewGroupSetupView: View {
                 }
             }
         }
-        .navigationTitle("New Group")
+        .scrollDismissesKeyboard(.interactively)
+        .navigationTitle("Set Up Group")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
         .navigationDestination(isPresented: $showRetentionPicker) {
@@ -123,7 +145,7 @@ struct NewGroupSetupView: View {
                     Task {
                         await model.createGroup(
                             name: name,
-                            description: "",
+                            description: description,
                             retentionSeconds: retentionSeconds,
                             image: groupImage,
                             using: appState,
