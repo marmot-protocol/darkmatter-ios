@@ -99,34 +99,24 @@ struct EditHistorySheet: View {
     let rows: [EditHistoryPresentation.Row]
 
     var body: some View {
-        VStack(spacing: 0) {
-            sheetHeader
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(rows) { row in
-                        versionCard(row)
-                    }
+        NavigationStack {
+            List(rows) { row in
+                versionCard(row)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+            }
+            .listStyle(.plain)
+            .navigationTitle("Edit history")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
                 }
-                .padding(16)
             }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-    }
-
-    private var sheetHeader: some View {
-        HStack {
-            Text("Edit history")
-                .font(.headline)
-            Spacer()
-            Button("Done") { dismiss() }
-                .buttonStyle(.plain)
-                .font(.headline)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
     }
 
     private func versionCard(_ row: EditHistoryPresentation.Row) -> some View {

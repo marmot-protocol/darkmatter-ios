@@ -1,6 +1,19 @@
 import SwiftUI
 import MarmotKit
 
+nonisolated enum ForwardMessagePresentation {
+    static let maximumDestinationCount = 5
+
+    static func filtered(
+        _ destinations: [MessageForwardDestination],
+        query: String
+    ) -> [MessageForwardDestination] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return destinations }
+        return destinations.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+    }
+}
+
 struct ForwardMessageSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -14,6 +27,7 @@ struct ForwardMessageSheet: View {
     @State private var isSending = false
     @State private var loadFailed = false
     @State private var sendFailed = false
+    @State private var query = ""
 
     init(
         message: AppMessageRecordFfi,
@@ -36,32 +50,25 @@ struct ForwardMessageSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
+        NavigationStack {
             content
-            Divider()
-            forwardButton
+                .searchable(text: $query, prompt: "Search Chats")
+                .navigationTitle("Forward")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", role: .cancel) { dismiss() }
+                            .disabled(isSending)
+                    }
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    forwardButton
+                }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isSending)
         .task { await loadDestinations() }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text(L10n.plural("Forward %lld messages", Int64(messages.count)))
-                .font(.headline)
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .disabled(isSending)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 18)
     }
 
     @ViewBuilder
@@ -79,8 +86,10 @@ struct ForwardMessageSheet: View {
             }
         } else if destinations.isEmpty {
             ContentUnavailableView("No chats yet", systemImage: "bubble.left.and.bubble.right")
+        } else if filteredDestinations.isEmpty {
+            ContentUnavailableView.search(text: query)
         } else {
-            List(destinations) { destination in
+            List(filteredDestinations) { destination in
                 Button {
                     toggle(destination.id)
                 } label: {
@@ -107,9 +116,13 @@ struct ForwardMessageSheet: View {
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
+                .disabled(
+                    isSending
+                        || (selectedGroupIds.count == ForwardMessagePresentation.maximumDestinationCount
+                            && !selectedGroupIds.contains(destination.id))
+                )
                 .accessibilityAddTraits(selectedGroupIds.contains(destination.id) ? .isSelected : [])
             }
-            .listStyle(.plain)
         }
     }
 
@@ -136,18 +149,26 @@ struct ForwardMessageSheet: View {
                 .frame(maxWidth: .infinity, minHeight: 24)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .buttonBorderShape(.capsule)
             .disabled(selectedGroupIds.isEmpty || isSending || isLoading)
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     private func toggle(_ groupIdHex: String) {
         sendFailed = false
         if selectedGroupIds.contains(groupIdHex) {
             selectedGroupIds.remove(groupIdHex)
-        } else {
+        } else if selectedGroupIds.count < ForwardMessagePresentation.maximumDestinationCount {
             selectedGroupIds.insert(groupIdHex)
         }
+    }
+
+    private var filteredDestinations: [MessageForwardDestination] {
+        ForwardMessagePresentation.filtered(destinations, query: query)
     }
 
     private func loadDestinations() async {
@@ -195,47 +216,39 @@ struct EditMessageSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-
-            TextEditor(text: $draft)
-                .focused($editorFocused)
-                .padding(12)
-                .scrollContentBackground(.hidden)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(.rect(cornerRadius: 12))
-                .padding(16)
-                .onChange(of: draft) { _, value in
-                    if value.count > ContentSanitizer.maxMessageLength {
-                        draft = String(value.prefix(ContentSanitizer.maxMessageLength))
-                    }
+        NavigationStack {
+            Form {
+                Section {
+                    TextEditor(text: $draft)
+                        .focused($editorFocused)
+                        .frame(minHeight: 160)
+                        .onChange(of: draft) { _, value in
+                            if value.count > ContentSanitizer.maxMessageLength {
+                                draft = String(value.prefix(ContentSanitizer.maxMessageLength))
+                            }
+                        }
                 }
+            }
+            .navigationTitle("Edit")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task { await save() }
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(!canSave)
+                }
+            }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(isSaving)
         .onAppear { editorFocused = true }
-    }
-
-    private var header: some View {
-        ZStack {
-            Text("Edit")
-                .font(.headline)
-
-            HStack {
-                Button("Cancel") { dismiss() }
-                    .disabled(isSaving)
-                Spacer()
-                Button("Save") {
-                    Task { await save() }
-                }
-                .fontWeight(.semibold)
-                .disabled(!canSave)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 18)
     }
 
     private var canSave: Bool {

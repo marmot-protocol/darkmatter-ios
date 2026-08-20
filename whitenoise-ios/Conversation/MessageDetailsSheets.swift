@@ -32,33 +32,26 @@ struct MessageInfoSheet: View {
     let status: MessageStatus
 
     var body: some View {
-        VStack(spacing: 0) {
-            sheetHeader
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 20) {
+        NavigationStack {
+            List {
+                Section {
                     senderCard
+                }
+
+                Section {
                     detailsCard
                 }
-                .padding(16)
+            }
+            .navigationTitle("Message info")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-    }
-
-    private var sheetHeader: some View {
-        HStack {
-            Text("Message info")
-                .font(.headline)
-            Spacer()
-            Button("Done") { dismiss() }
-                .buttonStyle(.plain)
-                .font(.headline)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
     }
 
     private var senderCard: some View {
@@ -90,8 +83,7 @@ struct MessageInfoSheet: View {
 
             Spacer(minLength: 0)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
+        .padding(.vertical, 4)
     }
 
     private var detailsCard: some View {
@@ -134,7 +126,6 @@ struct MessageInfoSheet: View {
                 }
             }
         }
-        .background(Color(.secondarySystemGroupedBackground), in: .rect(cornerRadius: 16))
     }
 
     private func infoRow(
@@ -187,6 +178,7 @@ struct MessageInfoSheet: View {
 
 struct ReactionDetailsSheet: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     let details: ConversationViewModel.ReactionDetails
     let onRemoveOwnReaction: ((String) -> Void)?
@@ -203,10 +195,19 @@ struct ReactionDetailsSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            filters
-            Divider()
-            reactionList
+        NavigationStack {
+            VStack(spacing: 0) {
+                filters
+                Divider()
+                reactionList
+            }
+            .navigationTitle("Reactions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)

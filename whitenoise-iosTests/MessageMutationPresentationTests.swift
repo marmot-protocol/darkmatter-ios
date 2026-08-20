@@ -111,6 +111,19 @@ struct MessageMutationPolicyTests {
         #expect(destinations.map(\.title) == ["Alice", "Weekend plans"])
     }
 
+    @Test func forwardPickerFiltersTitlesWithoutChangingDestinationOrder() {
+        let destinations = [
+            MessageForwardDestination(id: "1", title: "Weekend Plans", avatarURL: nil),
+            MessageForwardDestination(id: "2", title: "Alice", avatarURL: nil),
+            MessageForwardDestination(id: "3", title: "Work Updates", avatarURL: nil),
+        ]
+
+        #expect(ForwardMessagePresentation.filtered(destinations, query: "").map(\.id) == ["1", "2", "3"])
+        #expect(ForwardMessagePresentation.filtered(destinations, query: "  work ").map(\.id) == ["3"])
+        #expect(ForwardMessagePresentation.filtered(destinations, query: "PLANS").map(\.id) == ["1"])
+        #expect(ForwardMessagePresentation.maximumDestinationCount == 5)
+    }
+
     private func appRecord(
         messageIdHex: String = hex("11"),
         direction: String = "received",

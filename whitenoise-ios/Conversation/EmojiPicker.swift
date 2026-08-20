@@ -135,37 +135,34 @@ private enum EmojiRecents {
 }
 
 struct EmojiPickerSheet: View {
-    var title: LocalizedStringKey? = "React"
     var quickReactions: [String]?
     var onQuickReactionsSave: (([String]) -> Void)?
-    var onQuickReactionsReset: (() -> Void)?
     let onPick: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var isConfiguringReactions = false
 
     var body: some View {
-        NavigationStack {
-            EmojiPickerContent(showsSearchField: true) { emoji in
-                onPick(emoji)
-                dismiss()
-            }
-            .navigationTitle(title ?? "")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if let quickReactions, let onQuickReactionsSave, let onQuickReactionsReset {
-                    ToolbarItem(placement: .topBarLeading) {
-                        NavigationLink("Customize") {
-                            QuickReactionEditorView(
-                                quickReactions: quickReactions,
-                                onSave: onQuickReactionsSave,
-                                onReset: onQuickReactionsReset
-                            )
-                        }
-                    }
+        EmojiPickerContent(
+            showsSearchField: true,
+            onConfigure: quickReactions != nil && onQuickReactionsSave != nil
+                ? { isConfiguringReactions = true }
+                : nil
+        ) { emoji in
+            onPick(emoji)
+            dismiss()
+        }
+        .accessibilityAction(.escape) { dismiss() }
+        .sheet(isPresented: $isConfiguringReactions) {
+            if let quickReactions, let onQuickReactionsSave {
+                NavigationStack {
+                    QuickReactionEditorView(
+                        quickReactions: quickReactions,
+                        onSave: onQuickReactionsSave
+                    )
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.string("Done")) { dismiss() }
-                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
         .presentationDetents([.medium, .large])
@@ -175,7 +172,6 @@ struct EmojiPickerSheet: View {
 
 private struct QuickReactionEditorView: View {
     let onSave: ([String]) -> Void
-    let onReset: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: [String]
@@ -183,57 +179,64 @@ private struct QuickReactionEditorView: View {
 
     init(
         quickReactions: [String],
-        onSave: @escaping ([String]) -> Void,
-        onReset: @escaping () -> Void
+        onSave: @escaping ([String]) -> Void
     ) {
         self.onSave = onSave
-        self.onReset = onReset
         _draft = State(initialValue: QuickReactionChoices.normalize(quickReactions))
     }
 
     var body: some View {
-        VStack(spacing: 28) {
-            HStack(spacing: 8) {
+        VStack(spacing: 24) {
+            Spacer()
+
+            HStack(spacing: 0) {
                 ForEach(Array(draft.enumerated()), id: \.offset) { index, emoji in
                     Button {
                         editingIndex = index
                     } label: {
                         Text(emoji)
-                            .font(.title2)
-                            .frame(width: 42, height: 42)
-                            .background(Color(.tertiarySystemFill), in: Circle())
+                            .font(.system(size: 32))
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.formatted("Change quick reaction %lld", Int64(index + 1)))
                 }
             }
+            .padding(6)
+            .frame(maxWidth: 360)
+            .background(.regularMaterial, in: .capsule)
+            .overlay {
+                Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
 
             Text("Tap a reaction to replace it. These six reactions appear first when you open message actions.")
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Spacer()
-
-            HStack {
+            Spacer()
+        }
+        .padding()
+        .navigationTitle("Customize reactions")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
                 Button("Reset") {
-                    draft = AppState.defaultReactions
-                    onReset()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        draft = AppState.defaultReactions
+                    }
                 }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Button("Save") {
+                .disabled(draft == AppState.defaultReactions)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done", systemImage: "checkmark") {
                     onSave(draft)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
             }
         }
-        .padding(24)
-        .navigationTitle("Customize reactions")
-        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(
             isPresented: Binding(
                 get: { editingIndex != nil },
@@ -267,21 +270,33 @@ struct ComposerEmojiPanel: View {
 
 private struct EmojiPickerContent: View {
     let showsSearchField: Bool
+    var onConfigure: (() -> Void)?
     var onDeleteBackward: (() -> Void)?
     let onPick: (String) -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @StateObject private var model = EmojiPickerModel()
     @State private var query = ""
     @State private var selectedCategory = 0
-
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 8)
 
     var body: some View {
         ScrollViewReader { proxy in
             VStack(spacing: 0) {
                 if showsSearchField {
-                    searchField
-                    Divider()
+                    HStack(spacing: 4) {
+                        searchField
+                        if let onConfigure {
+                            Button(action: onConfigure) {
+                                Image(systemName: "gearshape")
+                                    .frame(width: 44, height: 44)
+                                    .background(.regularMaterial, in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Customize reactions")
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
                 }
                 emojiGrid
                 Divider()
@@ -312,8 +327,13 @@ private struct EmojiPickerContent: View {
         .padding(.horizontal, 14)
         .frame(height: 44)
         .background(Color(.secondarySystemBackground), in: Capsule())
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+    }
+
+    private var columns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: 4),
+            count: dynamicTypeSize.isAccessibilitySize ? 6 : 8
+        )
     }
 
     @ViewBuilder
@@ -404,8 +424,7 @@ private struct EmojiPickerContent: View {
                         .accessibilityLabel(Text(category.title))
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(4)
             }
             if let onDeleteBackward {
                 Divider()
@@ -420,7 +439,10 @@ private struct EmojiPickerContent: View {
                 .accessibilityLabel(L10n.string("Delete"))
             }
         }
-        .background(Color(.secondarySystemBackground))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: .capsule)
+        .padding(.horizontal, 8)
     }
 
     private func railButton(
@@ -432,8 +454,8 @@ private struct EmojiPickerContent: View {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(selected ? Color.primary : Color.secondary)
-                .frame(width: 38, height: 34)
-                .background(selected ? Color(.tertiarySystemFill) : .clear, in: .rect(cornerRadius: 10))
+                .frame(width: 38, height: 36)
+                .background(selected ? Color(.tertiarySystemFill) : .clear, in: .circle)
         }
         .buttonStyle(.plain)
     }

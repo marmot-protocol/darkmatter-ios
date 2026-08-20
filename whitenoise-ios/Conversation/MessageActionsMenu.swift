@@ -62,7 +62,6 @@ struct MessageActionsMenu: View {
                 if canInteract {
                     actionRow("Reply", systemImage: "arrowshape.turn.up.left", action: onReply)
                 }
-                actionRow("Copy", systemImage: "doc.on.doc", action: onCopy)
                 if canForward {
                     actionRow("Forward", systemImage: "arrowshape.turn.up.right", action: onForward)
                 }
@@ -72,8 +71,9 @@ struct MessageActionsMenu: View {
                 if canViewEditHistory {
                     actionRow("View edit history", systemImage: "clock.arrow.circlepath", action: onViewEditHistory)
                 }
-                actionRow("Info", systemImage: "info.circle", action: onInfo)
+                actionRow("Copy", systemImage: "doc.on.doc", action: onCopy)
                 actionRow("Select", systemImage: "checkmark.circle", action: onSelect)
+                actionRow("Info", systemImage: "info.circle", action: onInfo)
 
                 if canDelete {
                     actionRow("Delete", systemImage: "trash", role: .destructive, action: onDelete)

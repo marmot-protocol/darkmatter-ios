@@ -771,7 +771,6 @@ struct ConversationView: View {
                     EmojiPickerSheet(
                         quickReactions: appState.quickReactions,
                         onQuickReactionsSave: appState.setQuickReactions,
-                        onQuickReactionsReset: appState.resetQuickReactions,
                         onPick: { emoji in
                             Task { await viewModel.toggleReaction(emoji, on: target.record) }
                             appState.addRecentReaction(emoji)
