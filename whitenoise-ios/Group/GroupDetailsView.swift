@@ -223,10 +223,13 @@ struct GroupDetailsView: View {
             )
             .appAppearance()
         }
-        .sheet(isPresented: $model.showDescriptionEditor) {
+        .sheet(isPresented: $model.showProfileEditor) {
             NavigationStack {
                 Form {
                     Section {
+                        TextField("Group name", text: $model.renameDraft)
+                            .textInputAutocapitalization(.words)
+                            .submitLabel(.done)
                         TextField(
                             "Description",
                             text: $model.descriptionDraft,
@@ -234,38 +237,33 @@ struct GroupDetailsView: View {
                         )
                         .lineLimit(4...8)
                     } footer: {
-                        Text("Everyone in the group will see this description. Leave it blank to remove it.")
+                        Text("Everyone in the group will see this name and description. Leave the description blank to remove it.")
                     }
                 }
-                .navigationTitle("Edit Description")
+                .navigationTitle("Edit Group Info")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { model.showDescriptionEditor = false }
+                        Button("Cancel") { model.showProfileEditor = false }
                             .disabled(model.membershipActionInFlight)
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
                             Task {
-                                if await model.updateDescription(using: appState) {
-                                    model.showDescriptionEditor = false
+                                if await model.updateProfile(using: appState) {
+                                    model.showProfileEditor = false
                                 }
                             }
                         }
-                        .disabled(model.membershipActionInFlight)
+                        .disabled(
+                            model.membershipActionInFlight
+                                || Self.validatedGroupName(model.renameDraft) == nil
+                        )
                     }
                 }
                 .interactiveDismissDisabled(model.membershipActionInFlight)
             }
             .appAppearance()
-        }
-        .alert("Group name", isPresented: $model.showRename) {
-            TextField("Group name", text: $model.renameDraft)
-            Button("Save") { Task { await model.rename(using: appState) } }
-                .disabled(Self.validatedGroupName(model.renameDraft) == nil)
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Everyone in the group will see the new name.")
         }
         .fullScreenCover(item: $model.pendingConfirmation) { confirmation in
             fullScreenConfirmation(for: confirmation)
@@ -461,8 +459,8 @@ struct GroupDetailsView: View {
                         .lineLimit(4)
                 } else if isAdmin {
                     Button {
-                        model.descriptionDraft = ""
-                        model.showDescriptionEditor = true
+                        model.prepareProfileDrafts()
+                        model.showProfileEditor = true
                     } label: {
                         Text("Add Description")
                             .font(.callout)
@@ -587,27 +585,10 @@ struct GroupDetailsView: View {
     private var editMenu: some View {
         Menu {
             Button {
-                model.renameDraft = ContentSanitizer.groupName(viewModel.group.name) ?? ""
-                model.showRename = true
+                model.prepareProfileDrafts()
+                model.showProfileEditor = true
             } label: {
-                Label(
-                    viewModel.group.name.isEmpty ? L10n.string("Set Name") : L10n.string("Edit Name"),
-                    systemImage: "pencil"
-                )
-            }
-            Button {
-                model.descriptionDraft = ContentSanitizer.multilineText(
-                    viewModel.group.description,
-                    maxLength: ContentSanitizer.maxGroupDescriptionLength
-                ) ?? ""
-                model.showDescriptionEditor = true
-            } label: {
-                Label(
-                    Self.normalizedGroupDescriptionForUpdate(viewModel.group.description).isEmpty
-                        ? L10n.string("Set Description")
-                        : L10n.string("Edit Description"),
-                    systemImage: "text.alignleft"
-                )
+                Label("Edit Group Info", systemImage: "pencil")
             }
             Button {
                 model.showGroupImageEditor = true

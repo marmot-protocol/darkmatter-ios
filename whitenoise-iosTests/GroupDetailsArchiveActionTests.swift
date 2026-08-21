@@ -56,7 +56,7 @@ struct GroupDetailsArchiveActionTests {
         #expect(changedRecords.map(\.archived) == [true])
     }
 
-    @Test func renameRejectsConcurrentPublishUntilFirstCompletes() async throws {
+    @Test func profileUpdateRejectsConcurrentPublishUntilFirstCompletes() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         appState.activeAccountRef = "account-1"
         let groupIdHex = String(repeating: "ab", count: 32)
@@ -69,19 +69,25 @@ struct GroupDetailsArchiveActionTests {
 
         model.conversation = conversation
         model.renameDraft = "Renamed group"
-        model.updateGroupProfileForTesting = { accountRef, groupIdHex, name in
-            try await publisher.publish(accountRef: accountRef, groupIdHex: groupIdHex, name: name)
+        model.descriptionDraft = "A shared description"
+        model.updateGroupProfileForTesting = { accountRef, groupIdHex, name, description in
+            try await publisher.publish(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                name: name,
+                description: description
+            )
         }
 
         let first = Task { @MainActor in
-            await model.rename(using: appState)
+            await model.updateProfile(using: appState)
         }
         await publisher.waitUntilStarted()
 
         #expect(model.membershipActionInFlight)
 
         let second = Task { @MainActor in
-            await model.rename(using: appState)
+            await model.updateProfile(using: appState)
         }
         await second.value
 
@@ -89,7 +95,8 @@ struct GroupDetailsArchiveActionTests {
             GroupProfilePublishProbe.Request(
                 accountRef: "account-1",
                 groupIdHex: groupIdHex,
-                name: "Renamed group"
+                name: "Renamed group",
+                description: "A shared description"
             ),
         ])
 
@@ -261,13 +268,14 @@ struct GroupDetailsArchiveActionTests {
         var requests: [(accountRef: String, groupIdHex: String, description: String)] = []
 
         model.conversation = conversation
+        model.renameDraft = conversation.group.name
         model.descriptionDraft = " \n\t "
-        model.updateGroupDescriptionForTesting = { accountRef, groupIdHex, description in
+        model.updateGroupProfileForTesting = { accountRef, groupIdHex, _, description in
             requests.append((accountRef, groupIdHex, description))
             return SendSummaryFfi(published: 1, messageIds: ["description-update"])
         }
 
-        let succeeded = await model.updateDescription(using: appState)
+        let succeeded = await model.updateProfile(using: appState)
 
         #expect(succeeded)
         #expect(requests.count == 1)
@@ -576,14 +584,25 @@ private final class GroupProfilePublishProbe {
         let accountRef: String
         let groupIdHex: String
         let name: String
+        let description: String
     }
 
     private(set) var requests: [Request] = []
     private var startWaiters: [CheckedContinuation<Void, Never>] = []
     private var firstCompletion: CheckedContinuation<SendSummaryFfi, Error>?
 
-    func publish(accountRef: String, groupIdHex: String, name: String) async throws -> SendSummaryFfi {
-        let request = Request(accountRef: accountRef, groupIdHex: groupIdHex, name: name)
+    func publish(
+        accountRef: String,
+        groupIdHex: String,
+        name: String,
+        description: String
+    ) async throws -> SendSummaryFfi {
+        let request = Request(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            name: name,
+            description: description
+        )
         requests.append(request)
         startWaiters.forEach { $0.resume() }
         startWaiters.removeAll()

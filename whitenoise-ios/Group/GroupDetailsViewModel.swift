@@ -12,8 +12,7 @@ import MarmotKit
 @Observable
 final class GroupDetailsViewModel {
     var showAddMembers = false
-    var showRename = false
-    var showDescriptionEditor = false
+    var showProfileEditor = false
     var showGroupImageEditor = false
     var showRetentionEditor = false
     var renameDraft = ""
@@ -48,8 +47,7 @@ final class GroupDetailsViewModel {
     @ObservationIgnored var onGroupDeleted: (String) -> Void = { _ in }
 #if DEBUG
     @ObservationIgnored var setGroupArchivedForTesting: (@MainActor (String, String, Bool) async throws -> AppGroupRecordFfi)?
-    @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
-    @ObservationIgnored var updateGroupDescriptionForTesting: (@MainActor (String, String, String) async throws -> SendSummaryFfi)?
+    @ObservationIgnored var updateGroupProfileForTesting: (@MainActor (String, String, String, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupAvatarUrlForTesting: (@MainActor (String, String, String?) async throws -> SendSummaryFfi)?
     @ObservationIgnored var updateGroupImageForTesting: (@MainActor (String, String, Data, String) async throws -> SendSummaryFfi)?
     @ObservationIgnored var clearGroupImageForTesting: (@MainActor (String, String) async throws -> SendSummaryFfi)?
@@ -183,71 +181,36 @@ final class GroupDetailsViewModel {
         }
     }
 
-    func rename(using appState: AppState) async {
-        guard let conversation, let accountRef = appState.activeAccountRef,
-              let name = GroupDetailsView.validatedGroupName(renameDraft) else { return }
-        guard !membershipActionInFlight else { return }
-        membershipActionInFlight = true
-        defer { membershipActionInFlight = false }
-        do {
-            appState.present(.warning(L10n.string("Updating group name…"), message: L10n.string("Publishing group update.")))
-            let summary: SendSummaryFfi
-#if DEBUG
-            if let updateGroupProfileForTesting {
-                summary = try await updateGroupProfileForTesting(accountRef, conversation.group.groupIdHex, name)
-            } else {
-                let client = try appState.currentMarmotClient()
-                summary = try await client.updateGroupProfile(
-                    accountRef: accountRef,
-                    groupIdHex: conversation.group.groupIdHex,
-                    name: name,
-                    description: nil
-                )
-            }
-#else
-            let client = try appState.currentMarmotClient()
-            summary = try await client.updateGroupProfile(
-                accountRef: accountRef,
-                groupIdHex: conversation.group.groupIdHex,
-                name: name,
-                description: nil
-            )
-#endif
-            await refreshGroupManagementAndNotify()
-            await refreshVisibleDebugState(using: appState)
-            Haptics.success()
-            appState.present(.success(L10n.string("Group name updated"), message: publishMessage(for: summary)))
-        } catch {
-            await refreshAfterFailedMutation(using: appState)
-            Haptics.error()
-            actionError = error.localizedDescription
-            appState.present(UserFacingError.toast(title: L10n.string("Couldn't rename group"), error: error))
-        }
+    func prepareProfileDrafts() {
+        guard let conversation else { return }
+        renameDraft = ContentSanitizer.groupName(conversation.group.name) ?? ""
+        descriptionDraft = GroupDetailsView.normalizedGroupDescriptionForUpdate(
+            conversation.group.description
+        )
     }
 
     @discardableResult
-    func updateDescription(using appState: AppState) async -> Bool {
-        guard let conversation, let accountRef = appState.activeAccountRef else { return false }
+    func updateProfile(using appState: AppState) async -> Bool {
+        guard let conversation, let accountRef = appState.activeAccountRef,
+              let name = GroupDetailsView.validatedGroupName(renameDraft) else { return false }
         let description = GroupDetailsView.normalizedGroupDescriptionForUpdate(descriptionDraft)
+        let currentName = ContentSanitizer.groupName(conversation.group.name) ?? ""
         let currentDescription = GroupDetailsView.normalizedGroupDescriptionForUpdate(
             conversation.group.description
         )
-        guard description != currentDescription else { return true }
+        guard name != currentName || description != currentDescription else { return true }
         guard !membershipActionInFlight else { return false }
         membershipActionInFlight = true
         defer { membershipActionInFlight = false }
-
         do {
-            appState.present(.warning(
-                L10n.string("Updating group description…"),
-                message: L10n.string("Publishing group update.")
-            ))
+            appState.present(.warning(L10n.string("Updating group info…"), message: L10n.string("Publishing group update.")))
             let summary: SendSummaryFfi
 #if DEBUG
-            if let updateGroupDescriptionForTesting {
-                summary = try await updateGroupDescriptionForTesting(
+            if let updateGroupProfileForTesting {
+                summary = try await updateGroupProfileForTesting(
                     accountRef,
                     conversation.group.groupIdHex,
+                    name,
                     description
                 )
             } else {
@@ -255,7 +218,7 @@ final class GroupDetailsViewModel {
                 summary = try await client.updateGroupProfile(
                     accountRef: accountRef,
                     groupIdHex: conversation.group.groupIdHex,
-                    name: nil,
+                    name: name,
                     description: description
                 )
             }
@@ -264,25 +227,20 @@ final class GroupDetailsViewModel {
             summary = try await client.updateGroupProfile(
                 accountRef: accountRef,
                 groupIdHex: conversation.group.groupIdHex,
-                name: nil,
+                name: name,
                 description: description
             )
 #endif
             await refreshGroupManagementAndNotify()
             await refreshVisibleDebugState(using: appState)
             Haptics.success()
-            appState.present(.success(
-                description.isEmpty
-                    ? L10n.string("Group description removed")
-                    : L10n.string("Group description updated"),
-                message: publishMessage(for: summary)
-            ))
+            appState.present(.success(L10n.string("Group info updated"), message: publishMessage(for: summary)))
             return true
         } catch {
             await refreshAfterFailedMutation(using: appState)
             Haptics.error()
             actionError = error.localizedDescription
-            appState.present(UserFacingError.toast(title: L10n.string("Couldn't update group description"), error: error))
+            appState.present(UserFacingError.toast(title: L10n.string("Couldn't update group info"), error: error))
             return false
         }
     }
