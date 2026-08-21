@@ -93,9 +93,13 @@ struct GroupDetailsView: View {
             destructiveActionsSection
 
             if appState.developerMode {
-                transcriptExportSection
-                developerSection
-                pushNotificationsDeveloperSection
+                Section {
+                    NavigationLink {
+                        ChatDeveloperToolsView(model: model, conversation: viewModel)
+                    } label: {
+                        Label("Chat Developer Tools", systemImage: "wrench.and.screwdriver")
+                    }
+                }
             }
 
             if let actionError = model.actionError {
@@ -285,22 +289,6 @@ struct GroupDetailsView: View {
                 },
                 onDismiss: { sharedMediaGallery = nil }
             )
-        }
-        .alert(
-            "Export failed",
-            isPresented: Binding(
-                get: { model.transcriptExportError != nil },
-                set: { if !$0 { model.transcriptExportError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) { model.transcriptExportError = nil }
-        } message: {
-            Text(model.transcriptExportError ?? "")
-        }
-        .sheet(isPresented: $model.showTranscriptShareSheet, onDismiss: model.cleanupTranscriptExportFile) {
-            if let transcriptExportURL = model.transcriptExportURL {
-                ActivityShareSheet(items: [transcriptExportURL], onComplete: model.cleanupTranscriptExportFile)
-            }
         }
         .task(id: appState.developerMode) {
             await model.refreshGroupManagementAndNotify()
@@ -1015,25 +1003,6 @@ struct GroupDetailsView: View {
         viewModel.group.avatarUrl != nil || viewModel.group.imageHashHex != nil
     }
 
-    private var transcriptExportSection: some View {
-        Section {
-            Button {
-                Task { await model.exportConversationTranscript(using: appState) }
-            } label: {
-                HStack {
-                    Label("Export Conversation Transcript", systemImage: "doc.text")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if model.isExportingTranscript {
-                        ProgressView()
-                    }
-                }
-            }
-            .disabled(model.isExportingTranscript || appState.activeAccountRef == nil)
-        } footer: {
-            Text("Exports the raw inner Nostr event history for this group as JSON (kinds 9, 1200–1210, and related metadata), ordered by time. Use Share to copy or save the file.")
-        }
-    }
-
     private var shouldShowSelfDemoteAction: Bool {
         isAdmin || viewModel.managementState?.requiresSelfDemoteBeforeLeave == true
     }
@@ -1041,70 +1010,6 @@ struct GroupDetailsView: View {
     private var canSelfDemoteAction: Bool {
         if GroupManagementPresentation.canSelfDemote(state: viewModel.managementState) { return true }
         return viewModel.managementState == nil && isAdmin && !viewModel.isLastAdmin
-    }
-
-    private var developerSection: some View {
-        Section {
-            copyableDeveloperValueRow(
-                title: "MLS group ID",
-                value: model.mlsState?.groupIdHex ?? viewModel.group.groupIdHex
-            )
-            copyableDeveloperValueRow(title: "Nostr group ID", value: viewModel.group.nostrGroupIdHex)
-            if let mlsState = model.mlsState {
-                LabeledContent("Epoch", value: "\(mlsState.epoch)")
-                LabeledContent("Members (MLS)", value: "\(mlsState.memberCount)")
-                LabeledContent("Required components") {
-                    Text(mlsState.requiredAppComponents.map(String.init).joined(separator: ", "))
-                        .font(.caption.monospaced())
-                }
-            } else {
-                Text("Loading MLS state…")
-                    .foregroundStyle(.secondary)
-            }
-            LabeledContent("Admins", value: "\(viewModel.group.admins.count)")
-        } header: {
-            Text("MLS group (developer)")
-        }
-    }
-
-    private var pushNotificationsDeveloperSection: some View {
-        Section("Push notifications (developer)") {
-            if let pushDebugInfo = model.pushDebugInfo {
-                LabeledContent("Tokens") {
-                    Text(GroupPushDebugPresentation.tokenSummary(for: pushDebugInfo))
-                        .monospacedDigit()
-                }
-                LabeledContent("Relay hints") {
-                    Text(GroupPushDebugPresentation.missingRelayHintSummary(for: pushDebugInfo))
-                        .monospacedDigit()
-                }
-                LabeledContent("Local registration") {
-                    Text(GroupPushDebugPresentation.localRegistrationSummary(for: pushDebugInfo.localRegistration))
-                        .foregroundStyle(.secondary)
-                }
-                if let leafIndex = pushDebugInfo.localRegistration.localLeafIndex {
-                    LabeledContent("Local leaf", value: "\(leafIndex)")
-                }
-                if let updatedAtMs = pushDebugInfo.lastTokenListUpdatedAtMs {
-                    LabeledContent("Last token list update") {
-                        Text(Date(timeIntervalSince1970: TimeInterval(updatedAtMs) / 1000), style: .relative)
-                    }
-                }
-                if !pushDebugInfo.tokens.isEmpty {
-                    DisclosureGroup("Token fingerprints") {
-                        ForEach(Array(pushDebugInfo.tokens.enumerated()), id: \.offset) { _, token in
-                            tokenDebugRow(token)
-                        }
-                    }
-                }
-            } else if let pushDebugError = model.pushDebugError {
-                Label(pushDebugError, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-            } else {
-                Text("Loading push notification state…")
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
     private func copyableDeveloperValueRow(title: String, value: String) -> some View {
@@ -1128,43 +1033,6 @@ struct GroupDetailsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(L10n.formatted("Copies %@", title))
-    }
-
-    private func tokenDebugRow(_ token: GroupPushTokenDebugEntryFfi) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(GroupPushDebugPresentation.platformLabel(token.platform))
-                    .font(.caption.weight(.semibold))
-                Text("leaf \(token.leafIndex)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if token.isLocalMember {
-                    Text("local")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.16), in: Capsule())
-                        .foregroundStyle(.tint)
-                }
-                if !token.activeLeaf {
-                    Text("stale")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.16), in: Capsule())
-                        .foregroundStyle(.orange)
-                }
-            }
-            Text(token.tokenFingerprint)
-                .font(.system(.caption2, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-            Text(IdentityFormatter.short(token.memberIdHex, head: 12, tail: 12))
-                .font(.system(.caption2, design: .monospaced))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 4)
     }
 
     // MARK: - Member actions
