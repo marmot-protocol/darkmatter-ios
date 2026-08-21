@@ -1829,6 +1829,15 @@ struct ConversationView: View {
             onLoadMedia: ConversationMediaLoader { media in
                 try await viewModel.data(for: media)
             },
+            mediaForwardingContext: MediaForwardingContext(
+                viewModel: viewModel,
+                destinationProvider: {
+                    if let forwardDestinationProvider {
+                        return try await forwardDestinationProvider()
+                    }
+                    return try await viewModel.forwardDestinations()
+                }
+            ),
             onViewEditHistory: viewModel.hasEditHistory(record.messageIdHex)
                 ? { editHistoryTarget = ActionsTarget(record: record, status: status) }
                 : nil,

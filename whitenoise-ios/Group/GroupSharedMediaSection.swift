@@ -138,7 +138,12 @@ struct GroupSharedMediaSection: View {
                         guard let gallery = MessageMediaGallery(
                             items: attachments,
                             initialItem: item.attachment,
-                            initialMediaData: initialData
+                            initialMediaData: initialData,
+                            messageIdByItemID: Dictionary(
+                                uniqueKeysWithValues: visualItems.compactMap { media in
+                                    media.messageIdHex.map { (media.attachment.id, $0) }
+                                }
+                            )
                         ) else { return }
                         onOpenGallery(gallery)
                     }

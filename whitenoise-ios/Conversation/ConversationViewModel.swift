@@ -2350,6 +2350,61 @@ final class ConversationViewModel {
         return MessageForwardResult(successfulGroupIds: successful, failedGroupIds: failed)
     }
 
+    /// Re-encrypts the selected plaintext media independently for every
+    /// destination. Ciphertext references are group-bound and must never be
+    /// copied directly between conversations.
+    func forwardMedia(
+        _ media: MessageMediaAttachment,
+        data: Data,
+        to groupIds: Set<String>
+    ) async -> MessageForwardResult {
+        let destinations = groupIds.filter { !$0.isEmpty && $0 != group.groupIdHex }
+        guard !destinations.isEmpty,
+              let appState,
+              let accountRef = appState.activeAccountRef,
+              let client = try? appState.currentMarmotClient()
+        else {
+            return MessageForwardResult(successfulGroupIds: [], failedGroupIds: Set(destinations))
+        }
+
+        let prepared: MediaDraftAttachment
+        do {
+            prepared = try await MediaDraftProcessor.preparedAttachment(
+                from: data,
+                fileName: media.fileName,
+                typeIdentifier: nil
+            )
+        } catch {
+            return MessageForwardResult(successfulGroupIds: [], failedGroupIds: Set(destinations))
+        }
+
+        var successful = Set<String>()
+        var failed = Set<String>()
+        for destination in destinations {
+            do {
+                _ = try await client.uploadMedia(
+                    accountRef: accountRef,
+                    groupIdHex: destination,
+                    request: MediaUploadRequestFfi(
+                        attachments: [prepared.uploadRequest],
+                        caption: nil,
+                        send: true,
+                        blossomServer: nil
+                    )
+                )
+                successful.insert(destination)
+            } catch {
+                failed.insert(destination)
+            }
+        }
+        if failed.isEmpty {
+            Haptics.tap()
+        } else {
+            Haptics.error()
+        }
+        return MessageForwardResult(successfulGroupIds: successful, failedGroupIds: failed)
+    }
+
     func editMessage(_ message: AppMessageRecordFfi, content: String) async -> Bool {
         guard MessageEditingPolicy.canEdit(
                 message,

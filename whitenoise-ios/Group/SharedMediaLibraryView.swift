@@ -179,6 +179,11 @@ struct SharedMediaLibraryView: View {
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
                 onLoadMedia: mediaLoader,
+                forwardingContext: MediaForwardingContext(
+                    viewModel: conversation,
+                    destinationProvider: { try await conversation.forwardDestinations() }
+                ),
+                onGoToMessage: jumpToMessage,
                 onDismiss: { self.gallery = nil }
             )
         }
@@ -287,7 +292,12 @@ struct SharedMediaLibraryView: View {
                                     guard let gallery = MessageMediaGallery(
                                         items: attachments,
                                         initialItem: item.attachment,
-                                        initialMediaData: initialData
+                                        initialMediaData: initialData,
+                                        messageIdByItemID: Dictionary(
+                                            uniqueKeysWithValues: visual.compactMap { media in
+                                                media.messageIdHex.map { (media.attachment.id, $0) }
+                                            }
+                                        )
                                     ) else { return }
                                     self.gallery = gallery
                                 }

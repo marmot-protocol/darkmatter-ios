@@ -275,6 +275,16 @@ struct GroupDetailsView: View {
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
                 onLoadMedia: mediaLoader,
+                forwardingContext: MediaForwardingContext(
+                    viewModel: viewModel,
+                    destinationProvider: { try await viewModel.forwardDestinations() }
+                ),
+                onGoToMessage: { messageId in
+                    appState.presentChat(
+                        groupIdHex: viewModel.group.groupIdHex,
+                        messageIdHex: messageId
+                    )
+                },
                 onDismiss: { sharedMediaGallery = nil }
             )
         }

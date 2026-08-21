@@ -11618,6 +11618,26 @@ struct MessageMediaGalleryTests {
         #expect(gallery.initialItemID == "image")
     }
 
+    @Test func galleryRetainsMessageDestinationsForVisualItems() throws {
+        let image = attachment(id: "image", mediaType: "image/png")
+        let video = attachment(id: "video", mediaType: "video/mp4")
+        let document = attachment(id: "document", mediaType: "application/pdf")
+        let messageIds = [
+            image.id: "image-message",
+            video.id: "video-message",
+            document.id: "document-message",
+        ]
+
+        let gallery = try #require(MessageMediaGallery(
+            items: [image, video, document],
+            initialItem: image,
+            messageIdByItemID: messageIds
+        ))
+
+        #expect(gallery.messageIdByItemID[image.id] == "image-message")
+        #expect(gallery.messageIdByItemID[video.id] == "video-message")
+    }
+
     @Test func galleryAcceptsVideoInitialItem() throws {
         let image = attachment(id: "image", mediaType: "image/png")
         let video = attachment(id: "video", mediaType: "video/mp4")
@@ -11678,6 +11698,29 @@ struct MessageMediaGalleryTests {
             selectedIndex: nil,
             totalCount: 3
         ).isEmpty)
+    }
+
+    @Test func fullscreenActionsRequireTheirRuntimeInputs() {
+        #expect(MessageMediaFullscreenGalleryPresentation.canGoToMessage(
+            messageId: "message-id",
+            hasHandler: true
+        ))
+        #expect(!MessageMediaFullscreenGalleryPresentation.canGoToMessage(
+            messageId: "",
+            hasHandler: true
+        ))
+        #expect(!MessageMediaFullscreenGalleryPresentation.canGoToMessage(
+            messageId: "message-id",
+            hasHandler: false
+        ))
+        #expect(MessageMediaFullscreenGalleryPresentation.canForward(
+            hasPreparedMedia: true,
+            hasForwardingContext: true
+        ))
+        #expect(!MessageMediaFullscreenGalleryPresentation.canForward(
+            hasPreparedMedia: false,
+            hasForwardingContext: true
+        ))
     }
 
     @Test func fullscreenInitialDecodeFailureIsExplicit() async {

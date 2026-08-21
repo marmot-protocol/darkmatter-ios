@@ -17,9 +17,8 @@ nonisolated enum ForwardMessagePresentation {
 struct ForwardMessageSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let messages: [AppMessageRecordFfi]
-    let viewModel: ConversationViewModel
     let destinationProvider: () async throws -> [MessageForwardDestination]
+    let submit: (Set<String>) async -> MessageForwardResult
 
     @State private var destinations: [MessageForwardDestination] = []
     @State private var selectedGroupIds = Set<String>()
@@ -34,9 +33,10 @@ struct ForwardMessageSheet: View {
         viewModel: ConversationViewModel,
         destinationProvider: @escaping () async throws -> [MessageForwardDestination]
     ) {
-        self.messages = [message]
-        self.viewModel = viewModel
         self.destinationProvider = destinationProvider
+        self.submit = { groupIds in
+            await viewModel.forwardMessage(message, to: groupIds)
+        }
     }
 
     init(
@@ -44,9 +44,23 @@ struct ForwardMessageSheet: View {
         viewModel: ConversationViewModel,
         destinationProvider: @escaping () async throws -> [MessageForwardDestination]
     ) {
-        self.messages = Array(messages.prefix(MessageSelectionPolicy.maximumForwardCount))
-        self.viewModel = viewModel
+        let messages = Array(messages.prefix(MessageSelectionPolicy.maximumForwardCount))
         self.destinationProvider = destinationProvider
+        self.submit = { groupIds in
+            await viewModel.forwardMessages(messages, to: groupIds)
+        }
+    }
+
+    init(
+        media: MessageMediaAttachment,
+        data: Data,
+        viewModel: ConversationViewModel,
+        destinationProvider: @escaping () async throws -> [MessageForwardDestination]
+    ) {
+        self.destinationProvider = destinationProvider
+        self.submit = { groupIds in
+            await viewModel.forwardMedia(media, data: data, to: groupIds)
+        }
     }
 
     var body: some View {
@@ -186,7 +200,7 @@ struct ForwardMessageSheet: View {
         guard !selectedGroupIds.isEmpty else { return }
         isSending = true
         sendFailed = false
-        let result = await viewModel.forwardMessages(messages, to: selectedGroupIds)
+        let result = await submit(selectedGroupIds)
         isSending = false
         if result.succeededCompletely {
             dismiss()

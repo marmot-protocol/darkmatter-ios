@@ -4,6 +4,7 @@ import MarmotKit
 import ImageIO
 import AVFoundation
 import AVKit
+import UniformTypeIdentifiers
 
 /// Reference box for the media-load callback. Passing the bare async closure
 /// through every media view layer builds a deep reabstraction-thunk chain
@@ -86,6 +87,7 @@ struct MessageBubble: View {
     var onShowReactionDetails: (String?) -> Void = { _ in }
     var onReplyPreviewTap: () -> Void = {}
     var onLoadMedia = ConversationMediaLoader { _ in Data() }
+    var mediaForwardingContext: MediaForwardingContext?
     /// Set when the message has viewable edit history; makes the inline "Edited"
     /// label tap to open the history sheet, the same sheet the actions menu opens.
     var onViewEditHistory: (() -> Void)? = nil
@@ -219,7 +221,8 @@ struct MessageBubble: View {
         .fullScreenCover(item: $mediaGallery) { gallery in
             MessageMediaFullscreenGalleryView(
                 gallery: gallery,
-                onLoadMedia: onLoadMedia
+                onLoadMedia: onLoadMedia,
+                forwardingContext: mediaForwardingContext
             ) {
                 mediaGallery = nil
             }
@@ -431,13 +434,15 @@ struct MessageBubble: View {
                     mediaGallery = MessageMediaGallery(
                         items: mediaItems,
                         initialItem: item,
-                        initialImageData: data
+                        initialImageData: data,
+                        messageIdByItemID: mediaMessageIds
                     )
                 },
                 onOpenVideo: { item in
                     mediaGallery = MessageMediaGallery(
                         items: mediaItems,
-                        initialItem: item
+                        initialItem: item,
+                        messageIdByItemID: mediaMessageIds
                     )
                 }
             )
@@ -468,6 +473,11 @@ struct MessageBubble: View {
             }
         }
         .opacity(status == .sending ? 0.7 : 1)
+    }
+
+    private var mediaMessageIds: [String: String] {
+        guard !record.messageIdHex.isEmpty else { return [:] }
+        return Dictionary(uniqueKeysWithValues: mediaItems.map { ($0.id, record.messageIdHex) })
     }
 
     private var mediaGridWidth: CGFloat {
@@ -2871,16 +2881,32 @@ struct MessageMediaGallery: Identifiable {
     let items: [MessageMediaAttachment]
     let initialItemID: String
     let initialMediaData: Data?
+    let messageIdByItemID: [String: String]
 
     init?(item: MessageMediaAttachment, imageData: Data) {
         self.init(items: [item], initialItem: item, initialMediaData: imageData)
     }
 
-    init?(items: [MessageMediaAttachment], initialItem: MessageMediaAttachment, initialImageData: Data) {
-        self.init(items: items, initialItem: initialItem, initialMediaData: initialImageData)
+    init?(
+        items: [MessageMediaAttachment],
+        initialItem: MessageMediaAttachment,
+        initialImageData: Data,
+        messageIdByItemID: [String: String] = [:]
+    ) {
+        self.init(
+            items: items,
+            initialItem: initialItem,
+            initialMediaData: initialImageData,
+            messageIdByItemID: messageIdByItemID
+        )
     }
 
-    init?(items: [MessageMediaAttachment], initialItem: MessageMediaAttachment, initialMediaData: Data? = nil) {
+    init?(
+        items: [MessageMediaAttachment],
+        initialItem: MessageMediaAttachment,
+        initialMediaData: Data? = nil,
+        messageIdByItemID: [String: String] = [:]
+    ) {
         guard initialItem.isImage || initialItem.isVideo else { return nil }
         let visualItems = items.filter { $0.isImage || $0.isVideo }
         if visualItems.contains(where: { $0.id == initialItem.id }) {
@@ -2890,6 +2916,7 @@ struct MessageMediaGallery: Identifiable {
         }
         self.initialItemID = initialItem.id
         self.initialMediaData = initialMediaData
+        self.messageIdByItemID = messageIdByItemID
     }
 
     func initialData(for item: MessageMediaAttachment) -> Data? {
@@ -2898,6 +2925,47 @@ struct MessageMediaGallery: Identifiable {
         }
         return item.localData
     }
+}
+
+@MainActor
+struct MediaForwardingContext {
+    let viewModel: ConversationViewModel
+    let destinationProvider: () async throws -> [MessageForwardDestination]
+}
+
+private struct FullscreenMediaPrepared: Identifiable {
+    let id: String
+    let item: MessageMediaAttachment
+    let data: Data
+    let url: URL
+    let contentType: UTType
+}
+
+private struct FullscreenMediaShare: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct DecryptedMediaExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.data] }
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
+private enum FullscreenMediaPreparationError: Error {
+    case protectedFileUnavailable
 }
 
 enum MessageMediaFullscreenPresentation {
@@ -2953,15 +3021,32 @@ nonisolated enum MessageMediaFullscreenGalleryPresentation {
         let total = LocalizedNumberLabel.decimal(UInt64(totalCount), locale: locale)
         return L10n.formatted("%@ of %@", arguments: [current, total], locale: locale)
     }
+
+    static func canGoToMessage(messageId: String?, hasHandler: Bool) -> Bool {
+        guard hasHandler, let messageId else { return false }
+        return !messageId.isEmpty
+    }
+
+    static func canForward(hasPreparedMedia: Bool, hasForwardingContext: Bool) -> Bool {
+        hasPreparedMedia && hasForwardingContext
+    }
 }
 
 struct MessageMediaFullscreenGalleryView: View {
     let gallery: MessageMediaGallery
     let onLoadMedia: ConversationMediaLoader
+    var forwardingContext: MediaForwardingContext?
+    var onGoToMessage: ((String) -> Void)?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
     @State private var dismissDragOffset: CGFloat = 0
+    @State private var preparedMedia: FullscreenMediaPrepared?
+    @State private var mediaShare: FullscreenMediaShare?
+    @State private var exportDocument: DecryptedMediaExportDocument?
+    @State private var isExporting = false
+    @State private var actionError: String?
+    @State private var forwardMedia: FullscreenMediaPrepared?
 
     @ScaledMetric(relativeTo: .body)
     private var closeButtonSize: CGFloat = 42
@@ -2969,10 +3054,14 @@ struct MessageMediaFullscreenGalleryView: View {
     init(
         gallery: MessageMediaGallery,
         onLoadMedia: ConversationMediaLoader,
+        forwardingContext: MediaForwardingContext? = nil,
+        onGoToMessage: ((String) -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.gallery = gallery
         self.onLoadMedia = onLoadMedia
+        self.forwardingContext = forwardingContext
+        self.onGoToMessage = onGoToMessage
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: gallery.initialItemID)
     }
@@ -3005,7 +3094,7 @@ struct MessageMediaFullscreenGalleryView: View {
                     .padding(.vertical, 7)
                     .background(.ultraThinMaterial, in: Capsule())
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, 34)
+                    .padding(.bottom, 76)
             }
 
             Button(action: onDismiss) {
@@ -3019,10 +3108,147 @@ struct MessageMediaFullscreenGalleryView: View {
             .accessibilityLabel("Close")
             .padding(.top, 14)
             .padding(.trailing, 14)
+
+            actionMenu
+
+            bottomActions
         }
         .offset(y: dismissDragOffset)
         .opacity(1 - min(dismissDragOffset / 420, 0.35))
         .simultaneousGesture(swipeDownToDismissGesture)
+        .task(id: selectedItemID) { await prepareSelectedMedia() }
+        .sheet(item: $mediaShare) { share in
+            ActivityShareSheet(items: [share.url])
+        }
+        .sheet(item: $forwardMedia) { prepared in
+            if let forwardingContext {
+                ForwardMessageSheet(
+                    media: prepared.item,
+                    data: prepared.data,
+                    viewModel: forwardingContext.viewModel,
+                    destinationProvider: forwardingContext.destinationProvider
+                )
+                .appAppearance()
+            }
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: preparedMedia?.contentType ?? .data,
+            defaultFilename: preparedMedia?.item.fileName ?? "Media"
+        ) { result in
+            if case .failure = result {
+                actionError = L10n.string("Couldn't save media.")
+            }
+        }
+        .alert(
+            "Media unavailable",
+            isPresented: Binding(
+                get: { actionError != nil },
+                set: { if !$0 { actionError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { actionError = nil }
+        } message: {
+            Text(actionError ?? "")
+        }
+    }
+
+    private var selectedItem: MessageMediaAttachment? {
+        gallery.items.first { $0.id == selectedItemID }
+    }
+
+    private var actionMenu: some View {
+        Menu {
+            Button("Save", systemImage: "square.and.arrow.down") {
+                guard let preparedMedia else { return }
+                exportDocument = DecryptedMediaExportDocument(data: preparedMedia.data)
+                isExporting = true
+            }
+            .disabled(preparedMedia == nil)
+
+            if let messageId = gallery.messageIdByItemID[selectedItemID],
+               MessageMediaFullscreenGalleryPresentation.canGoToMessage(
+                    messageId: messageId,
+                    hasHandler: onGoToMessage != nil
+               )
+            {
+                Button("Go to Message", systemImage: "bubble.left") {
+                    onDismiss()
+                    onGoToMessage?(messageId)
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: closeButtonSize, height: closeButtonSize)
+                .background(.ultraThinMaterial, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("More")
+        .padding(.top, 14)
+        .padding(.trailing, closeButtonSize + 24)
+    }
+
+    private var bottomActions: some View {
+        HStack {
+            Button {
+                if let url = preparedMedia?.url {
+                    mediaShare = FullscreenMediaShare(url: url)
+                }
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+            .disabled(preparedMedia == nil)
+
+            Spacer()
+
+            Button {
+                forwardMedia = preparedMedia
+            } label: {
+                Label("Forward", systemImage: "arrowshape.turn.up.right")
+            }
+            .disabled(!MessageMediaFullscreenGalleryPresentation.canForward(
+                hasPreparedMedia: preparedMedia != nil,
+                hasForwardingContext: forwardingContext != nil
+            ))
+        }
+        .font(.callout.weight(.semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+    }
+
+    private func prepareSelectedMedia() async {
+        guard let selectedItem else { return }
+        preparedMedia = nil
+        do {
+            let data = try await onLoadMedia.data(for: selectedItem)
+            guard !Task.isCancelled, selectedItem.id == selectedItemID else { return }
+            let producerEpoch = MessageMediaCache.currentProducerEpoch()
+            guard let url = await MediaPlaybackFileStore.fileURL(
+                for: selectedItem,
+                data: data,
+                producerEpoch: producerEpoch
+            ) else {
+                throw FullscreenMediaPreparationError.protectedFileUnavailable
+            }
+            guard !Task.isCancelled, selectedItem.id == selectedItemID else { return }
+            preparedMedia = FullscreenMediaPrepared(
+                id: selectedItem.id,
+                item: selectedItem,
+                data: data,
+                url: url,
+                contentType: UTType(mimeType: selectedItem.mediaType) ?? .data
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            actionError = L10n.string("Couldn't prepare media.")
+        }
     }
 
     private var swipeDownToDismissGesture: some Gesture {
