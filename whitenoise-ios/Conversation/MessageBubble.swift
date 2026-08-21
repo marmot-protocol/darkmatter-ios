@@ -699,9 +699,10 @@ struct MessageBubble: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.string("Reactions"))
-            .accessibilityValue(L10n.formatted("%lld", Int64(summary.totalCount)))
+            .accessibilityValue(L10n.plural("%lld reactions", Int64(summary.totalCount)))
             .accessibilityAddTraits(summary.mine ? .isSelected : [])
             .fixedSize()
+            .offset(y: -2)
         }
     }
 
@@ -2157,7 +2158,7 @@ private struct MessageFullscreenVideoPlayerView: View {
     @State private var dismissDragOffset: CGFloat = 0
 
     @ScaledMetric(relativeTo: .body)
-    private var closeButtonSize: CGFloat = 42
+    private var closeButtonSize: CGFloat = 44
 
     init(video: MessageFullscreenVideo, onDismiss: @escaping () -> Void) {
         self.video = video
@@ -3199,6 +3200,7 @@ struct MessageMediaFullscreenGalleryView: View {
                 }
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
+                    .frame(minHeight: 44)
             }
             .disabled(preparedMedia == nil)
 
@@ -3208,6 +3210,7 @@ struct MessageMediaFullscreenGalleryView: View {
                 forwardMedia = preparedMedia
             } label: {
                 Label("Forward", systemImage: "arrowshape.turn.up.right")
+                    .frame(minHeight: 44)
             }
             .disabled(!MessageMediaFullscreenGalleryPresentation.canForward(
                 hasPreparedMedia: preparedMedia != nil,

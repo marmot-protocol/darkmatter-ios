@@ -885,6 +885,7 @@ struct CameraCapture: Identifiable {
 
 struct CameraCaptureView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var camera = CameraCaptureModel()
     @State private var shutterIsPressed = false
     @State private var didBeginVideo = false
@@ -931,6 +932,13 @@ struct CameraCaptureView: View {
         .onChange(of: camera.capture?.id) {
             guard let capture = camera.capture else { return }
             onCapture(capture)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                camera.resumePreview()
+            } else {
+                camera.pausePreview()
+            }
         }
         .onDisappear {
             holdTask?.cancel()
@@ -1167,6 +1175,7 @@ private final class CameraCaptureModel: ObservableObject {
         }
 
         recordsVideoSound = await requestAudioAccess()
+        guard acceptsCapture, !Task.isCancelled else { return }
         do {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
@@ -1214,6 +1223,20 @@ private final class CameraCaptureModel: ObservableObject {
     func switchCamera() {
         guard !isRecordingVideo else { return }
         service.switchCamera()
+    }
+
+    func pausePreview() {
+        guard state == .ready else { return }
+        isRecordingVideo = false
+        recordingTimer?.cancel()
+        recordingTimer = nil
+        service.cancelRecording()
+        service.stop()
+    }
+
+    func resumePreview() {
+        guard state == .ready, acceptsCapture else { return }
+        service.start()
     }
 
     func cancelAndStop() {
