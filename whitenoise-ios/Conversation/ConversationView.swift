@@ -3,6 +3,7 @@ import UIKit
 import MarmotKit
 import Contacts
 import CoreLocation
+import UniformTypeIdentifiers
 
 enum TimelineBottom {
     static let pinnedThreshold: CGFloat = 44
@@ -886,9 +887,9 @@ struct ConversationView: View {
         conversationMessageSheets
             .sheet(isPresented: $showCameraCapture) {
                 CameraCaptureView(
-                    onImage: { image in
+                    onCapture: { capture in
                         showCameraCapture = false
-                        addCameraImage(image)
+                        addCameraCapture(capture)
                     },
                     onCancel: {
                         showCameraCapture = false
@@ -2556,6 +2557,30 @@ struct ConversationView: View {
         Task { @MainActor in
             do {
                 let attachment = try await MediaDraftProcessor.preparedAttachment(from: image, fileName: nil)
+                try appendMediaDraft(attachment)
+            } catch is CancellationError {
+                return
+            } catch {
+                appState.present(UserFacingError.toast(title: L10n.string("Couldn't add attachment"), error: error))
+            }
+        }
+    }
+
+    private func addCameraCapture(_ capture: CameraCapture) {
+        Task { @MainActor in
+            do {
+                let attachment: MediaDraftAttachment
+                switch capture.content {
+                case .photo(let data):
+                    attachment = try await MediaDraftProcessor.preparedAttachment(
+                        from: data,
+                        fileName: "camera.jpg",
+                        typeIdentifier: UTType.jpeg.identifier
+                    )
+                case .video(let url):
+                    defer { try? FileManager.default.removeItem(at: url) }
+                    attachment = try await MediaDraftProcessor.preparedAttachment(fromFileURL: url)
+                }
                 try appendMediaDraft(attachment)
             } catch is CancellationError {
                 return

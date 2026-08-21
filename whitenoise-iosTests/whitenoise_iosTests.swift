@@ -11794,6 +11794,15 @@ struct MessageMediaGalleryTests {
     }
 }
 
+struct CameraCapturePresentationTests {
+    @Test func recordingDurationUsesMinuteAndZeroPaddedSecondFields() {
+        #expect(CameraCapturePresentation.durationLabel(0) == "0:00")
+        #expect(CameraCapturePresentation.durationLabel(9.99) == "0:09")
+        #expect(CameraCapturePresentation.durationLabel(65) == "1:05")
+        #expect(CameraCapturePresentation.durationLabel(-2) == "0:00")
+    }
+}
+
 @MainActor
 struct MessageMediaThumbnailDecoderTests {
 
