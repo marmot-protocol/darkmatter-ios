@@ -4,32 +4,94 @@ import MarmotKit
 nonisolated enum MessageActionsPresentation {
     static let actionHeight: CGFloat = 50
     static let reactionHeight: CGFloat = 56
-    static let verticalChrome: CGFloat = 40
+    static let actionVerticalPadding: CGFloat = 10
+    static let surfaceGap: CGFloat = 12
+    static let menuWidth: CGFloat = 250
+    static let horizontalMargin: CGFloat = 16
+    static let verticalMargin: CGFloat = 12
+    static let minimumPreviewHeight: CGFloat = 100
 
-    static func estimatedHeight(
+    static func actionCount(
         canRetry: Bool,
         canInteract: Bool,
         canForward: Bool,
         canEdit: Bool,
         canViewEditHistory: Bool,
         canDelete: Bool
-    ) -> CGFloat {
-        var actionCount = 3 // Copy, Info, and Select.
-        if canRetry { actionCount += 1 }
-        if canInteract { actionCount += 1 }
-        if canForward { actionCount += 1 }
-        if canEdit { actionCount += 1 }
-        if canViewEditHistory { actionCount += 1 }
-        if canDelete { actionCount += 1 }
-        return CGFloat(actionCount) * actionHeight
-            + (canInteract ? reactionHeight : 0)
-            + verticalChrome
+    ) -> Int {
+        var count = 3 // Copy, Info, and Select.
+        if canRetry { count += 1 }
+        if canInteract { count += 1 }
+        if canForward { count += 1 }
+        if canEdit { count += 1 }
+        if canViewEditHistory { count += 1 }
+        if canDelete { count += 1 }
+        return count
+    }
+
+    static func actionMenuHeight(actionCount: Int) -> CGFloat {
+        CGFloat(actionCount) * actionHeight + actionVerticalPadding * 2
+    }
+
+    static func reactionWidth(itemCount: Int, maximumWidth: CGFloat) -> CGFloat {
+        min(maximumWidth, CGFloat(itemCount) * 44 + 12)
     }
 }
 
-/// Free-floating actions pane shown in a popover anchored under a long-pressed
-/// message: a row of the most-recent reaction emojis with a full-picker
-/// button, then message actions such as reply, forward, edit, info, and delete.
+nonisolated struct MessageActionsOverlayLayout: Equatable {
+    let groupTop: CGFloat
+    let previewHeight: CGFloat
+    let previewScale: CGFloat
+    let previewCenterY: CGFloat
+    let groupCenterY: CGFloat
+    let groupHeight: CGFloat
+
+    static func resolve(
+        sourceFrame: CGRect,
+        containerHeight: CGFloat,
+        actionMenuHeight: CGFloat,
+        showsReactions: Bool
+    ) -> Self {
+        let reactionHeight = showsReactions ? MessageActionsPresentation.reactionHeight : 0
+        let reactionGap = showsReactions ? MessageActionsPresentation.surfaceGap : 0
+        let fixedHeight = reactionHeight
+            + reactionGap
+            + MessageActionsPresentation.surfaceGap
+            + actionMenuHeight
+        let availablePreviewHeight = max(
+            MessageActionsPresentation.minimumPreviewHeight,
+            containerHeight
+                - MessageActionsPresentation.verticalMargin * 2
+                - fixedHeight
+        )
+        let previewScale = min(1, availablePreviewHeight / max(sourceFrame.height, 1))
+        let previewHeight = sourceFrame.height * previewScale
+        let groupHeight = fixedHeight + previewHeight
+        let preferredTop = sourceFrame.minY - reactionHeight - reactionGap
+        let maximumTop = max(
+            MessageActionsPresentation.verticalMargin,
+            containerHeight - MessageActionsPresentation.verticalMargin - groupHeight
+        )
+        let groupTop = min(
+            max(preferredTop, MessageActionsPresentation.verticalMargin),
+            maximumTop
+        )
+        let previewTop = groupTop + reactionHeight + reactionGap
+
+        return Self(
+            groupTop: groupTop,
+            previewHeight: previewHeight,
+            previewScale: previewScale,
+            previewCenterY: previewTop + previewHeight / 2,
+            groupCenterY: groupTop + groupHeight / 2,
+            groupHeight: groupHeight
+        )
+    }
+}
+
+/// The two independently styled surfaces around a lifted message preview.
+/// The transparent middle keeps the reaction capsule and action panel from
+/// acquiring shared popover chrome.
 struct MessageActionsMenu: View {
     let canRetry: Bool
     let canInteract: Bool
@@ -39,6 +101,9 @@ struct MessageActionsMenu: View {
     let canDelete: Bool
     let quickReactions: [String]
     let selectedReaction: String?
+    let previewHeight: CGFloat
+    let alignsTrailing: Bool
+    let surfaceWidth: CGFloat
     let onRetry: () -> Void
     let onReact: (String) -> Void
     let onReply: () -> Void
@@ -52,8 +117,15 @@ struct MessageActionsMenu: View {
     let onMoreEmoji: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(
+            alignment: alignsTrailing ? .trailing : .leading,
+            spacing: MessageActionsPresentation.surfaceGap
+        ) {
             if canInteract { reactionRow }
+
+            Color.clear
+                .frame(height: previewHeight)
+                .allowsHitTesting(false)
 
             VStack(spacing: 0) {
                 if canRetry {
@@ -79,17 +151,16 @@ struct MessageActionsMenu: View {
                     actionRow("Delete", systemImage: "trash", role: .destructive, action: onDelete)
                 }
             }
-            .padding(.vertical, 10)
-            .background(.regularMaterial, in: .rect(cornerRadius: 28))
+            .padding(.vertical, MessageActionsPresentation.actionVerticalPadding)
+            .frame(width: MessageActionsPresentation.menuWidth)
+            .background(.regularMaterial, in: .rect(cornerRadius: 32))
             .overlay {
-                RoundedRectangle(cornerRadius: 28)
+                RoundedRectangle(cornerRadius: 32)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
+            .shadow(color: .black.opacity(0.16), radius: 18, y: 7)
         }
-        .padding(8)
-        .frame(width: 266)
-        .presentationBackground(.clear)
-        .presentationCompactAdaptation(.popover)
+        .frame(width: surfaceWidth)
     }
 
     private var reactionRow: some View {
@@ -128,10 +199,19 @@ struct MessageActionsMenu: View {
             .accessibilityLabel("More reactions")
         }
         .padding(6)
+        .frame(width: reactionWidth)
         .background(.regularMaterial, in: .capsule)
         .overlay {
             Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.14), radius: 12, y: 4)
+    }
+
+    private var reactionWidth: CGFloat {
+        MessageActionsPresentation.reactionWidth(
+            itemCount: displayedQuickReactions.count + 1,
+            maximumWidth: surfaceWidth
+        )
     }
 
     private var displayedQuickReactions: [String] {
@@ -148,15 +228,11 @@ struct MessageActionsMenu: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(role: role, action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: systemImage)
-                    .frame(width: 24)
-                Text(title)
-                Spacer()
-            }
+            Label(title, systemImage: systemImage)
             .font(.body)
-            .padding(.horizontal, 22)
-            .frame(minHeight: 50)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .frame(minHeight: MessageActionsPresentation.actionHeight)
             .contentShape(.rect)
         }
         .foregroundStyle(role == .destructive ? Color.red : Color.primary)

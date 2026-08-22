@@ -12669,40 +12669,56 @@ struct TimelineBottomTests {
         ))
     }
 
-    @Test func messageActionsPlacementPrefersBelowWhenThereIsRoom() {
-        #expect(MessageActionsPlacement.resolve(
-            rowFrame: CGRect(x: 0, y: 120, width: 300, height: 80),
-            contentTopY: 80,
-            contentBottomY: 800,
-            menuEstimate: 280
-        ) == .below)
+    @Test func messageActionsOverlayKeepsReactionsAboveAndActionsBelowMessage() {
+        let source = CGRect(x: 0, y: 220, width: 390, height: 96)
+        let layout = MessageActionsOverlayLayout.resolve(
+            sourceFrame: source,
+            containerHeight: 844,
+            actionMenuHeight: 320,
+            showsReactions: true
+        )
+
+        let reactionBottom = layout.groupTop + MessageActionsPresentation.reactionHeight
+        let previewTop = layout.previewCenterY - layout.previewHeight / 2
+        let previewBottom = layout.previewCenterY + layout.previewHeight / 2
+        let actionsTop = layout.groupTop + layout.groupHeight - 320
+
+        #expect(previewTop - reactionBottom == MessageActionsPresentation.surfaceGap)
+        #expect(actionsTop - previewBottom == MessageActionsPresentation.surfaceGap)
     }
 
-    @Test func messageActionsPlacementFlipsAboveWhenBelowDoesNotFit() {
-        #expect(MessageActionsPlacement.resolve(
-            rowFrame: CGRect(x: 0, y: 440, width: 300, height: 160),
-            contentTopY: 80,
-            contentBottomY: 760,
-            menuEstimate: 280
-        ) == .above)
+    @Test func messageActionsOverlayShiftsTheWholeCompositionOnShortScreens() {
+        let layout = MessageActionsOverlayLayout.resolve(
+            sourceFrame: CGRect(x: 0, y: 650, width: 390, height: 300),
+            containerHeight: 760,
+            actionMenuHeight: 420,
+            showsReactions: true
+        )
+
+        #expect(layout.groupTop >= MessageActionsPresentation.verticalMargin)
+        #expect(layout.groupTop + layout.groupHeight <= 760 - MessageActionsPresentation.verticalMargin)
+        #expect(layout.previewScale < 1)
     }
 
-    @Test func messageActionsPlacementCentersWhenNeitherSideFits() {
-        #expect(MessageActionsPlacement.resolve(
-            rowFrame: CGRect(x: 0, y: 260, width: 300, height: 360),
-            contentTopY: 80,
-            contentBottomY: 760,
-            menuEstimate: 280
-        ) == .centered)
-    }
+    @Test func messageActionsOverlayDoesNotReserveAReactionSurfaceWhenInteractionIsDisabled() {
+        let source = CGRect(x: 0, y: 180, width: 390, height: 80)
+        let withReactions = MessageActionsOverlayLayout.resolve(
+            sourceFrame: source,
+            containerHeight: 844,
+            actionMenuHeight: 220,
+            showsReactions: true
+        )
+        let withoutReactions = MessageActionsOverlayLayout.resolve(
+            sourceFrame: source,
+            containerHeight: 844,
+            actionMenuHeight: 220,
+            showsReactions: false
+        )
 
-    @Test func messageActionsPlacementCentersWithoutMeasuredFrame() {
-        #expect(MessageActionsPlacement.resolve(
-            rowFrame: nil,
-            contentTopY: 80,
-            contentBottomY: 760,
-            menuEstimate: 280
-        ) == .centered)
+        #expect(withoutReactions.groupHeight
+            == withReactions.groupHeight
+                - MessageActionsPresentation.reactionHeight
+                - MessageActionsPresentation.surfaceGap)
     }
 }
 

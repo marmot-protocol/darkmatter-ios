@@ -5,6 +5,49 @@ import UserNotifications
 
 @MainActor
 struct AppNotificationsRefreshTests {
+    @Test func partialConversationReadRemovesOnlyTheConfirmedMessages() {
+        let notifications = Self.deliveredDescriptors()
+
+        let identifiers = DeliveredNotificationReadCleanupPolicy.identifiersToRemove(
+            from: notifications,
+            accountRef: "account-a",
+            groupIdHex: "group-a",
+            readMessageIdHexes: ["message-2"],
+            removeEntireConversation: false
+        )
+
+        #expect(identifiers == ["request-2"])
+    }
+
+    @Test func fullyReadConversationRemovesItsMessageStackWithoutCrossingRoutes() {
+        let identifiers = DeliveredNotificationReadCleanupPolicy.identifiersToRemove(
+            from: Self.deliveredDescriptors(),
+            accountRef: "account-a",
+            groupIdHex: "group-a",
+            readMessageIdHexes: ["message-2"],
+            removeEntireConversation: true
+        )
+
+        #expect(identifiers == ["request-1", "request-2"])
+    }
+
+    @Test func deliveredNotificationReconciliationUsesSystemRequestIdentifiers() async {
+        var removedIdentifiers: [String] = []
+        let notifications = AppNotifications(
+            deliveredNotificationDescriptorsProvider: { Self.deliveredDescriptors() },
+            deliveredNotificationIdentifiersRemover: { removedIdentifiers = $0 }
+        )
+
+        await notifications.reconcileDeliveredNotificationsAfterRead(
+            accountRef: "account-a",
+            groupIdHex: "group-a",
+            readMessageIdHexes: ["message-2"],
+            conversationStillHasUnread: false
+        )
+
+        #expect(removedIdentifiers == ["request-1", "request-2"])
+    }
+
     @Test func applicationBadgeWritesRemainInUnreadProjectionOrder() async {
         var appliedCounts: [Int] = []
         let notifications = AppNotifications(
@@ -143,5 +186,46 @@ struct AppNotificationsRefreshTests {
             Issue.record("unexpected error: \(error)")
         }
         #expect(notifications.apnsTokenHex == nil)
+    }
+
+    private static func deliveredDescriptors() -> [DeliveredNotificationDescriptor] {
+        [
+            descriptor(identifier: "request-1", messageIdHex: "message-1"),
+            descriptor(identifier: "request-2", messageIdHex: "message-2"),
+            descriptor(identifier: "other-group", groupIdHex: "group-b", messageIdHex: "message-3"),
+            descriptor(identifier: "other-account", accountRef: "account-b", messageIdHex: "message-4"),
+            descriptor(identifier: "action-failure", messageIdHex: "message-2", isActionFailure: true),
+            DeliveredNotificationDescriptor(
+                identifier: "group-invite",
+                route: LocalNotificationRoute(
+                    accountRef: "account-a",
+                    groupIdHex: "group-a",
+                    notificationKey: "invite",
+                    messageIdHex: nil
+                ),
+                isMessageNotification: false,
+                isActionFailure: false
+            ),
+        ]
+    }
+
+    private static func descriptor(
+        identifier: String,
+        accountRef: String = "account-a",
+        groupIdHex: String = "group-a",
+        messageIdHex: String,
+        isActionFailure: Bool = false
+    ) -> DeliveredNotificationDescriptor {
+        DeliveredNotificationDescriptor(
+            identifier: identifier,
+            route: LocalNotificationRoute(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                notificationKey: "notification-\(identifier)",
+                messageIdHex: messageIdHex
+            ),
+            isMessageNotification: true,
+            isActionFailure: isActionFailure
+        )
     }
 }

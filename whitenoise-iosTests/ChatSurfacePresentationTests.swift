@@ -192,8 +192,8 @@ struct ChatSurfacePresentationTests {
         #expect(!MessageSelectionPolicy.canDelete(selectedCount: 2, allDeletable: false))
     }
 
-    @Test func messageActionsEstimateTracksOnlyVisibleRows() {
-        let compact = MessageActionsPresentation.estimatedHeight(
+    @Test func messageActionPanelHeightTracksOnlyVisibleRows() {
+        let compactCount = MessageActionsPresentation.actionCount(
             canRetry: false,
             canInteract: false,
             canForward: false,
@@ -201,7 +201,7 @@ struct ChatSurfacePresentationTests {
             canViewEditHistory: false,
             canDelete: false
         )
-        let expanded = MessageActionsPresentation.estimatedHeight(
+        let expandedCount = MessageActionsPresentation.actionCount(
             canRetry: true,
             canInteract: true,
             canForward: true,
@@ -210,10 +210,26 @@ struct ChatSurfacePresentationTests {
             canDelete: true
         )
 
-        #expect(compact == 3 * MessageActionsPresentation.actionHeight + MessageActionsPresentation.verticalChrome)
-        #expect(expanded == compact
-            + 6 * MessageActionsPresentation.actionHeight
-            + MessageActionsPresentation.reactionHeight)
+        #expect(compactCount == 3)
+        #expect(expandedCount == 9)
+        #expect(MessageActionsPresentation.actionMenuHeight(actionCount: expandedCount)
+            == 9 * MessageActionsPresentation.actionHeight
+                + MessageActionsPresentation.actionVerticalPadding * 2)
+    }
+
+    @Test func reactionSurfaceCanBeWiderThanTheActionPanelWithoutLeavingScreenMargins() {
+        let sixReactionsAndMore = MessageActionsPresentation.reactionWidth(
+            itemCount: 7,
+            maximumWidth: 358
+        )
+        let selectedReactionPlusMore = MessageActionsPresentation.reactionWidth(
+            itemCount: 8,
+            maximumWidth: 358
+        )
+
+        #expect(sixReactionsAndMore == 320)
+        #expect(sixReactionsAndMore > MessageActionsPresentation.menuWidth)
+        #expect(selectedReactionPlusMore == 358)
     }
 
     @Test func conversationDateHeadersCategorizeTodayYesterdayAndOlderDates() {

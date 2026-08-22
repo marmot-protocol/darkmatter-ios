@@ -12,6 +12,9 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
     private let authorizationStatusProvider: (() async -> UNAuthorizationStatus)?
     private let remoteNotificationRegistrar: (() -> Void)?
     private let applicationBadgeCountSetter: ((Int) async throws -> Void)?
+    private let deliveredNotificationDescriptorsProvider:
+        (() async -> [DeliveredNotificationDescriptor])?
+    private let deliveredNotificationIdentifiersRemover: (([String]) -> Void)?
     private weak var appState: AppState?
     private var pendingRoutes: [LocalNotificationRoute] = []
     private var pendingActionOperations: [NotificationActionOperation] = []
@@ -27,13 +30,18 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
         requestAuthorizationHandler: (() async throws -> Bool)? = nil,
         authorizationStatusProvider: (() async -> UNAuthorizationStatus)? = nil,
         remoteNotificationRegistrar: (() -> Void)? = nil,
-        applicationBadgeCountSetter: ((Int) async throws -> Void)? = nil
+        applicationBadgeCountSetter: ((Int) async throws -> Void)? = nil,
+        deliveredNotificationDescriptorsProvider:
+            (() async -> [DeliveredNotificationDescriptor])? = nil,
+        deliveredNotificationIdentifiersRemover: (([String]) -> Void)? = nil
     ) {
         self.center = center
         self.requestAuthorizationHandler = requestAuthorizationHandler
         self.authorizationStatusProvider = authorizationStatusProvider
         self.remoteNotificationRegistrar = remoteNotificationRegistrar
         self.applicationBadgeCountSetter = applicationBadgeCountSetter
+        self.deliveredNotificationDescriptorsProvider = deliveredNotificationDescriptorsProvider
+        self.deliveredNotificationIdentifiersRemover = deliveredNotificationIdentifiersRemover
         super.init()
     }
 
@@ -445,6 +453,89 @@ final class AppNotifications: NSObject, UNUserNotificationCenterDelegate {
                 actedNotificationIdentifier: identifier
             )
         )
+    }
+
+    /// Reconciles Notification Center only after MDK confirms a read-marker
+    /// mutation. A fully read chat sheds its whole delivered message stack;
+    /// a partially read chat sheds only notifications for the messages that
+    /// actually advanced the marker, preserving newer unread attention.
+    func reconcileDeliveredNotificationsAfterRead(
+        accountRef: String,
+        groupIdHex: String,
+        readMessageIdHexes: Set<String>,
+        conversationStillHasUnread: Bool?
+    ) async {
+        guard !readMessageIdHexes.isEmpty else { return }
+        let descriptors = await deliveredNotificationDescriptors()
+        let identifiers = DeliveredNotificationReadCleanupPolicy.identifiersToRemove(
+            from: descriptors,
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            readMessageIdHexes: readMessageIdHexes,
+            removeEntireConversation: conversationStillHasUnread == false
+        )
+        guard !identifiers.isEmpty else { return }
+        if let deliveredNotificationIdentifiersRemover {
+            deliveredNotificationIdentifiersRemover(identifiers)
+        } else {
+            center.removeDeliveredNotifications(withIdentifiers: identifiers)
+        }
+    }
+
+    private func deliveredNotificationDescriptors() async -> [DeliveredNotificationDescriptor] {
+        if let deliveredNotificationDescriptorsProvider {
+            return await deliveredNotificationDescriptorsProvider()
+        }
+        let delivered = await withCheckedContinuation { continuation in
+            center.getDeliveredNotifications { notifications in
+                continuation.resume(returning: notifications)
+            }
+        }
+        return delivered.map { notification in
+            let content = notification.request.content
+            return DeliveredNotificationDescriptor(
+                identifier: notification.request.identifier,
+                route: LocalNotificationProjection.route(from: content.userInfo),
+                isMessageNotification: content.categoryIdentifier
+                    == NotificationActionCategory.message,
+                isActionFailure: LocalNotificationProjection.isActionFailure(
+                    from: content.userInfo
+                )
+            )
+        }
+    }
+}
+
+nonisolated struct DeliveredNotificationDescriptor: Equatable {
+    let identifier: String
+    let route: LocalNotificationRoute?
+    let isMessageNotification: Bool
+    let isActionFailure: Bool
+}
+
+nonisolated enum DeliveredNotificationReadCleanupPolicy {
+    static func identifiersToRemove(
+        from notifications: [DeliveredNotificationDescriptor],
+        accountRef: String,
+        groupIdHex: String,
+        readMessageIdHexes: Set<String>,
+        removeEntireConversation: Bool
+    ) -> [String] {
+        notifications.compactMap { notification in
+            guard notification.isMessageNotification,
+                  !notification.isActionFailure,
+                  let route = notification.route,
+                  route.accountRef == accountRef,
+                  route.groupIdHex == groupIdHex
+            else { return nil }
+            if removeEntireConversation {
+                return notification.identifier
+            }
+            guard let messageIdHex = route.messageIdHex,
+                  readMessageIdHexes.contains(messageIdHex)
+            else { return nil }
+            return notification.identifier
+        }
     }
 }
 

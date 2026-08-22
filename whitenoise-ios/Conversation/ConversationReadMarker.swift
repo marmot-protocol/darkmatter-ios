@@ -209,8 +209,20 @@ final class ConversationReadMarker {
             for result in results where !result.succeeded {
                 markedReadMessageIds.remove(result.messageIdHex)
             }
-            if let row = results.compactMap(\.row).last {
-                onChatListRowUpdated?(row)
+            let latestRow = results.compactMap(\.row).last
+            if let latestRow {
+                onChatListRowUpdated?(latestRow)
+            }
+            let readMessageIds = Set(
+                results.lazy.filter(\.succeeded).map(\.messageIdHex)
+            )
+            if !readMessageIds.isEmpty {
+                await appState.notifications.reconcileDeliveredNotificationsAfterRead(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex,
+                    readMessageIdHexes: readMessageIds,
+                    conversationStillHasUnread: latestRow?.hasUnread
+                )
             }
         } catch {
             markedReadMessageIds.subtract(messageIds)

@@ -1019,6 +1019,12 @@ struct ChatsListView: View {
             } else {
                 await viewModel?.refreshRows()
             }
+            await appState.notifications.reconcileDeliveredNotificationsAfterRead(
+                accountRef: ref,
+                groupIdHex: groupIdHex,
+                readMessageIdHexes: [messageIdHex],
+                conversationStillHasUnread: result.row?.hasUnread
+            )
             return true
         } catch {
             return false

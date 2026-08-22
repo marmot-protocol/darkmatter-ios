@@ -1,4 +1,5 @@
 import Foundation
+import MarmotKit
 
 extension AppState {
     /// Executes a notification-action response. Reply and mark-read run against
@@ -32,12 +33,22 @@ extension AppState {
                         accountRef: route.accountRef,
                         groupIdHex: route.groupIdHex
                     )
-                    _ = await client.markTimelineMessagesRead(
+                    let results = await client.markTimelineMessagesRead(
                         accountRef: route.accountRef,
                         groupIdHex: route.groupIdHex,
                         messageIdHexes: [messageIdHex]
                     )
+                    if results.contains(where: \.succeeded) {
+                        await notifications.reconcileDeliveredNotificationsAfterRead(
+                            accountRef: route.accountRef,
+                            groupIdHex: route.groupIdHex,
+                            readMessageIdHexes: [messageIdHex],
+                            conversationStillHasUnread: results.compactMap(\.row).last?.hasUnread
+                        )
+                    }
                 }
+                // Preserve the exact-action fallback for older deliveries that
+                // lack enough metadata for conversation-level reconciliation.
                 notifications.removeDeliveredNotification(identifier: route.notificationKey)
                 await self.refreshAccountUnreadSummaries(using: client)
             }
@@ -60,6 +71,12 @@ extension AppState {
                 guard results.contains(where: \.succeeded) else {
                     throw NotificationActionError.markReadFailed
                 }
+                await notifications.reconcileDeliveredNotificationsAfterRead(
+                    accountRef: route.accountRef,
+                    groupIdHex: route.groupIdHex,
+                    readMessageIdHexes: [messageIdHex],
+                    conversationStillHasUnread: results.compactMap(\.row).last?.hasUnread
+                )
                 notifications.removeDeliveredNotification(identifier: route.notificationKey)
                 await self.refreshAccountUnreadSummaries(using: client)
             }
