@@ -63,6 +63,28 @@ before every release tag.
       top. Open a fully-read chat: the latest-message sentinel is aligned at
       the bottom. Neither entry path flashes or later jumps to another anchor.
 
+## GIF search and remote playback
+
+- [ ] With a local `GIPHY_API_KEY_WHITENOISE_IOS` configured, open the
+      composer **+** drawer and choose **GIF**. The sheet explains the GIPHY
+      network disclosure and shows the required GIPHY branding.
+- [ ] Search for a phrase containing spaces or punctuation, choose a result,
+      and confirm visible search tiles begin looping promptly. Choose a result
+      and confirm it sends as one message whose bubble loops without sound.
+- [ ] On the receiving device, opening the chat does not contact or load the
+      GIF. Tapping **Load GIF** loads and loops it; the chat-list preview says
+      **GIF via GIPHY** instead of exposing the media URL.
+- [ ] Enable Settings → Data & Storage → Automatically Load Remote GIFs and
+      confirm received GIFs then load on opening a chat. Disable it and confirm
+      the tap-to-load behavior returns.
+- [ ] Reply to a message and choose a GIF. Confirm the reply context remains
+      attached and the GIF bubble renders without shifting nearby rows.
+- [ ] Send landscape, square, and portrait GIFs. Confirm each follows its
+      source aspect ratio, meets the bubble's rounded edges without
+      letterboxing, and loads visibly sharper than its search thumbnail.
+- [ ] With no GIPHY key configured, the GIF drawer action explains that search
+      is unavailable and no network request is made.
+
 ## Markdown rendering
 
 - [ ] Send `**bold** _italic_ ~~strike~~ \`code\``: both sides render
@@ -233,6 +255,10 @@ the test device.
       unread total and foreground account switching does not reset it.
 - [ ] Tapping that notification opens the matching chat for the matching
       account.
+- [ ] With device B outside the app, have an admin remove B from a group,
+      promote B to admin, and remove B's admin role in separate groups. Each
+      change produces the matching local notification copy, opens the correct
+      chat when tapped, and offers no Reply or Mark as read actions.
 - [ ] Sending a message in a chat that device B is already viewing does not
       show a duplicate local banner while the app is foreground-active.
 - [ ] A generic APNS wake with no local notification update shows a coherent

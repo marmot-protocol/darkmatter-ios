@@ -157,6 +157,12 @@ struct ChatRow: View {
             return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("No messages yet"))
         }
         let body = item.previewText ?? ""
+        if latest.kind == MessageSemantics.kindGroupSystem {
+            return ChatRowPreviewPresentation(
+                prefix: nil,
+                body: body.isEmpty ? L10n.string("Group membership updated") : body
+            )
+        }
         if latest.sender == activeAccountIdHex {
             return body.isEmpty
                 ? ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You sent a message"))

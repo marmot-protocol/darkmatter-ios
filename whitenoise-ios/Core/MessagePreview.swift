@@ -51,6 +51,9 @@ enum MessagePreview {
             return GroupSystemEventPresentation.displayText(from: record.plaintext) ?? ""
         case .chat, .reply, .streamFinal:
             // Reply text, stream transcript, and plain chat all live in plaintext.
+            if RemoteGiphyMedia.parse(wireText: record.plaintext) != nil {
+                return L10n.string("GIF via GIPHY")
+            }
             return flattenedBody(
                 plaintext: record.plaintext,
                 tokens: record.contentTokens,
@@ -80,6 +83,9 @@ enum MessagePreview {
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
             }
+            if RemoteGiphyMedia.parse(wireText: preview.plaintext) != nil {
+                return L10n.string("GIF via GIPHY")
+            }
             return flattenedBody(
                 plaintext: preview.plaintext,
                 tokens: preview.contentTokens,
@@ -105,6 +111,9 @@ enum MessagePreview {
             }
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""
+            }
+            if RemoteGiphyMedia.parse(wireText: preview.plaintext) != nil {
+                return L10n.string("GIF via GIPHY")
             }
             return flattenedBody(
                 plaintext: preview.plaintext,

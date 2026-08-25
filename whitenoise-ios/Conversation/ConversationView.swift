@@ -7,7 +7,6 @@ import UniformTypeIdentifiers
 
 enum TimelineBottom {
     static let pinnedThreshold: CGFloat = 44
-    static let overscrollRepairThreshold: CGFloat = 8
 
     static func isPinned(bottomY: CGFloat, viewportBottomY: CGFloat) -> Bool {
         bottomY <= viewportBottomY + pinnedThreshold
@@ -25,23 +24,8 @@ enum TimelineBottom {
         distanceToBottom > pinnedThreshold
     }
 
-    static func shouldFollowProjectionChange(
-        isPinned: Bool,
-        isInitialBottomPositioning: Bool,
-        hasTargetMessage: Bool
-    ) -> Bool {
-        isPinned || (isInitialBottomPositioning && !hasTargetMessage)
-    }
-
     static func pinnedStateAfterScrollButtonTap(currentIsPinned: Bool) -> Bool {
         true
-    }
-
-    static func shouldPreservePinAfterContentGrowth(
-        previous: TimelineBottomViewport,
-        current: TimelineBottomViewport
-    ) -> Bool {
-        previous.isPinned && current.contentHeight > previous.contentHeight
     }
 
     static func overscrollPastBottom(
@@ -52,11 +36,14 @@ enum TimelineBottom {
         max(0, visibleBottomY - (contentHeight + bottomContentInset))
     }
 
-    static func shouldRepairBottomOverscroll(
-        _ viewport: TimelineBottomViewport,
+    static func userMovedAwayState(
+        previous: Bool,
+        viewportIsPinned: Bool,
         isUserScrolling: Bool
     ) -> Bool {
-        !isUserScrolling && viewport.overscrollPastBottom > overscrollRepairThreshold
+        if viewportIsPinned { return false }
+        if isUserScrolling { return true }
+        return previous
     }
 }
 
@@ -89,20 +76,16 @@ struct TimelineBottomViewport: Equatable {
         !shouldShowScrollToBottomButton
     }
 
-    var isSettledAtBottom: Bool {
-        isPinned && overscrollPastBottom <= TimelineBottom.overscrollRepairThreshold
-    }
 }
 
 enum TimelineBottomScrollReason: Equatable {
-    case contentGrowth
     case timelineChange
-    case viewportChange
     case buttonTap
 
     var isUserInitiated: Bool {
         self == .buttonTap
     }
+
 }
 
 enum TimelineInitialTargetScrollPolicy {
@@ -487,6 +470,7 @@ struct ConversationView: View {
     @State private var showFileImporter = false
     @State private var showLocationPicker = false
     @State private var showContactPicker = false
+    @State private var showGiphySearch = false
     @State private var showDetails = false
     @State private var openAddMembersOnDetails = false
     @State private var actionsTarget: ActionsTarget?
@@ -507,6 +491,7 @@ struct ConversationView: View {
     @State private var rowFrames = RowFrameStore()
     @State private var timelineVisibility = TimelineVisibilityStore()
     @State private var measuredActionRowFrameKey: String?
+    @State private var pendingActionsPresentation: PendingActionsPresentation?
     @State private var pendingActionFrameMeasurementClearTask: Task<Void, Never>?
     @State private var composerFocusRequest = 0
     @State private var composerDismissRequest = 0
@@ -516,7 +501,7 @@ struct ConversationView: View {
     @State private var didRequestInitialTimelinePosition = false
     @State private var isInitialTimelinePositionSettled = false
     @State private var pendingInitialPositionTarget: TimelineInitialPositionTarget?
-    @State private var visibleTimelineTargetIDs = Set<String>()
+    @State private var timelineTargetVisibility = TimelineTargetVisibilityStore()
     @State private var initialTimelinePositionRequestGeneration = 0
     @State private var pendingBottomScrollRequest: TimelineBottomScrollRequest?
     @State private var pendingBottomScrollTask: Task<Void, Never>?
@@ -558,6 +543,13 @@ struct ConversationView: View {
             self.rowId = rowId
             self.sourceFrame = sourceFrame
         }
+    }
+
+    private struct PendingActionsPresentation {
+        let record: AppMessageRecordFfi
+        let status: MessageStatus
+        let rowId: String
+        let rowFrameKey: String
     }
 
     private struct FailedSendTarget: Identifiable {
@@ -806,7 +798,7 @@ struct ConversationView: View {
                 }
             }
             .confirmationDialog(
-                "Delete message?",
+                L10n.string("Delete message?"),
                 isPresented: Binding(
                     get: { deleteTarget != nil },
                     set: { if !$0 { deleteTarget = nil } }
@@ -816,21 +808,22 @@ struct ConversationView: View {
             ) { target in
                 if let viewModel {
                     let capability = viewModel.deleteCapability(for: target.record)
-                    if capability.canDeleteForEveryone {
-                        Button("Delete for everyone", role: .destructive) {
-                            Task { await viewModel.deleteMessageForEveryone(target.record) }
-                        }
-                    }
                     if capability.canDeleteForMe {
-                        Button(
-                            capability.canDeleteForEveryone ? "Delete for me" : "Delete",
-                            role: .destructive
-                        ) {
+                        Button(L10n.string("Delete for me"), role: .destructive) {
                             Task { _ = await viewModel.deleteMessageForMe(target.record) }
                         }
                     }
+                    if capability.canDeleteForEveryone {
+                        Button(L10n.string("Delete for everyone"), role: .destructive) {
+                            Task { await viewModel.deleteMessageForEveryone(target.record) }
+                        }
+                    }
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(L10n.string("Cancel"), role: .cancel) {}
+            } message: { target in
+                if let viewModel {
+                    messageDeleteSupportingText(for: target.record, viewModel: viewModel)
+                }
             }
             .modifier(FailedSendDialogModifier(
                 target: $failedSendTarget,
@@ -892,6 +885,15 @@ struct ConversationView: View {
                     },
                     onCancel: { showContactPicker = false }
                 )
+            }
+            .sheet(isPresented: $showGiphySearch) {
+                if let apiKey = GiphyBuildConfig.current().apiKey {
+                    GiphySearchView(
+                        client: GiphySearchClient(apiKey: apiKey),
+                        onSelect: sendGiphyResult
+                    )
+                    .appAppearance()
+                }
             }
             .fileImporter(
                 isPresented: $showFileImporter,
@@ -1030,6 +1032,7 @@ struct ConversationView: View {
                     onAttachFile: openFileImporter,
                     onShareLocation: openLocationPicker,
                     onShareContact: openContactPicker,
+                    onSearchGIFs: openGiphySearch,
                     onPasteImage: pasteImage,
                     onRemoveAudioDraft: removeMediaDraft,
                     onRemovePreparedAttachment: removeMediaDraft,
@@ -1439,11 +1442,12 @@ struct ConversationView: View {
                 emptyTimeline(viewModel: viewModel)
             } else {
                 let concealInitialTimeline = shouldConcealInitialTimelineContent(viewModel: viewModel)
+                let showsSenderIdentity = !viewModel.groupDisplay.isDirectMessage
                 ScrollViewReader { proxy in
                     GeometryReader { outer in
                         ScrollView {
                             VStack(spacing: 0) {
-                                LazyVStack(alignment: .leading, spacing: 4, pinnedViews: [.sectionHeaders]) {
+                                VStack(alignment: .leading, spacing: 4) {
                                     olderTimelineTrigger(viewModel: viewModel)
                                     ForEach(viewModel.timelineDaySections()) { section in
                                         Section {
@@ -1455,20 +1459,21 @@ struct ConversationView: View {
                                                     UnreadMessagesDivider()
                                                         .id(unreadDividerID(for: initialUnreadMessageIdHex ?? ""))
                                                 }
-                                                row(for: item, viewModel: viewModel)
+                                                row(
+                                                    for: item,
+                                                    viewModel: viewModel,
+                                                    showsSenderIdentity: showsSenderIdentity
+                                                )
                                                     .background {
                                                         searchMatchHighlight(for: item, viewModel: viewModel)
                                                     }
-                                                    .onScrollVisibilityChange(
-                                                        threshold: TimelineViewportVisibility.minimumVisibleFraction
-                                                    ) { isVisible in
-                                                        if timelineVisibility.set(
-                                                            item.rowFrameKey,
-                                                            isVisible: isVisible
-                                                        ), isVisible {
+                                                    .modifier(TimelineRowVisibilityModifier(
+                                                        rowKey: item.rowFrameKey,
+                                                        store: timelineVisibility,
+                                                        onBecameVisible: {
                                                             markCurrentlyVisibleMessagesRead(viewModel: viewModel)
                                                         }
-                                                    }
+                                                    ))
                                             }
                                         } header: {
                                             timelineDateHeader(section)
@@ -1485,11 +1490,8 @@ struct ConversationView: View {
                             .padding(.top, 8)
                             .padding(.bottom, BottomInputChromeLayout.timelineComposerSpacing)
                             // Keep short conversations bottom-aligned by making
-                            // their content track the live viewport height. The
-                            // alignment scroll-anchor role can retain the old
-                            // height while the iOS 27 keyboard resizes the
-                            // safe-area bar, leaving the rows scrollable outside
-                            // the visible chat area.
+                            // their content track the live viewport height as
+                            // the keyboard resizes the safe-area bar.
                             .frame(minHeight: max(0, outer.size.height), alignment: .bottom)
                             .background {
                                 TimelineKeyboardDismissInstaller(onTap: dismissKeyboard)
@@ -1511,10 +1513,6 @@ struct ConversationView: View {
                         // row. Short conversations are aligned by the live
                         // viewport-sized content frame above.
                         .defaultScrollAnchor(.bottom, for: .initialOffset)
-                        .defaultScrollAnchor(
-                            userMovedAwayFromTimelineBottom ? nil : .bottom,
-                            for: .sizeChanges
-                        )
                         .task(id: initialTimelinePositionRequestGeneration) {
                             await Task.yield()
                             guard !Task.isCancelled,
@@ -1523,14 +1521,14 @@ struct ConversationView: View {
                             scrollToInitialTimelineTarget(target, proxy: proxy)
                         }
                         // Only scroll/bounce when the messages actually exceed
-                        // the viewport; with a few messages the timeline stays
-                        // put instead of rubber-banding under the pinned day
-                        // header.
+                        // the viewport; with a few messages the timeline stays put.
                         .scrollBounceBehavior(.basedOnSize)
                         .compatibleBottomScrollEdgeEffectHidden()
                         .scrollDismissesKeyboard(.interactively)
                         .onScrollPhaseChange { _, phase in
-                            isUserScrollingTimeline = phase == .interacting || phase == .decelerating
+                            // New-message follow requests must not interrupt
+                            // native dragging, deceleration, or rubber-banding.
+                            isUserScrollingTimeline = phase != .idle
                             if isUserScrollingTimeline {
                                 cancelPendingBottomScroll()
                             }
@@ -1538,54 +1536,41 @@ struct ConversationView: View {
                                 userMovedAwayFromTimelineBottom = false
                             }
                         }
-                        .onPreferenceChange(RowFramesKey.self) { rowFrames.replace(with: $0) }
+                        .onPreferenceChange(RowFramesKey.self) { preferences in
+                            rowFrames.replace(with: preferences)
+                            completePendingActionsPresentationIfMeasured()
+                        }
                         .onScrollTargetVisibilityChange(
                             idType: String.self,
                             threshold: TimelineViewportVisibility.minimumVisibleFraction
                         ) { visibleIDs in
-                            visibleTimelineTargetIDs = Set(visibleIDs)
+                            timelineTargetVisibility.replace(with: Set(visibleIDs))
                             settleInitialTimelinePositionIfTargetVisible(viewModel: viewModel)
                         }
-                        .onScrollGeometryChange(for: TimelineBottomViewport.self) { geometry in
-                            TimelineBottomViewport(
+                        .onScrollGeometryChange(for: Bool.self) { geometry in
+                            TimelineBottom.distanceToBottom(
                                 contentHeight: geometry.contentSize.height,
                                 visibleBottomY: geometry.visibleRect.maxY,
                                 bottomContentInset: geometry.contentInsets.bottom
-                            )
-                        } action: { previous, current in
-                            if isInitialTimelinePositioning {
-                                isAtTimelineBottom = current.isPinned
-                                maintainInitialTimelinePosition(viewModel: viewModel)
-                            } else if TimelineBottom.shouldRepairBottomOverscroll(
-                                current,
-                                isUserScrolling: isUserScrollingTimeline
-                            ) {
-                                isAtTimelineBottom = true
-                                scheduleScrollToBottom(
-                                    proxy: proxy,
-                                    animated: false,
-                                    reason: .viewportChange,
-                                    targetID: viewModel.timeline.last?.id
-                                )
-                            } else if TimelineBottom.shouldPreservePinAfterContentGrowth(
-                                previous: previous,
-                                current: current
-                            ) {
-                                isAtTimelineBottom = true
-                                scheduleScrollToBottom(
-                                    proxy: proxy,
-                                    animated: false,
-                                    reason: .contentGrowth,
-                                    targetID: viewModel.timeline.last?.id
-                                )
-                            } else {
-                                isAtTimelineBottom = current.isPinned
-                                if current.isPinned {
-                                    userMovedAwayFromTimelineBottom = false
-                                } else if isUserScrollingTimeline {
-                                    userMovedAwayFromTimelineBottom = true
-                                }
+                            ) <= TimelineBottom.pinnedThreshold
+                        } action: { _, isPinned in
+                            if isAtTimelineBottom != isPinned {
+                                isAtTimelineBottom = isPinned
                             }
+                            let movedAway = TimelineBottom.userMovedAwayState(
+                                previous: userMovedAwayFromTimelineBottom,
+                                viewportIsPinned: isPinned,
+                                isUserScrolling: isUserScrollingTimeline
+                            )
+                            if userMovedAwayFromTimelineBottom != movedAway {
+                                userMovedAwayFromTimelineBottom = movedAway
+                            }
+                        }
+                        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                            geometry.contentSize.height
+                        } action: { _, _ in
+                            guard isInitialTimelinePositioning else { return }
+                            maintainInitialTimelinePosition(viewModel: viewModel)
                         }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
                             guard newId != nil else { return }
@@ -1606,7 +1591,7 @@ struct ConversationView: View {
                         .onChange(of: viewModel.timelineProjectionGeneration) { _, _ in
                             viewModel.search.refreshAfterTimelineChange()
                             pruneMessageSelection(viewModel: viewModel)
-                            handleTimelineProjectionChange(proxy: proxy, viewModel: viewModel)
+                            handleTimelineProjectionChange(viewModel: viewModel)
                         }
                         .onChange(of: viewModel.search.scrollRequest) { _, request in
                             guard let request else { return }
@@ -1711,7 +1696,11 @@ struct ConversationView: View {
     }
 
     @ViewBuilder
-    private func row(for item: TimelineItem, viewModel: ConversationViewModel) -> some View {
+    private func row(
+        for item: TimelineItem,
+        viewModel: ConversationViewModel,
+        showsSenderIdentity: Bool
+    ) -> some View {
         switch item.kind {
         case .message(let record, let status):
             if let groupSystemText = viewModel.groupSystemDisplayText(for: record) {
@@ -1731,7 +1720,8 @@ struct ConversationView: View {
                     for: item,
                     record: record,
                     status: status,
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    showsSenderIdentity: showsSenderIdentity
                 )
             }
         case .systemEvent(let event):
@@ -1748,7 +1738,8 @@ struct ConversationView: View {
         for item: TimelineItem,
         record: AppMessageRecordFfi,
         status: MessageStatus,
-        viewModel: ConversationViewModel
+        viewModel: ConversationViewModel,
+        showsSenderIdentity: Bool
     ) -> some View {
         let debugStyle = appState.streamingDebugEnabled
             ? MessageSemantics.debugStyle(for: record)
@@ -1763,7 +1754,8 @@ struct ConversationView: View {
             for: item,
             record: record,
             status: status,
-            viewModel: viewModel
+            viewModel: viewModel,
+            showsSenderIdentity: showsSenderIdentity
         )
         .replySwipeToReply(
             isEnabled: interactionsEnabled && canReply(to: record, viewModel: viewModel)
@@ -1811,29 +1803,24 @@ struct ConversationView: View {
             }
         }
         .id(item.id)
-        .onLongPressGesture(
-            pressing: { pressing in
-                updateActionFrameMeasurement(pressing: pressing, rowFrameKey: item.rowFrameKey)
-            }
-        ) {
+        .onLongPressGesture {
             guard !isSelectingMessages,
                   !viewModel.search.isActive,
                   allowsActions,
                   !record.messageIdHex.isEmpty,
                   !viewModel.isDeleted(record.messageIdHex) else { return }
             Haptics.tap()
-            presentActions(
+            beginActionsPresentation(
                 for: record,
                 status: status,
                 rowId: item.id,
                 rowFrameKey: item.rowFrameKey
             )
-            finishActionFrameMeasurement(rowFrameKey: item.rowFrameKey)
         }
         .accessibilityActions {
             if interactionsEnabled {
                 Button("Show actions") {
-                    presentActions(
+                    beginActionsPresentation(
                         for: record,
                         status: status,
                         rowId: item.id,
@@ -1857,7 +1844,8 @@ struct ConversationView: View {
         for item: TimelineItem,
         record: AppMessageRecordFfi,
         status: MessageStatus,
-        viewModel: ConversationViewModel
+        viewModel: ConversationViewModel,
+        showsSenderIdentity: Bool
     ) -> some View {
         let debugStyle = appState.streamingDebugEnabled
             ? MessageSemantics.debugStyle(for: record)
@@ -1868,6 +1856,9 @@ struct ConversationView: View {
             debugStyle: debugStyle,
             isDeleted: viewModel.isDeleted(record.messageIdHex),
             isEdited: viewModel.isEdited(record.messageIdHex),
+            clusterPresentation: showsSenderIdentity
+                ? viewModel.messageClusterPresentation(for: item)
+                : .none,
             replyPreview: viewModel.replyPreview(for: record),
             mediaItems: viewModel.mediaItems(for: item),
             markdownBlocks: viewModel.markdownDisplayBlocks(for: item),
@@ -2004,18 +1995,17 @@ struct ConversationView: View {
         }
     }
 
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool, targetID: String?) {
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
         userMovedAwayFromTimelineBottom = false
-        let destinationID = targetID ?? Self.timelineBottomID
         if animated {
             withAnimation(.smooth(duration: 0.2)) {
-                proxy.scrollTo(destinationID, anchor: .bottom)
+                proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
             }
         } else {
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) {
-                proxy.scrollTo(destinationID, anchor: .bottom)
+                proxy.scrollTo(Self.timelineBottomID, anchor: .bottom)
             }
         }
     }
@@ -2026,15 +2016,19 @@ struct ConversationView: View {
         reason: TimelineBottomScrollReason,
         targetID: String? = nil
     ) {
-        guard !TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
+        if TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
             hasPositionIntent: didRequestInitialTimelinePosition || initialTargetMessageIdHex != nil,
             didFinishPositioning: isInitialTimelinePositionSettled,
             reason: reason
-        ) else { return }
+        ) {
+            return
+        }
         guard TimelineBottomScrollCoordinator.shouldExecute(
             reason: reason,
             isUserScrolling: isUserScrollingTimeline
-        ) else { return }
+        ) else {
+            return
+        }
 
         if reason == .timelineChange,
            TimelineBottomScrollCoordinator.shouldSkipTimelineChangeScroll(
@@ -2056,14 +2050,15 @@ struct ConversationView: View {
         pendingBottomScrollTask?.cancel()
         pendingBottomScrollTask = Task { @MainActor in
             await Task.yield()
-            guard !Task.isCancelled, let request = pendingBottomScrollRequest else { return }
+            guard !Task.isCancelled else { return }
+            guard let request = pendingBottomScrollRequest else { return }
             pendingBottomScrollRequest = nil
             pendingBottomScrollTask = nil
             guard TimelineBottomScrollCoordinator.shouldExecute(
                 reason: request.reason,
                 isUserScrolling: isUserScrollingTimeline
             ) else { return }
-            scrollToBottom(proxy: proxy, animated: request.animated, targetID: request.targetID)
+            scrollToBottom(proxy: proxy, animated: request.animated)
             lastAutomaticBottomScrollTargetID = request.targetID
         }
     }
@@ -2129,28 +2124,13 @@ struct ConversationView: View {
         return true
     }
 
-    private func handleTimelineProjectionChange(proxy: ScrollViewProxy, viewModel: ConversationViewModel) {
+    private func handleTimelineProjectionChange(viewModel: ConversationViewModel) {
         guard !viewModel.timeline.isEmpty else { return }
-        if performInitialScrollIfNeeded(viewModel: viewModel) {
-            return
-        }
+        if performInitialScrollIfNeeded(viewModel: viewModel) { return }
         guard !isInitialTimelinePositioning else {
             maintainInitialTimelinePosition(viewModel: viewModel)
             return
         }
-        let shouldFollow = TimelineBottom.shouldFollowProjectionChange(
-            isPinned: !userMovedAwayFromTimelineBottom,
-            isInitialBottomPositioning: false,
-            hasTargetMessage: initialTargetMessageIdHex != nil
-        )
-        guard shouldFollow else { return }
-        isAtTimelineBottom = true
-        scheduleScrollToBottom(
-            proxy: proxy,
-            animated: false,
-            reason: .contentGrowth,
-            targetID: viewModel.timeline.last?.id
-        )
     }
 
     private func requestInitialTimelinePosition(
@@ -2183,7 +2163,7 @@ struct ConversationView: View {
         }
         if TimelineInitialTargetScrollPolicy.shouldSettle(
             target: target,
-            visibleTargetIDs: visibleTimelineTargetIDs
+            visibleTargetIDs: timelineTargetVisibility.visibleTargetIDs
         ) {
             settleInitialTimelinePosition(viewModel: viewModel)
         } else {
@@ -2222,7 +2202,7 @@ struct ConversationView: View {
     private func settleInitialTimelinePositionIfTargetVisible(viewModel: ConversationViewModel) {
         guard TimelineInitialTargetScrollPolicy.shouldSettle(
             target: pendingInitialPositionTarget,
-            visibleTargetIDs: visibleTimelineTargetIDs
+            visibleTargetIDs: timelineTargetVisibility.visibleTargetIDs
         ) else { return }
         settleInitialTimelinePosition(viewModel: viewModel)
     }
@@ -2389,6 +2369,7 @@ struct ConversationView: View {
         showFileImporter = false
         showLocationPicker = false
         showContactPicker = false
+        showGiphySearch = false
         dismissKeyboard()
     }
 
@@ -2486,6 +2467,21 @@ struct ConversationView: View {
         guard editSession == nil else { return }
         guard canBeginMediaSelection() else { return }
         showContactPicker = true
+    }
+
+    private func openGiphySearch() {
+        guard editSession == nil else { return }
+        guard viewModel?.canSendMessages == true else { return }
+        guard GiphyBuildConfig.current().isAvailable else {
+            appState.present(.warning(L10n.string("GIF search isn't configured in this build.")))
+            return
+        }
+        showGiphySearch = true
+    }
+
+    private func sendGiphyResult(_ result: GiphySearchResult) {
+        guard let viewModel, viewModel.canSendMessages else { return }
+        Task { await viewModel.sendPreparedComposerText(result.media.wireText) }
     }
 
     private func pasteImage(_ image: UIImage) {
@@ -2761,37 +2757,21 @@ struct ConversationView: View {
         )
     }
 
-    private func updateActionFrameMeasurement(pressing: Bool, rowFrameKey: String) {
-        if pressing {
-            pendingActionFrameMeasurementClearTask?.cancel()
-            pendingActionFrameMeasurementClearTask = nil
-            measuredActionRowFrameKey = rowFrameKey
-        } else {
-            scheduleActionFrameMeasurementClear(rowFrameKey: rowFrameKey)
-        }
-    }
-
     private func scheduleActionFrameMeasurementClear(rowFrameKey: String) {
         pendingActionFrameMeasurementClearTask?.cancel()
         pendingActionFrameMeasurementClearTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: Self.actionFrameMeasurementClearDelayNanoseconds)
             guard !Task.isCancelled, measuredActionRowFrameKey == rowFrameKey else { return }
+            pendingActionsPresentation = nil
             measuredActionRowFrameKey = nil
             pendingActionFrameMeasurementClearTask = nil
-        }
-    }
-
-    private func finishActionFrameMeasurement(rowFrameKey: String) {
-        pendingActionFrameMeasurementClearTask?.cancel()
-        pendingActionFrameMeasurementClearTask = nil
-        if measuredActionRowFrameKey == rowFrameKey {
-            measuredActionRowFrameKey = nil
         }
     }
 
     private func cancelActionFrameMeasurement() {
         pendingActionFrameMeasurementClearTask?.cancel()
         pendingActionFrameMeasurementClearTask = nil
+        pendingActionsPresentation = nil
         measuredActionRowFrameKey = nil
     }
 
@@ -2957,20 +2937,56 @@ struct ConversationView: View {
         }
     }
 
+    @ViewBuilder
+    private func messageDeleteSupportingText(
+        for record: AppMessageRecordFfi,
+        viewModel: ConversationViewModel
+    ) -> some View {
+        let capability = viewModel.deleteCapability(for: record)
+        switch MessageDeletePresentation.supportingCopy(
+            capability: capability,
+            isMine: viewModel.isMessageMine(record)
+        ) {
+        case .chooseScope:
+            Text("Choose whether to remove this message only from this device or for everyone.")
+        case .localOnly:
+            Text("This message can only be removed from this device.")
+        case .moderation:
+            Text("As a group admin, you can remove this message for everyone.")
+        }
+    }
+
     // MARK: - Message actions presentation
 
-    private func presentActions(
+    private func beginActionsPresentation(
         for record: AppMessageRecordFfi,
         status: MessageStatus,
         rowId: String,
         rowFrameKey: String
     ) {
-        guard let sourceFrame = rowFrames.frames[rowFrameKey] else { return }
+        pendingActionsPresentation = PendingActionsPresentation(
+            record: record,
+            status: status,
+            rowId: rowId,
+            rowFrameKey: rowFrameKey
+        )
+        measuredActionRowFrameKey = rowFrameKey
+        scheduleActionFrameMeasurementClear(rowFrameKey: rowFrameKey)
+    }
+
+    private func completePendingActionsPresentationIfMeasured() {
+        guard let pending = pendingActionsPresentation,
+              let sourceFrame = rowFrames.frames[pending.rowFrameKey]
+        else { return }
+        pendingActionFrameMeasurementClearTask?.cancel()
+        pendingActionFrameMeasurementClearTask = nil
+        pendingActionsPresentation = nil
+        measuredActionRowFrameKey = nil
         withAnimation(.easeOut(duration: 0.18)) {
             actionsTarget = ActionsTarget(
-                record: record,
-                status: status,
-                rowId: rowId,
+                record: pending.record,
+                status: pending.status,
+                rowId: pending.rowId,
                 sourceFrame: sourceFrame
             )
         }
@@ -3044,7 +3060,8 @@ struct ConversationView: View {
                         for: item,
                         record: target.record,
                         status: target.status,
-                        viewModel: viewModel
+                        viewModel: viewModel,
+                        showsSenderIdentity: !viewModel.groupDisplay.isDirectMessage
                     )
                     .frame(width: sourceFrame.width, height: sourceFrame.height)
                     .scaleEffect(layout.previewScale)
@@ -3209,6 +3226,41 @@ final class TimelineVisibilityStore {
             return visibleRowKeys.insert(rowKey).inserted
         }
         return visibleRowKeys.remove(rowKey) != nil
+    }
+}
+
+private struct TimelineRowVisibilityModifier: ViewModifier {
+    let rowKey: String
+    let store: TimelineVisibilityStore
+    let onBecameVisible: () -> Void
+
+    @State private var isVisible = false
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.timelineRowIsVisible, isVisible)
+            .onScrollVisibilityChange(
+                threshold: TimelineViewportVisibility.minimumVisibleFraction
+            ) { nextIsVisible in
+                guard nextIsVisible != isVisible else { return }
+                isVisible = nextIsVisible
+                if store.set(rowKey, isVisible: nextIsVisible), nextIsVisible {
+                    onBecameVisible()
+                }
+            }
+    }
+}
+
+/// Keeps scroll-target visibility out of SwiftUI state invalidation. The
+/// values are consumed only by the scroll callbacks that drive initial
+/// positioning, so publishing each row-edge transition would needlessly
+/// rebuild the whole conversation while the user drags.
+final class TimelineTargetVisibilityStore {
+    private(set) var visibleTargetIDs: Set<String> = []
+
+    func replace(with visibleTargetIDs: Set<String>) {
+        guard self.visibleTargetIDs != visibleTargetIDs else { return }
+        self.visibleTargetIDs = visibleTargetIDs
     }
 }
 

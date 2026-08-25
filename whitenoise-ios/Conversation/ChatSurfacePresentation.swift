@@ -75,8 +75,8 @@ enum MessageBubblePalette {
 }
 
 nonisolated enum MessageMetadataRowArrangement {
-    static func timestampOnLeadingEdge(isFromMe: Bool, hasReactions: Bool) -> Bool {
-        isFromMe != hasReactions
+    static func timestampOnLeadingEdge(isFromMe: Bool) -> Bool {
+        !isFromMe
     }
 }
 
@@ -101,13 +101,26 @@ nonisolated enum MessageBubbleChromeSizing {
 }
 
 struct MessageBubbleChromeLayout: Layout {
+    struct Cache {
+        var resolvedWidth: CGFloat?
+        var bubbleSize: CGSize?
+    }
+
     let isFromMe: Bool
     var spacing: CGFloat = 3
+
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache()
+    }
+
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        cache = Cache()
+    }
 
     func sizeThatFits(
         proposal: ProposedViewSize,
         subviews: Subviews,
-        cache: inout ()
+        cache: inout Cache
     ) -> CGSize {
         guard subviews.count == 2 else { return .zero }
 
@@ -122,6 +135,8 @@ struct MessageBubbleChromeLayout: Layout {
         let resolvedProposal = ProposedViewSize(width: width, height: nil)
         let resolvedBubbleSize = subviews[0].sizeThatFits(resolvedProposal)
         let resolvedMetadataSize = subviews[1].sizeThatFits(resolvedProposal)
+        cache.resolvedWidth = width
+        cache.bubbleSize = resolvedBubbleSize
 
         return CGSize(
             width: width,
@@ -137,12 +152,19 @@ struct MessageBubbleChromeLayout: Layout {
         in bounds: CGRect,
         proposal: ProposedViewSize,
         subviews: Subviews,
-        cache: inout ()
+        cache: inout Cache
     ) {
         guard subviews.count == 2 else { return }
 
         let resolvedProposal = ProposedViewSize(width: bounds.width, height: nil)
-        let bubbleSize = subviews[0].sizeThatFits(resolvedProposal)
+        let bubbleSize: CGSize
+        if cache.resolvedWidth == bounds.width, let measured = cache.bubbleSize {
+            bubbleSize = measured
+        } else {
+            bubbleSize = subviews[0].sizeThatFits(resolvedProposal)
+            cache.resolvedWidth = bounds.width
+            cache.bubbleSize = bubbleSize
+        }
         let bubbleX = isFromMe ? bounds.maxX - bubbleSize.width : bounds.minX
         subviews[0].place(
             at: CGPoint(x: bubbleX, y: bounds.minY),
@@ -294,6 +316,117 @@ nonisolated struct ReactionSummaryPresentation: Equatable {
             totalCount: sorted.reduce(0) { $0 + $1.count },
             mine: reactions.contains(where: \.mine)
         )
+    }
+}
+
+nonisolated enum ReactionPillPresentation {
+    static let maximumRenderedPills = 7
+
+    static func sorted(
+        _ reactions: [ConversationViewModel.ReactionTally]
+    ) -> [ConversationViewModel.ReactionTally] {
+        reactions.sorted {
+            if $0.mine != $1.mine { return $0.mine && !$1.mine }
+            if $0.count != $1.count { return $0.count > $1.count }
+            return $0.emoji < $1.emoji
+        }
+    }
+}
+
+nonisolated struct ReactionMetadataFit: Equatable {
+    let visibleReactionCount: Int
+    let hiddenReactionCount: Int
+
+    var usesOverflowPill: Bool { hiddenReactionCount > 0 }
+}
+
+nonisolated enum ReactionMetadataFitting {
+    static let pillSpacing: CGFloat = 3
+    static let metadataSpacing: CGFloat = 8
+
+    static func fit(
+        reactionWidths: [CGFloat],
+        overflowWidthForHiddenCount: [Int: CGFloat],
+        footerWidth: CGFloat,
+        availableWidth: CGFloat,
+        footerSpacing: CGFloat = metadataSpacing,
+        preHiddenReactionCount: Int = 0
+    ) -> ReactionMetadataFit {
+        guard !reactionWidths.isEmpty else {
+            return ReactionMetadataFit(visibleReactionCount: 0, hiddenReactionCount: 0)
+        }
+
+        let boundedWidth = max(0, availableWidth)
+        var prefixWidths = [CGFloat](repeating: 0, count: reactionWidths.count + 1)
+        for index in reactionWidths.indices {
+            prefixWidths[index + 1] = prefixWidths[index] + reactionWidths[index]
+        }
+        if preHiddenReactionCount == 0, requiredWidth(
+            visibleWidth: prefixWidths[reactionWidths.count],
+            visibleCount: reactionWidths.count,
+            overflowWidth: nil,
+            footerWidth: footerWidth,
+            footerSpacing: footerSpacing
+        ) <= boundedWidth {
+            return ReactionMetadataFit(
+                visibleReactionCount: reactionWidths.count,
+                hiddenReactionCount: 0
+            )
+        }
+
+        let firstVisibleCount = preHiddenReactionCount > 0
+            ? reactionWidths.count
+            : reactionWidths.count - 1
+        for visibleCount in stride(from: firstVisibleCount, through: 0, by: -1) {
+            let hiddenCount = preHiddenReactionCount + reactionWidths.count - visibleCount
+            guard let overflowWidth = overflowWidthForHiddenCount[hiddenCount] else { continue }
+            if requiredWidth(
+                visibleWidth: prefixWidths[visibleCount],
+                visibleCount: visibleCount,
+                overflowWidth: overflowWidth,
+                footerWidth: footerWidth,
+                footerSpacing: footerSpacing
+            ) <= boundedWidth {
+                return ReactionMetadataFit(
+                    visibleReactionCount: visibleCount,
+                    hiddenReactionCount: hiddenCount
+                )
+            }
+        }
+
+        return ReactionMetadataFit(
+            visibleReactionCount: 0,
+            hiddenReactionCount: reactionWidths.count
+        )
+    }
+
+    static func requiredWidth(
+        visibleReactionWidths: [CGFloat],
+        overflowWidth: CGFloat?,
+        footerWidth: CGFloat,
+        footerSpacing: CGFloat = metadataSpacing
+    ) -> CGFloat {
+        requiredWidth(
+            visibleWidth: visibleReactionWidths.reduce(0, +),
+            visibleCount: visibleReactionWidths.count,
+            overflowWidth: overflowWidth,
+            footerWidth: footerWidth,
+            footerSpacing: footerSpacing
+        )
+    }
+
+    private static func requiredWidth(
+        visibleWidth: CGFloat,
+        visibleCount: Int,
+        overflowWidth: CGFloat?,
+        footerWidth: CGFloat,
+        footerSpacing: CGFloat
+    ) -> CGFloat {
+        let pillCount = visibleCount + (overflowWidth == nil ? 0 : 1)
+        let reactionWidth = visibleWidth
+            + (overflowWidth ?? 0)
+            + CGFloat(max(0, pillCount - 1)) * pillSpacing
+        return reactionWidth + (pillCount > 0 ? max(0, footerSpacing) : 0) + max(0, footerWidth)
     }
 }
 

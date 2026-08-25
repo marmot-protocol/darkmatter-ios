@@ -111,7 +111,7 @@ struct ChatsListView: View {
                     action: { Task { await markAllChatsRead() } }
                 )
             )
-            .onChange(of: visibleRowsKey) { _, _ in
+            .task(id: visibleRowsKey) {
                 selectedChatIds = ChatListSelection.reconcile(selectedChatIds, visibleIds: visibleRowIds)
             }
             .navigationTitle("")

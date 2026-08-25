@@ -89,6 +89,7 @@ final class TimelineStore {
     @ObservationIgnored private var replyTargetByMessageId: [String: String] = [:]
     @ObservationIgnored private var replyPreviewsByMessageId: [String: TimelineReplyPreviewFfi] = [:]
     @ObservationIgnored private var replyPreviewDisplayCache: [String: ReplyPreviewDisplayCacheEntry] = [:]
+    @ObservationIgnored private var groupSystemByMessageId: [String: GroupSystemEventFfi] = [:]
     @ObservationIgnored private var groupSystemDisplayCache: [String: GroupSystemDisplayCacheEntry] = [:]
     @ObservationIgnored private var transientTimelineItems: [String: TimelineItem] = [:]
     @ObservationIgnored private var systemTimelineItems: [TimelineItem] = []
@@ -113,6 +114,7 @@ final class TimelineStore {
     @ObservationIgnored let deletedProjections = ConversationDeletedMessageProjection()
     @ObservationIgnored let editProjections = ConversationEditProjectionCache()
     @ObservationIgnored private var timelineSignature: [TimelineItemSignature] = []
+    @ObservationIgnored private var messageClusterPresentations: [String: MessageClusterPresentation] = [:]
 
     @ObservationIgnored private weak var appState: AppState?
     @ObservationIgnored private let groupIdHex: String
@@ -286,6 +288,11 @@ final class TimelineStore {
         return reactionProjections.details(forMessageId: messageIdHex)
     }
 
+    func messageClusterPresentation(for item: TimelineItem) -> MessageClusterPresentation {
+        _ = timelineProjectionGeneration
+        return messageClusterPresentations[item.id] ?? .none
+    }
+
     func markdownDisplayBlocks(for item: TimelineItem) -> [MarkdownDisplayBlock]? {
         _ = timelineProjectionGeneration
         return markdownProjections.blocks(for: item)
@@ -455,6 +462,8 @@ final class TimelineStore {
 #endif
         let text = GroupSystemEventPresentation.displayText(
             for: record,
+            groupSystem: groupSystemByMessageId[record.messageIdHex],
+            currentAccountIdHex: myAccountId,
             displayName: { accountIdHex in
                 appState?.displayName(forAccountIdHex: accountIdHex) ?? IdentityFormatter.short(accountIdHex)
             }
@@ -643,6 +652,7 @@ final class TimelineStore {
         projectionChanged = true
         replyPreviewDisplayCache[appRecord.messageIdHex] = nil
         groupSystemDisplayCache[appRecord.messageIdHex] = nil
+        groupSystemByMessageId[appRecord.messageIdHex] = record.groupSystem
         messageById[appRecord.messageIdHex] = appRecord
         // `sourceMessageIdHex` is the durable delivery marker. A nil-source
         // projection normally means committed but undelivered, except while a
@@ -732,6 +742,7 @@ final class TimelineStore {
         replyPreviewsByMessageId[messageIdHex] = nil
         replyPreviewDisplayCache[messageIdHex] = nil
         groupSystemDisplayCache[messageIdHex] = nil
+        groupSystemByMessageId[messageIdHex] = nil
         mediaProjections.removeReferences(forMessageId: messageIdHex)
         reactionProjections.removeSummary(forMessageId: messageIdHex)
         deletedProjections.removeProjected(forMessageId: messageIdHex)
@@ -867,7 +878,10 @@ final class TimelineStore {
             guard agentEventProjections.display(for: item) != nil else { return nil }
             return item
         case .groupSystem:
-            guard GroupSystemEventPresentation.isDisplayable(record) else { return nil }
+            guard GroupSystemEventPresentation.isDisplayable(
+                record,
+                groupSystem: groupSystemByMessageId[record.messageIdHex]
+            ) else { return nil }
             return TimelineItem.message(record, status: status)
         case .reaction, .delete, .edit, .agentStreamStart, .unknown:
             guard streamingDebugEnabled else { return nil }
@@ -913,6 +927,7 @@ final class TimelineStore {
         guard timelineSignature != nextSignature else { return false }
         timeline = next
         timelineSignature = nextSignature
+        messageClusterPresentations = MessageClusterProjection.presentations(for: next)
         return true
     }
 
@@ -932,6 +947,7 @@ final class TimelineStore {
         } else {
             timelineSignature = timeline.map(TimelineItemSignature.init)
         }
+        messageClusterPresentations = MessageClusterProjection.presentations(for: timeline)
         return true
     }
 

@@ -86,7 +86,7 @@ nonisolated enum LocalNotificationProjection {
             for: update.sender,
             nickname: nickname(update.accountIdHex, update.sender.accountIdHex)
         )
-        let preview = sanitizedPreview(update.previewText)
+        let preview = notificationPreview(update.previewText)
         let content = contentText(
             trigger: update.trigger,
             isDm: update.isDm,
@@ -185,6 +185,21 @@ nonisolated enum LocalNotificationProjection {
                 body: groupName.map { L10n.formatted("Invitation to %@", $0) }
                     ?? L10n.string("Open White Noise to view the invite")
             )
+        case .removedFromGroup:
+            return (
+                title: groupName ?? L10n.string("White Noise"),
+                body: L10n.string("You were removed from this chat.")
+            )
+        case .madeAdmin:
+            return (
+                title: groupName ?? L10n.string("White Noise"),
+                body: L10n.string("You are now an admin.")
+            )
+        case .removedAsAdmin:
+            return (
+                title: groupName ?? L10n.string("White Noise"),
+                body: L10n.string("You are no longer an admin.")
+            )
         case .newMessage:
             if isDm {
                 return (title: senderName, body: preview ?? L10n.string("New encrypted message"))
@@ -221,6 +236,14 @@ nonisolated enum LocalNotificationProjection {
 
     private static func sanitizedPreview(_ raw: String?) -> String? {
         ContentSanitizer.compactSingleLine(raw, maxLength: maxPreviewLength)
+    }
+
+    private static func notificationPreview(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        if RemoteGiphyMedia.parse(wireText: raw) != nil {
+            return L10n.string("GIF via GIPHY")
+        }
+        return sanitizedPreview(raw)
     }
 
     private static func notificationIdentifier(for update: NotificationUpdateFfi) -> String {

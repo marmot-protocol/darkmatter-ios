@@ -5,18 +5,12 @@ struct SystemEventRow: View {
     let event: SystemEvent
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.caption2)
-            Text(text)
-                .font(.caption)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background(.thinMaterial, in: Capsule())
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
+        Text(text)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 5)
     }
 
     private var text: String {
@@ -29,13 +23,4 @@ struct SystemEventRow: View {
         }
     }
 
-    private var icon: String {
-        switch event {
-        case .groupCreated: "sparkles"
-        case .groupRenamed: "pencil"
-        case .groupArchived: "archivebox"
-        case .groupUnarchived: "tray.and.arrow.up"
-        case .rosterChanged: "person.2.fill"
-        }
-    }
 }

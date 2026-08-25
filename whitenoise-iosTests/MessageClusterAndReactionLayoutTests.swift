@@ -1,0 +1,146 @@
+import Foundation
+import Testing
+@testable import MarmotKit
+@testable import whitenoise_ios
+
+struct ReactionMetadataFittingTests {
+    @Test func keepsEveryPillWhenTheMetadataRowFits() {
+        let fit = ReactionMetadataFitting.fit(
+            reactionWidths: [30, 30, 30],
+            overflowWidthForHiddenCount: [1: 24, 2: 24, 3: 24],
+            footerWidth: 20,
+            availableWidth: 124
+        )
+
+        #expect(fit == ReactionMetadataFit(visibleReactionCount: 3, hiddenReactionCount: 0))
+    }
+
+    @Test func usesTheLargestVisiblePrefixThatFitsBesideOverflowAndFooter() {
+        let fit = ReactionMetadataFitting.fit(
+            reactionWidths: [30, 30, 30],
+            overflowWidthForHiddenCount: [1: 24, 2: 24, 3: 24],
+            footerWidth: 20,
+            availableWidth: 95
+        )
+
+        #expect(fit == ReactionMetadataFit(visibleReactionCount: 1, hiddenReactionCount: 2))
+    }
+
+    @Test func canCollapseToOnlyOverflowAndFooter() {
+        let fit = ReactionMetadataFitting.fit(
+            reactionWidths: [30, 30, 30],
+            overflowWidthForHiddenCount: [1: 24, 2: 24, 3: 24],
+            footerWidth: 20,
+            availableWidth: 52
+        )
+
+        #expect(fit == ReactionMetadataFit(visibleReactionCount: 0, hiddenReactionCount: 3))
+    }
+
+    @Test func sortsOurReactionFirstThenByPopularity() {
+        let sorted = ReactionPillPresentation.sorted([
+            .init(emoji: "a", count: 5, mine: false),
+            .init(emoji: "b", count: 1, mine: true),
+            .init(emoji: "c", count: 3, mine: false),
+        ])
+
+        #expect(sorted.map(\.emoji) == ["b", "a", "c"])
+    }
+
+    @Test func preservesAlreadyHiddenReactionTypesWhenEveryRenderedPillFits() {
+        let fit = ReactionMetadataFitting.fit(
+            reactionWidths: [30, 30],
+            overflowWidthForHiddenCount: [3: 24, 4: 24, 5: 24],
+            footerWidth: 20,
+            availableWidth: 121,
+            preHiddenReactionCount: 3
+        )
+
+        #expect(fit == ReactionMetadataFit(visibleReactionCount: 2, hiddenReactionCount: 3))
+        #expect(ReactionPillPresentation.maximumRenderedPills == 7)
+    }
+}
+
+struct MessageClusterProjectionTests {
+    private let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }()
+
+    @Test func sameSenderMessagesWithinFiveMinutesShareOneCluster() throws {
+        let items = [
+            item(id: "01", sender: "alice", timestamp: 100),
+            item(id: "02", sender: "alice", timestamp: 200),
+            item(id: "03", sender: "alice", timestamp: 500),
+        ]
+
+        let result = MessageClusterProjection.presentations(for: items, calendar: calendar)
+        let first = try #require(result[items[0].id])
+        let middle = try #require(result[items[1].id])
+        let last = try #require(result[items[2].id])
+
+        #expect(first.showsSenderName)
+        #expect(!first.showsAvatar)
+        #expect(!middle.showsSenderName)
+        #expect(!middle.showsAvatar)
+        #expect(!last.showsSenderName)
+        #expect(last.showsAvatar)
+        #expect(last.reservesIdentityLane)
+    }
+
+    @Test func senderSystemRowsAndOutgoingMessagesBreakClusters() throws {
+        let first = item(id: "11", sender: "alice", timestamp: 100)
+        let otherSender = item(id: "12", sender: "bob", timestamp: 101)
+        let beforeSystem = item(id: "13", sender: "alice", timestamp: 102)
+        let system = TimelineItem.systemEvent(id: "break", event: .rosterChanged, timestamp: 103)
+        let afterSystem = item(id: "14", sender: "alice", timestamp: 104)
+        let outgoing = item(id: "15", sender: "me", timestamp: 105, direction: "sent")
+        let afterOutgoing = item(id: "16", sender: "alice", timestamp: 106)
+        let items = [first, otherSender, beforeSystem, system, afterSystem, outgoing, afterOutgoing]
+
+        let result = MessageClusterProjection.presentations(for: items, calendar: calendar)
+
+        for incoming in [first, otherSender, beforeSystem, afterSystem, afterOutgoing] {
+            let presentation = try #require(result[incoming.id])
+            #expect(presentation.showsSenderName)
+            #expect(presentation.showsAvatar)
+        }
+        #expect(result[outgoing.id] == nil)
+    }
+
+    @Test func calendarDayAndFiveMinuteBoundaryAreDeterministic() throws {
+        let beforeMidnight = item(id: "21", sender: "alice", timestamp: 86_390)
+        let afterMidnight = item(id: "22", sender: "alice", timestamp: 86_410)
+        let atLimit = item(id: "23", sender: "alice", timestamp: 86_710)
+        let beyondLimit = item(id: "24", sender: "alice", timestamp: 87_011)
+        let items = [beforeMidnight, afterMidnight, atLimit, beyondLimit]
+
+        let result = MessageClusterProjection.presentations(for: items, calendar: calendar)
+
+        #expect(try #require(result[beforeMidnight.id]).showsAvatar)
+        #expect(try #require(result[afterMidnight.id]).showsSenderName)
+        #expect(!(try #require(result[atLimit.id])).showsSenderName)
+        #expect(try #require(result[atLimit.id]).showsAvatar)
+        #expect(try #require(result[beyondLimit.id]).showsSenderName)
+    }
+
+    private func item(
+        id: String,
+        sender: String,
+        timestamp: UInt64,
+        direction: String = "received"
+    ) -> TimelineItem {
+        TimelineItem.message(AppMessageRecordFfi(
+            messageIdHex: String(repeating: id, count: 32),
+            direction: direction,
+            groupIdHex: String(repeating: "aa", count: 32),
+            sender: sender,
+            plaintext: "message",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: timestamp,
+            receivedAt: timestamp
+        ))
+    }
+}

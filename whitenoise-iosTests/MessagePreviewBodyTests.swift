@@ -80,6 +80,17 @@ struct MessagePreviewBodyTests {
         #expect(MessagePreview.body(record) == "hello world")
     }
 
+    @Test func remoteGiphyMessageUsesAStableNonTrackingPreviewLabel() {
+        let record = previewRecord(
+            kind: MessageSemantics.kindChat,
+            plaintext: "https://media1.giphy.com/media/abc/giphy.mp4?cid=client&rid=giphy.mp4\nvia GIPHY · Creator",
+            tags: []
+        )
+
+        #expect(MessagePreview.isPreviewable(record))
+        #expect(MessagePreview.body(record) == "GIF via GIPHY")
+    }
+
     @Test func tokenlessEditedBodyRendersCanonicalMentionAsDisplayName() throws {
         // MDK emits empty markdown tokens for kind-1009 edits. Once projected
         // onto the original chat row, the body must still render the mention.

@@ -6,6 +6,7 @@ import SwiftUI
 struct DataAndStorageView: View {
     @State private var quality = MediaQualityStore.quality()
     @State private var store = MediaAutoDownloadStore.shared
+    @State private var remoteGIFStore = RemoteGIFLoadingStore.shared
 
     var body: some View {
         Form {
@@ -32,6 +33,20 @@ struct DataAndStorageView: View {
                 Text("Auto-Download")
             } footer: {
                 Text("Media that isn't downloaded automatically shows a download button.")
+            }
+
+            Section {
+                Toggle(
+                    "Automatically Load Remote GIFs",
+                    isOn: Binding(
+                        get: { remoteGIFStore.automaticallyLoads },
+                        set: { remoteGIFStore.setAutomaticallyLoads($0) }
+                    )
+                )
+            } header: {
+                Text("Remote Media")
+            } footer: {
+                Text("When enabled, opening a conversation can tell GIPHY your IP address and which GIF was requested. Otherwise, received GIFs load only when you tap them.")
             }
 
             Section {

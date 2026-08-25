@@ -146,6 +146,7 @@ The script verifies the published manifest, SwiftPM checksum, generated Swift so
 - User defaults hold preferences such as active account, developer mode, recent reactions, and diagnostics self-check state.
 - Decrypted media cache files and temporary transcript exports use complete file protection.
 - Remote group-image search is an explicit third-party egress surface and uses ephemeral, no-cookie/no-cache URL sessions.
+- GIF search sends the query and IP address directly to GIPHY over the same pinned, ephemeral transport. Messages contain GIPHY's returned media URL rather than a Blossom copy. Received GIFs are tap-to-load by default so merely opening a chat does not contact GIPHY.
 
 ## Telemetry And Audit Logs
 
@@ -155,8 +156,9 @@ Telemetry is compiled into the published MarmotKit bundle with the `otlp-export`
 - `WHITENOISE_OTLP_BEARER_TOKEN` - defaults to `$(OTLP_TOKEN_WHITENOISE_IOS)`
 - `WHITENOISE_TELEMETRY_ENVIRONMENT` - `staging` or `production`; TestFlight builds are staging
 - `WHITENOISE_AUDIT_LOG_BEARER_TOKEN` - defaults to `$(AUDIT_LOG_TOKEN_WHITENOISE_IOS)`
+- `WHITENOISE_GIPHY_API_KEY` - defaults to `$(GIPHY_API_KEY_WHITENOISE_IOS)`
 
-Put local secrets in `Config/TelemetrySecrets.xcconfig` and do not commit real tokens. Audit-log uploads use the endpoint compiled into MarmotKit and a token separate from OTLP, because the audit tracker and metrics collector are different services.
+Put local secrets in `Config/TelemetrySecrets.xcconfig` and do not commit real tokens or API keys. Audit-log uploads use the endpoint compiled into MarmotKit and a token separate from OTLP, because the audit tracker and metrics collector are different services. GIF search remains unavailable when no GIPHY key is configured.
 
 ## Release Checks
 

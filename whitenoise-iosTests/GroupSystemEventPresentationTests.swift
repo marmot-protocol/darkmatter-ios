@@ -4,6 +4,54 @@ import Testing
 @testable import MarmotKit
 
 struct GroupSystemEventPresentationTests {
+    @Test func structuredBindingProjectionAvoidsJsonFallbackAndNamesCurrentAccountAsYou() {
+        let me = hex("aa")
+        let other = hex("bb")
+        let record = groupSystemRecord(plaintext: "not json", sender: me)
+        let projection = GroupSystemEventFfi(
+            systemType: "member_added",
+            text: "Member added",
+            actorAccountIdHex: me,
+            subjectAccountIdHex: other,
+            name: nil,
+            oldName: nil,
+            oldRetentionSeconds: nil,
+            newRetentionSeconds: nil
+        )
+
+        let text = GroupSystemEventPresentation.displayText(
+            for: record,
+            groupSystem: projection,
+            currentAccountIdHex: me,
+            displayName: testDisplayName
+        )
+
+        #expect(text == "You added Bob")
+        #expect(GroupSystemEventPresentation.isDisplayable(record, groupSystem: projection))
+    }
+
+    @Test func structuredBindingProjectionUsesActorForGroupIdentityChanges() {
+        let actor = hex("aa")
+        let renamed = GroupSystemEventFfi(
+            systemType: "group_renamed",
+            text: "Group renamed",
+            actorAccountIdHex: actor,
+            subjectAccountIdHex: nil,
+            name: "Weekend Walks",
+            oldName: "Walks",
+            oldRetentionSeconds: nil,
+            newRetentionSeconds: nil
+        )
+
+        let text = GroupSystemEventPresentation.displayText(
+            for: groupSystemRecord(plaintext: "not json", sender: actor),
+            groupSystem: renamed,
+            displayName: testDisplayName
+        )
+
+        #expect(text == "Alice changed the group name to Weekend Walks")
+    }
+
     @Test func oversizedPayloadIsRejectedBeforeParsing() {
         // Same ceiling as the agent-event parser: the cap must run before
         // JSONSerialization materializes an attacker-sized payload. The
@@ -169,10 +217,20 @@ struct GroupSystemEventPresentationTests {
         )
         let row = timelineRecord(
             messageIdHex: hex("aa"),
-            plaintext: #"{"v":1,"system_type":"member_added","text":"Member added"}"#,
+            plaintext: "not json",
             kind: MessageSemantics.kindGroupSystem,
             tags: [MessageTagFfi(values: ["system", "member_added"])],
-            timelineAt: 1
+            timelineAt: 1,
+            groupSystem: GroupSystemEventFfi(
+                systemType: "member_added",
+                text: "Member added",
+                actorAccountIdHex: nil,
+                subjectAccountIdHex: nil,
+                name: nil,
+                oldName: nil,
+                oldRetentionSeconds: nil,
+                newRetentionSeconds: nil
+            )
         )
 
         viewModel.applyTimelinePage(
@@ -186,7 +244,7 @@ struct GroupSystemEventPresentationTests {
             return
         }
         #expect(record.kind == MessageSemantics.kindGroupSystem)
-        #expect(GroupSystemEventPresentation.isDisplayable(record))
+        #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
     }
 
     @MainActor
@@ -230,12 +288,12 @@ private func testDisplayName(_ accountHex: String) -> String {
     }
 }
 
-private func groupSystemRecord(plaintext: String) -> AppMessageRecordFfi {
+private func groupSystemRecord(plaintext: String, sender: String = hex("11")) -> AppMessageRecordFfi {
     AppMessageRecordFfi(
         messageIdHex: hex("aa"),
         direction: "received",
         groupIdHex: hex("bb"),
-        sender: hex("11"),
+        sender: sender,
         plaintext: plaintext,
         contentTokens: MarkdownDocumentFfi.emptyDocument,
         kind: MessageSemantics.kindGroupSystem,
@@ -250,7 +308,8 @@ private func timelineRecord(
     plaintext: String,
     kind: UInt64,
     tags: [MessageTagFfi],
-    timelineAt: UInt64
+    timelineAt: UInt64,
+    groupSystem: GroupSystemEventFfi? = nil
 ) -> TimelineMessageRecordFfi {
     TimelineMessageRecordFfi(
         messageIdHex: messageIdHex,
@@ -269,7 +328,7 @@ private func timelineRecord(
         mediaJson: nil,
         media: [],
         agentTextStreamJson: nil,
-        groupSystem: nil,
+        groupSystem: groupSystem,
         reactions: TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
         deleted: false,
         deletedByMessageIdHex: nil,

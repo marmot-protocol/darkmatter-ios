@@ -2683,8 +2683,9 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func shutdown() async
 
     /**
-     * [`Marmot::shutdown`], then close every SQLite database and release the
-     * Marmot root's runtime lease.
+     * Stop admitting runtime work, close every SQLite database and release the
+     * Marmot root's runtime lease, then make a bounded attempt at graceful
+     * worker cleanup.
      *
      * Await this before letting the process be suspended. When it returns,
      * nothing this process owns holds a file lock inside the Marmot root —
@@ -2701,9 +2702,12 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * this method just cleared. Construct a new `Marmot` on resume — which is
      * what a foregrounding app does anyway.
      *
-     * Safe to call twice, and safe to call with or without a preceding
-     * [`Marmot::shutdown`]. Bounded: worker drain has a fixed budget and the
-     * close itself waits only for the SQLite statement currently executing.
+     * Storage closure runs in a runtime-owned task, so cancelling the host
+     * future cannot cancel it. Safe to call twice or concurrently, and safe to
+     * call with or without a preceding [`Marmot::shutdown`]. Graceful cleanup
+     * has a fixed budget; the close itself waits only for an already-admitted
+     * database open or SQLite statement. Begin this call early enough to cover
+     * that close before the host's suspension assertion expires.
      * An error means at least one database reported a problem while closing;
      * every database is still attempted and left closed, so a failure is not
      * a reason to retry or to keep the process alive.
@@ -5697,8 +5701,9 @@ open func shutdown()async   {
 }
 
     /**
-     * [`Marmot::shutdown`], then close every SQLite database and release the
-     * Marmot root's runtime lease.
+     * Stop admitting runtime work, close every SQLite database and release the
+     * Marmot root's runtime lease, then make a bounded attempt at graceful
+     * worker cleanup.
      *
      * Await this before letting the process be suspended. When it returns,
      * nothing this process owns holds a file lock inside the Marmot root —
@@ -5715,9 +5720,12 @@ open func shutdown()async   {
      * this method just cleared. Construct a new `Marmot` on resume — which is
      * what a foregrounding app does anyway.
      *
-     * Safe to call twice, and safe to call with or without a preceding
-     * [`Marmot::shutdown`]. Bounded: worker drain has a fixed budget and the
-     * close itself waits only for the SQLite statement currently executing.
+     * Storage closure runs in a runtime-owned task, so cancelling the host
+     * future cannot cancel it. Safe to call twice or concurrently, and safe to
+     * call with or without a preceding [`Marmot::shutdown`]. Graceful cleanup
+     * has a fixed budget; the close itself waits only for an already-admitted
+     * database open or SQLite statement. Begin this call early enough to cover
+     * that close before the host's suspension assertion expires.
      * An error means at least one database reported a problem while closing;
      * every database is still attempted and left closed, so a failure is not
      * a reason to retry or to keep the process alive.
@@ -23714,6 +23722,9 @@ public enum NotificationTriggerFfi {
 
     case newMessage
     case groupInvite
+    case removedFromGroup
+    case madeAdmin
+    case removedAsAdmin
 }
 
 
@@ -23735,6 +23746,12 @@ public struct FfiConverterTypeNotificationTriggerFfi: FfiConverterRustBuffer {
 
         case 2: return .groupInvite
 
+        case 3: return .removedFromGroup
+
+        case 4: return .madeAdmin
+
+        case 5: return .removedAsAdmin
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -23749,6 +23766,18 @@ public struct FfiConverterTypeNotificationTriggerFfi: FfiConverterRustBuffer {
 
         case .groupInvite:
             writeInt(&buf, Int32(2))
+
+
+        case .removedFromGroup:
+            writeInt(&buf, Int32(3))
+
+
+        case .madeAdmin:
+            writeInt(&buf, Int32(4))
+
+
+        case .removedAsAdmin:
+            writeInt(&buf, Int32(5))
 
         }
     }
@@ -27686,7 +27715,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown() != 50597) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown_and_close() != 15326) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_shutdown_and_close() != 12346) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_sign_in_account() != 63258) {

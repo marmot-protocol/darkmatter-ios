@@ -6,11 +6,10 @@ struct GroupSystemEventRow: View {
 
     var body: some View {
         Text(text)
-            .font(.caption)
+            .font(.caption.weight(.medium))
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
     }
 }

@@ -60,6 +60,7 @@ nonisolated enum RemoteImageFetch {
     static func request(for url: URL, accept: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpShouldHandleCookies = false
         request.timeoutInterval = 12
         request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")

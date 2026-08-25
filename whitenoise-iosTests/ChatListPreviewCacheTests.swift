@@ -88,6 +88,25 @@ struct ChatListPreviewCacheTests {
         ) == ChatRowPreviewPresentation(prefix: nil, body: "hello"))
     }
 
+    @Test func groupSystemActivityDoesNotAddASenderPrefix() {
+        let item = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(
+                sender: "",
+                plaintext: #"{"v":1,"system_type":"member_added","text":"Member added"}"#,
+                kind: MessageSemantics.kindGroupSystem
+            )),
+            avatarURL: nil,
+            title: "Room",
+            isDirectMessage: false
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: "Member added"))
+    }
+
     @Test func terminalMembershipReplacesStaleMessagePreview() {
         let leftItem = ChatsListViewModel.Item(
             row: row(lastMessage: preview(), selfMembership: .left),

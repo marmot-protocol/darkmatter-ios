@@ -3946,6 +3946,34 @@ struct NotificationPresentationTests {
         #expect(LocalNotificationProjection.makePresentation(for: groupMessage)?.body == L10n.formatted("%@ sent a message", "Bob"))
     }
 
+    @Test func groupMembershipAndAdminNotificationsUseDedicatedCopy() {
+        let removed = LocalNotificationProjection.makePresentation(for: notificationUpdate(
+            trigger: .removedFromGroup,
+            isDm: false,
+            groupName: "Project Room",
+            previewText: nil
+        ))
+        let madeAdmin = LocalNotificationProjection.makePresentation(for: notificationUpdate(
+            trigger: .madeAdmin,
+            isDm: false,
+            groupName: "Project Room",
+            previewText: nil
+        ))
+        let removedAsAdmin = LocalNotificationProjection.makePresentation(for: notificationUpdate(
+            trigger: .removedAsAdmin,
+            isDm: false,
+            groupName: nil,
+            previewText: nil
+        ))
+
+        #expect(removed?.title == "Project Room")
+        #expect(removed?.body == "You were removed from this chat.")
+        #expect(madeAdmin?.title == "Project Room")
+        #expect(madeAdmin?.body == "You are now an admin.")
+        #expect(removedAsAdmin?.title == "White Noise")
+        #expect(removedAsAdmin?.body == "You are no longer an admin.")
+    }
+
     @Test func selfMessagesAreNotPresentedLocally() {
         let update = notificationUpdate(isFromSelf: true)
 
@@ -12067,7 +12095,7 @@ private struct TimelineSemanticPositionHarness: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                VStack(spacing: 0) {
                     Section {
                         ForEach(0..<80, id: \.self) { index in
                             Text("Row \(index)")
@@ -12129,7 +12157,7 @@ private struct TimelineShortContentResizeHarness: View {
     var body: some View {
         GeometryReader { viewport in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                VStack(spacing: 0) {
                     Text("Only message")
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .id("message")
@@ -12138,7 +12166,6 @@ private struct TimelineShortContentResizeHarness: View {
                 .frame(minHeight: max(0, viewport.size.height), alignment: .bottom)
             }
             .defaultScrollAnchor(.bottom, for: .initialOffset)
-            .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .onScrollTargetVisibilityChange(
                 idType: String.self,
                 threshold: TimelineViewportVisibility.minimumVisibleFraction
@@ -12183,7 +12210,7 @@ struct TimelineBottomTests {
         window.isHidden = true
     }
 
-    @Test func swiftUILazyTimelineResolvesSemanticBottomTarget() async throws {
+    @Test func swiftUIStableTimelineResolvesSemanticBottomTarget() async throws {
         let target = TimelineInitialPositionTarget.latest(id: "row-79")
         var didReachTarget = false
         var didSeeBottomTarget = false
@@ -12193,7 +12220,7 @@ struct TimelineBottomTests {
                 target: target,
                 onViewportChanged: {
                     lastViewport = $0
-                    didReachTarget = $0.isSettledAtBottom
+                    didReachTarget = $0.isPinned
                 },
                 onVisibleTargetsChanged: {
                     didSeeBottomTarget = $0.contains("row-79")
@@ -12346,11 +12373,7 @@ struct TimelineBottomTests {
     }
 
     @Test func semanticTargetPositioningRejectsAutomaticBottomScrolls() {
-        for reason in [
-            TimelineBottomScrollReason.contentGrowth,
-            .timelineChange,
-            .viewportChange,
-        ] {
+        for reason in [TimelineBottomScrollReason.timelineChange] {
             #expect(TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
                 hasPositionIntent: true,
                 didFinishPositioning: false,
@@ -12366,12 +12389,12 @@ struct TimelineBottomTests {
         #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
             hasPositionIntent: false,
             didFinishPositioning: false,
-            reason: .viewportChange
+            reason: .timelineChange
         ))
         #expect(!TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
             hasPositionIntent: true,
             didFinishPositioning: true,
-            reason: .contentGrowth
+            reason: .timelineChange
         ))
     }
 
@@ -12425,6 +12448,16 @@ struct TimelineBottomTests {
         #expect(visibility.set("message-a", isVisible: false))
         #expect(!visibility.set("message-a", isVisible: false))
         #expect(visibility.visibleRowKeys.isEmpty)
+    }
+
+    @Test func timelineTargetVisibilityStoreRetainsTheLatestScrollCallbackSnapshot() {
+        let visibility = TimelineTargetVisibilityStore()
+
+        visibility.replace(with: ["message-a", "message-b"])
+        #expect(visibility.visibleTargetIDs == ["message-a", "message-b"])
+
+        visibility.replace(with: ["message-b"])
+        #expect(visibility.visibleTargetIDs == ["message-b"])
     }
 
     @Test func timelineVisibilityThresholdIncludesPartiallyVisibleTallRows() {
@@ -12486,7 +12519,7 @@ struct TimelineBottomTests {
         #expect(!TimelineBottom.shouldShowScrollToBottomButton(distanceToBottom: insetAdjustedBottom))
     }
 
-    @Test func bottomOverscrollDetectsViewportBelowLegalContentBottom() {
+    @Test func bottomOverscrollMeasuresViewportBelowLegalContentBottom() {
         let validBottom = TimelineBottomViewport(
             contentHeight: 1_000,
             visibleBottomY: 1_050,
@@ -12499,76 +12532,32 @@ struct TimelineBottomTests {
         )
 
         #expect(validBottom.overscrollPastBottom == 0)
-        #expect(validBottom.isSettledAtBottom)
-        #expect(!TimelineBottom.shouldRepairBottomOverscroll(
-            validBottom,
-            isUserScrolling: false
-        ))
         #expect(belowContent.overscrollPastBottom == 70)
-        #expect(!belowContent.isSettledAtBottom)
-        #expect(TimelineBottom.shouldRepairBottomOverscroll(
-            belowContent,
-            isUserScrolling: false
-        ))
-        #expect(!TimelineBottom.shouldRepairBottomOverscroll(
-            belowContent,
+    }
+
+    @Test func bottomBounceDoesNotMarkTheUserAsMovedAway() {
+        #expect(TimelineBottom.userMovedAwayState(
+            previous: false,
+            viewportIsPinned: true,
+            isUserScrolling: true
+        ) == false)
+        #expect(TimelineBottom.userMovedAwayState(
+            previous: true,
+            viewportIsPinned: true,
+            isUserScrolling: true
+        ) == false)
+    }
+
+    @Test func draggingBeyondTheBottomThresholdMarksTheUserAsMovedAway() {
+        #expect(TimelineBottom.userMovedAwayState(
+            previous: false,
+            viewportIsPinned: false,
             isUserScrolling: true
         ))
-    }
-
-    @Test func pinnedContentGrowthKeepsTimelinePinned() {
-        let previous = TimelineBottomViewport(
-            contentHeight: 1_000,
-            visibleBottomY: 995,
-            bottomContentInset: 0
-        )
-        let current = TimelineBottomViewport(
-            contentHeight: 1_080,
-            visibleBottomY: 995,
-            bottomContentInset: 0
-        )
-
-        #expect(previous.isPinned)
-        #expect(!current.isPinned)
-        #expect(TimelineBottom.shouldPreservePinAfterContentGrowth(previous: previous, current: current))
-    }
-
-    @Test func scrolledUpContentGrowthDoesNotForceTimelinePinned() {
-        let previous = TimelineBottomViewport(
-            contentHeight: 1_000,
-            visibleBottomY: 800,
-            bottomContentInset: 0
-        )
-        let current = TimelineBottomViewport(
-            contentHeight: 1_080,
-            visibleBottomY: 800,
-            bottomContentInset: 0
-        )
-
-        #expect(!previous.isPinned)
-        #expect(!TimelineBottom.shouldPreservePinAfterContentGrowth(previous: previous, current: current))
-    }
-
-    @Test func projectionChangesFollowPinnedOrInitialBottomPlacementOnly() {
-        #expect(TimelineBottom.shouldFollowProjectionChange(
-            isPinned: true,
-            isInitialBottomPositioning: false,
-            hasTargetMessage: false
-        ))
-        #expect(TimelineBottom.shouldFollowProjectionChange(
-            isPinned: false,
-            isInitialBottomPositioning: true,
-            hasTargetMessage: false
-        ))
-        #expect(!TimelineBottom.shouldFollowProjectionChange(
-            isPinned: false,
-            isInitialBottomPositioning: false,
-            hasTargetMessage: false
-        ))
-        #expect(!TimelineBottom.shouldFollowProjectionChange(
-            isPinned: false,
-            isInitialBottomPositioning: true,
-            hasTargetMessage: true
+        #expect(TimelineBottom.userMovedAwayState(
+            previous: true,
+            viewportIsPinned: false,
+            isUserScrolling: false
         ))
     }
 
@@ -12592,29 +12581,29 @@ struct TimelineBottomTests {
         ))
     }
 
-    @Test func bottomScrollRequestsCoalesceToLatestNonAnimatedTarget() {
+    @Test func bottomScrollRequestsCoalesceToLatestTimelineTarget() {
         let timelineChange = TimelineBottomScrollRequest(
             animated: true,
             reason: .timelineChange,
             targetID: "message-a"
         )
-        let viewportChange = TimelineBottomScrollRequest(
+        let nextTimelineChange = TimelineBottomScrollRequest(
             animated: false,
-            reason: .viewportChange,
+            reason: .timelineChange,
             targetID: "message-b"
         )
 
-        let result = TimelineBottomScrollCoordinator.coalesced(timelineChange, with: viewportChange)
+        let result = TimelineBottomScrollCoordinator.coalesced(timelineChange, with: nextTimelineChange)
 
         #expect(result.animated == false)
-        #expect(result.reason == .viewportChange)
+        #expect(result.reason == .timelineChange)
         #expect(result.targetID == "message-b")
     }
 
     @Test func userInitiatedBottomScrollWinsPendingAutomaticFollowUps() {
-        let viewportChange = TimelineBottomScrollRequest(
+        let timelineChange = TimelineBottomScrollRequest(
             animated: false,
-            reason: .viewportChange,
+            reason: .timelineChange,
             targetID: "message-a"
         )
         let buttonTap = TimelineBottomScrollRequest(
@@ -12623,8 +12612,8 @@ struct TimelineBottomTests {
             targetID: "message-b"
         )
 
-        let userWins = TimelineBottomScrollCoordinator.coalesced(viewportChange, with: buttonTap)
-        let automaticDoesNotOverrideUser = TimelineBottomScrollCoordinator.coalesced(buttonTap, with: viewportChange)
+        let userWins = TimelineBottomScrollCoordinator.coalesced(timelineChange, with: buttonTap)
+        let automaticDoesNotOverrideUser = TimelineBottomScrollCoordinator.coalesced(buttonTap, with: timelineChange)
 
         #expect(userWins.animated)
         #expect(userWins.reason == .buttonTap)
@@ -12633,11 +12622,7 @@ struct TimelineBottomTests {
     }
 
     @Test func userScrollSuppressesAutomaticBottomRequestsButNotButtonTap() {
-        for reason in [
-            TimelineBottomScrollReason.contentGrowth,
-            .timelineChange,
-            .viewportChange,
-        ] {
+        for reason in [TimelineBottomScrollReason.timelineChange] {
             #expect(!TimelineBottomScrollCoordinator.shouldExecute(
                 reason: reason,
                 isUserScrolling: true

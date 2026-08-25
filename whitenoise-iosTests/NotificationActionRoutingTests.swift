@@ -123,9 +123,34 @@ struct NotificationActionCategoryTests {
         ) == nil)
     }
 
+    @Test func groupStateUpdatesGetNoMessageActions() {
+        #expect(NotificationActionCategory.identifier(
+            trigger: .removedFromGroup,
+            messageIdHex: "message-a"
+        ) == nil)
+        #expect(NotificationActionCategory.identifier(
+            trigger: .madeAdmin,
+            messageIdHex: "message-a"
+        ) == nil)
+        #expect(NotificationActionCategory.identifier(
+            trigger: .removedAsAdmin,
+            messageIdHex: "message-a"
+        ) == nil)
+    }
+
     @Test func projectionStampsMessageCategoryOnMessagePresentations() {
         let presentation = LocalNotificationProjection.makePresentation(for: actionTestUpdate())
         #expect(presentation?.categoryIdentifier == NotificationActionCategory.message)
+    }
+
+    @Test func projectionDoesNotExposeGiphyMediaURLInNotificationBody() {
+        let update = actionTestUpdate(
+            previewText: "https://media.giphy.com/media/abc/giphy.mp4?cid=client&rid=giphy.mp4\nvia GIPHY · Creator"
+        )
+
+        let presentation = LocalNotificationProjection.makePresentation(for: update)
+
+        #expect(presentation?.body == "Alice: GIF via GIPHY")
     }
 
     @Test func projectionLeavesInvitePresentationsActionFree() {
@@ -177,7 +202,8 @@ struct NotificationActionCategoryTests {
 
 private func actionTestUpdate(
     trigger: NotificationTriggerFfi = .newMessage,
-    messageIdHex: String? = "message-a"
+    messageIdHex: String? = "message-a",
+    previewText: String = "Hello"
 ) -> NotificationUpdateFfi {
     NotificationUpdateFfi(
         notificationKey: "notif-a",
@@ -200,7 +226,7 @@ private func actionTestUpdate(
             displayName: "Me",
             pictureUrl: nil
         ),
-        previewText: "Hello",
+        previewText: previewText,
         reactionEmoji: nil,
         reactedToPreview: nil,
         timestampMs: 1_700_000_000_123,

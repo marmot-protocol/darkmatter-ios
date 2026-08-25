@@ -39,6 +39,8 @@
 	<string>$(WN_URL_SCHEME)</string>
 	<key>WhiteNoiseAuditLogBearerToken</key>
 	<string>$(WHITENOISE_AUDIT_LOG_BEARER_TOKEN)</string>
+	<key>WhiteNoiseGiphyAPIKey</key>
+	<string>$(WHITENOISE_GIPHY_API_KEY)</string>
 	<key>WhiteNoisePushRelayHint</key>
 	<string>$(WHITENOISE_PUSH_RELAY_HINT)</string>
 	<key>WhiteNoisePushServerPubkeyHex</key>

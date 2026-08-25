@@ -25,35 +25,32 @@ struct MessageBubbleReplyChromeTests {
         #expect(ChatBubbleMetrics.cornerRadius == 18)
     }
 
-    @Test func replyHeaderUsesBalancedPaddingAndExtraBodyGap() {
-        #expect(MessageBubbleReplyLayout.headerVerticalInset > 0)
-        #expect(MessageBubbleReplyLayout.headerHorizontalInset == MessageBubbleReplyLayout.bodyHorizontalInset)
-        #expect(MessageBubbleReplyLayout.bodyTopInsetAfterReply > MessageBubbleReplyLayout.bodyTopInset)
+    @Test func replyCardUsesPrototypeInsetAndCornerMetrics() {
+        #expect(MessageBubbleReplyLayout.richContentWidth == 256)
+        #expect(MessageBubbleReplyLayout.richBubbleWidth == 268)
+        #expect(MessageBubbleReplyLayout.cardOuterInset == 6)
+        #expect(MessageBubbleReplyLayout.cardHorizontalInset == 10)
+        #expect(MessageBubbleReplyLayout.cardVerticalInset == 6)
+        #expect(MessageBubbleReplyLayout.cardCornerRadius == 12)
+        #expect(MessageBubbleReplyLayout.bodyTopInsetAfterReply == 0)
         #expect(MessageBubbleReplyLayout.bodyBottomInset == MessageBubbleReplyLayout.bodyTopInset)
     }
 
-    @Test func receivedReplyHeaderContrastsWithBubbleFill() {
-        #expect(MessageBubble.receivedReplyHeaderColor(dark: true) == UIColor.systemGray4)
-        #expect(MessageBubble.receivedReplyHeaderColor(dark: false) == UIColor.systemGray4)
-        #expect(MessageBubble.receivedReplyHeaderColor(dark: true) != MessageBubble.receivedBubbleColor(dark: true))
-        #expect(MessageBubble.receivedReplyHeaderColor(dark: false) != MessageBubble.receivedBubbleColor(dark: false))
+    @Test func replyCardsUseThePrototypeSurfaceOpacities() {
+        #expect(MessageBubbleReplyLayout.receivedCardOpacity == 0.09)
+        #expect(MessageBubbleReplyLayout.sentCardOpacity == 0.16)
     }
 
-    @Test func sentReplyHeaderUsesSubtleOverlay() {
-        #expect(MessageBubbleReplyLayout.sentHeaderOverlayOpacity > 0)
-        #expect(MessageBubbleReplyLayout.sentHeaderOverlayOpacity < 0.25)
+    @Test func replyCardTintRemainsSubtle() {
+        #expect(MessageBubbleReplyLayout.receivedCardOpacity > 0)
+        #expect(MessageBubbleReplyLayout.sentCardOpacity < 0.25)
     }
 }
 
 struct MessageBubbleMetadataLayoutTests {
-    @Test func timestampsUseConversationCenterEdgeWithoutReactions() {
-        #expect(MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: true, hasReactions: false))
-        #expect(!MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: false, hasReactions: false))
-    }
-
-    @Test func reactionsMoveTimestampsToTheOuterEdge() {
-        #expect(!MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: true, hasReactions: true))
-        #expect(MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: false, hasReactions: true))
+    @Test func timestampsAlwaysUseTheOuterConversationEdge() {
+        #expect(!MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: true))
+        #expect(MessageMetadataRowArrangement.timestampOnLeadingEdge(isFromMe: false))
     }
 
     @Test func chromeWidthTracksItsWidestChildAndHonorsTheProposal() {

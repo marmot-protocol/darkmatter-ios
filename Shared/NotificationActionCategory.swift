@@ -18,7 +18,7 @@ nonisolated enum NotificationActionCategory {
         case .newMessage:
             guard let messageIdHex, !messageIdHex.isEmpty else { return nil }
             return message
-        case .groupInvite:
+        case .groupInvite, .removedFromGroup, .madeAdmin, .removedAsAdmin:
             return nil
         }
     }

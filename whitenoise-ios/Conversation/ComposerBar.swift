@@ -145,6 +145,7 @@ private enum ComposerAttachmentAction {
     case document
     case location
     case contact
+    case gifs
 }
 
 enum ComposerAccessoryPanel: Equatable {
@@ -215,6 +216,7 @@ struct ComposerBar: View {
     let onAttachFile: () -> Void
     let onShareLocation: () -> Void
     let onShareContact: () -> Void
+    let onSearchGIFs: () -> Void
     let onPasteImage: (UIImage) -> Void
     let onRemoveAudioDraft: (MediaDraftAttachment.ID) -> Void
     let onRemovePreparedAttachment: (MediaDraftAttachment.ID) -> Void
@@ -666,6 +668,8 @@ struct ComposerBar: View {
             onShareLocation()
         case .contact:
             onShareContact()
+        case .gifs:
+            onSearchGIFs()
         }
     }
 
@@ -678,7 +682,8 @@ struct ComposerBar: View {
                 onTakePhoto: { selectAttachmentAction(.camera) },
                 onAttachFile: { selectAttachmentAction(.document) },
                 onShareLocation: { selectAttachmentAction(.location) },
-                onShareContact: { selectAttachmentAction(.contact) }
+                onShareContact: { selectAttachmentAction(.contact) },
+                onSearchGIFs: { selectAttachmentAction(.gifs) }
             )
         }
     }
@@ -1037,6 +1042,7 @@ private struct ComposerAttachmentMenu: View {
     let onAttachFile: () -> Void
     let onShareLocation: () -> Void
     let onShareContact: () -> Void
+    let onSearchGIFs: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1046,6 +1052,7 @@ private struct ComposerAttachmentMenu: View {
                 actionTile("Document", systemImage: "doc.fill", tint: .cyan, action: onAttachFile)
                 actionTile("Location", systemImage: "location.fill", tint: .green, action: onShareLocation)
                 actionTile("Contact", systemImage: "person.crop.circle.fill", tint: .indigo, action: onShareContact)
+                actionTile("GIF", systemImage: "rectangle.stack.badge.play.fill", tint: .pink, action: onSearchGIFs)
             }
             Spacer(minLength: 0)
         }

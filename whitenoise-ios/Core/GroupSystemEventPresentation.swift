@@ -12,18 +12,28 @@ nonisolated enum GroupSystemEventPresentation {
     typealias DisplayNameResolver = (String) -> String
 
     static func isDisplayable(_ record: AppMessageRecordFfi) -> Bool {
+        isDisplayable(record, groupSystem: nil)
+    }
+
+    static func isDisplayable(
+        _ record: AppMessageRecordFfi,
+        groupSystem: GroupSystemEventFfi?
+    ) -> Bool {
         guard case .groupSystem = MessageSemantics.classify(record) else { return false }
-        return parsePayload(record.plaintext) != nil
+        return groupSystem != nil || parsePayload(record.plaintext) != nil
     }
 
     static func displayText(
         for record: AppMessageRecordFfi,
+        groupSystem: GroupSystemEventFfi? = nil,
+        currentAccountIdHex: String? = nil,
         displayName: DisplayNameResolver
     ) -> String? {
         guard case .groupSystem = MessageSemantics.classify(record) else { return nil }
-        return displayText(
-            from: record.plaintext,
+        let payload = groupSystem.map(Payload.init) ?? parsePayload(record.plaintext)
+        return payload?.resolvedText(
             sender: record.sender,
+            currentAccountIdHex: currentAccountIdHex,
             displayName: displayName
         )
     }
@@ -34,7 +44,7 @@ nonisolated enum GroupSystemEventPresentation {
         displayName: DisplayNameResolver = { IdentityFormatter.short($0) }
     ) -> String? {
         guard let payload = parsePayload(plaintext) else { return nil }
-        return payload.resolvedText(sender: sender, displayName: displayName)
+        return payload.resolvedText(sender: sender, currentAccountIdHex: nil, displayName: displayName)
     }
 
     private static func parsePayload(_ plaintext: String) -> Payload? {
@@ -140,11 +150,44 @@ nonisolated enum GroupSystemEventPresentation {
         var oldRetentionSeconds: UInt64?
         var newRetentionSeconds: UInt64?
 
-        func resolvedText(sender: String, displayName: DisplayNameResolver) -> String? {
+        init(_ event: GroupSystemEventFfi) {
+            text = event.text
+            systemType = event.systemType
+            actor = event.actorAccountIdHex
+            subject = event.subjectAccountIdHex
+            name = event.name
+            oldRetentionSeconds = event.oldRetentionSeconds
+            newRetentionSeconds = event.newRetentionSeconds
+        }
+
+        init(
+            text: String?,
+            systemType: String?,
+            actor: String?,
+            subject: String?,
+            name: String?,
+            oldRetentionSeconds: UInt64?,
+            newRetentionSeconds: UInt64?
+        ) {
+            self.text = text
+            self.systemType = systemType
+            self.actor = actor
+            self.subject = subject
+            self.name = name
+            self.oldRetentionSeconds = oldRetentionSeconds
+            self.newRetentionSeconds = newRetentionSeconds
+        }
+
+        func resolvedText(
+            sender: String,
+            currentAccountIdHex: String?,
+            displayName: DisplayNameResolver
+        ) -> String? {
             let actorHex = normalizedHex(actor) ?? normalizedHex(sender.isEmpty ? nil : sender)
             let subjectHex = normalizedHex(subject)
-            let actorName = actorHex.map(displayName)
-            let subjectName = subjectHex.map(displayName)
+            let current = normalizedHex(currentAccountIdHex)
+            let actorName = actorHex.map { $0 == current ? L10n.string("You") : displayName($0) }
+            let subjectName = subjectHex.map { $0 == current ? L10n.string("you") : displayName($0) }
             let groupName = ContentSanitizer.groupName(name)
 
             if let systemType = trimmed(systemType) {
@@ -164,8 +207,8 @@ nonisolated enum GroupSystemEventPresentation {
                         return L10n.formatted("%@ was removed", subjectName)
                     }
                 case "member_left":
-                    if let subjectName {
-                        return L10n.formatted("%@ left", subjectName)
+                    if let leavingName = actorName ?? subjectName {
+                        return L10n.formatted("%@ left", leavingName)
                     }
                 case "admin_added":
                     if let actorName, let subjectName {
@@ -183,10 +226,16 @@ nonisolated enum GroupSystemEventPresentation {
                     }
                 case "group_renamed":
                     if let groupName {
+                        if let actorName {
+                            return L10n.formatted("%@ changed the group name to %@", actorName, groupName)
+                        }
                         return L10n.formatted("Group renamed to %@", groupName)
                     }
                     return L10n.string("Group renamed")
                 case "group_avatar_changed":
+                    if let actorName {
+                        return L10n.formatted("%@ changed the group photo", actorName)
+                    }
                     return L10n.string("Group avatar changed")
                 case "disappearing_timer_changed":
                     if let newRetentionSeconds {

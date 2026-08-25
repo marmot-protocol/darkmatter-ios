@@ -538,6 +538,10 @@ final class ConversationViewModel {
         timelineStore.reactionDetails(for: messageIdHex)
     }
 
+    func messageClusterPresentation(for item: TimelineItem) -> MessageClusterPresentation {
+        timelineStore.messageClusterPresentation(for: item)
+    }
+
     /// All aggregated reaction tallies (full dict). Used by reaction tests.
     var reactions: [String: [ReactionTally]] { timelineStore.reactions }
 

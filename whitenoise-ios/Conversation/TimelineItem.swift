@@ -47,6 +47,87 @@ enum SystemEvent: Hashable {
     case rosterChanged
 }
 
+nonisolated struct MessageClusterPresentation: Equatable, Hashable {
+    var reservesIdentityLane: Bool
+    var showsSenderName: Bool
+    var showsAvatar: Bool
+
+    static let none = Self(
+        reservesIdentityLane: false,
+        showsSenderName: false,
+        showsAvatar: false
+    )
+}
+
+nonisolated enum MessageClusterProjection {
+    static let maximumGap: UInt64 = 5 * 60
+
+    static func presentations(
+        for timeline: [TimelineItem],
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> [String: MessageClusterPresentation] {
+        struct PreviousMessage {
+            let itemId: String
+            let sender: String
+            let timestamp: UInt64
+            let day: Date
+        }
+
+        var result: [String: MessageClusterPresentation] = [:]
+        result.reserveCapacity(timeline.count)
+        var previous: PreviousMessage?
+
+        for item in timeline {
+            guard case .message(let record, _) = item.kind,
+                  record.direction != "sent",
+                  isClusterable(record)
+            else {
+                previous = nil
+                continue
+            }
+
+            let date = Date(timeIntervalSince1970: TimeInterval(item.timestamp))
+            let day = calendar.startOfDay(for: date)
+            let continuesPrevious: Bool
+            if let previous {
+                continuesPrevious = previous.sender == record.sender
+                    && previous.day == day
+                    && item.timestamp >= previous.timestamp
+                    && item.timestamp - previous.timestamp <= maximumGap
+            } else {
+                continuesPrevious = false
+            }
+
+            if continuesPrevious, let previousId = previous?.itemId {
+                result[previousId]?.showsAvatar = false
+            }
+            result[item.id] = MessageClusterPresentation(
+                reservesIdentityLane: true,
+                showsSenderName: !continuesPrevious,
+                showsAvatar: true
+            )
+            previous = PreviousMessage(
+                itemId: item.id,
+                sender: record.sender,
+                timestamp: item.timestamp,
+                day: day
+            )
+        }
+
+        return result
+    }
+
+    private static func isClusterable(_ record: AppMessageRecordFfi) -> Bool {
+        switch MessageSemantics.classify(record) {
+        case .chat, .reply, .media, .streamFinal:
+            return true
+        case .reaction, .delete, .edit, .agentStreamStart,
+             .agentActivity, .agentOperation, .groupSystem, .unknown:
+            return false
+        }
+    }
+}
+
 extension TimelineItem {
     /// Sort key for a message row. Clamped to the earlier of the message's
     /// claimed send time and our local receive time, so a peer (or a skewed
