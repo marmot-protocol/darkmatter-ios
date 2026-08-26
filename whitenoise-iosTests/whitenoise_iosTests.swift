@@ -12097,9 +12097,12 @@ private struct TimelineSemanticPositionHarness: View {
             ScrollView {
                 VStack(spacing: 0) {
                     Section {
-                        ForEach(0..<80, id: \.self) { index in
+                        ForEach(0..<120, id: \.self) { index in
                             Text("Row \(index)")
-                                .frame(maxWidth: .infinity, minHeight: 40)
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: index.isMultiple(of: 11) ? 180 : 40
+                                )
                                 .id("row-\(index)")
                         }
                     }
@@ -12211,7 +12214,7 @@ struct TimelineBottomTests {
     }
 
     @Test func swiftUIStableTimelineResolvesSemanticBottomTarget() async throws {
-        let target = TimelineInitialPositionTarget.latest(id: "row-79")
+        let target = TimelineInitialPositionTarget.latest(id: "bottom")
         var didReachTarget = false
         var didSeeBottomTarget = false
         var lastViewport: TimelineBottomViewport?
@@ -12223,7 +12226,7 @@ struct TimelineBottomTests {
                     didReachTarget = $0.isPinned
                 },
                 onVisibleTargetsChanged: {
-                    didSeeBottomTarget = $0.contains("row-79")
+                    didSeeBottomTarget = $0.contains("bottom")
                 }
             )
         )
@@ -12306,36 +12309,18 @@ struct TimelineBottomTests {
         ) == .target(.latest(id: "msg-latest")))
     }
 
-    @Test func initialTimelineConcealsOnlyExplicitMessageTargets() {
-        #expect(!TimelineInitialScroll.shouldConcealContent(
+    @Test func initialTimelineRemainsConcealedUntilSemanticPositionSettles() {
+        #expect(TimelineInitialScroll.shouldConcealContent(
             hasItems: true,
-            didFinishInitialPositioning: false,
-            targetMessageIdHex: nil,
-            targetItemId: nil
+            didFinishInitialPositioning: false
         ))
         #expect(!TimelineInitialScroll.shouldConcealContent(
             hasItems: false,
-            didFinishInitialPositioning: false,
-            targetMessageIdHex: nil,
-            targetItemId: nil
+            didFinishInitialPositioning: false
         ))
         #expect(!TimelineInitialScroll.shouldConcealContent(
             hasItems: true,
-            didFinishInitialPositioning: true,
-            targetMessageIdHex: nil,
-            targetItemId: nil
-        ))
-        #expect(TimelineInitialScroll.shouldConcealContent(
-            hasItems: true,
-            didFinishInitialPositioning: false,
-            targetMessageIdHex: "message-target",
-            targetItemId: "msg-target"
-        ))
-        #expect(TimelineInitialScroll.shouldConcealContent(
-            hasItems: true,
-            didFinishInitialPositioning: false,
-            targetMessageIdHex: "message-target",
-            targetItemId: nil
+            didFinishInitialPositioning: true
         ))
     }
 
@@ -12427,15 +12412,6 @@ struct TimelineBottomTests {
         #expect(TimelineInitialTargetScrollPolicy.shouldSettle(
             target: .latest(id: "msg-latest"),
             visibleTargetIDs: ["msg-latest"]
-        ))
-    }
-
-    @Test func ordinaryLatestEntryUsesDefaultBottomPlacement() {
-        #expect(!TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(
-            .latest(id: "msg-latest")
-        ))
-        #expect(TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(
-            .item(id: "msg-target", anchor: .center)
         ))
     }
 

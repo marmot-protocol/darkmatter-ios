@@ -115,12 +115,6 @@ enum TimelineInitialTargetScrollPolicy {
         }
     }
 
-    static func requiresProgrammaticScroll(_ target: TimelineInitialPositionTarget) -> Bool {
-        if case .item = target {
-            return true
-        }
-        return false
-    }
 }
 
 struct TimelineBottomScrollRequest: Equatable {
@@ -242,12 +236,9 @@ enum TimelineInitialScroll {
 
     static func shouldConcealContent(
         hasItems: Bool,
-        didFinishInitialPositioning: Bool,
-        targetMessageIdHex: String?,
-        targetItemId: String?
+        didFinishInitialPositioning: Bool
     ) -> Bool {
-        guard hasItems, !didFinishInitialPositioning else { return false }
-        return targetMessageIdHex?.isEmpty == false
+        hasItems && !didFinishInitialPositioning
     }
 
 }
@@ -1509,9 +1500,9 @@ struct ConversationView: View {
                                 ProgressView()
                             }
                         }
-                        // Initial offset starts long conversations at the latest
-                        // row. Short conversations are aligned by the live
-                        // viewport-sized content frame above.
+                        // Give SwiftUI a correct first-frame preference. The
+                        // semantic initial-position request below still verifies
+                        // the bottom sentinel after row layout has completed.
                         .defaultScrollAnchor(.bottom, for: .initialOffset)
                         .task(id: initialTimelinePositionRequestGeneration) {
                             await Task.yield()
@@ -2103,8 +2094,10 @@ struct ConversationView: View {
             // A notification can point at a message that was deleted or aged
             // out. Once the complete local history has been searched, fall back
             // to the latest message instead of leaving the timeline concealed.
-            guard let latestItemId = viewModel.timeline.last?.id else { return false }
-            requestInitialTimelinePosition(.latest(id: latestItemId), viewModel: viewModel)
+            requestInitialTimelinePosition(
+                .latest(id: Self.timelineBottomID),
+                viewModel: viewModel
+            )
             return true
         }
         let destination = TimelineInitialScroll.destination(
@@ -2112,7 +2105,7 @@ struct ConversationView: View {
             didPerformInitialScroll: didRequestInitialTimelinePosition,
             targetMessageIdHex: initialTargetMessageIdHex,
             targetItemId: targetItemId,
-            latestItemId: viewModel.timeline.last?.id,
+            latestItemId: Self.timelineBottomID,
             unreadMessageIdHex: initialUnreadMessageIdHex
         )
         switch destination {
@@ -2141,12 +2134,6 @@ struct ConversationView: View {
         didRequestInitialTimelinePosition = true
         isAtTimelineBottom = target.isBottom
         userMovedAwayFromTimelineBottom = !target.isBottom
-        guard TimelineInitialTargetScrollPolicy.requiresProgrammaticScroll(target) else {
-            isInitialTimelinePositionSettled = true
-            pendingInitialPositionTarget = nil
-            markCurrentlyVisibleMessagesRead(viewModel: viewModel)
-            return
-        }
         isInitialTimelinePositionSettled = false
         pendingInitialPositionTarget = target
         initialTimelinePositionRequestGeneration &+= 1
@@ -2154,13 +2141,6 @@ struct ConversationView: View {
 
     private func maintainInitialTimelinePosition(viewModel: ConversationViewModel) {
         guard let target = pendingInitialPositionTarget else { return }
-        if case .latest = target,
-           let latestItemId = viewModel.timeline.last?.id,
-           target != .latest(id: latestItemId) {
-            pendingInitialPositionTarget = .latest(id: latestItemId)
-            initialTimelinePositionRequestGeneration &+= 1
-            return
-        }
         if TimelineInitialTargetScrollPolicy.shouldSettle(
             target: target,
             visibleTargetIDs: timelineTargetVisibility.visibleTargetIDs
@@ -2193,9 +2173,7 @@ struct ConversationView: View {
     private func shouldConcealInitialTimelineContent(viewModel: ConversationViewModel) -> Bool {
         TimelineInitialScroll.shouldConcealContent(
             hasItems: !viewModel.timeline.isEmpty,
-            didFinishInitialPositioning: isInitialTimelinePositionSettled,
-            targetMessageIdHex: initialTargetMessageIdHex,
-            targetItemId: initialTargetItemId(viewModel: viewModel)
+            didFinishInitialPositioning: isInitialTimelinePositionSettled
         )
     }
 
