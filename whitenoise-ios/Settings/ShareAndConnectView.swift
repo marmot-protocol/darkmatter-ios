@@ -86,9 +86,11 @@ struct ShareAndConnectView: View {
                         .font(.title2.weight(.bold))
                         .multilineTextAlignment(.center)
 
-                    Text(appState.shortNpub(forAccountIdHex: accountIdHex))
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                    CopyableIdentityChip(
+                        display: appState.shortNpub(forAccountIdHex: accountIdHex),
+                        copyValue: npub,
+                        copiedToastTitle: L10n.string("npub")
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)

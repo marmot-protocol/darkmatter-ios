@@ -121,6 +121,11 @@ nonisolated enum DecodedImageCost {
 
 actor RemoteAvatarDiskCache {
     static let shared = RemoteAvatarDiskCache()
+    static let groupShared = RemoteAvatarDiskCache(
+        directoryName: "GroupAvatars",
+        maximumBytes: 75 * 1024 * 1024,
+        maximumEntryBytes: 10 * 1024 * 1024
+    )
 
     private let directoryURL: URL
     private let maximumBytes: Int
@@ -129,6 +134,7 @@ actor RemoteAvatarDiskCache {
 
     init(
         directoryURL: URL? = nil,
+        directoryName: String = "ProfileAvatars",
         maximumBytes: Int = 50 * 1024 * 1024,
         maximumEntryBytes: Int = RemoteImageFetch.maximumImageBytes,
         maximumAge: TimeInterval = 7 * 24 * 60 * 60
@@ -136,15 +142,19 @@ actor RemoteAvatarDiskCache {
         let cacheRoot = directoryURL
             ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
-        self.directoryURL = cacheRoot.appendingPathComponent("ProfileAvatars", isDirectory: true)
+        self.directoryURL = cacheRoot.appendingPathComponent(directoryName, isDirectory: true)
         self.maximumBytes = maximumBytes
         self.maximumEntryBytes = maximumEntryBytes
         self.maximumAge = maximumAge
     }
 
     func data(for url: URL, now: Date = Date()) -> Data? {
+        data(forKey: url.absoluteString, now: now)
+    }
+
+    func data(forKey key: String, now: Date = Date()) -> Data? {
         guard prepareDirectory() else { return nil }
-        let fileURL = cachedFileURL(for: url)
+        let fileURL = cachedFileURL(forKey: key)
         do {
             let values = try fileURL.resourceValues(forKeys: [
                 .contentModificationDateKey,
@@ -182,12 +192,16 @@ actor RemoteAvatarDiskCache {
     }
 
     func store(_ data: Data, for url: URL, now: Date = Date()) {
+        store(data, forKey: url.absoluteString, now: now)
+    }
+
+    func store(_ data: Data, forKey key: String, now: Date = Date()) {
         guard !data.isEmpty,
               data.count <= maximumEntryBytes,
               prepareDirectory()
         else { return }
 
-        let fileURL = cachedFileURL(for: url)
+        let fileURL = cachedFileURL(forKey: key)
         do {
             try data.write(to: fileURL, options: .atomic)
             try FileManager.default.setAttributes(
@@ -220,8 +234,8 @@ actor RemoteAvatarDiskCache {
         }
     }
 
-    private func cachedFileURL(for url: URL) -> URL {
-        let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
+    private func cachedFileURL(forKey key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
         return directoryURL.appendingPathComponent(name, isDirectory: false)
     }
@@ -271,7 +285,11 @@ actor RemoteAvatarDiskCache {
     }
 
     func cachedFileExistsForTesting(for url: URL) -> Bool {
-        FileManager.default.fileExists(atPath: cachedFileURL(for: url).path)
+        FileManager.default.fileExists(atPath: cachedFileURL(forKey: url.absoluteString).path)
+    }
+
+    func cachedFileExistsForTesting(forKey key: String) -> Bool {
+        FileManager.default.fileExists(atPath: cachedFileURL(forKey: key).path)
     }
     #endif
 }
@@ -319,6 +337,7 @@ enum RemoteAvatarImageLoader {
     }()
 
     private static var inFlightTasks: [String: Task<Data, Error>] = [:]
+    private static var inFlightImageTasks: [String: Task<UIImage, Error>] = [:]
     private static let cacheLog = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "dev.ipf.whitenoise.ios",
         category: "avatar-cache"
@@ -342,13 +361,24 @@ enum RemoteAvatarImageLoader {
             throw cachedFailure
         }
 
-        do {
+        let imageTaskKey = key as String
+        if let task = inFlightImageTasks[imageTaskKey] {
+            return try await task.value
+        }
+
+        let task = Task { @MainActor in
             let data = try await cachedImageData(for: url, keyString: failureKeyString, fetch: fetch)
             guard let image = await RemoteImageDecoder.downsampledImage(
                 from: data,
                 maxPixelSize: targetPixelSize,
                 scale: scale
             ) else { throw URLError(.cannotDecodeContentData) }
+            return image
+        }
+        inFlightImageTasks[imageTaskKey] = task
+        defer { inFlightImageTasks[imageTaskKey] = nil }
+        do {
+            let image = try await task.value
 
             failureCache.removeObject(forKey: failureKey)
             cache.setObject(
@@ -446,6 +476,8 @@ enum RemoteAvatarImageLoader {
         cache.removeAllObjects()
         failureCache.removeAllObjects()
         inFlightTasks.removeAll()
+        inFlightImageTasks.values.forEach { $0.cancel() }
+        inFlightImageTasks.removeAll()
     }
 
     static func cacheFailureForTesting(_ error: Error, for url: URL, now: Date = Date()) {
@@ -467,5 +499,13 @@ enum RemoteAvatarImageLoader {
     ) async throws -> Data {
         try await imageData(for: url, keyString: keyString, fetch: fetch)
     }
+
+    static func cachedImageForTesting(for url: URL, maxPixelSize: Int) -> UIImage? {
+        cachedImage(for: url, maxPixelSize: maxPixelSize)
+    }
     #endif
+
+    static func cachedImage(for url: URL, maxPixelSize: Int) -> UIImage? {
+        cache.object(forKey: cacheKey(for: url, maxPixelSize: max(maxPixelSize, 1)))?.image
+    }
 }

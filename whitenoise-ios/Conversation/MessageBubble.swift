@@ -54,6 +54,24 @@ enum MessageBubbleReplyLayout {
     static let receivedCardOpacity = 0.09
 }
 
+nonisolated enum MessageRichMediaBubblePresentation {
+    static func contentWidth(
+        maxWidth: CGFloat,
+        singleVisualWidth: CGFloat?,
+        hasCaption: Bool,
+        hasReply: Bool
+    ) -> CGFloat {
+        let boundedMaxWidth = max(1, maxWidth)
+        guard !hasCaption,
+              !hasReply,
+              let singleVisualWidth,
+              singleVisualWidth.isFinite,
+              singleVisualWidth > 0
+        else { return boundedMaxWidth }
+        return min(boundedMaxWidth, singleVisualWidth)
+    }
+}
+
 nonisolated enum MessageBodyCollapsePresentation {
     static let maxCollapsedCharacters = 900
     static let maxCollapsedLines = 12
@@ -479,7 +497,7 @@ struct MessageBubble: View {
                 messageBodyText(hasReply: false, richContent: true)
             }
         }
-        .frame(width: MessageBubbleReplyLayout.richContentWidth, alignment: .leading)
+        .frame(width: richMediaContentWidth, alignment: .leading)
         .padding(6)
         .background { bubbleBackground }
         .clipShape(.rect(cornerRadius: ChatBubbleMetrics.cornerRadius, style: .continuous))
@@ -552,6 +570,35 @@ struct MessageBubble: View {
             return sizeClass == .regular ? 340 : 276
         }
         return 256
+    }
+
+    private var richMediaContentWidth: CGFloat {
+        let singleVisualWidth: CGFloat?
+        if mediaItems.count == 1, let item = mediaItems.first {
+            switch item.kind {
+            case .image:
+                singleVisualWidth = MessageImageBubblePresentation.displaySize(
+                    maxWidth: mediaGridWidth,
+                    dim: item.dim
+                ).width
+            case .video:
+                singleVisualWidth = MessageVideoBubblePresentation.displaySize(
+                    maxWidth: mediaGridWidth,
+                    dim: item.dim
+                ).width
+            case .audio, .document, .unsupported:
+                singleVisualWidth = nil
+            }
+        } else {
+            singleVisualWidth = nil
+        }
+
+        return MessageRichMediaBubblePresentation.contentWidth(
+            maxWidth: MessageBubbleReplyLayout.richContentWidth,
+            singleVisualWidth: singleVisualWidth,
+            hasCaption: hasVisibleBodyText,
+            hasReply: replyPreview != nil
+        )
     }
 
     private func quoted(_ preview: ConversationReplyPreview) -> some View {

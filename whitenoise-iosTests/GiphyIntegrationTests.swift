@@ -16,6 +16,20 @@ struct GiphyIntegrationTests {
         #expect(view.contentCompressionResistancePriority(for: .vertical) == .defaultLow)
     }
 
+    @Test func decodedGIFGeometrySurvivesPlaybackTeardown() {
+        var geometry = StableGiphyDisplayGeometry(fallbackAspectRatio: 1)
+
+        geometry.record(decodedAspectRatio: 16.0 / 9.0)
+        let resolvedAspectRatio = geometry.aspectRatio
+
+        // Playback teardown reports no decoded geometry, so the row keeps its
+        // resolved size across visibility-driven stop/start.
+        geometry.record(decodedAspectRatio: nil)
+        #expect(geometry.aspectRatio == resolvedAspectRatio)
+        geometry.record(decodedAspectRatio: .nan)
+        #expect(geometry.aspectRatio == resolvedAspectRatio)
+    }
+
     @Test func legacyLookupOnlyRetriesTransientResolutionFailure() {
         #expect(GiphySearchClient.shouldRetryLookup(
             error: HostResolutionGuard.GuardError.resolutionFailed,

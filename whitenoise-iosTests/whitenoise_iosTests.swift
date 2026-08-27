@@ -1012,6 +1012,35 @@ struct AppStateBootstrapTests {
         #expect(endedTaskIDs == [taskID])
     }
 
+    /// A cancelled foreground task may not reach its cancellation point before
+    /// UIKit expires the background assertion. Terminal storage closure must
+    /// therefore happen before lifecycle cleanup waits for those tasks.
+    @Test func backgroundSuspensionClosesStorageBeforeMaintenanceDrainCompletes() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        let marmot = try #require(appState.client?.marmot)
+        let checkpoint = AsyncTestCheckpoint()
+
+        appState.beforeUnreadSummaryRefreshForTesting = {
+            await checkpoint.pause()
+        }
+        appState.scheduleAccountUnreadSummaryRefresh()
+        await checkpoint.waitUntilPaused()
+
+        let suspensionTask = appState.startRuntimeSuspension()
+        try await waitForExpectation {
+            marmot.storageIsClosed()
+        }
+        #expect(appState.client == nil)
+
+        await checkpoint.release()
+        await suspensionTask.value
+        #expect(appState.runtimeSuspendedForBackground)
+        appState.beforeUnreadSummaryRefreshForTesting = nil
+
+        await stopReadyRuntime(appState)
+    }
+
     @Test func bootstrapRegistrationCompletesOriginalSuspensionInOnboarding() async throws {
         let appState = try testAppState()
 
@@ -1389,10 +1418,11 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
-    @Test func suspensionWaitsForForegroundMutationLeaseBeforeShutdown() async throws {
+    @Test func suspensionClosesStorageBeforeForegroundMutationLeaseDrains() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
         let liveClient = try #require(appState.client)
+        let marmot = liveClient.marmot
         let lease = try appState.runtimeLifecycle.beginForegroundRuntimeMutation()
 
         let suspension = appState.startRuntimeSuspension()
@@ -1402,11 +1432,12 @@ struct AppStateBootstrapTests {
             suspensionCompleted = true
         }
 
-        await Task.yield()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitForExpectation {
+            marmot.storageIsClosed()
+        }
 
         #expect(!suspensionCompleted)
-        #expect(appState.client === liveClient)
+        #expect(appState.client == nil)
 
         appState.runtimeLifecycle.endForegroundRuntimeMutation(lease)
         await suspension.value
@@ -1419,7 +1450,7 @@ struct AppStateBootstrapTests {
         resetPersistedActiveAccountRef()
     }
 
-    @Test func suspensionDrainsConnectivityCatchUpTaskBeforeShutdown() async throws {
+    @Test func suspensionClosesStorageBeforeConnectivityCatchUpDrains() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
         let checkpoint = AsyncTestCheckpoint()
@@ -1432,6 +1463,7 @@ struct AppStateBootstrapTests {
         await checkpoint.waitUntilPaused()
         await activation.value
         let liveClient = try #require(appState.client)
+        let marmot = liveClient.marmot
 
         let suspension = appState.startRuntimeSuspension()
         var suspensionCompleted = false
@@ -1439,11 +1471,12 @@ struct AppStateBootstrapTests {
             await suspension.value
             suspensionCompleted = true
         }
-        await Task.yield()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitForExpectation {
+            marmot.storageIsClosed()
+        }
 
         #expect(!suspensionCompleted)
-        #expect(appState.client === liveClient)
+        #expect(appState.client == nil)
 
         await checkpoint.release()
         await suspension.value
@@ -11380,6 +11413,35 @@ struct MessageMediaThumbnailPresentationTests {
 }
 
 struct MessageImageBubblePresentationTests {
+
+    @Test func mediaOnlyPortraitBubbleWrapsRenderedImageWidth() {
+        let renderedSize = MessageImageBubblePresentation.displaySize(
+            maxWidth: 300,
+            dim: "1080x1920"
+        )
+
+        #expect(MessageRichMediaBubblePresentation.contentWidth(
+            maxWidth: 300,
+            singleVisualWidth: renderedSize.width,
+            hasCaption: false,
+            hasReply: false
+        ) == renderedSize.width)
+    }
+
+    @Test func captionOrReplyKeepsRichMediaBubbleReadable() {
+        #expect(MessageRichMediaBubblePresentation.contentWidth(
+            maxWidth: 300,
+            singleVisualWidth: 228,
+            hasCaption: true,
+            hasReply: false
+        ) == 300)
+        #expect(MessageRichMediaBubblePresentation.contentWidth(
+            maxWidth: 300,
+            singleVisualWidth: 228,
+            hasCaption: false,
+            hasReply: true
+        ) == 300)
+    }
 
     @Test func landscapeImageUsesActualAspectRatio() {
         let size = MessageImageBubblePresentation.displaySize(maxWidth: 300, dim: "640x360")

@@ -332,6 +332,9 @@ struct GroupAvatarBubble: View {
     }
 
     private func image(for request: GroupAvatarImageRequest?) -> UIImage? {
+        if let request, let cached = GroupAvatarImageLoader.cachedImage(for: request) {
+            return cached
+        }
         guard case .success(let loadedRequest, let image) = phase,
               loadedRequest == request
         else { return nil }
@@ -425,62 +428,91 @@ private enum GroupAvatarImageLoader {
     }()
 
     private static var inFlight: [String: Task<Data, Error>] = [:]
+    private static var inFlightImages: [String: Task<UIImage, Error>] = [:]
+
+    static func cachedImage(for request: GroupAvatarImageRequest) -> UIImage? {
+        cache.object(forKey: imageCacheKey(for: request))?.image
+    }
 
     static func image(
         request: GroupAvatarImageRequest,
         scale: CGFloat,
         client: MarmotClient
     ) async throws -> UIImage {
-        let cacheKey = "\(request.accountRef):\(request.imageHashHex):\(request.maxPixelSize)" as NSString
+        let cacheKey = imageCacheKey(for: request)
         if let cached = cache.object(forKey: cacheKey)?.image {
             return cached
         }
 
-        let dataKey = "\(request.accountRef):\(request.groupIdHex):\(request.imageHashHex)"
-        let data: Data
-        if let cached = dataCache.object(forKey: dataKey as NSString) {
-            data = cached as Data
-        } else if let task = inFlight[dataKey] {
-            data = try await task.value
-        } else {
-            let task = Task {
-                await GroupAvatarLoadLimiter.shared.acquire()
-                do {
-                    try Task.checkCancellation()
-                    let data = try await client.downloadGroupBlossomImage(
-                        accountRef: request.accountRef,
-                        groupIdHex: request.groupIdHex
-                    )
-                    await GroupAvatarLoadLimiter.shared.release()
-                    return data
-                } catch {
-                    await GroupAvatarLoadLimiter.shared.release()
-                    throw error
-                }
-            }
-            inFlight[dataKey] = task
-            defer { inFlight[dataKey] = nil }
-            data = try await task.value
-            dataCache.setObject(
-                data as NSData,
-                forKey: dataKey as NSString,
-                cost: data.count
-            )
+        let imageTaskKey = cacheKey as String
+        if let task = inFlightImages[imageTaskKey] {
+            return try await task.value
         }
 
-        guard let image = await RemoteImageDecoder.downsampledImage(
-            from: data,
-            maxPixelSize: request.maxPixelSize,
-            scale: scale
-        ) else {
-            throw URLError(.cannotDecodeContentData)
+        let task = Task { @MainActor in
+            let data = try await imageData(request: request, client: client)
+            guard let image = await RemoteImageDecoder.downsampledImage(
+                from: data,
+                maxPixelSize: request.maxPixelSize,
+                scale: scale
+            ) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            return image
         }
+        inFlightImages[imageTaskKey] = task
+        defer { inFlightImages[imageTaskKey] = nil }
+
+        let image = try await task.value
         cache.setObject(
             CachedImage(image),
             forKey: cacheKey,
             cost: DecodedImageCost.decodedBitmapByteCost(for: image)
         )
         return image
+    }
+
+    private static func imageData(
+        request: GroupAvatarImageRequest,
+        client: MarmotClient
+    ) async throws -> Data {
+        let dataKey = "\(request.accountRef):\(request.groupIdHex):\(request.imageHashHex)"
+        if let cached = dataCache.object(forKey: dataKey as NSString) {
+            return cached as Data
+        }
+        if let cached = await RemoteAvatarDiskCache.groupShared.data(forKey: dataKey) {
+            dataCache.setObject(cached as NSData, forKey: dataKey as NSString, cost: cached.count)
+            return cached
+        }
+        if let task = inFlight[dataKey] {
+            return try await task.value
+        }
+
+        let task = Task {
+            await GroupAvatarLoadLimiter.shared.acquire()
+            do {
+                try Task.checkCancellation()
+                let data = try await client.downloadGroupBlossomImage(
+                    accountRef: request.accountRef,
+                    groupIdHex: request.groupIdHex
+                )
+                await GroupAvatarLoadLimiter.shared.release()
+                return data
+            } catch {
+                await GroupAvatarLoadLimiter.shared.release()
+                throw error
+            }
+        }
+        inFlight[dataKey] = task
+        defer { inFlight[dataKey] = nil }
+        let data = try await task.value
+        dataCache.setObject(data as NSData, forKey: dataKey as NSString, cost: data.count)
+        await RemoteAvatarDiskCache.groupShared.store(data, forKey: dataKey)
+        return data
+    }
+
+    private static func imageCacheKey(for request: GroupAvatarImageRequest) -> NSString {
+        "\(request.accountRef):\(request.imageHashHex):\(request.maxPixelSize)" as NSString
     }
 }
 
@@ -508,12 +540,19 @@ private struct AvatarRemoteImage: View {
 
     @ViewBuilder
     private func content(for request: AvatarRemoteImageRequest) -> some View {
-        switch phase {
-        case .success(let loadedRequest, let image) where loadedRequest == request:
+        if let cached = RemoteAvatarImageLoader.cachedImage(
+            for: request.url,
+            maxPixelSize: request.maxPixelSize
+        ) {
+            Image(uiImage: cached)
+                .resizable()
+                .scaledToFill()
+        } else if case .success(let loadedRequest, let image) = phase,
+                  loadedRequest == request {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
-        case .loading, .failure, .success:
+        } else {
             Color.clear
         }
     }

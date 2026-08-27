@@ -74,6 +74,11 @@ struct ForegroundRuntimeMutationLease {
     let client: MarmotClient
 }
 
+private struct ForegroundMaintenanceCancellation {
+    let foregroundActivation: Task<Void, Never>?
+    let maintenance: ForegroundMaintenanceTasks?
+}
+
 /// Owns the Marmot runtime's lifecycle: the live `MarmotClient` handle, the
 /// foreground/suspension gates, the runtime generation token, bootstrap, and the
 /// background suspend / foreground resume orchestration (including the
@@ -152,6 +157,7 @@ final class RuntimeLifecycle {
     /// "Connecting…" state. MainActor-owned.
     private(set) var isRuntimeWarmingUp = false
     private(set) var runtimeGeneration = 0
+    @ObservationIgnored private var isBackgroundStorageCloseInProgress = false
 
     @ObservationIgnored private weak var appState: AppState?
     private static let foregroundResumeLog = Logger(
@@ -221,7 +227,7 @@ final class RuntimeLifecycle {
     var canRefreshProfiles: Bool {
         isAppSceneActive
             && !runtimeSuspendedForBackground
-            && !isRuntimeSuspending
+            && !runtimeWorkIsSuspending
             && client != nil
     }
 
@@ -229,7 +235,7 @@ final class RuntimeLifecycle {
         ForegroundRuntimeWorkGate.canUseLocalForegroundWork(
             isAppSceneActive: isAppSceneActive,
             runtimeSuspendedForBackground: runtimeSuspendedForBackground,
-            isRuntimeSuspending: isRuntimeSuspending,
+            isRuntimeSuspending: runtimeWorkIsSuspending,
             hasRuntimeClient: client != nil
         )
     }
@@ -237,13 +243,17 @@ final class RuntimeLifecycle {
         ForegroundRuntimeWorkGate.canUseForegroundWork(
             isAppSceneActive: isAppSceneActive,
             runtimeSuspendedForBackground: runtimeSuspendedForBackground,
-            isRuntimeSuspending: isRuntimeSuspending
+            isRuntimeSuspending: runtimeWorkIsSuspending
         )
     }
 
     /// Exposes the suspension/suspended gate values to the notification and
     /// settings read gates that stay on `AppState`.
-    var isRuntimeSuspendingNow: Bool { isRuntimeSuspending }
+    var isRuntimeSuspendingNow: Bool { runtimeWorkIsSuspending }
+
+    private var runtimeWorkIsSuspending: Bool {
+        isRuntimeSuspending || isBackgroundStorageCloseInProgress
+    }
 
     // MARK: - Runtime ownership
 
@@ -651,12 +661,11 @@ final class RuntimeLifecycle {
 
     func prepareForBackgroundSuspension() async {
         defer { runtimeSuspensionTask = nil }
-        await cancelForegroundMaintenance()
-        // A notification action can be using the live durable client while the
-        // scene transitions to the background. Keep this suspension request
-        // alive until the action releases its lease so teardown cannot close
-        // the runtime underneath in-flight FFI work.
-        await waitForRuntimeSuspensionToFinish()
+        // Stop admitting foreground maintenance immediately, but do not put
+        // storage closure behind cancellation-sensitive drains. A subscription,
+        // relay catch-up, or local read can otherwise consume the entire UIKit
+        // background assertion while SQLCipher still holds its App Group lock.
+        let cancellation = beginForegroundMaintenanceCancellation()
         // `isAppSceneActive` is owned by the synchronous scene-phase entry
         // points (`startRuntimeSuspension` / `startForegroundActivation` /
         // `setAppSceneActive`), which run in true scene-delivery order. After
@@ -666,6 +675,7 @@ final class RuntimeLifecycle {
         // foregrounded with `client == nil` and nothing to re-trigger resume
         // (#222). Hand back to a fresh foreground activation instead.
         guard !isAppSceneActive else {
+            await drainForegroundMaintenance(cancellation)
             startForegroundActivation()
             return
         }
@@ -677,22 +687,50 @@ final class RuntimeLifecycle {
             await waitForBootstrapRegistrationIfNeeded()
             await bootstrapTask?.value
             guard !isAppSceneActive else {
+                await drainForegroundMaintenance(cancellation)
                 startForegroundActivation()
                 return
             }
         }
         guard phaseOwnsLiveRuntime,
               !runtimeSuspendedForBackground
-        else { return }
+        else {
+            await drainForegroundMaintenance(cancellation)
+            return
+        }
 
-        isRuntimeSuspending = true
-        defer { finishRuntimeSuspensionWait() }
+        // A notification action can hold an explicit lease on the live client.
+        // Unlike cancelled maintenance, that work must retain the runtime until
+        // the action releases it; closing underneath the lease would invalidate
+        // an in-flight reply or mark-read FFI call. This gate is independent of
+        // the maintenance drains moved below terminal storage closure.
+        await waitForRuntimeSuspensionToFinish()
+        guard !isAppSceneActive,
+              phaseOwnsLiveRuntime,
+              !runtimeSuspendedForBackground
+        else {
+            await drainForegroundMaintenance(cancellation)
+            if isAppSceneActive {
+                startForegroundActivation()
+            }
+            return
+        }
+
+        isBackgroundStorageCloseInProgress = true
+        defer { finishBackgroundStorageClose() }
         await shutdownAndReleaseCurrentClient()
         // `shutdownAndClose()` explicitly closes every SQLite connection and
         // releases the root lease. Dropping only the top-level handle cannot
         // prove that while subscriptions and projections retain internal Arcs;
         // suspending with either lock is an iOS `0xdead10cc` kill.
         runtimeSuspendedForBackground = true
+        // Once terminal storage closure has run, cancelled work can safely
+        // drain: retained handles are spent and return StorageClosed instead of
+        // reopening the App Group databases. Keep the lifecycle task alive so
+        // foreground resume still observes orderly task completion, but the
+        // suspension-sensitive file lock is already gone if UIKit expires the
+        // background assertion during this cleanup.
+        await drainForegroundMaintenance(cancellation)
     }
 
     private func resumeAfterForegroundActivation(activationID: UUID) async {
@@ -957,19 +995,19 @@ final class RuntimeLifecycle {
     }
 
     private func noteRuntimeForegroundReadyAfterSuspension() {
-        guard runtimeSuspendedForBackground || isRuntimeSuspending else { return }
+        guard runtimeSuspendedForBackground || runtimeWorkIsSuspending else { return }
         runtimeSuspendedForBackground = false
         finishRuntimeSuspensionWait()
         runtimeGeneration += 1
     }
 
     private func waitForRuntimeSuspensionToFinish() async {
-        while isRuntimeSuspending, !Task.isCancelled {
+        while runtimeWorkIsSuspending, !Task.isCancelled {
             let waiterID = UUID()
 
             await withTaskCancellationHandler {
                 await withCheckedContinuation { continuation in
-                    guard isRuntimeSuspending, !Task.isCancelled else {
+                    guard runtimeWorkIsSuspending, !Task.isCancelled else {
                         continuation.resume()
                         return
                     }
@@ -985,6 +1023,16 @@ final class RuntimeLifecycle {
 
     private func finishRuntimeSuspensionWait() {
         isRuntimeSuspending = false
+        resumeRuntimeSuspensionWaitersIfReady()
+    }
+
+    private func finishBackgroundStorageClose() {
+        isBackgroundStorageCloseInProgress = false
+        resumeRuntimeSuspensionWaitersIfReady()
+    }
+
+    private func resumeRuntimeSuspensionWaitersIfReady() {
+        guard !runtimeWorkIsSuspending else { return }
         let waiters = Array(runtimeSuspensionWaiters.values)
         runtimeSuspensionWaiters.removeAll()
         for waiter in waiters {
@@ -1055,12 +1103,7 @@ final class RuntimeLifecycle {
         foregroundMutationWaiters.removeValue(forKey: id)?.resume()
     }
 
-    private func cancelForegroundMaintenance() async {
-        // Account teardown owns the live runtime until it finishes. Waiting
-        // here prevents background suspension from releasing the shared store
-        // underneath a sign-out or wipe already in progress.
-        await appState?.waitForAccountExitToFinish()
-
+    private func beginForegroundMaintenanceCancellation() -> ForegroundMaintenanceCancellation {
         let foregroundTask = foregroundActivationTask
         foregroundActivationTask = nil
         foregroundActivationTaskID = UUID()
@@ -1070,20 +1113,31 @@ final class RuntimeLifecycle {
         // (master #401). Cancel-without-awaiting first, cancel the profile queue,
         // then drain the foreground task, the coordinator push task, and the
         // profile task — mirroring AppState's pre-extraction ordering.
-        let maintenanceTasks = appState?.beginForegroundMaintenanceCancellation()
+        return ForegroundMaintenanceCancellation(
+            foregroundActivation: foregroundTask,
+            maintenance: appState?.beginForegroundMaintenanceCancellation()
+        )
+    }
 
-        await foregroundTask?.value
-        await maintenanceTasks?.notificationSubscription?.value
-        await maintenanceTasks?.connectivityCatchUp?.value
+    private func drainForegroundMaintenance(
+        _ cancellation: ForegroundMaintenanceCancellation
+    ) async {
+        await cancellation.foregroundActivation?.value
+        await cancellation.maintenance?.notificationSubscription?.value
+        await cancellation.maintenance?.connectivityCatchUp?.value
         await appState?.cancelNativePushRegistrationTask()
         await appState?.cancelRetentionSweeps()
         await appState?.drainUnreadSummaryRefresh()
-        await maintenanceTasks?.profileRefresh?.value
-        if let mutationFollowups = maintenanceTasks?.mutationFollowups {
+        await cancellation.maintenance?.profileRefresh?.value
+        if let mutationFollowups = cancellation.maintenance?.mutationFollowups {
             for task in mutationFollowups {
                 await task.value
             }
         }
+        // Sign-out/wipe and explicit foreground mutations may still own spent
+        // handles. Terminal close makes their eventual completion safe to await
+        // without risking a shared-container lock at process suspension.
+        await appState?.waitForAccountExitToFinish()
         await waitForForegroundRuntimeMutations()
     }
 

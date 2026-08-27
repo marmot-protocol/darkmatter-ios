@@ -114,6 +114,45 @@ struct RemoteImageLoaderTests {
         #expect(await probe.callCount() == 1)
     }
 
+    @Test func avatarLoaderCoalescesDecodeWorkAndPublishesMemoryHit() async throws {
+        let url = try #require(URL(string: "https://example.com/\(UUID().uuidString).png"))
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 80, height: 80))
+        let source = renderer.image { context in
+            UIColor.green.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 80, height: 80))
+        }
+        let data = try #require(source.pngData())
+        let probe = RemoteImageFetchProbe(data: data)
+        RemoteAvatarImageLoader.resetCachesForTesting()
+        defer { RemoteAvatarImageLoader.resetCachesForTesting() }
+
+        let first = Task { @MainActor in
+            try await RemoteAvatarImageLoader.image(
+                for: url,
+                maxPixelSize: 56,
+                scale: 1,
+                fetch: { _ in await probe.fetch() }
+            )
+        }
+        await probe.waitUntilStarted()
+        let second = Task { @MainActor in
+            try await RemoteAvatarImageLoader.image(
+                for: url,
+                maxPixelSize: 56,
+                scale: 1,
+                fetch: { _ in await probe.fetch() }
+            )
+        }
+        for _ in 0..<10 { await Task.yield() }
+
+        await probe.release()
+        _ = try await first.value
+        _ = try await second.value
+
+        #expect(await probe.callCount() == 1)
+        #expect(RemoteAvatarImageLoader.cachedImageForTesting(for: url, maxPixelSize: 56) != nil)
+    }
+
     @Test func avatarDiskCacheSurvivesMemoryCacheResetAndExpiresOldEntries() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("RemoteAvatarDiskCacheTests-\(UUID().uuidString)", isDirectory: true)
@@ -152,6 +191,26 @@ struct RemoteImageLoaderTests {
 
         #expect(await cache.data(for: url) == nil)
         #expect(!(await cache.cachedFileExistsForTesting(for: url)))
+    }
+
+    @Test func avatarDiskCacheSupportsContentAddressedGroupKeys() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GroupAvatarDiskCacheTests-\(UUID().uuidString)", isDirectory: true)
+        let cache = RemoteAvatarDiskCache(
+            directoryURL: root,
+            directoryName: "GroupAvatars",
+            maximumBytes: 1_024,
+            maximumEntryBytes: 128,
+            maximumAge: 60
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let key = "account:group:image-hash"
+        let data = Data([0x89, 0x50, 0x4E, 0x47])
+
+        await cache.store(data, forKey: key)
+
+        #expect(await cache.cachedFileExistsForTesting(forKey: key))
+        #expect(await cache.data(forKey: key) == data)
     }
 
     @Test func avatarLoaderCacheCostExceedsCompressedBytesForHighlyCompressibleImage() throws {

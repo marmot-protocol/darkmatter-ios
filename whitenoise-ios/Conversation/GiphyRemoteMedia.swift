@@ -94,7 +94,7 @@ final class GiphyPlaybackBudget {
 }
 
 nonisolated enum GiphyRemoteMediaLoader {
-    struct PreparedPlayback: @unchecked Sendable {
+    struct PreparedPlayback: Sendable {
         let data: Data
         let aspectRatio: CGFloat?
     }
@@ -255,6 +255,26 @@ private struct GiphyPlaybackTaskID: Equatable {
     let requestGeneration: UInt64
 }
 
+/// Keeps a timeline row's measured size independent of whether its playback
+/// resource is currently resident. Visibility-driven playback teardown must
+/// not revert the row to a different fallback height and feed that geometry
+/// change back into the visibility calculation.
+nonisolated struct StableGiphyDisplayGeometry: Equatable, Sendable {
+    private(set) var aspectRatio: CGFloat
+
+    init(fallbackAspectRatio: CGFloat) {
+        aspectRatio = fallbackAspectRatio
+    }
+
+    mutating func record(decodedAspectRatio: CGFloat?) {
+        guard let decodedAspectRatio,
+              decodedAspectRatio.isFinite,
+              decodedAspectRatio > 0
+        else { return }
+        aspectRatio = decodedAspectRatio
+    }
+}
+
 final class GiphyAnimatedImageUIView: UIImageView {
     private var playbackID: UUID?
     private var playbackGeneration: UInt64 = 0
@@ -412,14 +432,19 @@ struct RemoteGiphyMediaView: View {
     @State private var isLoading = false
     @State private var didFail = false
     @State private var playback: GiphyPlaybackSession?
+    @State private var displayGeometry: StableGiphyDisplayGeometry
     @Environment(\.timelineRowIsVisible) private var isTimelineRowVisible
+
+    init(media: RemoteGiphyMedia, mayLoadAutomatically: Bool) {
+        self.media = media
+        self.mayLoadAutomatically = mayLoadAutomatically
+        _displayGeometry = State(
+            initialValue: StableGiphyDisplayGeometry(fallbackAspectRatio: media.aspectRatio)
+        )
+    }
 
     private var shouldLoad: Bool {
         mayLoadAutomatically || loadingStore.automaticallyLoads || loadRequested
-    }
-
-    private var displayAspectRatio: CGFloat {
-        playback?.aspectRatio ?? media.aspectRatio
     }
 
     var body: some View {
@@ -432,7 +457,7 @@ struct RemoteGiphyMediaView: View {
                     placeholder
                 }
             }
-            .aspectRatio(displayAspectRatio, contentMode: .fit)
+            .aspectRatio(displayGeometry.aspectRatio, contentMode: .fit)
             .frame(maxWidth: .infinity)
             .clipped()
 
@@ -508,12 +533,14 @@ struct RemoteGiphyMediaView: View {
                 playbackBudget.release(reservation)
                 return
             }
-            playback = GiphyPlaybackSession(
+            let session = GiphyPlaybackSession(
                 prepared: prepared,
                 fallbackAspectRatio: media.aspectRatio,
                 playbackBudget: playbackBudget,
                 budgetReservation: reservation
             )
+            displayGeometry.record(decodedAspectRatio: session.aspectRatio)
+            playback = session
         } catch is CancellationError {
             playbackBudget.release(reservation)
             return

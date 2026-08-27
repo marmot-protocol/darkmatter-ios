@@ -1135,22 +1135,25 @@ private final class CameraCaptureModel: ObservableObject {
         session = service.session
 
         service.onPhoto = { [weak self] data in
+            let model = self
             Task { @MainActor in
-                guard let self, self.acceptsCapture else { return }
-                self.capture = CameraCapture(content: .photo(data))
+                guard let model, model.acceptsCapture else { return }
+                model.capture = CameraCapture(content: .photo(data))
             }
         }
         service.onVideo = { [weak self] url in
+            let model = self
             Task { @MainActor in
-                guard let self, self.acceptsCapture else {
+                guard let model, model.acceptsCapture else {
                     try? FileManager.default.removeItem(at: url)
                     return
                 }
-                self.capture = CameraCapture(content: .video(url))
+                model.capture = CameraCapture(content: .video(url))
             }
         }
         service.onFailure = { [weak self] in
-            Task { @MainActor in self?.state = .unavailable }
+            let model = self
+            Task { @MainActor in model?.state = .unavailable }
         }
     }
 
@@ -1262,7 +1265,9 @@ private final class CameraCaptureModel: ObservableObject {
     }
 }
 
-private final class CameraCaptureService: NSObject, @unchecked Sendable {
+// Capture state is confined to sessionQueue; callbacks cross back to MainActor explicitly.
+// swiftlint:disable:next no_unchecked_sendable
+nonisolated private final class CameraCaptureService: NSObject, @unchecked Sendable {
     let session = AVCaptureSession()
     var onPhoto: (@Sendable (Data) -> Void)?
     var onVideo: (@Sendable (URL) -> Void)?
@@ -1386,7 +1391,7 @@ private final class CameraCaptureService: NSObject, @unchecked Sendable {
     }
 }
 
-extension CameraCaptureService: AVCapturePhotoCaptureDelegate, AVCaptureFileOutputRecordingDelegate {
+nonisolated extension CameraCaptureService: AVCapturePhotoCaptureDelegate, AVCaptureFileOutputRecordingDelegate {
     func photoOutput(
         _ output: AVCapturePhotoOutput,
         didFinishProcessingPhoto photo: AVCapturePhoto,
