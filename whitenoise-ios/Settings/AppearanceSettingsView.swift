@@ -1,16 +1,16 @@
 import SwiftUI
 
 struct AppearanceSettingsView: View {
-    @AppStorage(AppearanceTheme.storageKey) private var themeRawValue = AppearanceTheme.system.rawValue
+    @Environment(AppAppearanceStore.self) private var appearance
     @State private var languageRawValue = AppLanguage.currentRawValue
 
     var body: some View {
         Form {
             Section {
-                Picker("Theme", selection: $themeRawValue) {
+                Picker("Theme", selection: themeSelection) {
                     ForEach(AppearanceTheme.allCases) { theme in
                         Text(theme.displayName)
-                            .tag(theme.rawValue)
+                            .tag(theme)
                     }
                 }
                 .pickerStyle(.inline)
@@ -44,6 +44,14 @@ struct AppearanceSettingsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: AppLanguage.didChangeNotification)) { _ in
             languageRawValue = AppLanguage.currentRawValue
+        }
+    }
+
+    private var themeSelection: Binding<AppearanceTheme> {
+        Binding {
+            appearance.theme
+        } set: { theme in
+            appearance.setTheme(theme)
         }
     }
 

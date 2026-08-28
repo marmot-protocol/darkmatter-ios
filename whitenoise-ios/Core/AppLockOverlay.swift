@@ -9,16 +9,26 @@ import UIKit
 final class AppLockOverlayPresenter {
     private var window: UIWindow?
 
-    func update(for shield: AppLockController.Shield, controller: AppLockController) {
+    func update(
+        for shield: AppLockController.Shield,
+        controller: AppLockController,
+        appearance: AppAppearanceStore
+    ) {
         guard shield != .hidden else {
             window?.isHidden = true
             return
         }
-        guard let window = window ?? makeWindow(controller: controller) else { return }
+        guard let window = window ?? makeWindow(
+            controller: controller,
+            appearance: appearance
+        ) else { return }
         window.isHidden = false
     }
 
-    private func makeWindow(controller: AppLockController) -> UIWindow? {
+    private func makeWindow(
+        controller: AppLockController,
+        appearance: AppAppearanceStore
+    ) -> UIWindow? {
         let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first
@@ -31,7 +41,8 @@ final class AppLockOverlayPresenter {
         let host = UIHostingController(
             rootView: AppLockShieldView()
                 .environment(controller)
-                .appAppearance()
+                .environment(appearance)
+                .appAppearance(appearance)
         )
         host.view.backgroundColor = .systemBackground
         window.rootViewController = host

@@ -460,18 +460,24 @@ struct ProfileImagePickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                previewSection
-                deviceSection
-                searchSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    previewSection
+                    deviceSection
+                    searchSection
 
-                if let saveError {
-                    Section {
-                        Label(saveError, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
+                    if let saveError {
+                        ProfileImagePickerSection {
+                            Label(saveError, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 20)
             }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .scrollDismissesKeyboard(.interactively)
             .localizedNavigationTitle("Profile image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -489,6 +495,7 @@ struct ProfileImagePickerSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(Color(uiColor: .systemGroupedBackground))
         .interactiveDismissDisabled(isUploading)
         .sheet(isPresented: $showPhotoPicker) {
             PhotoLibraryPickerView(
@@ -529,73 +536,76 @@ struct ProfileImagePickerSheet: View {
     }
 
     private var previewSection: some View {
-        Section {
-            VStack(spacing: 8) {
-                AvatarBubble(
-                    seed: accountIdHex,
-                    title: title,
-                    pictureURL: draft == nil ? currentURL : nil,
-                    pictureImage: draft?.thumbnail
-                )
-                .frame(width: 88, height: 88)
-                .overlay {
-                    if progressPhase != nil {
-                        ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 42, height: 42)
-                            ProgressView()
-                        }
-                        .transition(.opacity.combined(with: .scale))
+        VStack(spacing: 8) {
+            AvatarBubble(
+                seed: accountIdHex,
+                title: title,
+                pictureURL: draft == nil ? currentURL : nil,
+                pictureImage: draft?.thumbnail
+            )
+            .frame(width: 88, height: 88)
+            .overlay {
+                if progressPhase != nil {
+                    ZStack {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 42, height: 42)
+                        ProgressView()
                     }
+                    .transition(.opacity.combined(with: .scale))
                 }
-
-                ZStack {
-                    Text(ProfileImageProgressPhase.preparing.label)
-                        .hidden()
-                        .accessibilityHidden(true)
-                    Text(ProfileImageProgressPhase.uploading.label)
-                        .hidden()
-                        .accessibilityHidden(true)
-
-                    if let progressPhase {
-                        Text(progressPhase.label)
-                            .transition(.opacity)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(progressPhase == nil)
             }
-            .animation(.easeInOut(duration: 0.2), value: progressPhase)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+
+            ZStack {
+                Text(ProfileImageProgressPhase.preparing.label)
+                    .hidden()
+                    .accessibilityHidden(true)
+                Text(ProfileImageProgressPhase.uploading.label)
+                    .hidden()
+                    .accessibilityHidden(true)
+
+                if let progressPhase {
+                    Text(progressPhase.label)
+                        .transition(.opacity)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(progressPhase == nil)
         }
+        .animation(.easeInOut(duration: 0.2), value: progressPhase)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 
     private var deviceSection: some View {
-        Section("Choose from your device") {
+        ProfileImagePickerSection("Choose from your device") {
             Button {
                 showPhotoPicker = true
             } label: {
                 Label("Photo Library", systemImage: "photo.on.rectangle")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(isBusy)
+
+            Divider()
 
             Button {
                 showFileImporter = true
             } label: {
                 Label("Files", systemImage: "folder")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .disabled(isBusy)
 
             if currentURL != nil {
+                Divider()
+
                 Button(role: .destructive) {
                     Task { await save(nil) }
                 } label: {
                     Label("Remove image", systemImage: "trash")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .disabled(isBusy)
             }
@@ -603,7 +613,7 @@ struct ProfileImagePickerSheet: View {
     }
 
     private var searchSection: some View {
-        Section("Search the web") {
+        ProfileImagePickerSection("Search the web") {
             HStack(spacing: 8) {
                 TextField("Image search", text: $searchQuery)
                     .textInputAutocapitalization(.never)
@@ -641,6 +651,7 @@ struct ProfileImagePickerSheet: View {
             }
 
             if !searchResults.isEmpty {
+                // Keep async thumbnails out of Form rows; iOS 26 can recurse during collection self-sizing.
                 LazyVGrid(columns: resultColumns, spacing: 12) {
                     ForEach(searchResults) { result in
                         Button {
@@ -810,6 +821,41 @@ struct ProfileImagePickerSheet: View {
         } catch {
             saveError = error.localizedDescription
             Haptics.error()
+        }
+    }
+}
+
+private struct ProfileImagePickerSection<Content: View>: View {
+    private let title: LocalizedStringKey?
+    private let content: Content
+
+    init(
+        _ title: LocalizedStringKey? = nil,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                Text(title)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .padding(.horizontal, 4)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: .rect(cornerRadius: 12)
+            )
         }
     }
 }

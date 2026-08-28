@@ -80,19 +80,27 @@ struct OnboardingAvatarWebImagePicker: View {
     }
 
     private var searchContent: some View {
-        Form {
-            Section {
-                privacyDisclosure(
-                    title: "Search privacy",
-                    detail: "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
-                )
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                searchCard {
+                    privacyDisclosure(
+                        title: "Search privacy",
+                        detail: "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+                    )
+                }
 
-            Section {
-                TextField("Search Images", text: $query)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
+                searchCard {
+                    TextField("Search Images", text: $query)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.search)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .background(
+                            Color(uiColor: .tertiarySystemGroupedBackground),
+                            in: .rect(cornerRadius: 10)
+                        )
+                }
 
                 if isSearching {
                     HStack {
@@ -100,17 +108,24 @@ struct OnboardingAvatarWebImagePicker: View {
                         ProgressView()
                         Spacer()
                     }
+                    .padding(.vertical, 28)
                 } else if let searchError {
-                    Label(searchError, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
+                    searchCard {
+                        Label(searchError, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                 } else if normalizedQuery.isEmpty {
-                    ContentUnavailableView(
-                        "Search Images",
-                        systemImage: "photo.on.rectangle.angled",
-                        description: Text("Enter a search to find an image.")
-                    )
-                } else {
+                    searchCard {
+                        ContentUnavailableView(
+                            "Search Images",
+                            systemImage: "photo.on.rectangle.angled",
+                            description: Text("Enter a search to find an image.")
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                } else if !results.isEmpty {
+                    // Keep async thumbnails out of Form rows; iOS 26 can recurse during collection self-sizing.
                     LazyVGrid(columns: columns, spacing: 1) {
                         ForEach(results) { result in
                             resultButton(result)
@@ -118,10 +133,10 @@ struct OnboardingAvatarWebImagePicker: View {
                     }
                 }
             }
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 20)
         }
-        .formStyle(.grouped)
+        .background(Color(uiColor: .systemGroupedBackground))
         .scrollDismissesKeyboard(.interactively)
         .task(id: normalizedQuery) {
             await searchAfterDebounce()
@@ -210,9 +225,11 @@ struct OnboardingAvatarWebImagePicker: View {
         Button {
             selectedURL = result.imageURL
         } label: {
-            GroupImageRemoteThumbnail(url: result.thumbnailURL ?? result.imageURL)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fill)
+            Color(uiColor: .secondarySystemGroupedBackground)
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    GroupImageRemoteThumbnail(url: result.thumbnailURL ?? result.imageURL)
+                }
                 .clipped()
                 .overlay(alignment: .bottomTrailing) {
                     if selectedURL == result.imageURL {
@@ -229,6 +246,18 @@ struct OnboardingAvatarWebImagePicker: View {
         .buttonStyle(.plain)
         .accessibilityLabel(result.title.isEmpty ? "Image result" : result.title)
         .accessibilityAddTraits(selectedURL == result.imageURL ? .isSelected : [])
+    }
+
+    private func searchCard<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                Color(uiColor: .secondarySystemGroupedBackground),
+                in: .rect(cornerRadius: 12)
+            )
     }
 
     private func privacyDisclosure(

@@ -1,5 +1,7 @@
+import Observation
 import SwiftUI
 import Testing
+import UIKit
 @testable import whitenoise_ios
 
 @MainActor
@@ -58,5 +60,64 @@ struct AppearanceThemeTests {
         let selection = AppAppearanceSelection(themeRawValue: "trueBlack", languageRawValue: nil)
         #expect(selection.theme == .dark)
         #expect(selection.preferredColorScheme == .dark)
+    }
+
+    @Test func sharedStorePublishesAndAppliesThemeImmediately() throws {
+        let suiteName = "appearance-store-tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var appliedThemes: [AppearanceTheme] = []
+        let store = AppAppearanceStore(
+            defaults: defaults,
+            themeApplier: { appliedThemes.append($0) }
+        )
+        let observation = AppearanceObservationProbe()
+
+        withObservationTracking {
+            _ = store.theme
+        } onChange: {
+            observation.recordChange()
+        }
+        store.setTheme(.dark)
+
+        #expect(observation.changeCount == 1)
+        #expect(store.theme == .dark)
+        #expect(defaults.string(forKey: AppearanceTheme.storageKey) == AppearanceTheme.dark.rawValue)
+        #expect(appliedThemes == [.dark])
+    }
+
+    @Test func sharedStoreMigratesLegacyThemeDuringInitialization() throws {
+        let suiteName = "appearance-store-migration-tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(AppearanceTheme.legacyTrueBlackRawValue, forKey: AppearanceTheme.storageKey)
+
+        let store = AppAppearanceStore(defaults: defaults, themeApplier: { _ in })
+
+        #expect(store.theme == .dark)
+        #expect(defaults.string(forKey: AppearanceTheme.storageKey) == AppearanceTheme.dark.rawValue)
+    }
+
+    @Test func returningToSystemClearsForcedWindowStyle() {
+        let window = UIWindow()
+
+        AppAppearanceRuntime.apply(theme: .light, to: [window])
+        #expect(window.overrideUserInterfaceStyle == .light)
+
+        AppAppearanceRuntime.apply(theme: .system, to: [window])
+        #expect(window.overrideUserInterfaceStyle == .unspecified)
+    }
+}
+
+private final class AppearanceObservationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var changes = 0
+
+    var changeCount: Int {
+        lock.withLock { changes }
+    }
+
+    func recordChange() {
+        lock.withLock { changes += 1 }
     }
 }

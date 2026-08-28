@@ -93,12 +93,15 @@ struct whitenoise_iosApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var appState: AppState
+    @State private var appearance: AppAppearanceStore
     @State private var appLockOverlay = AppLockOverlayPresenter()
     @State private var captureProtection = WindowCaptureProtection()
 
     init() {
         let appState = AppState()
+        let appearance = AppAppearanceStore()
         _appState = State(initialValue: appState)
+        _appearance = State(initialValue: appearance)
     }
 
     var body: some Scene {
@@ -107,14 +110,19 @@ struct whitenoise_iosApp: App {
                 .environment(appState)
                 .environment(appState.toastState)
                 .environment(appState.navigation)
-                .appAppearance()
+                .environment(appearance)
+                .appAppearance(appearance)
                 .task {
                     // The path monitor lives in this lazy singleton; touch it
                     // at launch so connectivity-restored events fire even in
                     // sessions that never read a media setting.
                     _ = MediaAutoDownloadStore.shared
                     handleScenePhase(scenePhase, isInitial: true)
-                    appLockOverlay.update(for: appState.appLock.shield, controller: appState.appLock)
+                    appLockOverlay.update(
+                        for: appState.appLock.shield,
+                        controller: appState.appLock,
+                        appearance: appearance
+                    )
                     syncCaptureProtection()
                     await appState.bootstrap()
                 }
@@ -133,7 +141,11 @@ struct whitenoise_iosApp: App {
                     MediaAutoDownloadStore.shared.setActiveAccount(accountIdHex)
                 }
                 .onChange(of: appState.appLock.shield) { _, shield in
-                    appLockOverlay.update(for: shield, controller: appState.appLock)
+                    appLockOverlay.update(
+                        for: shield,
+                        controller: appState.appLock,
+                        appearance: appearance
+                    )
                 }
                 .onChange(of: appState.blockScreenshots) { _, _ in
                     syncCaptureProtection()
