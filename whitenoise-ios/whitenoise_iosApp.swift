@@ -30,12 +30,14 @@ final class BackgroundRuntimeSuspensionTask {
     typealias EndBackgroundTask = @MainActor (_ taskID: UIBackgroundTaskIdentifier) -> Void
 
     private let endBackgroundTask: EndBackgroundTask
+    private let onExpiration: @MainActor () -> Void
     private var taskID: UIBackgroundTaskIdentifier = .invalid
     private var suspensionTask: Task<Void, Never>?
     private var endObserverTask: Task<Void, Never>?
 
     init(
         name: String,
+        onExpiration: @escaping @MainActor () -> Void = {},
         beginBackgroundTask: BeginBackgroundTask = { name, expirationHandler in
             UIApplication.shared.beginBackgroundTask(
                 withName: name,
@@ -47,10 +49,11 @@ final class BackgroundRuntimeSuspensionTask {
         }
     ) {
         self.endBackgroundTask = endBackgroundTask
+        self.onExpiration = onExpiration
         taskID = beginBackgroundTask(name) { [weak self] in
             guard let owner = self else { return }
             Task { @MainActor in
-                owner.endIfNeeded()
+                owner.expireIfNeeded()
             }
         }
     }
@@ -67,6 +70,12 @@ final class BackgroundRuntimeSuspensionTask {
         endObserverTask?.cancel()
         endObserverTask = nil
         endBackgroundTask(taskIDToEnd)
+    }
+
+    private func expireIfNeeded() {
+        guard taskID != .invalid else { return }
+        onExpiration()
+        endIfNeeded()
     }
 
     private func beginEndObserverIfPossible() {

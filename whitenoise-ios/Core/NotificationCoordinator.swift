@@ -159,7 +159,6 @@ protocol NotificationCoordinatorHost: AnyObject {
     var activeAccountRef: String? { get }
     var accounts: [AccountSummaryFfi] { get }
     var client: MarmotClient? { get }
-    var marmot: Marmot { get }
     var notifications: AppNotifications { get }
     var isAppSceneActive: Bool { get }
     var runtimeSuspendedForBackground: Bool { get }
@@ -217,12 +216,13 @@ final class NotificationCoordinator {
     }
 
     func startNotificationSubscription(host: NotificationCoordinatorHost) {
+        guard let client = host.client else { return }
+        let marmot = client.marmot
         let runner = NotificationSubscriptionRunner(
             initialRetryDelayNanoseconds: Self.notificationSubscriptionInitialRetryDelayNanoseconds,
             maximumRetryDelayNanoseconds: Self.notificationSubscriptionMaximumRetryDelayNanoseconds,
-            subscribe: { [weak host] in
-                guard let host else { throw CancellationError() }
-                let subscription = try await host.marmot.subscribeNotifications()
+            subscribe: {
+                let subscription = try await marmot.subscribeNotifications()
                 return SubscriptionDriver.notifications(subscription)
             },
             present: { [weak self, weak host] update in
@@ -455,10 +455,11 @@ final class NotificationCoordinator {
         // flight must finish (or be cancelled) before this enable issues its
         // own upsert, or two concurrent upsertPushRegistration calls race.
         await cancelNativePushRegistrationTask()
+        let client = try host.currentMarmotClient()
+        let marmot = client.marmot
         let coordinator = NativePushEnableCoordinator(
-            setNativePushEnabled: { [weak host] enabled in
-                guard let host else { throw CancellationError() }
-                return try await host.marmot.setNativePushEnabled(accountRef: accountRef, enabled: enabled)
+            setNativePushEnabled: { enabled in
+                try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: enabled)
             },
             syncPushRegistration: { [weak self, weak host] in
                 guard let self, let host else { throw CancellationError() }
@@ -472,14 +473,14 @@ final class NotificationCoordinator {
         accountRef: String,
         host: NotificationCoordinatorHost
     ) async throws -> NotificationSettingsFfi {
+        let client = try host.currentMarmotClient()
+        let marmot = client.marmot
         let coordinator = NativePushDisableCoordinator(
-            setNativePushEnabled: { [weak host] enabled in
-                guard let host else { throw CancellationError() }
-                return try await host.marmot.setNativePushEnabled(accountRef: accountRef, enabled: enabled)
+            setNativePushEnabled: { enabled in
+                try await marmot.setNativePushEnabled(accountRef: accountRef, enabled: enabled)
             },
-            clearPushRegistration: { [weak host] in
-                guard let host else { throw CancellationError() }
-                _ = try await host.marmot.clearPushRegistration(accountRef: accountRef)
+            clearPushRegistration: {
+                _ = try await marmot.clearPushRegistration(accountRef: accountRef)
             }
         )
         return try await coordinator.disable()
@@ -523,7 +524,8 @@ final class NotificationCoordinator {
         guard let tokenHex = host.notifications.apnsTokenHex, !tokenHex.isEmpty else {
             throw NotificationSettingsActionError.missingApnsToken
         }
-        return try await host.marmot.upsertPushRegistration(
+        let client = try host.currentMarmotClient()
+        return try await client.marmot.upsertPushRegistration(
             accountRef: accountRef,
             platform: .apns,
             rawToken: tokenHex,

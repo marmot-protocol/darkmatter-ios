@@ -770,38 +770,9 @@ struct GroupImageResultCell: View {
     }
 }
 
-actor GroupImageThumbnailLoadLimiter {
-    static let shared = GroupImageThumbnailLoadLimiter(maximumConcurrentLoads: 4)
-
-    private let maximumConcurrentLoads: Int
-    private var activeLoads = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(maximumConcurrentLoads: Int) {
-        self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
-    }
-
-    func acquire() async {
-        if activeLoads < maximumConcurrentLoads {
-            activeLoads += 1
-            return
-        }
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    func release() {
-        if waiters.isEmpty {
-            activeLoads = max(0, activeLoads - 1)
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
 struct GroupImageRemoteThumbnail: View {
     private static let displaySize = CGSize(width: 108, height: 92)
+    private static let loadLimiter = CancellableLoadLimiter(maximumConcurrentLoads: 4)
 
     let url: URL
 
@@ -833,7 +804,7 @@ struct GroupImageRemoteThumbnail: View {
 
     private func loadImage(scale: CGFloat) async {
         phase = .loading
-        await GroupImageThumbnailLoadLimiter.shared.acquire()
+        guard let reservation = await Self.loadLimiter.acquire() else { return }
         do {
             try Task.checkCancellation()
             let image = try await RemoteAvatarImageLoader.image(
@@ -841,11 +812,11 @@ struct GroupImageRemoteThumbnail: View {
                 maxPixelSize: Self.thumbnailMaxPixelSize(scale: scale),
                 scale: scale
             )
-            await GroupImageThumbnailLoadLimiter.shared.release()
+            await Self.loadLimiter.release(reservation)
             guard !Task.isCancelled else { return }
             phase = .success(image)
         } catch {
-            await GroupImageThumbnailLoadLimiter.shared.release()
+            await Self.loadLimiter.release(reservation)
             guard !Task.isCancelled else { return }
             phase = .failure
         }

@@ -85,7 +85,7 @@ private struct ForegroundMaintenanceCancellation {
 /// suspension-waiter machinery and the lifecycle `Task`s).
 ///
 /// Carved out of `AppState` (Phase 2). `AppState` keeps thin forwarding
-/// properties/methods (`client`, `marmot`, `runtimeGeneration`,
+/// properties/methods (`client`, `runtimeGeneration`,
 /// `canUseRuntimeForForegroundWork`, `bootstrap()`, `setAppSceneActive(_:)`,
 /// `startForegroundActivation()`, `startRuntimeSuspension()`, …) so every
 /// external and internal call site is unchanged.
@@ -127,6 +127,9 @@ final class RuntimeLifecycle {
     @ObservationIgnored private var foregroundActivationTask: Task<Void, Never>?
     @ObservationIgnored private var foregroundActivationTaskID = UUID()
     @ObservationIgnored private var runtimeSuspensionTask: Task<Void, Never>?
+    @ObservationIgnored private var activeNotificationActionLease: NotificationActionRuntimeLease?
+    @ObservationIgnored private var notificationActionReleaseTask: Task<Void, Never>?
+    @ObservationIgnored private var notificationActionReleaseTaskID = UUID()
     @ObservationIgnored private var runtimeSuspensionWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored private var bootstrapRegistrationWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     @ObservationIgnored private var foregroundMutationLeaseIDs: Set<UUID> = []
@@ -921,7 +924,7 @@ final class RuntimeLifecycle {
         await foregroundActivationTask?.value
         await runtimeSuspensionTask?.value
         await waitForRuntimeSuspensionToFinish()
-        guard phaseOwnsLiveRuntime else {
+        guard phaseOwnsLiveRuntime, !Task.isCancelled else {
             throw NotificationActionError.runtimeUnavailable
         }
         // Both lease kinds claim the same suspension gate for the full action.
@@ -929,7 +932,9 @@ final class RuntimeLifecycle {
         // a concurrent background transition can tear the durable runtime down.
         isRuntimeSuspending = true
         if !runtimeSuspendedForBackground, let client {
-            return NotificationActionRuntimeLease(client: client, ownsEphemeralRuntime: false)
+            let lease = NotificationActionRuntimeLease(client: client, ownsEphemeralRuntime: false)
+            activeNotificationActionLease = lease
+            return lease
         }
         let ephemeral: MarmotClient
         do {
@@ -960,10 +965,17 @@ final class RuntimeLifecycle {
             finishRuntimeSuspensionWait()
             throw error
         }
+        guard !Task.isCancelled else {
+            try? await ephemeral.marmot.shutdownAndClose()
+            finishRuntimeSuspensionWait()
+            throw NotificationActionError.runtimeUnavailable
+        }
         // `client` stays nil and `runtimeSuspendedForBackground` stays true:
         // the app's durable runtime really is still suspended, and nothing
         // app-visible changed runtimes (no generation bump).
-        return NotificationActionRuntimeLease(client: ephemeral, ownsEphemeralRuntime: true)
+        let lease = NotificationActionRuntimeLease(client: ephemeral, ownsEphemeralRuntime: true)
+        activeNotificationActionLease = lease
+        return lease
     }
 
     /// Ends a notification-action lease. An ephemeral lease shuts its frozen
@@ -972,7 +984,17 @@ final class RuntimeLifecycle {
     /// arrived mid-action then continues through the normal suspend / resume
     /// path after re-checking the authoritative scene flag.
     func suspendRuntimeAfterNotificationAction(_ lease: NotificationActionRuntimeLease) async {
-        await releaseNotificationActionClient(lease)
+        guard activeNotificationActionLease === lease else { return }
+        let releaseID = UUID()
+        notificationActionReleaseTaskID = releaseID
+        let releaseTask = Task {
+            await self.releaseNotificationActionClient(lease)
+        }
+        notificationActionReleaseTask = releaseTask
+        await releaseTask.value
+        guard notificationActionReleaseTaskID == releaseID else { return }
+        notificationActionReleaseTask = nil
+        activeNotificationActionLease = nil
         finishRuntimeSuspensionWait()
 
         // A live-client lease on a cold UI-less launch rides the runtime that
@@ -981,6 +1003,41 @@ final class RuntimeLifecycle {
         if !sceneHasReportedPhase {
             await startRuntimeSuspension().value
         } else if lease.ownsEphemeralRuntime, isAppSceneActive {
+            startForegroundActivation()
+        }
+    }
+
+    /// Terminates an action that outlived its UIKit/background deadline. Swift
+    /// task cancellation cannot interrupt every generated Rust future, so the
+    /// lifecycle owner must close the runtime concurrently and only then release
+    /// the suspension gate. A foreground app rebuilds a fresh durable runtime;
+    /// a background app remains safely suspended with storage closed.
+    func expireActiveNotificationAction() async {
+        if let notificationActionReleaseTask {
+            await notificationActionReleaseTask.value
+            return
+        }
+        guard let lease = activeNotificationActionLease else {
+            await runtimeSuspensionTask?.value
+            return
+        }
+        activeNotificationActionLease = nil
+        guard let clientToClose = lease.takeClientForRelease() else {
+            finishRuntimeSuspensionWait()
+            return
+        }
+
+        if !lease.ownsEphemeralRuntime,
+           client.map(ObjectIdentifier.init) == lease.clientIdentity {
+            client = nil
+        }
+        try? await clientToClose.marmot.shutdownAndClose()
+        if !lease.ownsEphemeralRuntime {
+            runtimeSuspendedForBackground = true
+        }
+        finishRuntimeSuspensionWait()
+
+        if isAppSceneActive {
             startForegroundActivation()
         }
     }

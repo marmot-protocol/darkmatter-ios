@@ -242,10 +242,8 @@ private final class GiphyPlaybackSession {
         playbackBudget.release(budgetReservation)
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            stop()
-        }
+    isolated deinit {
+        stop()
     }
 }
 

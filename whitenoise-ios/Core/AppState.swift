@@ -426,34 +426,8 @@ final class AppState {
         self.init(client: nil, notifications: .shared)
     }
 
-    /// Convenience accessor for the underlying FFI handle.
-    ///
-    /// AppState-internal seam only: lifecycle/bootstrap, runtime suspend/resume,
-    /// and the notification subscription legitimately need the raw handle. Feature
-    /// code (views / view-models / stores) must NOT use this — it goes through
-    /// `currentMarmotClient()` and the `MarmotClient` wrappers (the one seam),
-    /// enforced by `MarmotHandleLockdownTests` (#395).
-    ///
-    /// Non-optional for call-site ergonomics: the runtime is only released
-    /// while the app is suspended, when no UI or view-model code runs. If
-    /// something does touch it during the foreground transition (before
-    /// `resumeAfterForegroundActivation` restores it), fail closed. Only the
-    /// explicit async lifecycle paths may rebuild the store, off the MainActor;
-    /// an incidental accessor must never reopen it while suspended.
-    var marmot: Marmot {
-        if let client { return client.marmot }
-        do {
-            return try runtimeClient().marmot
-        } catch {
-            // See init(): keep internal Keychain/storage error details out of
-            // crash logs (#21); the error type is enough to triage.
-            fatalError(AppState.redactedRuntimeRebuildFailureMessage(for: error))
-        }
-    }
-
     // Redacted crash messages for unrecoverable Keychain/storage init and
-    // unavailable-runtime traps. Surface only the error type, never its
-    // description, so
+    // runtime errors. Surface only the error type, never its description, so
     // internal Keychain/storage details can't leak into crash logs (#21).
     static func redactedStorageInitFailureMessage(for error: Error) -> String {
         "Failed to initialize durable Marmot storage (\(type(of: error)))"
@@ -607,7 +581,8 @@ final class AppState {
 
         if account.signedOut {
             do {
-                _ = try await marmot.signInAccount(accountRef: accountRef)
+                let activationClient = try currentMarmotClient()
+                _ = try await activationClient.signInAccount(accountRef: accountRef)
                 try await refreshAccounts()
             } catch {
                 present(UserFacingError.toast(title: L10n.string("Couldn't sign in"), error: error))
@@ -663,21 +638,31 @@ final class AppState {
         // below.
         isSigningOut = true
         defer { finishAccountExit() }
+        guard let exitingClient = client else {
+            present(.error(L10n.string("Couldn't sign out")))
+            return false
+        }
         let nativePushWasEnabled = (
-            try? await runtimeClient()
+            try? await exitingClient
                 .notificationSettings(accountRef: signingOut)
                 .nativePushEnabled
         ) ?? false
+#if DEBUG
+        if let afterAccountExitClientCapturedForTesting {
+            await afterAccountExitClientCapturedForTesting()
+        }
+#endif
         await notificationCoordinator.cancelNativePushRegistrationTask()
-        _ = try? await marmot.clearPushRegistration(accountRef: signingOut)
-        _ = try? await marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
+        _ = try? await exitingClient.marmot.clearPushRegistration(accountRef: signingOut)
+        _ = try? await exitingClient.marmot.setNativePushEnabled(accountRef: signingOut, enabled: false)
 
         do {
-            let outcome = try await currentMarmotClient().signOut(accountRef: signingOut)
+            let outcome = try await exitingClient.signOut(accountRef: signingOut)
             guard outcome.localCleanup.completed else {
                 let message = outcome.localCleanup.reason
                     ?? L10n.string("Local account cleanup did not finish.")
                 await restoreNativePushAfterFailedSignOut(
+                    using: exitingClient,
                     accountRef: signingOut,
                     wasEnabled: nativePushWasEnabled
                 )
@@ -686,6 +671,7 @@ final class AppState {
             }
         } catch {
             await restoreNativePushAfterFailedSignOut(
+                using: exitingClient,
                 accountRef: signingOut,
                 wasEnabled: nativePushWasEnabled
             )
@@ -840,23 +826,33 @@ final class AppState {
         // reschedule for the *new* active account is not suppressed.
         isSigningOut = true
         defer { finishAccountExit() }
+        guard let exitingClient = client else {
+            present(.error(L10n.string("Couldn't wipe profile")))
+            return false
+        }
         let nativePushWasEnabled = (
-            try? await runtimeClient()
+            try? await exitingClient
                 .notificationSettings(accountRef: wipingRef)
                 .nativePushEnabled
         ) ?? false
+#if DEBUG
+        if let afterAccountExitClientCapturedForTesting {
+            await afterAccountExitClientCapturedForTesting()
+        }
+#endif
         // Sign-out push rule: cancel and await the in-flight native-push
         // registration sync before clearing the departing account's registration.
         await notificationCoordinator.cancelNativePushRegistrationTask()
-        _ = try? await marmot.clearPushRegistration(accountRef: wipingRef)
-        _ = try? await marmot.setNativePushEnabled(accountRef: wipingRef, enabled: false)
+        _ = try? await exitingClient.marmot.clearPushRegistration(accountRef: wipingRef)
+        _ = try? await exitingClient.marmot.setNativePushEnabled(accountRef: wipingRef, enabled: false)
 
         let outcome: WipeOutcomeFfi
         do {
-            outcome = try await currentMarmotClient().signOutAndWipe(accountRef: wipingRef)
+            outcome = try await exitingClient.signOutAndWipe(accountRef: wipingRef)
         } catch {
             // Total FFI failure: nothing was wiped. Roll native push back and toast.
             await restoreNativePushAfterFailedSignOut(
+                using: exitingClient,
                 accountRef: wipingRef,
                 wasEnabled: nativePushWasEnabled
             )
@@ -887,19 +883,21 @@ final class AppState {
 
     @MainActor
     private func restoreNativePushAfterFailedSignOut(
+        using client: MarmotClient,
         accountRef: String,
         wasEnabled: Bool
     ) async {
         guard wasEnabled else { return }
-        _ = try? await marmot.setNativePushEnabled(accountRef: accountRef, enabled: true)
+        _ = try? await client.marmot.setNativePushEnabled(accountRef: accountRef, enabled: true)
         finishAccountExit()
         scheduleNativePushRegistrationIfEnabled()
     }
 
     var isAccountExitInProgress: Bool { isSigningOut }
 
-    /// Background suspension waits here instead of releasing the shared
-    /// runtime while sign-out is still mutating account state.
+    /// Background suspension terminal-closes the shared runtime before waiting
+    /// here. Account exit retains its captured, now-spent client and finishes
+    /// with a typed storage error instead of reopening or trapping on globals.
     @MainActor
     func waitForAccountExitToFinish() async {
         guard isSigningOut else { return }
@@ -1453,7 +1451,8 @@ final class AppState {
         groupIdHex: String,
         streamIdHex: String? = nil
     ) async throws -> AgentStreamStartFfi {
-        try await marmot.startAgentTextStream(
+        let client = try currentMarmotClient()
+        return try await client.marmot.startAgentTextStream(
             accountRef: accountRef,
             groupIdHex: groupIdHex,
             streamIdHex: streamIdHex,
@@ -1462,6 +1461,8 @@ final class AppState {
     }
 
     #if DEBUG
+    @ObservationIgnored var afterAccountExitClientCapturedForTesting: (() async -> Void)?
+
     @MainActor
     func scheduleForegroundMutationFollowupForTesting(
         operation: @escaping @MainActor () async -> Void

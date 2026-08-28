@@ -258,9 +258,10 @@ struct AppStateBootstrapTests {
             #expect(authorizationRequestCount == 1)
             #expect(remoteRegistrationRequestCount >= 1)
 
-            _ = try? appState.marmot.setLocalNotificationsEnabled(accountRef: account.label, enabled: false)
-            _ = try? await appState.marmot.setNativePushEnabled(accountRef: account.label, enabled: false)
-            _ = try? await appState.marmot.clearPushRegistration(accountRef: account.label)
+            let marmot = try #require(appState.client?.marmot)
+            _ = try? marmot.setLocalNotificationsEnabled(accountRef: account.label, enabled: false)
+            _ = try? await marmot.setNativePushEnabled(accountRef: account.label, enabled: false)
+            _ = try? await marmot.clearPushRegistration(accountRef: account.label)
             await appState.signOut()
             await stopReadyRuntime(appState)
         }
@@ -607,7 +608,7 @@ struct AppStateBootstrapTests {
         #expect(appState.runtimeGeneration == generation + 1)
         #expect(appState.phase == .ready)
         #expect(appState.client != nil)
-        #expect(!appState.marmot.isStopping())
+        #expect(appState.client?.marmot.isStopping() == false)
 
         await stopReadyRuntime(appState)
     }
@@ -696,7 +697,7 @@ struct AppStateBootstrapTests {
         #expect(appState.runtimeGeneration == generation + 1)
         #expect(appState.phase == .onboarding)
         #expect(appState.client != nil)
-        #expect(!appState.marmot.isStopping())
+        #expect(appState.client?.marmot.isStopping() == false)
         #expect(!appState.notificationSubscriptionActive)
         #expect(!appState.isRuntimeWarmingUp)
         await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
@@ -731,7 +732,7 @@ struct AppStateBootstrapTests {
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.phase == .ready)
         #expect(appState.client != nil)
-        #expect(!appState.marmot.isStopping())
+        #expect(appState.client?.marmot.isStopping() == false)
         // The runtime must be re-armed exactly once if it was suspended.
         #expect(appState.runtimeGeneration <= generation + 1)
 
@@ -755,7 +756,7 @@ struct AppStateBootstrapTests {
         #expect(!appState.runtimeSuspendedForBackground)
         #expect(appState.phase == .ready)
         #expect(appState.client != nil)
-        #expect(!appState.marmot.isStopping())
+        #expect(appState.client?.marmot.isStopping() == false)
 
         await stopReadyRuntime(appState)
     }
@@ -986,8 +987,12 @@ struct AppStateBootstrapTests {
 
         var capturedExpirationHandler: (() -> Void)?
         var endedTaskIDs: [UIBackgroundTaskIdentifier] = []
+        var expirationCount = 0
         let backgroundTask = BackgroundRuntimeSuspensionTask(
             name: "Suspend Marmot runtime",
+            onExpiration: {
+                expirationCount += 1
+            },
             beginBackgroundTask: { name, expirationHandler in
                 #expect(name == "Suspend Marmot runtime")
                 capturedExpirationHandler = expirationHandler
@@ -1002,7 +1007,7 @@ struct AppStateBootstrapTests {
 
         capturedExpirationHandler?()
         try await waitForExpectation {
-            endedTaskIDs == [taskID]
+            expirationCount == 1 && endedTaskIDs == [taskID]
         }
 
         await checkpoint.release()
@@ -1010,6 +1015,7 @@ struct AppStateBootstrapTests {
         await Task.yield()
 
         #expect(endedTaskIDs == [taskID])
+        #expect(expirationCount == 1)
     }
 
     /// A cancelled foreground task may not reach its cancellation point before
@@ -1296,6 +1302,48 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    /// A generated Rust future may ignore Swift task cancellation. The action
+    /// deadline must terminal-close the leased runtime and release background
+    /// suspension without waiting for that operation to return.
+    @Test func notificationActionDeadlineClosesLiveRuntimeAndReleasesSuspension() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        appState.setAppSceneActive(true)
+        let marmot = try #require(appState.client?.marmot)
+        let checkpoint = AsyncTestCheckpoint()
+        let route = LocalNotificationRoute(
+            accountRef: seeded.accounts[0].label,
+            groupIdHex: "deadline-group",
+            notificationKey: "deadline-notification",
+            messageIdHex: "deadline-message"
+        )
+
+        let action = Task { @MainActor in
+            await appState.runNotificationAction(
+                route: route,
+                failureTitle: "Action expired",
+                deadline: .milliseconds(100)
+            ) { _ in
+                await checkpoint.pause()
+                try Task.checkCancellation()
+            }
+        }
+        await checkpoint.waitUntilPaused()
+
+        let suspension = appState.startRuntimeSuspension()
+        await action.value
+        await suspension.value
+
+        #expect(marmot.storageIsClosed())
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+        #expect(!appState.runtimeLifecycle.isRuntimeSuspendingNow)
+
+        await checkpoint.release()
+        await Task.yield()
+        await stopReadyRuntime(appState)
+    }
+
     /// A notification action on a cold UI-less launch (terminated app)
     /// bootstraps the durable runtime itself and no scene ever reports a
     /// phase, so nothing else suspends that runtime before iOS freezes the
@@ -1556,7 +1604,7 @@ struct AppStateBootstrapTests {
         #expect(appState.runtimeGeneration == generation)
         #expect(appState.phase == .ready)
         #expect(appState.client != nil)
-        #expect(!appState.marmot.isStopping())
+        #expect(appState.client?.marmot.isStopping() == false)
 
         await stopReadyRuntime(appState)
     }
@@ -1893,7 +1941,8 @@ struct AppStateBootstrapTests {
         // path goes through `setNativePushEnabled(_:)`, which requires an
         // APNS token unavailable in unit tests; calling marmot directly
         // flips the same local preference.
-        _ = try await appState.marmot.setNativePushEnabled(accountRef: accountA.label, enabled: true)
+        let marmot = try #require(appState.client?.marmot)
+        _ = try await marmot.setNativePushEnabled(accountRef: accountA.label, enabled: true)
         let enabledSettings = await appState.notificationSettings(for: accountA.label)
         #expect(enabledSettings?.nativePushEnabled == true)
 
@@ -1953,6 +2002,47 @@ struct AppStateBootstrapTests {
             isRuntimeSuspending: true,
             isSigningOut: false
         ))
+    }
+
+    /// Suspension closes storage before draining account exit. Sign-out and
+    /// wipe must therefore keep one captured client across awaits; re-reading
+    /// the former non-optional AppState handle here was a fatal-error race.
+    @Test(arguments: [false, true])
+    func accountExitUsesCapturedClientWhenSuspensionWins(_ destructive: Bool) async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        appState.activeAccountRef = seeded.accounts[0].label
+        let checkpoint = AsyncTestCheckpoint()
+        let marmot = try #require(appState.client?.marmot)
+
+        appState.afterAccountExitClientCapturedForTesting = {
+            await checkpoint.pause()
+        }
+        let accountExit = Task { @MainActor in
+            if destructive {
+                return await appState.signOutAndWipeActiveAccount()
+            }
+            return await appState.signOut()
+        }
+        await checkpoint.waitUntilPaused()
+
+        let suspension = appState.startRuntimeSuspension()
+        try await waitForExpectation {
+            marmot.storageIsClosed() && appState.client == nil
+        }
+        await checkpoint.release()
+
+        let succeeded = await accountExit.value
+        await suspension.value
+        appState.afterAccountExitClientCapturedForTesting = nil
+
+        #expect(!succeeded)
+        #expect(!appState.isSigningOutForTesting)
+        #expect(marmot.storageIsClosed())
+        #expect(appState.client == nil)
+        #expect(appState.runtimeSuspendedForBackground)
+
+        await stopReadyRuntime(appState)
     }
 
     @Test func signOutClearsSigningOutGuardBeforeReturning() async throws {
@@ -2125,8 +2215,9 @@ struct AppStateBootstrapTests {
         appState: AppState,
         accountRef: String
     ) async throws {
+        let marmot = try #require(appState.client?.marmot)
         for _ in 0..<300 {
-            switch try appState.marmot.accountSetupReadiness(accountRef: accountRef) {
+            switch try marmot.accountSetupReadiness(accountRef: accountRef) {
             case .networkReady:
                 return
             case .recoveryRequired:
@@ -4969,6 +5060,33 @@ struct NotificationServiceProjectionTests {
         })
     }
 
+    @Test func notificationServiceStorageReaderProjectsSmallValuesOffMain() async throws {
+        let client = try MarmotClient.testClient()
+        do {
+            try await client.startRuntime()
+            let account = try await client.marmot.createIdentity(
+                defaultRelays: MarmotClient.seedRelays,
+                bootstrapRelays: MarmotClient.seedRelays
+            )
+            let expected = try await client.notificationSettings(accountRef: account.label)
+
+            let enabled = await NotificationServiceStorageReader.localNotificationsEnabled(
+                marmot: client.marmot,
+                accountRefs: [account.label]
+            )
+            let badgeCount = await NotificationServiceStorageReader.applicationBadgeCount(
+                marmot: client.marmot
+            )
+
+            #expect(enabled[account.label] == expected.localNotificationsEnabled)
+            #expect(badgeCount == 0)
+            try await client.marmot.shutdownAndClose()
+        } catch {
+            try? await client.marmot.shutdownAndClose()
+            throw error
+        }
+    }
+
     @Test func noDataCollectionKeepsGenericFallback() {
         let collection = BackgroundNotificationCollectionFfi(
             status: .noData,
@@ -5539,17 +5657,17 @@ private actor ConcurrentLoadProbe {
 
 struct GroupImageSearchTests {
     @Test func groupImageThumbnailLoadsStayWithinConcurrencyLimit() async {
-        let limiter = GroupImageThumbnailLoadLimiter(maximumConcurrentLoads: 4)
+        let limiter = CancellableLoadLimiter(maximumConcurrentLoads: 4)
         let probe = ConcurrentLoadProbe()
 
         let peak = await withTaskGroup(of: Int.self, returning: Int.self) { group in
             for _ in 0..<20 {
                 group.addTask {
-                    await limiter.acquire()
+                    guard let reservation = await limiter.acquire() else { return 0 }
                     let active = await probe.begin()
                     try? await Task.sleep(nanoseconds: 5_000_000)
                     await probe.end()
-                    await limiter.release()
+                    await limiter.release(reservation)
                     return active
                 }
             }
@@ -5561,6 +5679,28 @@ struct GroupImageSearchTests {
         }
 
         #expect(peak == 4)
+    }
+
+    @Test func cancelledThumbnailWaiterResumesAndPreservesPermits() async throws {
+        let limiter = CancellableLoadLimiter(maximumConcurrentLoads: 1)
+        let first = try #require(await limiter.acquire())
+        let queued = Task { await limiter.acquire() }
+
+        while await limiter.snapshot().waiting == 0 {
+            await Task.yield()
+        }
+        queued.cancel()
+
+        #expect(await queued.value == nil)
+        #expect(await limiter.snapshot().waiting == 0)
+        await limiter.release(first)
+
+        let next = try #require(await limiter.acquire())
+        #expect(await limiter.snapshot().active == 1)
+        await limiter.release(next)
+        // A duplicate release must not mint an extra permit.
+        await limiter.release(next)
+        #expect(await limiter.snapshot().active == 0)
     }
 
     @Test func duckDuckGoRequestsCarryBrowserIdentityAndSameOriginReferer() throws {

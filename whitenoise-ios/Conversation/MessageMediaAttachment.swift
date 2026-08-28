@@ -1045,6 +1045,17 @@ nonisolated enum MediaWaveformAnalyzer {
     }
 }
 
+nonisolated enum MediaVideoDimensionPolicy {
+    static let maximumPixelDimension: CGFloat = 32_768
+
+    static func integerDimension(_ value: CGFloat) -> Int? {
+        guard value.isFinite else { return nil }
+        let rounded = abs(value).rounded()
+        guard rounded >= 1, rounded <= maximumPixelDimension else { return nil }
+        return Int(rounded)
+    }
+}
+
 nonisolated private enum MediaVideoMetadata {
     struct Metadata {
         let dim: String?
@@ -1069,8 +1080,9 @@ nonisolated private enum MediaVideoMetadata {
             async let preferredTransform = track.load(.preferredTransform)
             let (size, transform) = try await (naturalSize, preferredTransform)
             let transformed = size.applying(transform)
-            let width = max(1, Int(abs(transformed.width).rounded()))
-            let height = max(1, Int(abs(transformed.height).rounded()))
+            guard let width = MediaVideoDimensionPolicy.integerDimension(transformed.width),
+                  let height = MediaVideoDimensionPolicy.integerDimension(transformed.height)
+            else { return nil }
             return "\(width)x\(height)"
         } catch {
             return nil

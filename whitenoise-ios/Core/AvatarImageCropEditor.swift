@@ -1,9 +1,10 @@
+import ImageIO
 import SwiftUI
 import UIKit
 
 /// Raw image data awaiting the same square crop treatment regardless of
 /// whether it came from Photos, Files, or a web-search result.
-struct AvatarImageCropSource: Identifiable {
+struct AvatarImageCropSource: Identifiable, Sendable {
     let id = UUID()
     let data: Data
     let fileName: String?
@@ -11,16 +12,82 @@ struct AvatarImageCropSource: Identifiable {
     let sourceURL: URL?
 }
 
-enum AvatarImageCropper {
+nonisolated enum AvatarImageCropper {
     static let maximumZoom: CGFloat = 6
+    static let maximumEncodedBytes = 25 * 1024 * 1024
+    static let maximumSourcePixelCount = 80_000_000
+    static let maximumEditorPixelSize = 2_048
+    static let outputPixelSize = 1_024
+
+    static func encodedByteCountIsAllowed(_ count: Int) -> Bool {
+        count > 0 && count <= maximumEncodedBytes
+    }
+
+    static func sourceDimensionsAreAllowed(width: Int, height: Int) -> Bool {
+        width > 0
+            && height > 0
+            && width <= maximumSourcePixelCount / height
+    }
+
+    static func boundedFileData(
+        from url: URL,
+        maximumBytes: Int = maximumEncodedBytes
+    ) throws -> Data {
+        guard maximumBytes > 0 else {
+            throw MediaDraftProcessor.Failure.attachmentTooLarge(0)
+        }
+        let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+        guard values.isRegularFile != false,
+              values.fileSize.map({ $0 > 0 && $0 <= maximumBytes }) != false
+        else {
+            throw MediaDraftProcessor.Failure.attachmentTooLarge(values.fileSize ?? 0)
+        }
+
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var data = Data()
+        if let fileSize = values.fileSize {
+            data.reserveCapacity(min(fileSize, maximumBytes))
+        }
+        let chunkSize = 64 * 1024
+        while data.count <= maximumBytes {
+            let remaining = maximumBytes - data.count
+            guard let chunk = try handle.read(upToCount: min(chunkSize, remaining + 1)),
+                  !chunk.isEmpty
+            else { break }
+            data.append(chunk)
+            guard data.count <= maximumBytes else {
+                throw MediaDraftProcessor.Failure.attachmentTooLarge(data.count)
+            }
+        }
+        guard !data.isEmpty else {
+            throw MediaDraftProcessor.Failure.attachmentTooLarge(data.count)
+        }
+        return data
+    }
 
     static func normalizedImage(from data: Data) -> UIImage? {
-        guard let image = UIImage(data: data) else { return nil }
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = image.scale
-        return UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
-            image.draw(in: CGRect(origin: .zero, size: image.size))
+        guard encodedByteCountIsAllowed(data.count),
+              let source = CGImageSourceCreateWithData(
+                data as CFData,
+                [kCGImageSourceShouldCache: false] as CFDictionary
+              ),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+              sourceDimensionsAreAllowed(width: width, height: height)
+        else { return nil }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maximumEditorPixelSize,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
         }
+        return UIImage(cgImage: image, scale: 1, orientation: .up)
     }
 
     static func clampedOffset(
@@ -46,9 +113,10 @@ enum AvatarImageCropper {
         image: UIImage,
         cropSide: CGFloat,
         zoom: CGFloat,
-        offset: CGSize
+        offset: CGSize,
+        outputPixelSide: Int = outputPixelSize
     ) -> Data? {
-        guard let cgImage = image.cgImage else { return nil }
+        guard outputPixelSide > 0, let cgImage = image.cgImage else { return nil }
         let imageSize = image.size
         let baseScale = max(cropSide / imageSize.width, cropSide / imageSize.height)
         let displayScale = baseScale * zoom
@@ -63,7 +131,16 @@ enum AvatarImageCropper {
         guard rect.width > 0, rect.height > 0,
               let cropped = cgImage.cropping(to: rect)
         else { return nil }
-        return UIImage(cgImage: cropped).jpegData(compressionQuality: 0.92)
+        let outputSize = CGSize(width: outputPixelSide, height: outputPixelSide)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let output = UIGraphicsImageRenderer(size: outputSize, format: format).image { context in
+            UIColor.systemBackground.setFill()
+            context.fill(CGRect(origin: .zero, size: outputSize))
+            UIImage(cgImage: cropped).draw(in: CGRect(origin: .zero, size: outputSize))
+        }
+        return output.jpegData(compressionQuality: 0.92)
     }
 }
 
@@ -123,8 +200,13 @@ struct AvatarImageCropEditor: View {
             }
         }
         .interactiveDismissDisabled()
-        .onAppear {
-            image = AvatarImageCropper.normalizedImage(from: source.data)
+        .task(id: source.id) {
+            let data = source.data
+            let prepared = await Task.detached(priority: .userInitiated) {
+                AvatarImageCropper.normalizedImage(from: data)
+            }.value
+            guard !Task.isCancelled else { return }
+            image = prepared
         }
     }
 

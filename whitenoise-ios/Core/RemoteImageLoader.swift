@@ -5,6 +5,63 @@ import OSLog
 import UIKit
 import UniformTypeIdentifiers
 
+actor CancellableLoadLimiter {
+    private let maximumConcurrentLoads: Int
+    private var reservations: Set<UUID> = []
+    private var waiterOrder: [UUID] = []
+    private var waiters: [UUID: CheckedContinuation<UUID?, Never>] = [:]
+
+    init(maximumConcurrentLoads: Int) {
+        self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
+    }
+
+    func acquire() async -> UUID? {
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: nil)
+                } else if reservations.count < maximumConcurrentLoads {
+                    let reservation = UUID()
+                    reservations.insert(reservation)
+                    continuation.resume(returning: reservation)
+                } else {
+                    waiterOrder.append(waiterID)
+                    waiters[waiterID] = continuation
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(waiterID) }
+        }
+    }
+
+    func release(_ reservation: UUID) {
+        guard reservations.remove(reservation) != nil else { return }
+        resumeNextWaiter()
+    }
+
+    func snapshot() -> (active: Int, waiting: Int) {
+        (reservations.count, waiters.count)
+    }
+
+    private func cancelWaiter(_ waiterID: UUID) {
+        guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
+        waiterOrder.removeAll { $0 == waiterID }
+        continuation.resume(returning: nil)
+    }
+
+    private func resumeNextWaiter() {
+        while let waiterID = waiterOrder.first {
+            waiterOrder.removeFirst()
+            guard let continuation = waiters.removeValue(forKey: waiterID) else { continue }
+            let reservation = UUID()
+            reservations.insert(reservation)
+            continuation.resume(returning: reservation)
+            return
+        }
+    }
+}
+
 nonisolated enum RemoteImageFetch {
     static let maximumImageBytes = 2 * 1024 * 1024
     /// Byte cap for non-image responses (e.g. the DuckDuckGo image-search

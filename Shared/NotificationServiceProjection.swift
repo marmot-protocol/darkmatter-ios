@@ -134,6 +134,65 @@ nonisolated enum NotificationServiceSettingsReadPolicy {
     }
 }
 
+/// Runs the NSE's synchronous storage projections away from its MainActor so
+/// `serviceExtensionTimeWillExpire()` can begin terminal cleanup even if a
+/// SQLite read is slow. Only small Sendable values cross back to the extension.
+nonisolated enum NotificationServiceStorageReader {
+    static func applicationBadgeCount(marmot: Marmot) async -> Int? {
+        await offMain {
+            guard let summaries = try? marmot.accountUnreadSummary() else { return nil }
+            return ApplicationBadgeCountProjection.count(for: summaries)
+        }
+    }
+
+    static func localNotificationsEnabled(
+        marmot: Marmot,
+        accountRefs: Set<String>
+    ) async -> [String: Bool] {
+        await offMain {
+            var settings: [String: Bool] = [:]
+            for accountRef in accountRefs {
+                guard !Task.isCancelled else { break }
+                settings[accountRef] = NotificationServiceSettingsReadPolicy
+                    .localNotificationsEnabled {
+                        try marmot.notificationSettings(
+                            accountRef: accountRef
+                        ).localNotificationsEnabled
+                    }
+            }
+            return settings
+        }
+    }
+
+    static func archivedChatKeys(
+        marmot: Marmot,
+        accountRefs: Set<String>
+    ) async -> Set<String> {
+        await offMain {
+            var rowsByAccountRef: [String: [ChatListRowFfi]] = [:]
+            for accountRef in accountRefs {
+                guard !Task.isCancelled else { break }
+                rowsByAccountRef[accountRef] =
+                    (try? marmot.chatList(accountRef: accountRef, includeArchived: true)) ?? []
+            }
+            return NotificationServiceProjection.archivedChatKeys(
+                rowsByAccountRef: rowsByAccountRef
+            )
+        }
+    }
+
+    private static func offMain<Value: Sendable>(
+        _ operation: @escaping @Sendable () -> Value
+    ) async -> Value {
+        let task = Task.detached(priority: .userInitiated, operation: operation)
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+}
+
 nonisolated enum NotificationServiceProjection {
     // Keep room for extension startup and fallback delivery before iOS expires
     // the notification service extension.

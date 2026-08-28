@@ -377,36 +377,9 @@ private struct GroupAvatarImageRequest: Hashable {
     let maxPixelSize: Int
 }
 
-private actor GroupAvatarLoadLimiter {
-    static let shared = GroupAvatarLoadLimiter(maximumConcurrentLoads: 4)
-
-    private let maximumConcurrentLoads: Int
-    private var activeLoads = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(maximumConcurrentLoads: Int) {
-        self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
-    }
-
-    func acquire() async {
-        if activeLoads < maximumConcurrentLoads {
-            activeLoads += 1
-        } else {
-            await withCheckedContinuation { waiters.append($0) }
-        }
-    }
-
-    func release() {
-        if waiters.isEmpty {
-            activeLoads = max(0, activeLoads - 1)
-        } else {
-            waiters.removeFirst().resume()
-        }
-    }
-}
-
 @MainActor
 private enum GroupAvatarImageLoader {
+    private static let loadLimiter = CancellableLoadLimiter(maximumConcurrentLoads: 4)
     private final class CachedImage: NSObject {
         let image: UIImage
 
@@ -489,17 +462,19 @@ private enum GroupAvatarImageLoader {
         }
 
         let task = Task {
-            await GroupAvatarLoadLimiter.shared.acquire()
+            guard let reservation = await loadLimiter.acquire() else {
+                throw CancellationError()
+            }
             do {
                 try Task.checkCancellation()
                 let data = try await client.downloadGroupBlossomImage(
                     accountRef: request.accountRef,
                     groupIdHex: request.groupIdHex
                 )
-                await GroupAvatarLoadLimiter.shared.release()
+                await loadLimiter.release(reservation)
                 return data
             } catch {
-                await GroupAvatarLoadLimiter.shared.release()
+                await loadLimiter.release(reservation)
                 throw error
             }
         }

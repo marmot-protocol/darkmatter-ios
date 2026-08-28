@@ -730,8 +730,11 @@ struct ProfileImagePickerSheet: View {
                     }
                 }
                 do {
+                    let data = try await Task.detached(priority: .userInitiated) {
+                        try AvatarImageCropper.boundedFileData(from: url)
+                    }.value
                     cropSource = AvatarImageCropSource(
-                        data: try Data(contentsOf: url),
+                        data: data,
                         fileName: url.lastPathComponent,
                         typeIdentifier: nil,
                         sourceURL: nil

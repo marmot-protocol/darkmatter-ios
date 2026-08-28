@@ -36,6 +36,44 @@ struct AvatarImageCropperTests {
         let cropped = try #require(UIImage(data: data))
 
         #expect(cropped.size.width == cropped.size.height)
-        #expect(cropped.size.width == 200)
+        #expect(cropped.size.width == CGFloat(AvatarImageCropper.outputPixelSize))
+    }
+
+    @Test func sourceBoundsRejectEmptyOversizedAndExtremePixelInputs() {
+        #expect(!AvatarImageCropper.encodedByteCountIsAllowed(0))
+        #expect(AvatarImageCropper.encodedByteCountIsAllowed(1))
+        #expect(!AvatarImageCropper.encodedByteCountIsAllowed(AvatarImageCropper.maximumEncodedBytes + 1))
+
+        #expect(AvatarImageCropper.sourceDimensionsAreAllowed(width: 8_064, height: 6_048))
+        #expect(!AvatarImageCropper.sourceDimensionsAreAllowed(width: 0, height: 100))
+        #expect(!AvatarImageCropper.sourceDimensionsAreAllowed(width: 100_000, height: 100_000))
+    }
+
+    @Test func boundedFileReadRejectsFileOverConfiguredLimit() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("avatar-byte-cap-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(repeating: 0x41, count: 9).write(to: url)
+
+        #expect(throws: MediaDraftProcessor.Failure.self) {
+            try AvatarImageCropper.boundedFileData(from: url, maximumBytes: 8)
+        }
+    }
+
+    @Test func editorDecodeDownsamplesBeforeUIKitRendering() throws {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(
+            size: CGSize(width: 3_000, height: 1_500),
+            format: format
+        ).image { context in
+            UIColor.systemGreen.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 3_000, height: 1_500))
+        }
+        let data = try #require(image.jpegData(compressionQuality: 0.8))
+
+        let prepared = try #require(AvatarImageCropper.normalizedImage(from: data))
+
+        #expect(max(prepared.size.width, prepared.size.height) <= CGFloat(AvatarImageCropper.maximumEditorPixelSize))
     }
 }

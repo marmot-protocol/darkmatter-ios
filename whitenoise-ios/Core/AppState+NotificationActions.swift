@@ -1,6 +1,35 @@
 import Foundation
 import MarmotKit
 
+@MainActor
+private final class NotificationActionDeadlineGate {
+    enum Outcome {
+        case completed(succeeded: Bool)
+        case expired
+    }
+
+    private var outcome: Outcome?
+    private var continuation: CheckedContinuation<Outcome, Never>?
+
+    func resolve(_ outcome: Outcome) {
+        guard self.outcome == nil else { return }
+        self.outcome = outcome
+        continuation?.resume(returning: outcome)
+        continuation = nil
+    }
+
+    func wait() async -> Outcome {
+        if let outcome { return outcome }
+        return await withCheckedContinuation { continuation in
+            if let outcome {
+                continuation.resume(returning: outcome)
+            } else {
+                self.continuation = continuation
+            }
+        }
+    }
+}
+
 extension AppState {
     /// Executes a notification-action response. Reply and mark-read run against
     /// a runtime leased for the action: the live foreground runtime when the app
@@ -84,54 +113,80 @@ extension AppState {
     }
 
     @MainActor
-    private func runNotificationAction(
+    func runNotificationAction(
         route: LocalNotificationRoute,
         failureTitle: String,
+        deadline: Duration = .seconds(20),
         perform: @escaping @MainActor (MarmotClient) async throws -> Void
     ) async {
-        let backgroundTask = BackgroundRuntimeSuspensionTask(name: "Notification action")
-        let task = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.runNotificationActionAgainstRuntime(
+        let gate = NotificationActionDeadlineGate()
+        let backgroundTask = BackgroundRuntimeSuspensionTask(
+            name: "Notification action",
+            onExpiration: { gate.resolve(.expired) }
+        )
+        let actionTask = Task { @MainActor [weak self] in
+            guard let self else {
+                gate.resolve(.completed(succeeded: false))
+                return
+            }
+            let succeeded = await self.runNotificationActionAgainstRuntime(
                 route: route,
-                failureTitle: failureTitle,
                 perform: perform
             )
+            gate.resolve(.completed(succeeded: succeeded))
         }
-        backgroundTask.endWhenSuspensionCompletes(task)
-        await task.value
+        let deadlineTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: deadline)
+                gate.resolve(.expired)
+            } catch {
+                // Normal completion cancels the deadline.
+            }
+        }
+        let succeeded: Bool
+        switch await gate.wait() {
+        case .completed(let actionSucceeded):
+            succeeded = actionSucceeded
+        case .expired:
+            actionTask.cancel()
+            await runtimeLifecycle.expireActiveNotificationAction()
+            succeeded = false
+        }
+        deadlineTask.cancel()
+        backgroundTask.endIfNeeded()
+
+        if !succeeded {
+            await notifications.presentNotificationActionFailure(
+                title: failureTitle,
+                body: L10n.string("Open the chat to try again."),
+                route: route
+            )
+        }
     }
 
     @MainActor
     private func runNotificationActionAgainstRuntime(
         route: LocalNotificationRoute,
-        failureTitle: String,
         perform: @MainActor (MarmotClient) async throws -> Void
-    ) async {
+    ) async -> Bool {
         // A cold background launch can deliver the response while bootstrap is
         // still bringing the runtime up; ride the existing bootstrap instead of
         // racing it.
         if phase == .bootstrapping {
             await bootstrap()
         }
-        var failed = false
         do {
             let lease = try await runtimeLifecycle.startRuntimeForNotificationAction()
+            var succeeded = true
             do {
                 try await perform(lease.client)
             } catch {
-                failed = true
+                succeeded = false
             }
             await runtimeLifecycle.suspendRuntimeAfterNotificationAction(lease)
+            return succeeded
         } catch {
-            failed = true
-        }
-        if failed {
-            await notifications.presentNotificationActionFailure(
-                title: failureTitle,
-                body: L10n.string("Open the chat to try again."),
-                route: route
-            )
+            return false
         }
     }
 }

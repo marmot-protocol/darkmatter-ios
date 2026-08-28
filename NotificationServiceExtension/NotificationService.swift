@@ -122,25 +122,27 @@ final class NotificationService: UNNotificationServiceExtension {
                     source: .apnsNse
                 )
                 diagnosticStage = .collectionCompleted
-                if result.status != .failed,
-                   let summaries = try? marmot.accountUnreadSummary() {
-                    let count = ApplicationBadgeCountProjection.count(for: summaries)
-                    applicationBadgeCount = count
-                    NotificationContentDecorator.applyApplicationBadgeCount(count, to: content)
+                if result.status != .failed {
+                    let count = await NotificationServiceStorageReader
+                        .applicationBadgeCount(marmot: marmot)
+                    guard await continueCollection(using: marmot) else { return }
+                    if let count {
+                        applicationBadgeCount = count
+                        NotificationContentDecorator.applyApplicationBadgeCount(count, to: content)
+                    }
                 }
                 // One shared-defaults read per wake; per-record lookups hit the
                 // in-memory snapshots. A nil mode snapshot means the shared suite
                 // couldn't be resolved, so delivery fails safe (all suppressed).
                 let notifyModeSnapshot = ChatMuteStore.notifyModeSnapshot()
                 let contactNicknames = ContactNicknameStore.nicknamesByKey()
-                let localNotificationsEnabled = NotificationServiceSettingsReadPolicy
-                    .memoizingLocalNotificationsEnabled { accountRef in
-                        NotificationServiceSettingsReadPolicy.localNotificationsEnabled {
-                            try marmot.notificationSettings(
-                                accountRef: accountRef
-                            ).localNotificationsEnabled
-                        }
-                    }
+                let accountRefs = Set(result.notifications.map(\.accountRef))
+                let enabledByAccountRef = await NotificationServiceStorageReader
+                    .localNotificationsEnabled(marmot: marmot, accountRefs: accountRefs)
+                guard await continueCollection(using: marmot) else { return }
+                let localNotificationsEnabled: (String) -> Bool = { accountRef in
+                    enabledByAccountRef[accountRef] ?? true
+                }
                 let notifyMode: (String, String) -> ChatNotifyMode = { accountIdHex, groupIdHex in
                     ChatMuteStore.notifyMode(
                         accountIdHex: accountIdHex,
@@ -154,14 +156,11 @@ final class NotificationService: UNNotificationServiceExtension {
                         localNotificationsEnabled: localNotificationsEnabled,
                         notifyMode: notifyMode
                     )
-                var rowsByAccountRef: [String: [ChatListRowFfi]] = [:]
-                for accountRef in accountsRequiringArchivedLookup {
-                    rowsByAccountRef[accountRef] =
-                        (try? marmot.chatList(accountRef: accountRef, includeArchived: true)) ?? []
-                }
-                let archivedChatKeys = NotificationServiceProjection.archivedChatKeys(
-                    rowsByAccountRef: rowsByAccountRef
+                let archivedChatKeys = await NotificationServiceStorageReader.archivedChatKeys(
+                    marmot: marmot,
+                    accountRefs: accountsRequiringArchivedLookup
                 )
+                guard await continueCollection(using: marmot) else { return }
                 let decision = NotificationServiceProjection.decision(
                     for: result,
                     localNotificationsEnabled: localNotificationsEnabled,
@@ -220,6 +219,16 @@ final class NotificationService: UNNotificationServiceExtension {
         }
 
         finish()
+    }
+
+    private func continueCollection(using marmot: Marmot) async -> Bool {
+        guard activeMarmot === marmot, !Task.isCancelled else {
+            if let marmot = takeActiveMarmotForShutdown(marmot) {
+                try? await marmot.shutdownAndClose()
+            }
+            return false
+        }
+        return true
     }
 
     private func recordDiagnostic(

@@ -295,7 +295,7 @@ struct CreateIdentityView: View {
         }
         do {
             let data = try await Task.detached(priority: .userInitiated) {
-                try Data(contentsOf: url)
+                try AvatarImageCropper.boundedFileData(from: url)
             }.value
             cropSource = AvatarImageCropSource(
                 data: data,

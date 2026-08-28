@@ -146,3 +146,23 @@ struct MediaQualityTests {
         #expect(MediaQualityStore.quality(defaults: defaults) == .original)
     }
 }
+
+struct MediaVideoDimensionPolicyTests {
+    @Test func rejectsNonFiniteZeroAndUnreasonableDimensions() {
+        #expect(MediaVideoDimensionPolicy.integerDimension(.nan) == nil)
+        #expect(MediaVideoDimensionPolicy.integerDimension(.infinity) == nil)
+        #expect(MediaVideoDimensionPolicy.integerDimension(-.infinity) == nil)
+        #expect(MediaVideoDimensionPolicy.integerDimension(0) == nil)
+        #expect(MediaVideoDimensionPolicy.integerDimension(
+            MediaVideoDimensionPolicy.maximumPixelDimension + 1
+        ) == nil)
+    }
+
+    @Test func acceptsRotatedNegativeAndRoundsFiniteDimensions() {
+        #expect(MediaVideoDimensionPolicy.integerDimension(-1_920.4) == 1_920)
+        #expect(MediaVideoDimensionPolicy.integerDimension(1_080.6) == 1_081)
+        #expect(MediaVideoDimensionPolicy.integerDimension(
+            MediaVideoDimensionPolicy.maximumPixelDimension
+        ) == Int(MediaVideoDimensionPolicy.maximumPixelDimension))
+    }
+}
