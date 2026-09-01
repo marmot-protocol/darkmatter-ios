@@ -518,7 +518,7 @@ struct TimelineProjectionBoundaryTests {
     private func mediaReference(
         sourceEpoch: UInt64,
         plaintext: Data? = nil,
-        locatorValue: String = "https://media.example/a.png"
+        locatorValue: String = "https://media.example/4444444444444444444444444444444444444444444444444444444444444444.bin"
     ) -> MediaAttachmentReferenceFfi {
         MediaAttachmentReferenceFfi(
             locators: [MediaLocatorFfi(kind: "blossom-v1", value: locatorValue)],

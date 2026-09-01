@@ -61,11 +61,8 @@ private final class MockPrivacyDataSource: PrivacySecuritySettingsViewModelDataS
         throw CancellationError()
     }
     func deleteAllAuditLogFiles() async throws { throw CancellationError() }
-    func setAuditLogSettings(
-        enabled: Bool,
-        dataMode: AuditDataModeFfi
-    ) async throws -> AuditLogSettingsFfi {
-        let settings = AuditLogSettingsFfi(enabled: enabled, dataMode: dataMode)
+    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
+        let settings = AuditLogSettingsFfi(enabled: enabled)
         auditSettingsRequests.append(settings)
         return settings
     }
@@ -73,52 +70,17 @@ private final class MockPrivacyDataSource: PrivacySecuritySettingsViewModelDataS
 
 @MainActor
 struct PrivacySecuritySettingsViewModelTests {
-    @Test func enablingAuditLoggingPreservesTheSelectedDataMode() async {
+    @Test func enablingAuditLoggingUpdatesTheEngineSetting() async {
         let model = PrivacySecuritySettingsViewModel()
         let source = MockPrivacyDataSource()
-        model.auditSettings = PrivacyAuditSettingsProjection(
-            enabled: false,
-            dataMode: .fullData
-        )
+        model.auditSettings = PrivacyAuditSettingsProjection(enabled: false)
 
         await model.setAuditEnabled(true, using: source)
 
         #expect(source.auditSettingsRequests == [
-            AuditLogSettingsFfi(enabled: true, dataMode: .fullData)
+            AuditLogSettingsFfi(enabled: true)
         ])
         #expect(model.auditSettings?.enabled == true)
-        #expect(model.auditSettings?.includesSensitiveData == true)
-    }
-
-    @Test func sensitiveDataToggleChangesOnlyTheAuditDataMode() async {
-        let model = PrivacySecuritySettingsViewModel()
-        let source = MockPrivacyDataSource()
-        model.auditSettings = PrivacyAuditSettingsProjection(
-            enabled: true,
-            dataMode: .obfuscatedSensitiveData
-        )
-
-        await model.setAuditSensitiveDataEnabled(true, using: source)
-
-        #expect(source.auditSettingsRequests == [
-            AuditLogSettingsFfi(enabled: true, dataMode: .fullData)
-        ])
-        #expect(model.auditSettings?.enabled == true)
-        #expect(model.auditSettings?.includesSensitiveData == true)
-    }
-
-    @Test func sensitiveDataToggleDoesNothingWhileAuditLoggingIsOff() async {
-        let model = PrivacySecuritySettingsViewModel()
-        let source = MockPrivacyDataSource()
-        model.auditSettings = PrivacyAuditSettingsProjection(
-            enabled: false,
-            dataMode: .obfuscatedSensitiveData
-        )
-
-        await model.setAuditSensitiveDataEnabled(true, using: source)
-
-        #expect(source.auditSettingsRequests.isEmpty)
-        #expect(model.auditSettings?.includesSensitiveData == false)
     }
 
     @Test func overlappingFileLoadsKeepSpinnerUntilBothComplete() async {

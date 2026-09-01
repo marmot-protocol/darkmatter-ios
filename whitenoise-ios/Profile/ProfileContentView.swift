@@ -14,6 +14,36 @@ nonisolated enum ProfilePrimaryActionPresentation {
     }
 }
 
+nonisolated enum ProfileWebsitePresentation {
+    struct Website: Equatable {
+        let url: URL
+        let displayText: String
+    }
+
+    static func website(_ raw: String?) -> Website? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.utf8.count <= ContentSanitizer.maxImageURLLength,
+              let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              components.user == nil,
+              components.password == nil,
+              let host = components.host,
+              !host.isEmpty,
+              !ContentSanitizer.isPrivateOrLoopbackAddressLiteral(host),
+              let url = components.url,
+              case .confirmExternal = MessageLinkPolicy.action(for: url),
+              let displayText = ContentSanitizer.relayDisplayLine(
+                url.absoluteString,
+                maxLength: 120
+              )
+        else { return nil }
+        return Website(url: url, displayText: displayText)
+    }
+}
+
 /// Moderation scope handed to the profile surface when it's opened from a
 /// group's member list. Actions come from the live management state; the
 /// mutations run through the details view model so permission enforcement
@@ -34,6 +64,7 @@ struct ProfileModerationContext {
 struct ProfileContentView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     let npub: String
     var moderation: ProfileModerationContext?
@@ -54,6 +85,7 @@ struct ProfileContentView: View {
     @State private var confirmingRemoval = false
     @State private var showStartGroup = false
     @State private var showAddToGroup = false
+    @State private var pendingExternalWebsite: URL?
 
     var body: some View {
         List {
@@ -89,6 +121,9 @@ struct ProfileContentView: View {
                     load: onLoadFollowing
                 )
             }
+        }
+        .task(id: appState.profileRefreshGeneration) {
+            await model.refreshWebsite(using: appState)
         }
         .task(id: declaredNip05) { await model.verifyDeclaredNip05(declaredNip05) }
         .sheet(isPresented: $showStartGroup) {
@@ -135,6 +170,20 @@ struct ProfileContentView: View {
             )
             .interactiveDismissDisabled(model.starter.isCreating)
             .appAppearance()
+        }
+        .alert(L10n.string("Open link?"), isPresented: websiteConfirmationPresented) {
+            Button(L10n.string("Open")) {
+                guard let url = pendingExternalWebsite else { return }
+                pendingExternalWebsite = nil
+                openURL(url)
+            }
+            Button("Cancel", role: .cancel) {
+                pendingExternalWebsite = nil
+            }
+        } message: {
+            if let url = pendingExternalWebsite {
+                Text(MessageExternalLinkConfirmation.displayText(for: url))
+            }
         }
     }
 
@@ -330,13 +379,29 @@ struct ProfileContentView: View {
 
     @ViewBuilder
     private var publicProfileSection: some View {
-        if profileHandle != nil || lightningAddress != nil {
+        if profileHandle != nil || lightningAddress != nil || website != nil {
             Section("Profile") {
                 if let profileHandle {
                     LabeledContent("Name", value: profileHandle)
                 }
                 if let lightningAddress {
                     LabeledContent("Lightning address", value: lightningAddress)
+                }
+                if let website {
+                    Button {
+                        pendingExternalWebsite = website.url
+                    } label: {
+                        LabeledContent("Website") {
+                            HStack(spacing: 6) {
+                                Text(website.displayText)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Image(systemName: "arrow.up.right.square")
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -471,10 +536,11 @@ struct ProfileContentView: View {
     }
 
     private var lightningAddress: String? {
-        ContentSanitizer.singleLine(
-            effectiveProfile?.lud16,
-            maxLength: ContentSanitizer.maxProfileAddressLength
-        )
+        ContentSanitizer.profileAddress(effectiveProfile?.lud16)
+    }
+
+    private var website: ProfileWebsitePresentation.Website? {
+        ProfileWebsitePresentation.website(model.website)
     }
 
     private var profileHandle: String? {
@@ -519,6 +585,13 @@ struct ProfileContentView: View {
             display: IdentityFormatter.short(displayReference, head: 12, tail: 10),
             copyValue: displayReference,
             copiedToastTitle: L10n.string("npub")
+        )
+    }
+
+    private var websiteConfirmationPresented: Binding<Bool> {
+        Binding(
+            get: { pendingExternalWebsite != nil },
+            set: { if !$0 { pendingExternalWebsite = nil } }
         )
     }
 

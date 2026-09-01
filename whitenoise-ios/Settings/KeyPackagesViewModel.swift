@@ -11,14 +11,17 @@ import MarmotKit
 final class KeyPackagesViewModel {
     var packages: [AccountKeyPackageFfi] = []
     var lists: AccountRelayListsFfi?
+    var maintenanceStatus: KeyPackageMaintenanceStatusFfi?
     private var loadedRef: String?
     // Overlapping reloads (pull-to-refresh racing the task restart) must not
     // let an older result overwrite a newer one, even for the same account.
     private var reloadTicket = 0
     var isLoading = false
     var isPublishing = false
+    var isRepublishing = false
     var deletingEventIds: Set<String> = []
     var loadError: String?
+    var maintenanceLoadError: String?
 
     var bootstrapRelays: [String] {
         lists.map(RelaySettings.bootstrapRelays(from:)) ?? MarmotClient.seedRelays
@@ -28,6 +31,8 @@ final class KeyPackagesViewModel {
         guard let ref = appState.activeAccountRef else {
             packages = []
             lists = nil
+            maintenanceStatus = nil
+            maintenanceLoadError = nil
             return
         }
         isLoading = true
@@ -46,6 +51,8 @@ final class KeyPackagesViewModel {
         if loadedRef != ref {
             packages = []
             lists = nil
+            maintenanceStatus = nil
+            maintenanceLoadError = nil
         }
 
         do {
@@ -63,8 +70,22 @@ final class KeyPackagesViewModel {
                 bootstrapRelays: RelaySettings.bootstrapRelays(from: loadedLists)
             )
             guard !Task.isCancelled, reloadTicket == ticket, appState.activeAccountRef == ref else { return }
+            let loadedMaintenanceStatus: KeyPackageMaintenanceStatusFfi?
+            let loadedMaintenanceError: String?
+            do {
+                loadedMaintenanceStatus = try await client.keyPackageMaintenanceStatus(
+                    accountRef: ref
+                )
+                loadedMaintenanceError = nil
+            } catch {
+                loadedMaintenanceStatus = nil
+                loadedMaintenanceError = error.localizedDescription
+            }
+            guard !Task.isCancelled, reloadTicket == ticket, appState.activeAccountRef == ref else { return }
             lists = loadedLists
             packages = loadedPackages
+            maintenanceStatus = loadedMaintenanceStatus
+            maintenanceLoadError = loadedMaintenanceError
             loadedRef = ref
         } catch {
             guard reloadTicket == ticket, appState.activeAccountRef == ref else { return }
@@ -73,7 +94,7 @@ final class KeyPackagesViewModel {
     }
 
     func publishNew(using appState: AppState) async {
-        guard !isPublishing, let ref = appState.activeAccountRef else { return }
+        guard !isPublishing, !isRepublishing, let ref = appState.activeAccountRef else { return }
         isPublishing = true
         defer { isPublishing = false }
 
@@ -86,6 +107,23 @@ final class KeyPackagesViewModel {
         } catch {
             Haptics.error()
             appState.present(UserFacingError.toast(title: L10n.string("Publish failed"), error: error))
+        }
+    }
+
+    func republish(using appState: AppState) async {
+        guard !isPublishing, !isRepublishing, let ref = appState.activeAccountRef else { return }
+        isRepublishing = true
+        defer { isRepublishing = false }
+
+        do {
+            let client = try appState.currentMarmotClient()
+            _ = try await client.republishKeyPackage(accountRef: ref)
+            Haptics.success()
+            appState.present(.success(L10n.string("Key package republished")))
+            await reload(using: appState)
+        } catch {
+            Haptics.error()
+            appState.present(UserFacingError.toast(title: L10n.string("Republish failed"), error: error))
         }
     }
 

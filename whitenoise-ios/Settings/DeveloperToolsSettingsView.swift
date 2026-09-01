@@ -4,6 +4,7 @@ import MarmotKit
 struct DeveloperToolsSettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var model = PrivacySecuritySettingsViewModel()
+    @State private var quarantinedGroupsModel = QuarantinedGroupsViewModel()
 
     var body: some View {
         @Bindable var model = model
@@ -54,6 +55,26 @@ struct DeveloperToolsSettingsView: View {
                         KeyPackagesView()
                     } label: {
                         Label("Key Packages", systemImage: "shippingbox")
+                    }
+
+                    NavigationLink {
+                        QuarantinedGroupsView(model: quarantinedGroupsModel)
+                    } label: {
+                        HStack {
+                            Label("Quarantined Groups", systemImage: "exclamationmark.shield")
+                            Spacer()
+                            if quarantinedGroupsModel.isLoading {
+                                ProgressView().controlSize(.small)
+                            } else if quarantinedGroupsModel.loadError != nil {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundStyle(.orange)
+                                    .accessibilityLabel("Couldn't load quarantined groups")
+                            } else {
+                                Text(quarantinedGroupsModel.groups.count, format: .number)
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
                     }
                 }
 
@@ -136,7 +157,19 @@ struct DeveloperToolsSettingsView: View {
         .localizedNavigationTitle("Developer Tools")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: appState.activeAccountRef) { await model.reload(using: appState) }
-        .refreshable { await model.reload(using: appState) }
+        .task(id: appState.developerMode ? appState.activeAccountRef : nil) {
+            if appState.developerMode {
+                await quarantinedGroupsModel.reload(using: appState)
+            } else {
+                quarantinedGroupsModel.reset()
+            }
+        }
+        .refreshable {
+            await model.reload(using: appState)
+            if appState.developerMode {
+                await quarantinedGroupsModel.reload(using: appState)
+            }
+        }
         .alert("Clear all audit logs?", isPresented: $model.showDeleteAuditLogsConfirmation) {
             Button("Clear Logs", role: .destructive) {
                 Task { await model.deleteAllAuditLogs(using: appState) }

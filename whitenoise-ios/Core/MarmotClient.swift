@@ -218,6 +218,14 @@ nonisolated final class MarmotClient: Sendable {
         }.value
     }
 
+    /// Applies the relay plane's exact dial-boundary policy off the main actor.
+    /// Results preserve input order and cardinality, including rejected URLs.
+    func classifyRelayEndpoints(_ endpoints: [String]) async -> [RelayEndpointClassificationFfi] {
+        await Task.detached(priority: .utility) { [marmot, endpoints] in
+            marmot.classifyRelayEndpoints(endpoints: endpoints)
+        }.value
+    }
+
     /// Normalizes a staged recipient reference off the main actor.
     /// `Marmot.normalizeMemberRef` is a synchronous FFI call (bech32/TLV decode
     /// plus possible relay-hint normalization), so running it inline on the
@@ -648,6 +656,12 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.catchUpAccounts()
     }
 
+    /// Wakes MDK's exact durable outbound retries after the host observes that
+    /// connectivity is usable again. This does not create a new app event.
+    func notifyConnectivityRestored() async throws {
+        try await marmot.notifyConnectivityRestored()
+    }
+
     func replyToMessage(accountRef: String, groupIdHex: String, targetMessageId: String, text: String) async throws -> SendSummaryFfi {
         try await marmot.replyToMessage(accountRef: accountRef, groupIdHex: groupIdHex, targetMessageId: targetMessageId, text: text)
     }
@@ -801,6 +815,30 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.groupPushDebugInfo(accountRef: accountRef, groupIdHex: groupIdHex)
     }
 
+    func groupMaintenanceStatus(
+        accountRef: String,
+        groupIdHex: String
+    ) async throws -> GroupMaintenanceStatusFfi {
+        try await marmot.groupMaintenanceStatus(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        )
+    }
+
+    func quarantinedGroups(accountRef: String) async throws -> [AppQuarantinedGroupFfi] {
+        try await marmot.quarantinedGroups(accountRef: accountRef)
+    }
+
+    func retryHydrateQuarantinedGroup(
+        accountRef: String,
+        groupIdHex: String
+    ) async throws -> Bool {
+        try await marmot.retryHydrateQuarantinedGroup(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex
+        )
+    }
+
     func deleteMessage(accountRef: String, groupIdHex: String, targetMessageId: String) async throws -> SendSummaryFfi {
         try await marmot.deleteMessage(accountRef: accountRef, groupIdHex: groupIdHex, targetMessageId: targetMessageId)
     }
@@ -858,12 +896,44 @@ nonisolated final class MarmotClient: Sendable {
         try await marmot.refreshProfile(accountIdHex: accountIdHex, relays: relays)
     }
 
+    func userRelayLists(accountIdHex: String) async throws -> AccountRelayListsFfi {
+        try await Task.detached(priority: .utility) { [marmot, accountIdHex] in
+            try marmot.userRelayLists(accountIdHex: accountIdHex)
+        }.value
+    }
+
+    func refreshUserRelayLists(
+        accountIdHex: String,
+        relays: [String]
+    ) async throws -> AccountRelayListsFfi {
+        try await marmot.refreshUserRelayLists(
+            accountIdHex: accountIdHex,
+            relays: relays
+        )
+    }
+
+    func userProfileWebsite(accountIdHex: String) async throws -> String? {
+        try await Task.detached(priority: .utility) { [marmot, accountIdHex] in
+            try marmot.userProfileWebsite(accountIdHex: accountIdHex)
+        }.value
+    }
+
     func accountKeyPackages(accountRef: String, bootstrapRelays: [String]) async throws -> [AccountKeyPackageFfi] {
         try await marmot.accountKeyPackages(accountRef: accountRef, bootstrapRelays: bootstrapRelays)
     }
 
     func publishNewKeyPackage(accountRef: String) async throws -> UInt64 {
         try await marmot.publishNewKeyPackage(accountRef: accountRef)
+    }
+
+    func republishKeyPackage(accountRef: String) async throws -> UInt64 {
+        try await marmot.republishKeyPackage(accountRef: accountRef)
+    }
+
+    func keyPackageMaintenanceStatus(
+        accountRef: String
+    ) async throws -> KeyPackageMaintenanceStatusFfi? {
+        try await marmot.keyPackageMaintenanceStatus(accountRef: accountRef)
     }
 
     func deleteAccountKeyPackage(accountRef: String, eventIdHex: String, relays: [String]) async throws -> UInt64 {
@@ -937,6 +1007,10 @@ nonisolated final class MarmotClient: Sendable {
 
     func appPerformanceSnapshot() -> AppPerformanceSnapshotFfi {
         marmot.appPerformanceSnapshot()
+    }
+
+    func relayHealth() async -> RelayHealthFfi {
+        await marmot.relayHealth()
     }
 
     func configureTelemetryRuntime() async throws {

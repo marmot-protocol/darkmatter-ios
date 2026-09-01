@@ -880,6 +880,26 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(appState)
     }
 
+    @Test func connectivityRestoredWakesDurableRetriesBeforeCatchUp() async throws {
+        let seeded = try await readyAppStateWithCreatedIdentities()
+        let appState = seeded.appState
+        var operations: [String] = []
+        appState.notificationCoordinator.connectivityRestoredOperationForTesting = {
+            operations.append("wake")
+        }
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = {
+            operations.append("catch-up")
+        }
+
+        appState.scheduleConnectivityCatchUp(connectivityRestored: true)
+        await appState.notificationCoordinator.drainConnectivityCatchUpTaskForTesting()
+
+        #expect(operations == ["wake", "catch-up"])
+        appState.notificationCoordinator.connectivityRestoredOperationForTesting = nil
+        appState.notificationCoordinator.foregroundCatchUpOperationForTesting = nil
+        await stopReadyRuntime(appState)
+    }
+
     @Test func staleForegroundActivationDoesNotScheduleCatchUpAfterBackgroundWins() async throws {
         let seeded = try await readyAppStateWithCreatedIdentities()
         let appState = seeded.appState
@@ -9674,14 +9694,27 @@ struct MessageSemanticsTests {
         #expect(MessageSemantics.classify(record) == .chat)
     }
 
-    @Test func mediaReferenceMediaTypeValidationPreservesAcceptedTokens() {
-        #expect(MessageSemantics.canonicalMediaType(" Image/JPG; charset=utf-8 ") == "image/jpeg")
-        #expect(MessageSemantics.canonicalMediaType("application/vnd.marmot+json") == "application/vnd.marmot+json")
-        #expect(MessageSemantics.canonicalMediaType("text/x.foo_bar-1") == "text/x.foo_bar-1")
-        #expect(MessageSemantics.canonicalMediaType("image/png/extra") == nil)
-        #expect(MessageSemantics.canonicalMediaType("image/") == nil)
-        #expect(MessageSemantics.canonicalMediaType("image/p ng") == nil)
-        #expect(MessageSemantics.canonicalMediaType("image/猫") == nil)
+    @Test func mediaReferenceUsesMdkCanonicalV2MediaTypeValidation() {
+        let base = [
+            MessageSemantics.imetaTag,
+            "v encrypted-media-v2",
+            "locator blossom-v1 https://media.example/a.txt",
+            "ciphertext_sha256 \(hex("44"))",
+            "plaintext_sha256 \(hex("33"))",
+            "nonce \(String(repeating: "22", count: 12))",
+            "m text/plain",
+            "filename a.txt",
+        ]
+
+        #expect(MessageSemantics.mediaAttachments(
+            from: [MessageTagFfi(values: base)]
+        )?.first?.mediaType == "text/plain")
+
+        var noncanonical = base
+        noncanonical[6] = "m Text/Plain"
+        #expect(MessageSemantics.mediaAttachments(
+            from: [MessageTagFfi(values: noncanonical)]
+        ) == nil)
     }
 
     @Test func mediaReferenceParsesEncryptedMediaV1ImetaFields() {
@@ -9697,7 +9730,7 @@ struct MessageSemanticsTests {
                 MessageTagFfi(values: [
                     MessageSemantics.imetaTag,
                     "v encrypted-media-v1",
-                    "locator blossom-v1 https://media.example/a.png",
+                    "locator blossom-v1 https://media.example/\(hex("44")).bin",
                     "ciphertext_sha256 \(hex("44"))",
                     "plaintext_sha256 \(hex("33"))",
                     "nonce \(nonce)",
@@ -9716,7 +9749,7 @@ struct MessageSemanticsTests {
         }
 
         #expect(info.count == 1)
-        #expect(info[0].locators == [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/a.png")])
+        #expect(info[0].locators == [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(hex("44")).bin")])
         #expect(info[0].mediaType == "image/png")
         #expect(info[0].fileName == "a.png")
         #expect(info[0].plaintextSha256 == hex("33"))
@@ -9799,7 +9832,7 @@ struct MessageSemanticsTests {
         #expect(MessagePreview.body(record) == "caption")
     }
 
-    @Test func unsupportedBlurhashFieldDoesNotRejectValidMediaReference() throws {
+    @Test func unsupportedBlurhashFieldIsRejectedByMdkWithoutHidingMessage() {
         var tag = encryptedMediaTag(fileName: "a.png", plaintextByte: "33", ciphertextByte: "44")
         tag.values.append("blurhash LEHV6nWB2yk8pyo0adR*.7kCMdnj")
         let record = unsignedEventRecord(
@@ -9808,13 +9841,7 @@ struct MessageSemanticsTests {
             tags: [tag]
         )
 
-        guard case .media(let info) = MessageSemantics.classify(record) else {
-            #expect(Bool(false), "expected media")
-            return
-        }
-
-        #expect(info.count == 1)
-        #expect(info[0].fileName == "a.png")
+        #expect(MessageSemantics.classify(record) == .chat)
     }
 
     @Test func validThumbhashIsPreserved() throws {
@@ -10768,6 +10795,35 @@ struct ConversationInviteActionTests {
         #expect(!viewModel.hasPendingInvite)
     }
 
+    @Test func staleAcceptRefreshesTheTerminalGroupWithoutRetrying() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let pending = group(name: "invited", pendingConfirmation: true)
+        let viewModel = ConversationViewModel(appState: appState, group: pending)
+        let terminal = group(
+            name: "invited",
+            id: pending.groupIdHex,
+            archived: true,
+            selfMembership: .left
+        )
+        var attempts = 0
+        viewModel.acceptGroupInviteForTesting = { _, _ in
+            attempts += 1
+            throw MarmotKitError.GroupInviteNotPending
+        }
+        viewModel.refreshInviteStateForTesting = {
+            viewModel.applyGroupRecord(terminal)
+            return true
+        }
+
+        let updated = await viewModel.acceptInvite()
+
+        #expect(attempts == 1)
+        #expect(updated == terminal)
+        #expect(!viewModel.hasPendingInvite)
+        #expect(viewModel.inviteActionInFlight == nil)
+    }
+
     @Test func unrecoverableGroupDisablesComposerBeforeSend() async throws {
         let appState = AppState(client: try MarmotClient.testClient())
         let viewModel = ConversationViewModel(
@@ -10795,9 +10851,16 @@ struct MarmotKitMasterIntegrationTests {
             acceptDisposition: .acceptedPending,
             maintenanceDisposition: .postJoinRotationPendingRetryable
         )
+        let completionUnknown = SendSummaryFfi(
+            published: 0,
+            messageIds: [],
+            acceptDisposition: .completionUnknown,
+            maintenanceDisposition: .ready
+        )
 
         #expect(SendAcceptancePolicy.action(for: published) == .confirmPublished(messageId: "message-id"))
         #expect(SendAcceptancePolicy.action(for: pending) == .awaitDurableProjection)
+        #expect(SendAcceptancePolicy.action(for: completionUnknown) == .awaitDurableProjection)
     }
 
     @Test func accountWorkerErrorsExposeRetrySafetySemantics() {
@@ -10932,7 +10995,10 @@ struct MediaAttachmentPolicyTests {
         let thumbhash = try #require(attachment.thumbhash)
 
         let reference = MediaAttachmentReferenceFfi(
-            locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://example.com/blob")],
+            locators: [MediaLocatorFfi(
+                kind: "blossom-v1",
+                value: "https://example.com/\(String(repeating: "a", count: 64)).bin"
+            )],
             ciphertextSha256: String(repeating: "a", count: 64),
             plaintextSha256: String(repeating: "b", count: 64),
             nonceHex: String(repeating: "c", count: 24),
@@ -13220,7 +13286,7 @@ private func encryptedMediaTag(
     MessageTagFfi(values: [
         MessageSemantics.imetaTag,
         "v \(version.wireValue)",
-        "locator blossom-v1 https://media.example/\(fileName)",
+        "locator blossom-v1 https://media.example/\(hex(ciphertextByte)).bin",
         "ciphertext_sha256 \(hex(ciphertextByte))",
         "plaintext_sha256 \(hex(plaintextByte))",
         "nonce \(nonce)",
@@ -13240,7 +13306,10 @@ private func encryptedMediaReference(
     sourceEpoch: UInt64
 ) -> MediaAttachmentReferenceFfi {
     MediaAttachmentReferenceFfi(
-        locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(fileName)")],
+        locators: [MediaLocatorFfi(
+            kind: "blossom-v1",
+            value: "https://media.example/\(hex(ciphertextByte)).bin"
+        )],
         ciphertextSha256: hex(ciphertextByte),
         plaintextSha256: hex(plaintextByte),
         nonceHex: nonce,

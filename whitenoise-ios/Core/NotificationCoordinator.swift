@@ -178,11 +178,13 @@ final class NotificationCoordinator {
     private var nativePushRegistrationTask: Task<Void, Never>?
     private var connectivityCatchUpTask: Task<Void, Never>?
     private var connectivityCatchUpTaskID = UUID()
+    private var connectivityRestoredPending = false
     private(set) var isForegroundCatchUpRunning = false
     private var notificationSubscriptionFailureToastPresented = false
     private var nativePushRegistrationFailureToastPresented = false
 #if DEBUG
     var foregroundCatchUpOperationForTesting: (() async throws -> Void)?
+    var connectivityRestoredOperationForTesting: (() async throws -> Void)?
 #endif
 
     private static let notificationSubscriptionInitialRetryDelayNanoseconds: UInt64 = 1_000_000_000
@@ -668,7 +670,11 @@ final class NotificationCoordinator {
         }
     }
 
-    func scheduleConnectivityCatchUp(host: NotificationCoordinatorHost) {
+    func scheduleConnectivityCatchUp(
+        host: NotificationCoordinatorHost,
+        connectivityRestored: Bool = false
+    ) {
+        connectivityRestoredPending = connectivityRestoredPending || connectivityRestored
         guard connectivityCatchUpTask == nil else { return }
         let id = UUID()
         connectivityCatchUpTaskID = id
@@ -676,7 +682,32 @@ final class NotificationCoordinator {
             guard let self else { return }
             defer { self.clearCompletedConnectivityCatchUp(id: id) }
             guard let host else { return }
-            await self.catchUpAfterForegroundActivation(host: host)
+            repeat {
+                guard self.connectivityCatchUpTaskID == id else { return }
+                let shouldWakeDurableRetries = self.connectivityRestoredPending
+                self.connectivityRestoredPending = false
+                if shouldWakeDurableRetries {
+                    await self.notifyConnectivityRestored(host: host)
+                }
+                await self.catchUpAfterForegroundActivation(host: host)
+            } while self.connectivityCatchUpTaskID == id && self.connectivityRestoredPending
+        }
+    }
+
+    private func notifyConnectivityRestored(host: NotificationCoordinatorHost) async {
+        do {
+#if DEBUG
+            if let connectivityRestoredOperationForTesting {
+                try await connectivityRestoredOperationForTesting()
+            } else {
+                try await host.currentMarmotClient().notifyConnectivityRestored()
+            }
+#else
+            try await host.currentMarmotClient().notifyConnectivityRestored()
+#endif
+        } catch {
+            // Best effort. The following catch-up and MDK's durable retry
+            // scheduler remain available if the runtime changed underneath us.
         }
     }
 
@@ -684,6 +715,7 @@ final class NotificationCoordinator {
         let task = connectivityCatchUpTask
         connectivityCatchUpTask = nil
         connectivityCatchUpTaskID = UUID()
+        connectivityRestoredPending = false
         task?.cancel()
         return task
     }

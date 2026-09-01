@@ -34,6 +34,9 @@ final class DiagnosticsViewModel {
         for line in DiagnosticsView.performanceSnapshotText(client.appPerformanceSnapshot()) {
             append(line)
         }
+        for line in DiagnosticsView.relayHealthText(await client.relayHealth()) {
+            append(line)
+        }
         let sub = client.subscribeEvents()
         for await event in SubscriptionDriver.events(sub) {
             append(DiagnosticsView.diagnosticText(for: event))

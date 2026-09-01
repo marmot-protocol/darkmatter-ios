@@ -35,6 +35,39 @@ struct ProfileDisplayProjection: Equatable {
     }
 }
 
+nonisolated enum ProfileRelayDiscovery {
+    private static let maximumRouteRelays = 16
+
+    static func allowedRelays(
+        from classifications: [RelayEndpointClassificationFfi]
+    ) -> [String] {
+        var seen = Set<String>()
+        var relays: [String] = []
+        for classification in classifications where classification.policy == .allowed {
+            guard let normalized = classification.normalizedEndpoint,
+                  seen.insert(normalized).inserted
+            else { continue }
+            relays.append(normalized)
+        }
+        return relays
+    }
+
+    static func profileRelays(targetRelays: [String], bootstrapRelays: [String]) -> [String] {
+        var seen = Set<String>()
+        return (targetRelays + bootstrapRelays).compactMap { relay in
+            guard seen.insert(relay).inserted else { return nil }
+            return relay
+        }.prefix(maximumRouteRelays).map { $0 }
+    }
+
+    static func shouldRefreshTargetRelayLists(
+        cachedTargetRelays: [String],
+        hasRemoteIdentity: Bool
+    ) -> Bool {
+        cachedTargetRelays.isEmpty || !hasRemoteIdentity
+    }
+}
+
 /// Owns the app-side profile projection cache and the two queues that hydrate
 /// it (off-main Marmot load, then a best-effort relay refresh). Extracted from
 /// `AppState` so the god object stays a composition root; this is a dumb-mirror
@@ -662,21 +695,71 @@ final class ProfileStore {
               let appState
         else { return }
 
-        let relays: [String]
+        let bootstrapCandidates: [String]
         if let activeAccountRef {
-            relays = await appState.relayBootstrapRelays(for: activeAccountRef)
+            bootstrapCandidates = await appState.relayBootstrapRelays(for: activeAccountRef)
         } else {
-            relays = MarmotClient.seedRelays
+            bootstrapCandidates = MarmotClient.seedRelays
         }
+
+        guard let client = try? appState.currentMarmotClient() else { return }
+        let bootstrapClassifications = await client.classifyRelayEndpoints(bootstrapCandidates)
+        let bootstrapRelays = ProfileRelayDiscovery.allowedRelays(
+            from: bootstrapClassifications
+        )
+
+        let cachedLists = try? await client.userRelayLists(accountIdHex: id)
+        let cachedTargetCandidates = cachedLists?.nip65.relays ?? []
+        let cachedTargetClassifications = await client.classifyRelayEndpoints(cachedTargetCandidates)
+        let cachedTargetRelays = ProfileRelayDiscovery.allowedRelays(
+            from: cachedTargetClassifications
+        )
+        let initialRelays = ProfileRelayDiscovery.profileRelays(
+            targetRelays: cachedTargetRelays,
+            bootstrapRelays: bootstrapRelays
+        )
+        guard !initialRelays.isEmpty else { return }
+
+        var initialProjection: ProfileDisplayProjection?
         do {
-            let client = try appState.currentMarmotClient()
-            try await client.refreshProfile(accountIdHex: id, relays: relays)
+            try await client.refreshProfile(accountIdHex: id, relays: initialRelays)
+            guard !Task.isCancelled else { return }
+            initialProjection = await reloadProfileProjection(forAccountIdHex: id)
+        } catch is CancellationError {
+            return
+        } catch {
+            // A cached route can be stale. Continue into target relay-list
+            // discovery before giving up on the profile.
+        }
+
+        guard ProfileRelayDiscovery.shouldRefreshTargetRelayLists(
+            cachedTargetRelays: cachedTargetRelays,
+            hasRemoteIdentity: initialProjection?.hasRemoteIdentity == true
+        ),
+              !Task.isCancelled,
+              !bootstrapRelays.isEmpty,
+              let refreshedLists = try? await client.refreshUserRelayLists(
+                accountIdHex: id,
+                relays: bootstrapRelays
+              )
+        else { return }
+
+        let refreshedClassifications = await client.classifyRelayEndpoints(
+            refreshedLists.nip65.relays
+        )
+        let retryRelays = ProfileRelayDiscovery.profileRelays(
+            targetRelays: ProfileRelayDiscovery.allowedRelays(from: refreshedClassifications),
+            bootstrapRelays: bootstrapRelays
+        )
+        guard !Task.isCancelled, retryRelays != initialRelays else { return }
+
+        do {
+            try await client.refreshProfile(accountIdHex: id, relays: retryRelays)
+            guard !Task.isCancelled else { return }
+            await reloadProfileProjection(forAccountIdHex: id)
         } catch {
             return
         }
-
-        guard !Task.isCancelled else { return }
-        await reloadProfileProjection(forAccountIdHex: id)
     }
 
     #if DEBUG

@@ -2291,8 +2291,11 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * Initial history fetch for a group (or, when `group_id_hex` is None,
      * the account-wide tail). Used to populate the conversation view before
      * the subscription stream takes over.
+     *
+     * `kinds` restricts to the listed inner app-event kinds (e.g. an
+     * app-defined custom kind); `None` or an empty list returns all kinds.
      */
-    func messages(accountRef: String, groupIdHex: String?, limit: UInt32?) throws  -> [AppMessageRecordFfi]
+    func messages(accountRef: String, groupIdHex: String?, limit: UInt32?, kinds: [UInt64]?) throws  -> [AppMessageRecordFfi]
 
     /**
      * Normalize a member reference for group-management UI. Accepts hex,
@@ -2301,6 +2304,13 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func normalizeMemberRef(memberRef: String) throws  -> MemberRefFfi
 
     func notificationSettings(accountRef: String) throws  -> NotificationSettingsFfi
+
+    /**
+     * Interrupt retry backoff for durable outbound work after the host has
+     * observed usable connectivity. This is a scheduling signal only; it does
+     * not recreate application events or weaken exact-replay guarantees.
+     */
+    func notifyConnectivityRestored() async throws
 
     /**
      * Convert a hex account id (Nostr public key) into its `npub…` bech32
@@ -2420,6 +2430,13 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func refreshProfile(accountIdHex: String, relays: [String]) async throws
 
     /**
+     * Fetch an account's published NIP-65 and inbox relay lists from
+     * `relays`, updating the cache. An account with nothing published
+     * reports both kinds in `missing` rather than erroring.
+     */
+    func refreshUserRelayLists(accountIdHex: String, relays: [String]) async throws  -> AccountRelayListsFfi
+
+    /**
      * Re-register an external signer for an already-known external account.
      *
      * This is the restore path after app/process restart. It does not create a
@@ -2490,12 +2507,20 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * An own send commits and projects locally *before* it publishes, so a
      * message sent while offline (or when the relay was unreachable) lands in
      * the timeline with `source_message_id_hex == null` — committed, not yet
-     * delivered. Re-sending the same text would mint a fresh commit and event
-     * id, duplicating the bubble. This drives the existing pending commit to
-     * the relays via convergence instead, so the original timeline row flips
-     * to delivered (`source_message_id_hex == Some(..)`) on success and no new
-     * event is created. Returns the delivery summary; `published == 0` means
-     * nothing was pending or publishing is still failing.
+     * delivered. Re-sending the same text mints a fresh commit, so it is the
+     * wrong tool here: it either duplicates the bubble or — inside the same
+     * second as the original, where the NIP-01 id collides — silently reuses
+     * the same timeline row. This drives the existing pending commit to the
+     * relays via convergence instead, so the original timeline row flips to
+     * delivered (`source_message_id_hex == Some(..)`) on success and no new
+     * event is created.
+     *
+     * (A resend after a send that *failed* is still safe and still supported:
+     * the send path re-records that row and clears its `local_publish_failed`
+     * retraction. This call is for sends that are pending, not failed.)
+     *
+     * Returns the delivery summary; `published == 0` means nothing was pending
+     * or publishing is still failing.
      */
     func retryGroupConvergence(accountRef: String, groupIdHex: String) async throws  -> SendSummaryFfi
 
@@ -2526,6 +2551,14 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * / cross-account refs via the existing keystore validation.
      */
     func revealNsec(accountRef: String) throws  -> String
+
+    /**
+     * Rotate the account's KeyPackage: mint and publish a fresh one,
+     * superseding the current slot. This is the sanctioned repair for an
+     * epoch-stalled group. `publish_new_key_package` is the same
+     * operation under its legacy name.
+     */
+    func rotateKeyPackage(accountRef: String) async throws  -> UInt64
 
     func runDueMaintenance(accountRef: String) async throws  -> MaintenanceRunSummaryFfi
 
@@ -2577,6 +2610,16 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func selfDemoteAdmin(accountRef: String, groupIdHex: String) async throws  -> SendSummaryFfi
 
     func selfDemoteAdminDetailed(accountRef: String, groupIdHex: String) async throws  -> GroupMutationResultFfi
+
+    /**
+     * Send an app-defined event with an arbitrary non-reserved kind. `tags`
+     * and `content` pass through verbatim; kinds MDK owns (chat, reaction,
+     * edit, delete, agent, group system, push token) are rejected so an app
+     * cannot forge protocol events. Custom events appear in the timeline as
+     * standalone rows and can be fetched via [`Marmot::messages`] with a
+     * `kinds` filter.
+     */
+    func sendCustomEvent(accountRef: String, groupIdHex: String, kind: UInt64, tags: [[String]], content: String) async throws  -> SendSummaryFfi
 
     /**
      * Send already-uploaded encrypted media attachments as a kind-9 chat
@@ -2830,9 +2873,11 @@ public protocol MarmotProtocol: AnyObject, Sendable {
      * Messages for a specific group (when `group_id_hex` is `Some`) or
      * every message across the account (when `None`). `limit` caps the initial
      * snapshot to the latest N rows; live updates continue after the snapshot.
+     * `kinds` restricts to the listed inner app-event kinds (e.g. an
+     * app-defined custom kind); `None` or an empty list streams all kinds.
      * Async for the same tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-    func subscribeMessages(accountRef: String, groupIdHex: String?, limit: UInt32?) async throws  -> MessagesSubscription
+    func subscribeMessages(accountRef: String, groupIdHex: String?, limit: UInt32?, kinds: [UInt64]?) async throws  -> MessagesSubscription
 
     func subscribeNotifications() async throws  -> NotificationsSubscription
 
@@ -2951,6 +2996,14 @@ public protocol MarmotProtocol: AnyObject, Sendable {
     func userProfileWebsite(accountIdHex: String) throws  -> String?
 
     /**
+     * Cached NIP-65 and inbox relay lists for any account id — no network.
+     * An account with nothing cached yet returns an empty status with both
+     * kinds in `missing` rather than erroring; call
+     * `refresh_user_relay_lists` to fetch.
+     */
+    func userRelayLists(accountIdHex: String) throws  -> AccountRelayListsFfi
+
+    /**
      * Watch a live agent text stream over the brokered QUIC channel. Pass
      * `stream_id_hex = None` to follow the latest stream in the group (the
      * common case when reacting to an AgentStreamStarted event). The returned
@@ -3056,6 +3109,31 @@ public static func newWithCursorPersistence(rootPath: String, relayUrls: [String
         FfiConverterString.lower(rootPath),
         FfiConverterSequenceString.lower(relayUrls),
         FfiConverterTypeCursorPersistenceFfi_lower(cursorPersistence),$0
+    )
+})
+}
+
+    /**
+     * Open the Marmot app with host-supplied account-secret storage instead
+     * of the platform keychain. Identical to [`Marmot::new`] except that
+     * every read, write, and removal of an account signing key goes through
+     * `secret_store`.
+     *
+     * For hosts that already own an encrypted store: a desktop client with a
+     * password-sealed vault, an iOS host that wants its own Keychain
+     * access-control flags, an Android host layering policy over the
+     * Keystore. The key crosses the boundary as secret-key hex, so the store
+     * is responsible for protecting it at rest.
+     *
+     * `secret_store` is called from runtime worker threads and may be called
+     * concurrently; implementations must be thread-safe.
+     */
+public static func newWithSecretStore(rootPath: String, relayUrls: [String], secretStore: SecretStore)throws  -> Marmot  {
+    return try  FfiConverterTypeMarmot_lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_constructor_marmot_new_with_secret_store(
+        FfiConverterString.lower(rootPath),
+        FfiConverterSequenceString.lower(relayUrls),
+        FfiConverterTypeSecretStore_lower(secretStore),$0
     )
 })
 }
@@ -4502,13 +4580,17 @@ open func messageDrafts(accountRef: String)throws  -> [MessageDraftSummaryFfi]  
      * Initial history fetch for a group (or, when `group_id_hex` is None,
      * the account-wide tail). Used to populate the conversation view before
      * the subscription stream takes over.
+     *
+     * `kinds` restricts to the listed inner app-event kinds (e.g. an
+     * app-defined custom kind); `None` or an empty list returns all kinds.
      */
-open func messages(accountRef: String, groupIdHex: String?, limit: UInt32?)throws  -> [AppMessageRecordFfi]  {
+open func messages(accountRef: String, groupIdHex: String?, limit: UInt32?, kinds: [UInt64]?)throws  -> [AppMessageRecordFfi]  {
     return try  FfiConverterSequenceTypeAppMessageRecordFfi.lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
     uniffi_marmot_uniffi_fn_method_marmot_messages(self.uniffiClonePointer(),
         FfiConverterString.lower(accountRef),
         FfiConverterOptionString.lower(groupIdHex),
-        FfiConverterOptionUInt32.lower(limit),$0
+        FfiConverterOptionUInt32.lower(limit),
+        FfiConverterOptionSequenceUInt64.lower(kinds),$0
     )
 })
 }
@@ -4531,6 +4613,28 @@ open func notificationSettings(accountRef: String)throws  -> NotificationSetting
         FfiConverterString.lower(accountRef),$0
     )
 })
+}
+
+    /**
+     * Interrupt retry backoff for durable outbound work after the host has
+     * observed usable connectivity. This is a scheduling signal only; it does
+     * not recreate application events or weaken exact-replay guarantees.
+     */
+open func notifyConnectivityRestored()async throws   {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_notify_connectivity_restored(
+                    self.uniffiClonePointer()
+
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_void,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_void,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
 }
 
     /**
@@ -4916,6 +5020,28 @@ open func refreshProfile(accountIdHex: String, relays: [String])async throws   {
 }
 
     /**
+     * Fetch an account's published NIP-65 and inbox relay lists from
+     * `relays`, updating the cache. An account with nothing published
+     * reports both kinds in `missing` rather than erroring.
+     */
+open func refreshUserRelayLists(accountIdHex: String, relays: [String])async throws  -> AccountRelayListsFfi  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_refresh_user_relay_lists(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountIdHex),FfiConverterSequenceString.lower(relays)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeAccountRelayListsFfi_lift,
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
+}
+
+    /**
      * Re-register an external signer for an already-known external account.
      *
      * This is the restore path after app/process restart. It does not create a
@@ -5147,12 +5273,20 @@ open func retiredRelayHosts() -> [String]  {
      * An own send commits and projects locally *before* it publishes, so a
      * message sent while offline (or when the relay was unreachable) lands in
      * the timeline with `source_message_id_hex == null` — committed, not yet
-     * delivered. Re-sending the same text would mint a fresh commit and event
-     * id, duplicating the bubble. This drives the existing pending commit to
-     * the relays via convergence instead, so the original timeline row flips
-     * to delivered (`source_message_id_hex == Some(..)`) on success and no new
-     * event is created. Returns the delivery summary; `published == 0` means
-     * nothing was pending or publishing is still failing.
+     * delivered. Re-sending the same text mints a fresh commit, so it is the
+     * wrong tool here: it either duplicates the bubble or — inside the same
+     * second as the original, where the NIP-01 id collides — silently reuses
+     * the same timeline row. This drives the existing pending commit to the
+     * relays via convergence instead, so the original timeline row flips to
+     * delivered (`source_message_id_hex == Some(..)`) on success and no new
+     * event is created.
+     *
+     * (A resend after a send that *failed* is still safe and still supported:
+     * the send path re-records that row and clears its `local_publish_failed`
+     * retraction. This call is for sends that are pending, not failed.)
+     *
+     * Returns the delivery summary; `published == 0` means nothing was pending
+     * or publishing is still failing.
      */
 open func retryGroupConvergence(accountRef: String, groupIdHex: String)async throws  -> SendSummaryFfi  {
     return
@@ -5218,6 +5352,29 @@ open func revealNsec(accountRef: String)throws  -> String  {
         FfiConverterString.lower(accountRef),$0
     )
 })
+}
+
+    /**
+     * Rotate the account's KeyPackage: mint and publish a fresh one,
+     * superseding the current slot. This is the sanctioned repair for an
+     * epoch-stalled group. `publish_new_key_package` is the same
+     * operation under its legacy name.
+     */
+open func rotateKeyPackage(accountRef: String)async throws  -> UInt64  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_rotate_key_package(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_u64,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_u64,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_u64,
+            liftFunc: FfiConverterUInt64.lift,
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
 }
 
 open func runDueMaintenance(accountRef: String)async throws  -> MaintenanceRunSummaryFfi  {
@@ -5367,6 +5524,31 @@ open func selfDemoteAdminDetailed(accountRef: String, groupIdHex: String)async t
             completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeGroupMutationResultFfi_lift,
+            errorHandler: FfiConverterTypeMarmotKitError_lift
+        )
+}
+
+    /**
+     * Send an app-defined event with an arbitrary non-reserved kind. `tags`
+     * and `content` pass through verbatim; kinds MDK owns (chat, reaction,
+     * edit, delete, agent, group system, push token) are rejected so an app
+     * cannot forge protocol events. Custom events appear in the timeline as
+     * standalone rows and can be fetched via [`Marmot::messages`] with a
+     * `kinds` filter.
+     */
+open func sendCustomEvent(accountRef: String, groupIdHex: String, kind: UInt64, tags: [[String]], content: String)async throws  -> SendSummaryFfi  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_marmot_uniffi_fn_method_marmot_send_custom_event(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(accountRef),FfiConverterString.lower(groupIdHex),FfiConverterUInt64.lower(kind),FfiConverterSequenceSequenceString.lower(tags),FfiConverterString.lower(content)
+                )
+            },
+            pollFunc: ffi_marmot_uniffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_marmot_uniffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_marmot_uniffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSendSummaryFfi_lift,
             errorHandler: FfiConverterTypeMarmotKitError_lift
         )
 }
@@ -6008,15 +6190,17 @@ open func subscribeGroupState(accountRef: String, groupIdHex: String)async throw
      * Messages for a specific group (when `group_id_hex` is `Some`) or
      * every message across the account (when `None`). `limit` caps the initial
      * snapshot to the latest N rows; live updates continue after the snapshot.
+     * `kinds` restricts to the listed inner app-event kinds (e.g. an
+     * app-defined custom kind); `None` or an empty list streams all kinds.
      * Async for the same tokio-runtime reason as [`Marmot::subscribe_chats`].
      */
-open func subscribeMessages(accountRef: String, groupIdHex: String?, limit: UInt32?)async throws  -> MessagesSubscription  {
+open func subscribeMessages(accountRef: String, groupIdHex: String?, limit: UInt32?, kinds: [UInt64]?)async throws  -> MessagesSubscription  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_marmot_uniffi_fn_method_marmot_subscribe_messages(
                     self.uniffiClonePointer(),
-                    FfiConverterString.lower(accountRef),FfiConverterOptionString.lower(groupIdHex),FfiConverterOptionUInt32.lower(limit)
+                    FfiConverterString.lower(accountRef),FfiConverterOptionString.lower(groupIdHex),FfiConverterOptionUInt32.lower(limit),FfiConverterOptionSequenceUInt64.lower(kinds)
                 )
             },
             pollFunc: ffi_marmot_uniffi_rust_future_poll_pointer,
@@ -6357,6 +6541,20 @@ open func userProfile(accountIdHex: String)throws  -> UserProfileMetadataFfi?  {
 open func userProfileWebsite(accountIdHex: String)throws  -> String?  {
     return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
     uniffi_marmot_uniffi_fn_method_marmot_user_profile_website(self.uniffiClonePointer(),
+        FfiConverterString.lower(accountIdHex),$0
+    )
+})
+}
+
+    /**
+     * Cached NIP-65 and inbox relay lists for any account id — no network.
+     * An account with nothing cached yet returns an empty status with both
+     * kinds in `missing` rather than erroring; call
+     * `refresh_user_relay_lists` to fetch.
+     */
+open func userRelayLists(accountIdHex: String)throws  -> AccountRelayListsFfi  {
+    return try  FfiConverterTypeAccountRelayListsFfi_lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_marmot_user_relay_lists(self.uniffiClonePointer(),
         FfiConverterString.lower(accountIdHex),$0
     )
 })
@@ -6718,6 +6916,391 @@ public func FfiConverterTypeNotificationsSubscription_lift(_ pointer: UnsafeMuta
 #endif
 public func FfiConverterTypeNotificationsSubscription_lower(_ value: NotificationsSubscription) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNotificationsSubscription.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Foreign-implemented storage for account signing keys.
+ *
+ * Implementations must be thread-safe: the runtime calls these methods
+ * from worker threads and may call them concurrently.
+ *
+ * This is a storage boundary, not a security boundary. The plaintext
+ * secret-key hex crosses it in both directions; whatever protection the
+ * key gets (encryption, an OS keystore, a password-derived seal) is the
+ * implementation's responsibility.
+ */
+public protocol SecretStore: AnyObject, Sendable {
+
+    /**
+     * Whether a credential is stored under `label`.
+     */
+    func hasSecretForLabel(label: String) throws  -> Bool
+
+    /**
+     * Whether a credential is stored under `account_id_hex`. Stores that
+     * key one credential per label report `false`.
+     */
+    func hasSecretForAccountId(accountIdHex: String) throws  -> Bool
+
+    /**
+     * Persist `secret_key_hex` for this account, replacing any existing
+     * credential.
+     */
+    func writeSecret(label: String, accountIdHex: String, secretKeyHex: String) throws
+
+    /**
+     * Return the stored secret-key hex, or [`MarmotKitError::SecretNotFound`]
+     * when this account has no credential.
+     */
+    func loadSecret(label: String, accountIdHex: String) throws  -> String
+
+    /**
+     * Remove this account's credential. Removing a missing credential
+     * succeeds.
+     */
+    func removeSecret(label: String, accountIdHex: String) throws
+
+}
+/**
+ * Foreign-implemented storage for account signing keys.
+ *
+ * Implementations must be thread-safe: the runtime calls these methods
+ * from worker threads and may call them concurrently.
+ *
+ * This is a storage boundary, not a security boundary. The plaintext
+ * secret-key hex crosses it in both directions; whatever protection the
+ * key gets (encryption, an OS keystore, a password-derived seal) is the
+ * implementation's responsibility.
+ */
+open class SecretStoreImpl: SecretStore, @unchecked Sendable {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_marmot_uniffi_fn_clone_secretstore(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_marmot_uniffi_fn_free_secretstore(pointer, $0) }
+    }
+
+
+
+
+    /**
+     * Whether a credential is stored under `label`.
+     */
+open func hasSecretForLabel(label: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_secretstore_has_secret_for_label(self.uniffiClonePointer(),
+        FfiConverterString.lower(label),$0
+    )
+})
+}
+
+    /**
+     * Whether a credential is stored under `account_id_hex`. Stores that
+     * key one credential per label report `false`.
+     */
+open func hasSecretForAccountId(accountIdHex: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_secretstore_has_secret_for_account_id(self.uniffiClonePointer(),
+        FfiConverterString.lower(accountIdHex),$0
+    )
+})
+}
+
+    /**
+     * Persist `secret_key_hex` for this account, replacing any existing
+     * credential.
+     */
+open func writeSecret(label: String, accountIdHex: String, secretKeyHex: String)throws   {try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_secretstore_write_secret(self.uniffiClonePointer(),
+        FfiConverterString.lower(label),
+        FfiConverterString.lower(accountIdHex),
+        FfiConverterString.lower(secretKeyHex),$0
+    )
+}
+}
+
+    /**
+     * Return the stored secret-key hex, or [`MarmotKitError::SecretNotFound`]
+     * when this account has no credential.
+     */
+open func loadSecret(label: String, accountIdHex: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_secretstore_load_secret(self.uniffiClonePointer(),
+        FfiConverterString.lower(label),
+        FfiConverterString.lower(accountIdHex),$0
+    )
+})
+}
+
+    /**
+     * Remove this account's credential. Removing a missing credential
+     * succeeds.
+     */
+open func removeSecret(label: String, accountIdHex: String)throws   {try rustCallWithError(FfiConverterTypeMarmotKitError_lift) {
+    uniffi_marmot_uniffi_fn_method_secretstore_remove_secret(self.uniffiClonePointer(),
+        FfiConverterString.lower(label),
+        FfiConverterString.lower(accountIdHex),$0
+    )
+}
+}
+
+
+}
+
+
+// Put the implementation in a struct so we don't pollute the top-level namespace
+fileprivate struct UniffiCallbackInterfaceSecretStore {
+
+    // Create the VTable using a series of closures.
+    // Swift automatically converts these into C callback functions.
+    //
+    // This creates 1-element array, since this seems to be the only way to construct a const
+    // pointer that we can pass to the Rust code.
+    static let vtable: [UniffiVTableCallbackInterfaceSecretStore] = [UniffiVTableCallbackInterfaceSecretStore(
+        hasSecretForLabel: { (
+            uniffiHandle: UInt64,
+            label: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeSecretStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.hasSecretForLabel(
+                     label: try FfiConverterString.lift(label)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError_lower
+            )
+        },
+        hasSecretForAccountId: { (
+            uniffiHandle: UInt64,
+            accountIdHex: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<Int8>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> Bool in
+                guard let uniffiObj = try? FfiConverterTypeSecretStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.hasSecretForAccountId(
+                     accountIdHex: try FfiConverterString.lift(accountIdHex)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterBool.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError_lower
+            )
+        },
+        writeSecret: { (
+            uniffiHandle: UInt64,
+            label: RustBuffer,
+            accountIdHex: RustBuffer,
+            secretKeyHex: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeSecretStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.writeSecret(
+                     label: try FfiConverterString.lift(label),
+                     accountIdHex: try FfiConverterString.lift(accountIdHex),
+                     secretKeyHex: try FfiConverterString.lift(secretKeyHex)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError_lower
+            )
+        },
+        loadSecret: { (
+            uniffiHandle: UInt64,
+            label: RustBuffer,
+            accountIdHex: RustBuffer,
+            uniffiOutReturn: UnsafeMutablePointer<RustBuffer>,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> String in
+                guard let uniffiObj = try? FfiConverterTypeSecretStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.loadSecret(
+                     label: try FfiConverterString.lift(label),
+                     accountIdHex: try FfiConverterString.lift(accountIdHex)
+                )
+            }
+
+
+            let writeReturn = { uniffiOutReturn.pointee = FfiConverterString.lower($0) }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError_lower
+            )
+        },
+        removeSecret: { (
+            uniffiHandle: UInt64,
+            label: RustBuffer,
+            accountIdHex: RustBuffer,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterTypeSecretStore.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.removeSecret(
+                     label: try FfiConverterString.lift(label),
+                     accountIdHex: try FfiConverterString.lift(accountIdHex)
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeMarmotKitError_lower
+            )
+        },
+        uniffiFree: { (uniffiHandle: UInt64) -> () in
+            let result = try? FfiConverterTypeSecretStore.handleMap.remove(handle: uniffiHandle)
+            if result == nil {
+                print("Uniffi callback interface SecretStore: handle missing in uniffiFree")
+            }
+        }
+    )]
+}
+
+private func uniffiCallbackInitSecretStore() {
+    uniffi_marmot_uniffi_fn_init_callback_vtable_secretstore(UniffiCallbackInterfaceSecretStore.vtable)
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretStore: FfiConverter {
+    fileprivate static let handleMap = UniffiHandleMap<SecretStore>()
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SecretStore
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SecretStore {
+        return SecretStoreImpl(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SecretStore) -> UnsafeMutableRawPointer {
+        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
+            fatalError("Cast to UnsafeMutableRawPointer failed")
+        }
+        return ptr
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretStore {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SecretStore, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretStore_lift(_ pointer: UnsafeMutableRawPointer) throws -> SecretStore {
+    return try FfiConverterTypeSecretStore.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretStore_lower(_ value: SecretStore) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSecretStore.lower(value)
 }
 
 
@@ -9688,13 +10271,11 @@ public func FfiConverterTypeAuditLogFileFfi_lower(_ value: AuditLogFileFfi) -> R
 
 public struct AuditLogSettingsFfi {
     public var enabled: Bool
-    public var dataMode: AuditDataModeFfi
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(enabled: Bool, dataMode: AuditDataModeFfi) {
+    public init(enabled: Bool) {
         self.enabled = enabled
-        self.dataMode = dataMode
     }
 }
 
@@ -9708,15 +10289,11 @@ extension AuditLogSettingsFfi: Equatable, Hashable {
         if lhs.enabled != rhs.enabled {
             return false
         }
-        if lhs.dataMode != rhs.dataMode {
-            return false
-        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(enabled)
-        hasher.combine(dataMode)
     }
 }
 
@@ -9729,14 +10306,12 @@ public struct FfiConverterTypeAuditLogSettingsFfi: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuditLogSettingsFfi {
         return
             try AuditLogSettingsFfi(
-                enabled: FfiConverterBool.read(from: &buf),
-                dataMode: FfiConverterTypeAuditDataModeFfi.read(from: &buf)
+                enabled: FfiConverterBool.read(from: &buf)
         )
     }
 
     public static func write(_ value: AuditLogSettingsFfi, into buf: inout [UInt8]) {
         FfiConverterBool.write(value.enabled, into: &buf)
-        FfiConverterTypeAuditDataModeFfi.write(value.dataMode, into: &buf)
     }
 }
 
@@ -19838,85 +20413,6 @@ extension AppProtocolProfileFfi: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
-/**
- * Forensic audit data mode exposed to host apps.
- */
-
-public enum AuditDataModeFfi {
-
-    /**
-     * Default safety posture: obfuscated/hashed identifiers, no plaintext.
-     */
-    case obfuscatedSensitiveData
-    /**
-     * Explicit opt-in: decrypted content and full identifiers where useful.
-     */
-    case fullData
-}
-
-
-#if compiler(>=6)
-extension AuditDataModeFfi: Sendable {}
-#endif
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeAuditDataModeFfi: FfiConverterRustBuffer {
-    typealias SwiftType = AuditDataModeFfi
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuditDataModeFfi {
-        let variant: Int32 = try readInt(&buf)
-        switch variant {
-
-        case 1: return .obfuscatedSensitiveData
-
-        case 2: return .fullData
-
-        default: throw UniffiInternalError.unexpectedEnumCase
-        }
-    }
-
-    public static func write(_ value: AuditDataModeFfi, into buf: inout [UInt8]) {
-        switch value {
-
-
-        case .obfuscatedSensitiveData:
-            writeInt(&buf, Int32(1))
-
-
-        case .fullData:
-            writeInt(&buf, Int32(2))
-
-        }
-    }
-}
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAuditDataModeFfi_lift(_ buf: RustBuffer) throws -> AuditDataModeFfi {
-    return try FfiConverterTypeAuditDataModeFfi.lift(buf)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeAuditDataModeFfi_lower(_ value: AuditDataModeFfi) -> RustBuffer {
-    return FfiConverterTypeAuditDataModeFfi.lower(value)
-}
-
-
-extension AuditDataModeFfi: Equatable, Hashable {}
-
-
-
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum ChatConversationKindFfi {
 
@@ -22550,6 +23046,11 @@ public enum MarmotKitError: Swift.Error {
     case UnknownGroup(groupIdHex: String
     )
     /**
+     * The named group is terminal or no longer has a pending invitation.
+     * Stable host-facing rejection for stale notification actions (mdk#1606).
+     */
+    case GroupInviteNotPending
+    /**
      * Canonical creation succeeded, but its derived chat row was not durable.
      * Refresh account state; retrying creation would produce a duplicate.
      */
@@ -22809,124 +23310,125 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 3: return .UnknownGroup(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 4: return .CreatedGroupProjectionUnavailable(
+        case 4: return .GroupInviteNotPending
+        case 5: return .CreatedGroupProjectionUnavailable(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 5: return .InvalidGroupMembershipPage(
+        case 6: return .InvalidGroupMembershipPage(
             maxGroups: try FfiConverterUInt64.read(from: &buf)
             )
-        case 6: return .InvalidCachedIdentityPage(
+        case 7: return .InvalidCachedIdentityPage(
             maxAccounts: try FfiConverterUInt64.read(from: &buf)
             )
-        case 7: return .GroupHydrationPending(
+        case 8: return .GroupHydrationPending(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 8: return .DirectConversationIndexNotReady
-        case 9: return .InvalidChatPin(
+        case 9: return .DirectConversationIndexNotReady
+        case 10: return .InvalidChatPin(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 10: return .InvalidMessageDraft(
+        case 11: return .InvalidMessageDraft(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 11: return .InvalidMediaReference(
+        case 12: return .InvalidMediaReference(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 12: return .InvalidHex(
+        case 13: return .InvalidHex(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 13: return .InvalidIdentity(
+        case 14: return .InvalidIdentity(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 14: return .InvalidKeyPackageEvent(
+        case 15: return .InvalidKeyPackageEvent(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 15: return .MissingKeyPackage(
+        case 16: return .MissingKeyPackage(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 16: return .Publish(
+        case 17: return .Publish(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .FollowListUnavailable
-        case 18: return .TransportClosed
-        case 19: return .RuntimeBusy
-        case 20: return .AccountSessionBusy
-        case 21: return .AccountSetupRecoveryRequired
-        case 22: return .AccountSetupRetryRequired
-        case 23: return .AccountSetupResetNotApplicable
-        case 24: return .AccountSetupKeyPackageRecoveryAvailable
-        case 25: return .RuntimeStopping
-        case 26: return .AccountCatchUp(
+        case 18: return .FollowListUnavailable
+        case 19: return .TransportClosed
+        case 20: return .RuntimeBusy
+        case 21: return .AccountSessionBusy
+        case 22: return .AccountSetupRecoveryRequired
+        case 23: return .AccountSetupRetryRequired
+        case 24: return .AccountSetupResetNotApplicable
+        case 25: return .AccountSetupKeyPackageRecoveryAvailable
+        case 26: return .RuntimeStopping
+        case 27: return .AccountCatchUp(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 27: return .NotGroupAdmin(
+        case 28: return .NotGroupAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .AdminCannotSelfRemove(
+        case 29: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .LeaveAlreadyRequested(
+        case 30: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .WouldRemoveLastAdmin(
+        case 31: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 31: return .DisbandingUnsupportedMembers(
+        case 32: return .DisbandingUnsupportedMembers(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdsHex: try FfiConverterSequenceString.read(from: &buf)
             )
-        case 32: return .DisbandingNotEnabled(
+        case 33: return .DisbandingNotEnabled(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 33: return .GroupDisbanding(
+        case 34: return .GroupDisbanding(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 34: return .MemberNotInGroup(
+        case 35: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 35: return .AlreadyAdmin(
+        case 36: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 36: return .NotAdmin(
+        case 37: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 37: return .StorageBusy(
+        case 38: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 38: return .StorageClosed(
+        case 39: return .StorageClosed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 39: return .SecretNotFound(
+        case 40: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 40: return .KeystoreUnavailable(
+        case 41: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 41: return .EmptyPassphrase
-        case 42: return .EncryptionFailed(
+        case 42: return .EmptyPassphrase
+        case 43: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 43: return .Io(
+        case 44: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 44: return .ExternalSignerUnavailable(
+        case 45: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 45: return .ExternalSignerMismatch
-        case 46: return .ExternalSignerRejected
-        case 47: return .GroupSendQueueFull(
+        case 46: return .ExternalSignerMismatch
+        case 47: return .ExternalSignerRejected
+        case 48: return .GroupSendQueueFull(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 48: return .GroupUnrecoverableRepairRequired(
+        case 49: return .GroupUnrecoverableRepairRequired(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 49: return .Runtime(
+        case 50: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 50: return .AccountWorkerBusy
-        case 51: return .AccountWorkerResponseTimedOut
+        case 51: return .AccountWorkerBusy
+        case 52: return .AccountWorkerResponseTimedOut
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -22954,233 +23456,237 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .CreatedGroupProjectionUnavailable(groupIdHex):
+        case .GroupInviteNotPending:
             writeInt(&buf, Int32(4))
+
+
+        case let .CreatedGroupProjectionUnavailable(groupIdHex):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case let .InvalidGroupMembershipPage(maxGroups):
-            writeInt(&buf, Int32(5))
+            writeInt(&buf, Int32(6))
             FfiConverterUInt64.write(maxGroups, into: &buf)
 
 
         case let .InvalidCachedIdentityPage(maxAccounts):
-            writeInt(&buf, Int32(6))
+            writeInt(&buf, Int32(7))
             FfiConverterUInt64.write(maxAccounts, into: &buf)
 
 
         case let .GroupHydrationPending(groupIdHex):
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
         case .DirectConversationIndexNotReady:
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
 
 
         case let .InvalidChatPin(details):
-            writeInt(&buf, Int32(9))
-            FfiConverterString.write(details, into: &buf)
-
-
-        case let .InvalidMessageDraft(details):
             writeInt(&buf, Int32(10))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidMediaReference(details):
+        case let .InvalidMessageDraft(details):
             writeInt(&buf, Int32(11))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidHex(details):
+        case let .InvalidMediaReference(details):
             writeInt(&buf, Int32(12))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidIdentity(details):
+        case let .InvalidHex(details):
             writeInt(&buf, Int32(13))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .InvalidKeyPackageEvent(details):
+        case let .InvalidIdentity(details):
             writeInt(&buf, Int32(14))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .MissingKeyPackage(account):
+        case let .InvalidKeyPackageEvent(details):
             writeInt(&buf, Int32(15))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .MissingKeyPackage(account):
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(account, into: &buf)
 
 
         case let .Publish(details):
-            writeInt(&buf, Int32(16))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(details, into: &buf)
 
 
         case .FollowListUnavailable:
-            writeInt(&buf, Int32(17))
-
-
-        case .TransportClosed:
             writeInt(&buf, Int32(18))
 
 
-        case .RuntimeBusy:
+        case .TransportClosed:
             writeInt(&buf, Int32(19))
 
 
-        case .AccountSessionBusy:
+        case .RuntimeBusy:
             writeInt(&buf, Int32(20))
 
 
-        case .AccountSetupRecoveryRequired:
+        case .AccountSessionBusy:
             writeInt(&buf, Int32(21))
 
 
-        case .AccountSetupRetryRequired:
+        case .AccountSetupRecoveryRequired:
             writeInt(&buf, Int32(22))
 
 
-        case .AccountSetupResetNotApplicable:
+        case .AccountSetupRetryRequired:
             writeInt(&buf, Int32(23))
 
 
-        case .AccountSetupKeyPackageRecoveryAvailable:
+        case .AccountSetupResetNotApplicable:
             writeInt(&buf, Int32(24))
 
 
-        case .RuntimeStopping:
+        case .AccountSetupKeyPackageRecoveryAvailable:
             writeInt(&buf, Int32(25))
 
 
-        case let .AccountCatchUp(details):
+        case .RuntimeStopping:
             writeInt(&buf, Int32(26))
+
+
+        case let .AccountCatchUp(details):
+            writeInt(&buf, Int32(27))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .NotGroupAdmin(groupIdHex):
-            writeInt(&buf, Int32(27))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(28))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .LeaveAlreadyRequested(groupIdHex):
+        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(29))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .WouldRemoveLastAdmin(groupIdHex):
+        case let .LeaveAlreadyRequested(groupIdHex):
             writeInt(&buf, Int32(30))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+        case let .WouldRemoveLastAdmin(groupIdHex):
             writeInt(&buf, Int32(31))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+            writeInt(&buf, Int32(32))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterSequenceString.write(memberIdsHex, into: &buf)
 
 
         case let .DisbandingNotEnabled(groupIdHex):
-            writeInt(&buf, Int32(32))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(33))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(34))
             FfiConverterString.write(groupIdHex, into: &buf)
-            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .AlreadyAdmin(groupIdHex,memberIdHex):
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(35))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .NotAdmin(groupIdHex,memberIdHex):
+        case let .AlreadyAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(36))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageBusy(details):
+        case let .NotAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(37))
-            FfiConverterString.write(details, into: &buf)
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageClosed(details):
+        case let .StorageBusy(details):
             writeInt(&buf, Int32(38))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .SecretNotFound(details):
+        case let .StorageClosed(details):
             writeInt(&buf, Int32(39))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .KeystoreUnavailable(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(40))
             FfiConverterString.write(details, into: &buf)
 
 
-        case .EmptyPassphrase:
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(41))
-
-
-        case let .EncryptionFailed(details):
-            writeInt(&buf, Int32(42))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(42))
+
+
+        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(43))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .Io(details):
             writeInt(&buf, Int32(44))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(45))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(45))
-
-
-        case .ExternalSignerRejected:
             writeInt(&buf, Int32(46))
 
 
-        case let .GroupSendQueueFull(groupIdHex):
+        case .ExternalSignerRejected:
             writeInt(&buf, Int32(47))
-            FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .GroupUnrecoverableRepairRequired(groupIdHex):
+        case let .GroupSendQueueFull(groupIdHex):
             writeInt(&buf, Int32(48))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .Runtime(details):
+        case let .GroupUnrecoverableRepairRequired(groupIdHex):
             writeInt(&buf, Int32(49))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(50))
             FfiConverterString.write(details, into: &buf)
 
 
         case .AccountWorkerBusy:
-            writeInt(&buf, Int32(50))
+            writeInt(&buf, Int32(51))
 
 
         case .AccountWorkerResponseTimedOut:
-            writeInt(&buf, Int32(51))
+            writeInt(&buf, Int32(52))
 
         }
     }
@@ -24615,16 +25121,19 @@ extension SelfMembershipFfi: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
- * Whether an accepted send published or is retained pending convergence.
+ * Whether an accepted send published, is retained pending convergence, or
+ * has a frozen transport event whose acknowledgement is still unknown.
  *
- * `AcceptedPending` is not an error: the message is durable and publishes
- * later. Hosts should show it as still sending rather than as failed.
+ * Neither retained state is an error. Hosts should show it as still sending
+ * or unresolved rather than failed, and must not create a new semantic send
+ * for `CompletionUnknown`.
  */
 
 public enum SendAcceptDispositionFfi {
 
     case published
     case acceptedPending
+    case completionUnknown
 }
 
 
@@ -24646,6 +25155,8 @@ public struct FfiConverterTypeSendAcceptDispositionFfi: FfiConverterRustBuffer {
 
         case 2: return .acceptedPending
 
+        case 3: return .completionUnknown
+
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
@@ -24660,6 +25171,10 @@ public struct FfiConverterTypeSendAcceptDispositionFfi: FfiConverterRustBuffer {
 
         case .acceptedPending:
             writeInt(&buf, Int32(2))
+
+
+        case .completionUnknown:
+            writeInt(&buf, Int32(3))
 
         }
     }
@@ -25012,6 +25527,7 @@ public enum TimelineUpdateTriggerFfi {
     case agentActivity
     case agentOperation
     case groupSystem
+    case customEvent
     case deliveryOrSendStateChanged
     case receiptChanged
     case snapshotRefresh
@@ -25054,11 +25570,13 @@ public struct FfiConverterTypeTimelineUpdateTriggerFfi: FfiConverterRustBuffer {
 
         case 11: return .groupSystem
 
-        case 12: return .deliveryOrSendStateChanged
+        case 12: return .customEvent
 
-        case 13: return .receiptChanged
+        case 13: return .deliveryOrSendStateChanged
 
-        case 14: return .snapshotRefresh
+        case 14: return .receiptChanged
+
+        case 15: return .snapshotRefresh
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -25112,16 +25630,20 @@ public struct FfiConverterTypeTimelineUpdateTriggerFfi: FfiConverterRustBuffer {
             writeInt(&buf, Int32(11))
 
 
-        case .deliveryOrSendStateChanged:
+        case .customEvent:
             writeInt(&buf, Int32(12))
 
 
-        case .receiptChanged:
+        case .deliveryOrSendStateChanged:
             writeInt(&buf, Int32(13))
 
 
-        case .snapshotRefresh:
+        case .receiptChanged:
             writeInt(&buf, Int32(14))
+
+
+        case .snapshotRefresh:
+            writeInt(&buf, Int32(15))
 
         }
     }
@@ -25921,6 +26443,30 @@ fileprivate struct FfiConverterOptionTypeTimelineSubscriptionUpdateFfi: FfiConve
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionSequenceUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt64]?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterSequenceUInt64.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterSequenceUInt64.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceUInt16: FfiConverterRustBuffer {
     typealias SwiftType = [UInt16]
 
@@ -25938,6 +26484,31 @@ fileprivate struct FfiConverterSequenceUInt16: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterUInt16.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceUInt64: FfiConverterRustBuffer {
+    typealias SwiftType = [UInt64]
+
+    public static func write(_ value: [UInt64], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterUInt64.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [UInt64] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [UInt64]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterUInt64.read(from: &buf))
         }
         return seq
     }
@@ -27146,6 +27717,31 @@ fileprivate struct FfiConverterSequenceTypeTimelineMessageChangeFfi: FfiConverte
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [[String]]
+
+    public static func write(_ value: [[String]], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterSequenceString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [[String]] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [[String]]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterSequenceString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceSequenceTypeMarkdownTableCellFfi: FfiConverterRustBuffer {
     typealias SwiftType = [[MarkdownTableCellFfi]]
 
@@ -27526,13 +28122,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_message_drafts() != 19334) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_messages() != 45709) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_messages() != 16666) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_normalize_member_ref() != 2364) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_notification_settings() != 40364) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_notify_connectivity_restored() != 12384) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_npub() != 20744) {
@@ -27595,6 +28194,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_refresh_profile() != 33641) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_refresh_user_relay_lists() != 64760) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_register_external_signer() != 831) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27631,13 +28233,16 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_retired_relay_hosts() != 13548) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_retry_group_convergence() != 64264) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_retry_group_convergence() != 890) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_retry_hydrate_quarantined_group() != 14413) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_reveal_nsec() != 58041) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_rotate_key_package() != 47771) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_run_due_maintenance() != 9284) {
@@ -27659,6 +28264,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_self_demote_admin_detailed() != 31187) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_send_custom_event() != 15542) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_send_media_attachments() != 3385) {
@@ -27751,7 +28359,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_group_state() != 22651) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_messages() != 27462) {
+    if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_messages() != 44127) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_marmot_subscribe_notifications() != 41715) {
@@ -27805,6 +28413,9 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_method_marmot_user_profile_website() != 23102) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_method_marmot_user_relay_lists() != 26650) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_marmot_uniffi_checksum_method_marmot_watch_agent_text_stream() != 24253) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -27815,6 +28426,21 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_notificationssubscription_next() != 46153) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_secretstore_has_secret_for_label() != 23335) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_secretstore_has_secret_for_account_id() != 7982) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_secretstore_write_secret() != 12237) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_secretstore_load_secret() != 11727) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_marmot_uniffi_checksum_method_secretstore_remove_secret() != 46473) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_marmot_uniffi_checksum_method_timelinemessagessubscription_next() != 62953) {
@@ -27841,8 +28467,12 @@ private let initializationResult: InitializationResult = {
     if (uniffi_marmot_uniffi_checksum_constructor_marmot_new_with_cursor_persistence() != 18903) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_marmot_uniffi_checksum_constructor_marmot_new_with_secret_store() != 61899) {
+        return InitializationResult.apiChecksumMismatch
+    }
 
     uniffiCallbackInitExternalAccountSignerFfi()
+    uniffiCallbackInitSecretStore()
     return InitializationResult.ok
 }()
 

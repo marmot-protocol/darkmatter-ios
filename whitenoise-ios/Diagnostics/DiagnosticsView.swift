@@ -171,6 +171,14 @@ struct DiagnosticsView: View {
         return lines
     }
 
+    static func relayHealthText(_ health: RelayHealthFfi) -> [String] {
+        [
+            "[relay] connections: \(health.connected)/\(health.totalRelays) connected, \(health.connecting) connecting, \(health.pending) pending, \(health.disconnected) disconnected, \(health.sleeping) sleeping, \(health.terminated) terminated, \(health.banned) banned",
+            "[relay] attempts: \(health.connectionSuccesses)/\(health.connectionAttempts) succeeded; initialized \(health.initialized); SDK-backed \(health.sdkBacked ? "yes" : "no")",
+            "[relay] notification forwarder: \(health.notificationForwarderRunning ? "running" : "stopped"), \(health.notificationForwarderRestarts) restarts, \(health.notificationForwarderLagIncidents) lag incidents / \(health.notificationForwarderLaggedNotifications) notifications, \(health.notificationForwarderPanics) panics, \(health.notificationForwarderUnexpectedExits) unexpected exits",
+        ]
+    }
+
     static func performanceOperationText(
         label: String,
         snapshot: AppPerformanceOperationSnapshotFfi

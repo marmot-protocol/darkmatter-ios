@@ -36,7 +36,7 @@ nonisolated enum SendAcceptancePolicy {
         switch summary.acceptDisposition {
         case .published:
             return .confirmPublished(messageId: summary.messageIds.first)
-        case .acceptedPending:
+        case .acceptedPending, .completionUnknown:
             return .awaitDurableProjection
         }
     }
@@ -205,9 +205,9 @@ final class ComposerModel {
             case .confirmPublished(let messageId):
                 timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: messageId)
             case .awaitDurableProjection:
-                // Marmot durably accepted the intent but has not published it.
-                // Keep the optimistic row sending until the timeline projection
-                // supplies the durable pending row and eventual disposition.
+                // Marmot retained the exact event for durable delivery. Keep the
+                // optimistic row sending until the timeline projection supplies
+                // the pending row and eventual disposition.
                 break
             }
         } catch {

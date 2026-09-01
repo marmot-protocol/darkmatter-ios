@@ -997,22 +997,13 @@ final class AppState {
 
     @MainActor
     @discardableResult
-    func setAuditLogSettings(
-        enabled: Bool,
-        dataMode: AuditDataModeFfi
-    ) async throws -> AuditLogSettingsFfi {
+    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
         guard phase == .ready else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
         let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         return try await lease.client.marmot.setAuditLogSettings(
-            settings: AuditLogSettingsFfi(enabled: enabled, dataMode: dataMode)
+            settings: AuditLogSettingsFfi(enabled: enabled)
         )
-    }
-
-    @MainActor
-    @discardableResult
-    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
-        try await setAuditLogSettings(enabled: enabled, dataMode: .obfuscatedSensitiveData)
     }
 
     func auditLogFiles() async throws -> [AuditLogFileFfi]? {
@@ -1049,8 +1040,11 @@ final class AppState {
         await notificationCoordinator.catchUpAfterForegroundActivation(host: self)
     }
 
-    func scheduleConnectivityCatchUp() {
-        notificationCoordinator.scheduleConnectivityCatchUp(host: self)
+    func scheduleConnectivityCatchUp(connectivityRestored: Bool = false) {
+        notificationCoordinator.scheduleConnectivityCatchUp(
+            host: self,
+            connectivityRestored: connectivityRestored
+        )
     }
 
     /// Scene-phase entry points. Owned by `RuntimeLifecycle`; these forwarders

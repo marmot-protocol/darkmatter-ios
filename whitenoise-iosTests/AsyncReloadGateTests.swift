@@ -54,6 +54,48 @@ struct AsyncReloadGateTests {
         #expect(model.currentRelays == ["wss://new.example"])
     }
 
+    @Test func relaySaveRejectsRetiredEndpointBeforePublishing() async {
+        let model = RelaysViewModel()
+        let dataSource = RelaysViewModelDataSourceStub()
+        model.lists = relayLists(["wss://old.example"])
+        dataSource.classify = { endpoints in
+            endpoints.map {
+                RelayEndpointClassificationFfi(
+                    endpoint: $0,
+                    normalizedEndpoint: $0,
+                    policy: .retired
+                )
+            }
+        }
+
+        let saved = await model.save(["wss://relay.damus.io"], using: dataSource)
+
+        #expect(!saved)
+        #expect(dataSource.saveCallCount == 0)
+        #expect(dataSource.classificationRequests == [["wss://relay.damus.io"]])
+        #expect(model.saveError?.contains("retired") == true)
+    }
+
+    @Test func relaySaveUsesMdkCanonicalEndpoint() async {
+        let model = RelaysViewModel()
+        let dataSource = RelaysViewModelDataSourceStub()
+        model.lists = relayLists(["wss://old.example"])
+        dataSource.classify = { endpoints in
+            endpoints.map {
+                RelayEndpointClassificationFfi(
+                    endpoint: $0,
+                    normalizedEndpoint: $0 + "/",
+                    policy: .allowed
+                )
+            }
+        }
+
+        let saved = await model.save(["wss://new.example"], using: dataSource)
+
+        #expect(saved)
+        #expect(dataSource.saveRequests == [["wss://new.example/"]])
+    }
+
     @Test func relaySwipeDeleteQueuesSecondDeleteAgainstPostSaveList() async {
         let model = RelaysViewModel()
         let dataSource = RelaysViewModelDataSourceStub()
@@ -219,11 +261,8 @@ private final class PrivacySecuritySettingsDataSourceStub: PrivacySecuritySettin
 
     func deleteAllAuditLogFiles() async throws {}
 
-    func setAuditLogSettings(
-        enabled: Bool,
-        dataMode: AuditDataModeFfi
-    ) async throws -> AuditLogSettingsFfi {
-        AuditLogSettingsFfi(enabled: enabled, dataMode: dataMode)
+    func setAuditLogEnabled(_ enabled: Bool) async throws -> AuditLogSettingsFfi {
+        AuditLogSettingsFfi(enabled: enabled)
     }
 
     func waitUntilProjectionCallCount(_ count: Int) async {
@@ -253,8 +292,10 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
     var activeAccountRef: String? = "account-1"
     var loadResponses: [SuspendingResponse<AccountRelayListsFfi>] = []
     var saveResponses: [SuspendingResponse<AccountRelayListsFfi>] = []
+    var classify: (([String]) -> [RelayEndpointClassificationFfi])?
     private(set) var loadCallCount = 0
     private(set) var saveCallCount = 0
+    private(set) var classificationRequests: [[String]] = []
     private(set) var saveRequests: [[String]] = []
     private(set) var presentedToasts: [Toast] = []
 
@@ -275,6 +316,22 @@ private final class RelaysViewModelDataSourceStub: RelaysViewModelDataSource {
             return try await withCheckedThrowingContinuation { continuation in
                 loadContinuations.append(continuation)
             }
+        }
+    }
+
+    func classifyRelayEndpoints(
+        _ endpoints: [String]
+    ) async throws -> [RelayEndpointClassificationFfi] {
+        classificationRequests.append(endpoints)
+        if let classify {
+            return classify(endpoints)
+        }
+        return endpoints.map {
+            RelayEndpointClassificationFfi(
+                endpoint: $0,
+                normalizedEndpoint: $0,
+                policy: .allowed
+            )
         }
     }
 

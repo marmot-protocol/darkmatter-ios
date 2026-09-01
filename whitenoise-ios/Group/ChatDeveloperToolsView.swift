@@ -29,6 +29,7 @@ struct ChatDeveloperToolsView: View {
         Form {
             conversationSection
             deliverySection
+            maintenanceSection
             diagnosticsSection
         }
         .navigationTitle("Chat Developer Tools")
@@ -182,6 +183,81 @@ struct ChatDeveloperToolsView: View {
         }
     }
 
+    @ViewBuilder
+    private var maintenanceSection: some View {
+        Section("Maintenance") {
+            if let status = model.maintenanceStatus {
+                statusRow(
+                    "Worker",
+                    value: status.paused ? L10n.string("Paused") : L10n.string("Running"),
+                    isWarning: status.paused
+                )
+                LabeledContent(
+                    "Periodic rotation",
+                    value: status.periodicEnrolled ? L10n.string("Enrolled") : L10n.string("Not enrolled")
+                )
+                let overdueCount = status.obligations.lazy.filter(\.overdue).count
+                statusRow(
+                    "Obligations",
+                    value: "\(status.obligations.count) total, \(overdueCount) overdue",
+                    isWarning: overdueCount > 0
+                )
+                let failedFanouts = status.fanouts.reduce(UInt64.zero) { partial, fanout in
+                    let (sum, overflow) = partial.addingReportingOverflow(
+                        UInt64(fanout.attemptedFailed)
+                    )
+                    return overflow ? UInt64.max : sum
+                }
+                statusRow(
+                    "Fanouts",
+                    value: "\(status.fanouts.count) records, \(failedFanouts) failed targets",
+                    isWarning: failedFanouts > 0
+                )
+                LabeledContent(
+                    "Evolutions",
+                    value: LocalizedNumberLabel.decimal(UInt64(status.evolutions.count))
+                )
+                if let nextRotation = MaintenanceDiagnosticsPresentation.date(
+                    status.nextPeriodicRotationAt
+                ) {
+                    LabeledContent("Next rotation") {
+                        Text(nextRotation, style: .relative)
+                    }
+                }
+
+                if !status.obligations.isEmpty {
+                    DisclosureGroup("Maintenance obligations") {
+                        ForEach(status.obligations, id: \.idHex) { obligation in
+                            obligationRow(obligation)
+                        }
+                    }
+                }
+                if !status.evolutions.isEmpty {
+                    DisclosureGroup("Group evolutions") {
+                        ForEach(status.evolutions, id: \.idHex) { evolution in
+                            evolutionRow(evolution)
+                        }
+                    }
+                }
+                if !status.fanouts.isEmpty {
+                    DisclosureGroup("Transport fanouts") {
+                        ForEach(status.fanouts, id: \.idHex) { fanout in
+                            fanoutRow(fanout)
+                        }
+                    }
+                }
+            } else if let error = model.maintenanceStatusError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else {
+                HStack(spacing: 10) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading maintenance state…").foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     private var notificationLabel: String {
         switch model.notifyMode {
         case .all: return L10n.string("All messages")
@@ -240,5 +316,62 @@ struct ChatDeveloperToolsView: View {
                 .truncationMode(.middle)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func obligationRow(_ obligation: MaintenanceObligationFfi) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(IdentityFormatter.short(obligation.idHex))
+                    .font(.caption.monospaced())
+                Spacer()
+                Text(MaintenanceDiagnosticsPresentation.phaseLabel(obligation.phase))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(obligation.overdue ? Color.orange : Color.secondary)
+            }
+            Text("\(MaintenanceDiagnosticsPresentation.triggerLabel(obligation.trigger)); \(obligation.attemptCount) attempts; \(obligation.semanticRearmCount) rearms")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let failure = MaintenanceDiagnosticsPresentation.failureCode(
+                obligation.lastFailureCode
+            ) {
+                Text("Last failure: \(failure)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func evolutionRow(_ evolution: GroupEvolutionStatusFfi) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(IdentityFormatter.short(evolution.idHex))
+                    .font(.caption.monospaced())
+                Spacer()
+                Text(MaintenanceDiagnosticsPresentation.evolutionPhaseLabel(evolution.phase))
+                    .font(.caption.weight(.semibold))
+            }
+            Text("epoch \(evolution.sourceEpoch) → \(evolution.targetEpoch)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func fanoutRow(_ fanout: TransportFanoutStatusFfi) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(IdentityFormatter.short(fanout.idHex))
+                    .font(.caption.monospaced())
+                Spacer()
+                Text(fanout.evolutionConfirmed ? "Confirmed" : "Pending")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(fanout.evolutionConfirmed ? Color.green : Color.secondary)
+            }
+            Text("accepted \(fanout.accepted)/\(fanout.requiredAcks) required; \(fanout.unattempted) unattempted; \(fanout.attemptedFailed) failed; \(fanout.policyProhibited) prohibited")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(fanout.attemptedFailed > 0 ? Color.orange : Color.secondary)
+        }
+        .padding(.vertical, 2)
     }
 }

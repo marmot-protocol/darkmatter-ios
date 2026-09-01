@@ -74,6 +74,8 @@ struct KeyPackagesView: View {
                     }
                 }
 
+                maintenanceSection
+
                 Section {
                     Button {
                         Task { await model.publishNew(using: appState) }
@@ -87,9 +89,23 @@ struct KeyPackagesView: View {
                             Label("Publish New Key Package", systemImage: "plus.square.on.square")
                         }
                     }
-                    .disabled(model.isPublishing || appState.activeAccountRef == nil)
+                    .disabled(model.isPublishing || model.isRepublishing || appState.activeAccountRef == nil)
+
+                    Button {
+                        Task { await model.republish(using: appState) }
+                    } label: {
+                        if model.isRepublishing {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("Republishing…")
+                            }
+                        } else {
+                            Label("Republish Current Key Package", systemImage: "arrow.clockwise")
+                        }
+                    }
+                    .disabled(model.isPublishing || model.isRepublishing || appState.activeAccountRef == nil)
                 } footer: {
-                    Text("Publishes a fresh KeyPackage event to your account outbox relays.")
+                    Text("Publish New rotates to fresh key material. Republish sends the latest cached KeyPackage again when possible, and creates a fresh one only when no cached package is available.")
                         .font(.footnote)
                 }
 
@@ -119,6 +135,58 @@ struct KeyPackagesView: View {
     }
 
     // MARK: - Derived
+
+    @ViewBuilder
+    private var maintenanceSection: some View {
+        Section("Maintenance") {
+            if let status = model.maintenanceStatus {
+                LabeledContent(
+                    "Phase",
+                    value: MaintenanceDiagnosticsPresentation.phaseLabel(status.phase)
+                )
+                LabeledContent("Stable slot", value: shortHex(status.stableSlotId))
+                if let expires = MaintenanceDiagnosticsPresentation.date(status.currentNotAfter) {
+                    LabeledContent("Current package expires") {
+                        Text(expires, style: .relative)
+                    }
+                }
+                if let refresh = MaintenanceDiagnosticsPresentation.date(status.refreshAt) {
+                    LabeledContent("Scheduled refresh") {
+                        Text(refresh, style: .relative)
+                    }
+                }
+                LabeledContent(
+                    "Fanout targets",
+                    value: "\(status.acceptedFanoutTargets) accepted, \(status.unattemptedFanoutTargets) unattempted, \(status.failedFanoutTargets) failed, \(status.policyProhibitedFanoutTargets) prohibited"
+                )
+                .foregroundStyle(
+                    status.failedFanoutTargets > 0 || status.policyProhibitedFanoutTargets > 0
+                        ? Color.orange
+                        : Color.primary
+                )
+                LabeledContent(
+                    "Pending attempts",
+                    value: LocalizedNumberLabel.decimal(UInt64(status.pendingAttemptCount))
+                )
+                if let failure = MaintenanceDiagnosticsPresentation.failureCode(
+                    status.pendingLastFailureCode
+                ) {
+                    LabeledContent("Last failure", value: failure)
+                        .foregroundStyle(.orange)
+                }
+                LabeledContent(
+                    "Retained private material",
+                    value: LocalizedNumberLabel.decimal(UInt64(status.retainedPrivateMaterialCount))
+                )
+            } else if let error = model.maintenanceLoadError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            } else {
+                Text("No key-package maintenance state is currently recorded.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
 
     struct PackageSections {
         let local: [AccountKeyPackageFfi]

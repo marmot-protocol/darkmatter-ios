@@ -21,6 +21,8 @@ final class GroupDetailsViewModel {
     var mlsState: AppGroupMlsStateFfi?
     var pushDebugInfo: GroupPushDebugInfoFfi?
     var pushDebugError: String?
+    var maintenanceStatus: GroupMaintenanceStatusFfi?
+    var maintenanceStatusError: String?
     var pendingConfirmation: GroupDetailsConfirmation?
     var membershipActionInFlight = false
     var isExportingTranscript = false
@@ -846,8 +848,13 @@ final class GroupDetailsViewModel {
     }
 
     private func publishMessage(for summary: SendSummaryFfi) -> String {
-        if case .acceptedPending = summary.acceptDisposition {
+        switch summary.acceptDisposition {
+        case .acceptedPending:
             return L10n.string("Saved and waiting to send.")
+        case .completionUnknown:
+            return L10n.string("Saved; delivery confirmation is pending.")
+        case .published:
+            break
         }
         guard summary.published > 0 else { return L10n.string("Saved locally.") }
         return L10n.plural("Published %lld updates.", Int64(clamping: summary.published))
@@ -904,6 +911,8 @@ final class GroupDetailsViewModel {
             mlsState = nil
             pushDebugInfo = nil
             pushDebugError = nil
+            maintenanceStatus = nil
+            maintenanceStatusError = nil
             return
         }
         guard let conversation, let accountRef = appState.activeAccountRef,
@@ -916,6 +925,10 @@ final class GroupDetailsViewModel {
             accountRef: accountRef,
             groupIdHex: conversation.group.groupIdHex
         )
+        async let maintenanceResult = client.groupMaintenanceStatus(
+            accountRef: accountRef,
+            groupIdHex: conversation.group.groupIdHex
+        )
         mlsState = try? await mlsResult
         do {
             pushDebugInfo = try await pushResult
@@ -923,6 +936,13 @@ final class GroupDetailsViewModel {
         } catch {
             pushDebugInfo = nil
             pushDebugError = error.localizedDescription
+        }
+        do {
+            maintenanceStatus = try await maintenanceResult
+            maintenanceStatusError = nil
+        } catch {
+            maintenanceStatus = nil
+            maintenanceStatusError = error.localizedDescription
         }
     }
 }

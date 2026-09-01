@@ -133,9 +133,9 @@ struct whitenoise_iosApp: App {
                     handleScenePhase(phase, isInitial: false)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: MediaAutoDownloadStore.connectivityRestored)) { _ in
-                    // Relay recovery is otherwise foreground-driven; a network
-                    // return with the app already open needs the same pump.
-                    appState.scheduleConnectivityCatchUp()
+                    // Wake MDK's durable outbound retries before the ordinary
+                    // relay catch-up when the path monitor sees the network return.
+                    appState.scheduleConnectivityCatchUp(connectivityRestored: true)
                 }
                 .onChange(of: appState.activeAccount?.accountIdHex, initial: true) { _, accountIdHex in
                     MediaAutoDownloadStore.shared.setActiveAccount(accountIdHex)

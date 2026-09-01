@@ -29,7 +29,9 @@ struct AddMembersSheet: View {
                 if !model.selection.isEmpty {
                     Section {
                         SelectedRecipientRail(members: model.selection.members) { member in
-                            model.selection.remove(accountIdHex: member.accountIdHex)
+                            if model.remove(accountIdHex: member.accountIdHex) {
+                                scheduleMemberKeyPackagePrewarm()
+                            }
                         }
                         .listRowInsets(EdgeInsets())
                     }
@@ -111,6 +113,7 @@ struct AddMembersSheet: View {
             }
             .onDisappear {
                 model.userSearch.cancel()
+                model.cancelMemberKeyPackagePrewarm()
             }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerSheet { raw in
@@ -193,7 +196,9 @@ struct AddMembersSheet: View {
     private func memberRow(_ candidate: RecipientCandidate) -> some View {
         let isSelected = model.selection.isSelected(accountIdHex: candidate.accountIdHex)
         return Button {
-            model.toggle(candidate, excludedAccountIds: excludedAccountIds)
+            if model.toggle(candidate, excludedAccountIds: excludedAccountIds) {
+                scheduleMemberKeyPackagePrewarm()
+            }
         } label: {
             RecipientRow(
                 accountIdHex: candidate.accountIdHex,
@@ -214,11 +219,14 @@ struct AddMembersSheet: View {
     /// Explicit tap on a resolved row; shares the normalize-then-stage path
     /// with the automatic selection below.
     private func selectResolved(_ resolved: ResolvedRecipient) async {
-        await model.selectResolved(
+        let didSelect = await model.selectResolved(
             resolved,
             excludedAccountIds: excludedAccountIds,
             normalize: normalize
         )
+        if didSelect {
+            scheduleMemberKeyPackagePrewarm()
+        }
     }
 
     /// A pasted/scanned identifier is an unambiguous target, so it selects
@@ -250,5 +258,12 @@ struct AddMembersSheet: View {
             isIdentifierQuery: model.query.isIdentifierQuery,
             using: appState
         )
+    }
+
+    private func scheduleMemberKeyPackagePrewarm() {
+        model.scheduleMemberKeyPackagePrewarm { [weak appState] memberRefs in
+            guard let appState else { return }
+            _ = try? await appState.prewarmGroupMemberKeyPackages(memberRefs: memberRefs)
+        }
     }
 }

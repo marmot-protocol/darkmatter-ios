@@ -281,7 +281,7 @@ struct IOSParityBatchTests {
         let values = [
             MessageSemantics.imetaTag,
             "v \(EncryptedMediaVersionFfi.v1.wireValue)",
-            "locator blossom-v1 https://192.168.1.1/blob",
+            "locator blossom-v1 https://192.168.1.1/\(String(repeating: "a", count: 64)).bin",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
             "plaintext_sha256 \(String(repeating: "b", count: 64))",
             "nonce \(String(repeating: "c", count: 24))",
@@ -296,7 +296,7 @@ struct IOSParityBatchTests {
             MessageSemantics.imetaTag,
             "v \(EncryptedMediaVersionFfi.v1.wireValue)",
             "locator ipfs-v1 ipfs://bafy-test",
-            "locator blossom-v1 https://media.example/blob",
+            "locator blossom-v1 https://media.example/\(String(repeating: "a", count: 64)).bin",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
             "plaintext_sha256 \(String(repeating: "b", count: 64))",
             "nonce \(String(repeating: "c", count: 24))",
@@ -310,34 +310,28 @@ struct IOSParityBatchTests {
         #expect(attachment.locators.map(\.kind) == ["ipfs-v1", "blossom-v1"])
     }
 
-    @Test func optimisticImetaParserRejectsOversizedFieldAndLocatorCollections() {
-        let requiredFields = [
+    @Test func optimisticImetaParserKeepsValidSiblingWhenMdkRejectsMalformedTag() throws {
+        let valid = MessageTagFfi(values: [
+            MessageSemantics.imetaTag,
             "v \(EncryptedMediaVersionFfi.v1.wireValue)",
+            "locator blossom-v1 https://media.example/\(String(repeating: "a", count: 64)).bin",
             "ciphertext_sha256 \(String(repeating: "a", count: 64))",
             "plaintext_sha256 \(String(repeating: "b", count: 64))",
             "nonce \(String(repeating: "c", count: 24))",
             "m image/jpeg",
             "filename photo.jpg",
-        ]
-        let tooManyFields = [MessageSemantics.imetaTag]
-            + requiredFields
-            + (0...(MessageSemantics.maxImetaFieldsPerTag - requiredFields.count)).map {
-                "blurhash ignored-\($0)"
-            }
-        let tooManyLocators = [MessageSemantics.imetaTag]
-            + requiredFields
-            + (0...MessageSemantics.maxImetaLocatorsPerTag).map {
-                "locator blossom-v1 https://media.example/blob-\($0)"
-            }
+        ])
+        let malformed = MessageTagFfi(values: [
+            MessageSemantics.imetaTag,
+            "v unknown-version",
+        ])
 
-        #expect(tooManyLocators.dropFirst().count <= MessageSemantics.maxImetaFieldsPerTag)
-
-        #expect(MessageSemantics.mediaAttachments(
-            from: [MessageTagFfi(values: tooManyFields)]
-        ) == nil)
-        #expect(MessageSemantics.mediaAttachments(
-            from: [MessageTagFfi(values: tooManyLocators)]
-        ) == nil)
+        let attachment = try #require(MessageSemantics.mediaAttachments(
+            from: [malformed, valid],
+            sourceEpoch: 42
+        )?.first)
+        #expect(attachment.fileName == "photo.jpg")
+        #expect(attachment.sourceEpoch == 42)
     }
 
     private func locator(_ value: String) -> MediaLocatorFfi {

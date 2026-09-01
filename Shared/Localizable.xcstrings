@@ -57,6 +57,60 @@
             "state" : "translated",
             "value" : ""
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@; %u attempts; %u rearms"
+          }
         }
       }
     },
@@ -117,6 +171,60 @@
             "state" : "translated",
             "value" : "·"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
+          }
         }
       }
     },
@@ -176,6 +284,60 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "「線上」表示該帳戶的執行時間工作人員現在在應用程式中處於活動狀態（訂閱了其中繼）。它不反映密鑰存取。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %llu → %llu"
           }
         }
       }
@@ -690,16 +852,16 @@
       "comment" : "Text displayed in a notification when a group's name is changed. The first argument is the name of the actor. The second argument is the new group name.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ changed the group name to %2$@"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%@ changed the group name to %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ changed the group name to %2$@"
           }
         },
         "es" : {
@@ -1169,6 +1331,66 @@
         }
       }
     },
+    "%@ is a retired relay." : {
+      "comment" : "A localized error message.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist ein außer Betrieb genommenes Relais."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ es un relé retirado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ est un relais retiré."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ è un relay dismesso."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ é um relé desativado."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — выведенный из эксплуатации релей."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kullanımdan kaldırılmış bir röledir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是已停用的中继服务器。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 是已停用的中繼伺服器。"
+          }
+        }
+      }
+    },
     "%@ is no longer an admin" : {
       "comment" : "A description of an event that an admin has been removed from a group. The argument is the name of the user who was removed.",
       "extractionState" : "manual",
@@ -1236,6 +1458,66 @@
         }
       }
     },
+    "%@ isn't a valid relay URL." : {
+      "comment" : "A description of an error that might occur when validating a relay URL.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist keine gültige Relay-URL."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ no es una URL de relé válida."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ n’est pas une URL de relais valide."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ non è un URL di relay valido."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ não é uma URL de relé válida."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ — недопустимый URL релея."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ geçerli bir röle URL’si değil."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是有效的中继服务器 URL。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 不是有效的中繼伺服器 URL。"
+          }
+        }
+      }
+    },
     "%@ isn't on White Noise yet. Share the app so you can chat securely." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1297,6 +1579,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@還沒有使用 White Noise。分享應用程式即可安全聊天。"
+          }
+        }
+      }
+    },
+    "%@ isn't safe to connect to." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Verbindung mit %@ ist nicht sicher."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es seguro conectarse a %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion à %@ n’est pas sûre."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connessione a %@ non è sicura."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não é seguro se conectar a %@."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключаться к %@ небезопасно."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ bağlantısı güvenli değil."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到 %@ 不安全。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連線至 %@ 不安全。"
           }
         }
       }
@@ -2154,16 +2494,16 @@
       "comment" : "A label describing the index of a media attachment in a list of media attachments. The first argument is the file name of the attachment. The second argument is the index of the attachment in the list. The third argument is the total number of attachments in the list.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$@ of %3$@"
-          }
-        },
         "de" : {
           "stringUnit" : {
             "state" : "new",
             "value" : "%@, %@ of %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ of %3$@"
           }
         },
         "es" : {
@@ -2212,6 +2552,72 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%@, %@ of %@"
+          }
+        }
+      }
+    },
+    "%@; %u attempts; %u rearms" : {
+      "comment" : "A description of the maintenance trigger, the number of attempts, and the number of rearms.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; %u Versuche; %u erneute Aktivierungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@; %2$u attempts; %3$u rearms"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; %u intentos; %u reactivaciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ; %u tentatives ; %u réactivations"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; %u tentativi; %u riattivazioni"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; %u tentativas; %u reativações"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; попыток: %u; повторных активаций: %u"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@; %u deneme; %u yeniden etkinleştirme"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@；尝试 %u 次；重新激活 %u 次"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@；嘗試 %u 次；重新啟用 %u 次"
           }
         }
       }
@@ -5419,6 +5825,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "接受"
+          }
+        }
+      }
+    },
+    "accepted %u/%u required; %u unattempted; %u failed; %u prohibited" : {
+      "comment" : "A row in a fanout status view.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "akzeptiert: %u/%u erforderlich; %u nicht versucht; %u fehlgeschlagen; %u verboten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "accepted %1$u/%2$u required; %3$u unattempted; %4$u failed; %5$u prohibited"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aceptados: %u/%u requeridos; %u sin intentar; %u fallidos; %u prohibidos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "acceptés : %u/%u requis ; %u non tentés ; %u échoués ; %u interdits"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "accettati: %u/%u richiesti; %u non tentati; %u non riusciti; %u vietati"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aceitos: %u/%u necessários; %u não tentados; %u falharam; %u proibidos"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "принято %u из %u обязательных; не предпринято: %u; ошибок: %u; запрещено: %u"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kabul edilen: %u/%u gerekli; %u denenmedi; %u başarısız; %u yasak"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已接受：%u/%u 个必需目标；%u 个未尝试；%u 个失败；%u 个被禁止"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已接受：%u/%u 個必要目標；%u 個未嘗試；%u 個失敗；%u 個遭禁止"
           }
         }
       }
@@ -13286,6 +13758,66 @@
         }
       }
     },
+    "Confirmed" : {
+      "comment" : "A label for a confirmed evolution.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestätigt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confermato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подтверждено"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Onaylandı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已确认"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已確認"
+          }
+        }
+      }
+    },
     "Connecting to support…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15599,6 +16131,64 @@
         }
       }
     },
+    "Couldn't load quarantined groups" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppen in Quarantäne konnten nicht geladen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron cargar los grupos en cuarentena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de charger les groupes en quarantaine"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile caricare i gruppi in quarantena"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível carregar os grupos em quarentena"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось загрузить группы в карантине"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karantinadaki gruplar yüklenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载隔离的群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法載入隔離的群組"
+          }
+        }
+      }
+    },
     "Couldn't load shared media." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17880,6 +18470,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目前"
+          }
+        }
+      }
+    },
+    "Current package expires" : {
+      "comment" : "A label for the date when a key package will expire.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelles Schlüsselpaket läuft ab"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El paquete de claves actual caduca"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le paquet de clés actuel expire"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il pacchetto chiavi attuale scade"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O pacote de chaves atual expira"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Срок действия текущего пакета ключей истекает"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mevcut anahtar paketinin süresi doluyor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前密钥包到期"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前金鑰套件到期"
           }
         }
       }
@@ -23511,6 +24161,66 @@
         }
       }
     },
+    "Enrolled" : {
+      "comment" : "Text displayed in a label that indicates that a feature is enabled.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registriert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inscrito"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inscrit"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registrado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Зарегистрировано"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kayıtlı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已注册"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已註冊"
+          }
+        }
+      }
+    },
     "Enter a duration between %@ and %@." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -24355,6 +25065,72 @@
         }
       }
     },
+    "epoch %llu → %llu" : {
+      "comment" : "A description of a group evolution, showing the source and target epochs.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Epoche %llu → %llu"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "epoch %1$llu → %2$llu"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "época %llu → %llu"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "époque %llu → %llu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "epoca %llu → %llu"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "época %llu → %llu"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "эпоха %llu → %llu"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dönem %llu → %llu"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纪元 %llu → %llu"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紀元 %llu → %llu"
+          }
+        }
+      }
+    },
     "EVENT ID" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -24410,6 +25186,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "事件ID"
+          }
+        }
+      }
+    },
+    "Every stored group for this profile hydrated successfully." : {
+      "comment" : "A description of a quarantined group.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle für dieses Profil gespeicherten Gruppen wurden erfolgreich geladen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos los grupos almacenados de este perfil se cargaron correctamente."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous les groupes stockés pour ce profil ont été chargés correctement."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tutti i gruppi memorizzati per questo profilo sono stati caricati correttamente."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos os grupos armazenados deste perfil foram carregados com sucesso."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Все сохранённые группы этого профиля успешно загружены."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu profil için saklanan tüm gruplar başarıyla yüklendi."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此资料中的所有已存储群组均已成功加载。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此個人檔案中的所有已儲存群組均已成功載入。"
           }
         }
       }
@@ -24774,6 +25610,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所有成員都將被移除，群組將被永久解散。任何人都無法傳送新訊息。此操作無法復原。"
+          }
+        }
+      }
+    },
+    "Evolutions" : {
+      "comment" : "A label for the number of group evolutions.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entwicklungen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Évolutions"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluzioni"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluções"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эволюции"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evrimler"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "演进"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "演進"
           }
         }
       }
@@ -25499,6 +26395,64 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Exports the raw inner Nostr event history for this group as protected JSON, ordered by time."
+          }
+        }
+      }
+    },
+    "Fanout targets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanout-Ziele"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destinos de fanout"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cibles de fanout"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destinazioni fanout"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Destinos de fanout"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Цели рассылки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanout hedefleri"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扇出目标"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "扇出目標"
           }
         }
       }
@@ -27981,6 +28935,66 @@
         }
       }
     },
+    "Group evolutions" : {
+      "comment" : "A label for a section of a chat developer tools view that displays group evolutions.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppenentwicklungen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluciones de grupos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Évolutions des groupes"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluzioni dei gruppi"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Evoluções dos grupos"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Эволюции групп"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup evrimleri"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群组演进"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群組演進"
+          }
+        }
+      }
+    },
     "Group ID" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -28402,6 +29416,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "團體邀請"
+          }
+        }
+      }
+    },
+    "Group is still quarantined" : {
+      "comment" : "Text displayed in a toast when a group is still quarantined after a recovery retry.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppe befindet sich weiterhin in Quarantäne"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El grupo sigue en cuarentena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le groupe est toujours en quarantaine"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il gruppo è ancora in quarantena"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O grupo ainda está em quarentena"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Группа всё ещё в карантине"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup hâlâ karantinada"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群组仍处于隔离状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群組仍處於隔離狀態"
           }
         }
       }
@@ -28837,6 +29911,126 @@
         }
       }
     },
+    "Group record load failed" : {
+      "comment" : "Reason for quarantine: group record load failed.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppeneintrag konnte nicht geladen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar el registro del grupo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec du chargement de l’enregistrement du groupe"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caricamento del record del gruppo non riuscito"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao carregar o registro do grupo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось загрузить запись группы"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup kaydı yüklenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群组记录加载失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群組記錄載入失敗"
+          }
+        }
+      }
+    },
+    "Group recovered" : {
+      "comment" : "Text displayed in a toast when a group is successfully recovered.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppe wiederhergestellt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupo recuperado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groupe récupéré"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppo recuperato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupo recuperado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Группа восстановлена"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup kurtarıldı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群组已恢复"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群組已復原"
+          }
+        }
+      }
+    },
     "Group renamed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -29142,6 +30336,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Group unmuted"
+          }
+        }
+      }
+    },
+    "Groups" : {
+      "comment" : "A section title for the list of quarantined groups.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groupes"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppi"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupos"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Группы"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruplar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "群組"
           }
         }
       }
@@ -32548,6 +33802,66 @@
         }
       }
     },
+    "Key package republished" : {
+      "comment" : "Text of a toast message when a key package is republished.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlüsselpaket erneut veröffentlicht"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paquete de claves republicado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paquet de clés republié"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pacchetto chiavi ripubblicato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pacote de chaves republicado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Пакет ключей опубликован повторно"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anahtar paketi yeniden yayınlandı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密钥包已重新发布"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "金鑰套件已重新發布"
+          }
+        }
+      }
+    },
     "Key Packages" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -32781,6 +34095,126 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "語言"
+          }
+        }
+      }
+    },
+    "Last failure" : {
+      "comment" : "A label for the last failure that occurred.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzter Fehler"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Último error"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernier échec"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ultimo erro"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Última falha"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Последняя ошибка"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son hata"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次失敗"
+          }
+        }
+      }
+    },
+    "Last failure: %@" : {
+      "comment" : "A label displaying the last maintenance task failure.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzter Fehler: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Último error: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernier échec : %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ultimo errore: %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Última falha: %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Последняя ошибка: %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son hata: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次失败：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次失敗：%@"
           }
         }
       }
@@ -34473,6 +35907,66 @@
         }
       }
     },
+    "Load Failed" : {
+      "comment" : "A title for a section that displays an error message and a button to retry loading.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de carga"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec du chargement"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caricamento non riuscito"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao carregar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ошибка загрузки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yükleme başarısız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "載入失敗"
+          }
+        }
+      }
+    },
     "Load GIF" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -34528,6 +36022,66 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Load GIF"
+          }
+        }
+      }
+    },
+    "Loaded member credentials or ratchet-tree state failed validation. Retry does not bypass that validation." : {
+      "comment" : "Text displayed in a quarantine alert when a group's member validation fails.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die geladenen Mitgliedsanmeldedaten oder der Ratchet-Tree-Zustand haben die Validierung nicht bestanden. Ein erneuter Versuch umgeht diese Validierung nicht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las credenciales de miembro cargadas o el estado del ratchet-tree no superaron la validación. Reintentar no omite esa validación."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les identifiants de membre chargés ou l’état du ratchet-tree n’ont pas passé la validation. Réessayer ne contourne pas cette validation."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le credenziali del membro caricate o lo stato del ratchet-tree non hanno superato la convalida. Riprovare non aggira questa convalida."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "As credenciais de membro carregadas ou o estado do ratchet-tree não passaram na validação. Tentar novamente não ignora essa validação."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверка загруженных учётных данных участника или состояния ratchet-tree не пройдена. Повторная попытка не обходит эту проверку."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yüklenen üye kimlik bilgileri veya ratchet-tree durumu doğrulamayı geçemedi. Yeniden denemek bu doğrulamayı atlamaz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已加载的成员凭据或 ratchet-tree 状态未通过验证。重试不会绕过该验证。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已載入的成員憑證或 ratchet-tree 狀態未通過驗證。重試不會略過該驗證。"
           }
         }
       }
@@ -34651,6 +36205,66 @@
         }
       }
     },
+    "Loading maintenance state…" : {
+      "comment" : "A placeholder text that appears when the maintenance state is being loaded.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartungsstatus wird geladen…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cargando estado de mantenimiento…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chargement de l’état de maintenance…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caricamento dello stato di manutenzione…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carregando estado de manutenção…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка состояния обслуживания…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bakım durumu yükleniyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载维护状态…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入維護狀態…"
+          }
+        }
+      }
+    },
     "Loading MLS state…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -34766,6 +36380,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在載入推播通知狀態..."
+          }
+        }
+      }
+    },
+    "Loading quarantined groups" : {
+
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppen in Quarantäne werden geladen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cargando grupos en cuarentena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chargement des groupes en quarantaine"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caricamento dei gruppi in quarantena"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carregando grupos em quarentena"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Загрузка групп в карантине"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karantinadaki gruplar yükleniyor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载隔离的群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入隔離的群組"
           }
         }
       }
@@ -35788,6 +37461,126 @@
         }
       }
     },
+    "Maintenance" : {
+      "comment" : "A section in the chat developer tools that displays information about the current maintenance state of the chat.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartung"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mantenimiento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maintenance"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manutenzione"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manutenção"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обслуживание"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bakım"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "维护"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "維護"
+          }
+        }
+      }
+    },
+    "Maintenance obligations" : {
+      "comment" : "A section that displays the maintenance obligations of a chat.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wartungsaufgaben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obligaciones de mantenimiento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obligations de maintenance"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obblighi di manutenzione"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obrigações de manutenção"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Обязательства по обслуживанию"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bakım yükümlülükleri"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "维护任务"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "維護任務"
+          }
+        }
+      }
+    },
     "Make Admin" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -36138,6 +37931,186 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在將聊天標示為已讀…"
+          }
+        }
+      }
+    },
+    "Marmot found a stranded MLS commit but could not recover it. Retry re-runs the same non-destructive recovery." : {
+      "comment" : "Text displayed in a toast when Marmot encounters a stranded MLS commit and cannot recover it.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot hat einen feststeckenden MLS-Commit gefunden, konnte ihn aber nicht wiederherstellen. Ein erneuter Versuch führt dieselbe nicht destruktive Wiederherstellung erneut aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot encontró un commit MLS atascado, pero no pudo recuperarlo. Reintentar vuelve a ejecutar la misma recuperación no destructiva."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot a trouvé un commit MLS bloqué, mais n’a pas pu le récupérer. Réessayer relance la même récupération non destructive."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot ha trovato un commit MLS bloccato, ma non è riuscito a recuperarlo. Riprovare esegue di nuovo lo stesso ripristino non distruttivo."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Marmot encontrou um commit MLS bloqueado, mas não conseguiu recuperá-lo. Tentar novamente executa de novo a mesma recuperação não destrutiva."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot обнаружил зависший MLS-коммит, но не смог его восстановить. Повторная попытка заново запускает то же безопасное восстановление без удаления данных."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot takılı kalmış bir MLS commit’i buldu ancak kurtaramadı. Yeniden denemek aynı tahribatsız kurtarma işlemini tekrar çalıştırır."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot 发现了一个滞留的 MLS 提交，但无法恢复。重试会再次运行相同的非破坏性恢复流程。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot 發現了一個滯留的 MLS 提交，但無法復原。重試會再次執行相同的非破壞性復原流程。"
+          }
+        }
+      }
+    },
+    "Marmot has group metadata, but the corresponding OpenMLS state is missing. Retry only helps if that state becomes available." : {
+      "comment" : "Text displayed in a toast when a group is missing its OpenMLS state.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot verfügt über die Gruppenmetadaten, aber der zugehörige OpenMLS-Zustand fehlt. Ein erneuter Versuch hilft nur, wenn dieser Zustand verfügbar wird."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot tiene los metadatos del grupo, pero falta el estado OpenMLS correspondiente. Reintentar solo ayuda si ese estado vuelve a estar disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot dispose des métadonnées du groupe, mais l’état OpenMLS correspondant est absent. Réessayer n’aide que si cet état devient disponible."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot dispone dei metadati del gruppo, ma manca lo stato OpenMLS corrispondente. Riprovare è utile solo se quello stato diventa disponibile."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Marmot tem os metadados do grupo, mas o estado OpenMLS correspondente está ausente. Tentar novamente só ajuda se esse estado se tornar disponível."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "В Marmot есть метаданные группы, но соответствующее состояние OpenMLS отсутствует. Повторная попытка поможет только после появления этого состояния."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot grup meta verilerine sahip, ancak karşılık gelen OpenMLS durumu eksik. Yeniden denemek yalnızca bu durum kullanılabilir hâle gelirse yardımcı olur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot 具有群组元数据，但缺少对应的 OpenMLS 状态。仅当该状态恢复可用时，重试才有帮助。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot 具有群組中繼資料，但缺少對應的 OpenMLS 狀態。只有該狀態恢復可用時，重試才有幫助。"
+          }
+        }
+      }
+    },
+    "Marmot quarantines a stored group when it cannot safely hydrate its MLS state. Retrying is non-destructive: it does not delete history, bypass validation, or rejoin the group." : {
+      "comment" : "A description of the quarantined groups feature.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot stellt eine gespeicherte Gruppe unter Quarantäne, wenn ihr MLS-Zustand nicht sicher geladen werden kann. Ein erneuter Versuch ist nicht destruktiv: Dabei werden weder der Verlauf gelöscht noch die Validierung umgangen oder der Gruppe erneut beigetreten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot pone en cuarentena un grupo almacenado cuando no puede cargar de forma segura su estado MLS. Reintentar no es destructivo: no elimina el historial, no omite la validación ni vuelve a unirse al grupo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot met en quarantaine un groupe stocké lorsqu’il ne peut pas charger son état MLS en toute sécurité. Réessayer n’est pas destructeur : cela ne supprime pas l’historique, ne contourne pas la validation et ne rejoint pas à nouveau le groupe."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot mette in quarantena un gruppo memorizzato quando non può caricare in sicurezza il suo stato MLS. Riprovare non è distruttivo: non elimina la cronologia, non aggira la convalida e non si unisce nuovamente al gruppo."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Marmot coloca um grupo armazenado em quarentena quando não consegue carregar com segurança seu estado MLS. Tentar novamente não é destrutivo: não exclui o histórico, não ignora a validação nem entra novamente no grupo."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot помещает сохранённую группу в карантин, если не может безопасно загрузить её состояние MLS. Повторная попытка не разрушает данные: она не удаляет историю, не обходит проверку и не присоединяется к группе заново."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marmot, MLS durumunu güvenli şekilde yükleyemediğinde saklanan grubu karantinaya alır. Yeniden denemek tahribatsızdır: geçmişi silmez, doğrulamayı atlamaz ve gruba yeniden katılmaz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当 Marmot 无法安全加载已存储群组的 MLS 状态时，会将该群组隔离。重试不会破坏数据：不会删除历史记录、绕过验证或重新加入群组。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "當 Marmot 無法安全載入已儲存群組的 MLS 狀態時，會將該群組隔離。重試不會破壞資料：不會刪除歷史記錄、略過驗證或重新加入群組。"
           }
         }
       }
@@ -36810,6 +38783,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "會員已刪除"
+          }
+        }
+      }
+    },
+    "Member validation failed" : {
+      "comment" : "A reason why a group is quarantined.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitgliedsvalidierung fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló la validación del miembro"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de la validation du membre"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Convalida del membro non riuscita"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha na validação do membro"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверка участника не пройдена"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Üye doğrulaması başarısız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成员验证失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "成員驗證失敗"
           }
         }
       }
@@ -39681,6 +41714,66 @@
         }
       }
     },
+    "Next rotation" : {
+      "comment" : "A label for the next scheduled rotation.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nächste Rotation"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Próxima rotación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prochaine rotation"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prossima rotazione"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Próxima rotação"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Следующая ротация"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sonraki rotasyon"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次轮换"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下次輪替"
+          }
+        }
+      }
+    },
     "Nickname" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -40516,6 +42609,66 @@
         }
       }
     },
+    "No key-package maintenance state is currently recorded." : {
+      "comment" : "A message displayed when no maintenance state is available.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Derzeit ist kein Wartungsstatus für Schlüsselpakete gespeichert."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualmente no hay ningún estado de mantenimiento de paquetes de claves registrado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun état de maintenance des paquets de clés n’est actuellement enregistré."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Al momento non è registrato alcuno stato di manutenzione dei pacchetti chiavi."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhum estado de manutenção de pacotes de chaves está registrado no momento."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Состояние обслуживания пакетов ключей пока не записано."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Şu anda kayıtlı bir anahtar paketi bakım durumu yok."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有记录密钥包维护状态。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有記錄金鑰套件維護狀態。"
+          }
+        }
+      }
+    },
     "No Left Chats" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -41008,6 +43161,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "找不到該地址對應的個人檔案。"
+          }
+        }
+      }
+    },
+    "No Quarantined Groups" : {
+      "comment" : "A title for a view that shows when a user has no quarantined groups.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Gruppen in Quarantäne"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay grupos en cuarentena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun groupe en quarantaine"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessun gruppo in quarantena"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nenhum grupo em quarentena"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Нет групп в карантине"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karantinada grup yok"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有隔离的群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有隔離的群組"
           }
         }
       }
@@ -41795,6 +44008,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未送達。點按以查看選項。"
+          }
+        }
+      }
+    },
+    "Not enrolled" : {
+      "comment" : "Text displayed in a label that indicates that periodic rotation is not enrolled.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht registriert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No inscrito"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non inscrit"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non registrato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não registrado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не зарегистрировано"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kayıtlı değil"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未注册"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未註冊"
           }
         }
       }
@@ -44273,6 +46546,126 @@
         }
       }
     },
+    "OpenMLS group missing" : {
+      "comment" : "A reason why a group is quarantined, where Marmot has group metadata, but the corresponding OpenMLS state is missing.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS-Gruppe fehlt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falta el grupo OpenMLS"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groupe OpenMLS absent"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppo OpenMLS mancante"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupo OpenMLS ausente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Группа OpenMLS отсутствует"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS grubu eksik"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 OpenMLS 群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少 OpenMLS 群組"
+          }
+        }
+      }
+    },
+    "OpenMLS load failed" : {
+      "comment" : "A reason why a group is quarantined due to a failed OpenMLS load.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS konnte nicht geladen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo cargar OpenMLS"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec du chargement d’OpenMLS"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caricamento di OpenMLS non riuscito"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao carregar o OpenMLS"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось загрузить OpenMLS"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS yüklenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS 加载失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenMLS 載入失敗"
+          }
+        }
+      }
+    },
     "Opens Settings to allow microphone access." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -45133,6 +47526,246 @@
         }
       }
     },
+    "Paused" : {
+      "comment" : "Text displayed in a maintenance section of the chat developer tools, indicating that the worker is paused.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En pausa"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En pause"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In pausa"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pausado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Приостановлено"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duraklatıldı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已暫停"
+          }
+        }
+      }
+    },
+    "Pending" : {
+      "comment" : "A label for a fanout that is not yet confirmed.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausstehend"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendiente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In attesa"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pendente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ожидается"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bekliyor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待處理"
+          }
+        }
+      }
+    },
+    "Pending attempts" : {
+      "comment" : "A label for the number of pending attempts to publish a key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausstehende Versuche"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Intentos pendientes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentatives en attente"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentativi in attesa"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentativas pendentes"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ожидающие попытки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bekleyen denemeler"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理的尝试"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待處理的嘗試"
+          }
+        }
+      }
+    },
+    "Pending commit recovery failed" : {
+      "comment" : "A quarantine reason when Marmot found a stranded MLS commit but could not recover it.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellung des ausstehenden Commits fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló la recuperación del commit pendiente"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de la récupération du commit en attente"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripristino del commit in attesa non riuscito"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao recuperar o commit pendente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось восстановить ожидающий коммит"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bekleyen commit kurtarılamadı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待处理提交恢复失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "待處理提交復原失敗"
+          }
+        }
+      }
+    },
     "People" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -45259,6 +47892,66 @@
         }
       }
     },
+    "Periodic rotation" : {
+      "comment" : "A label for the periodic rotation of a chat group.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regelmäßige Rotation"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotación periódica"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotation périodique"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotazione periodica"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rotação periódica"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Периодическая ротация"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Periyodik rotasyon"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定期轮换"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "定期輪替"
+          }
+        }
+      }
+    },
     "Permanently remove this profile and its local data from this device." : {
       "comment" : "A description of the destructive action of wiping a profile.",
       "extractionState" : "manual",
@@ -45375,6 +48068,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允許"
+          }
+        }
+      }
+    },
+    "Phase" : {
+      "comment" : "A label for the phase of a key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phase"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phase"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fase"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фаза"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aşama"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阶段"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "階段"
           }
         }
       }
@@ -47906,6 +50659,66 @@
         }
       }
     },
+    "Publish New rotates to fresh key material. Republish sends the latest cached KeyPackage again when possible, and creates a fresh one only when no cached package is available." : {
+      "comment" : "A description of the key package publishing and republishing features.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„Neu veröffentlichen“ wechselt zu neuem Schlüsselmaterial. „Erneut veröffentlichen“ sendet nach Möglichkeit das zuletzt zwischengespeicherte KeyPackage erneut und erstellt nur dann ein neues, wenn kein zwischengespeichertes Paket verfügbar ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Publicar nuevo» rota a material de claves nuevo. «Volver a publicar» vuelve a enviar el KeyPackage almacenado en caché más reciente cuando es posible y solo crea uno nuevo cuando no hay ningún paquete en caché disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "« Publier nouveau » génère un nouveau matériel de clé. « Republier » renvoie le dernier KeyPackage mis en cache lorsque c’est possible et n’en crée un nouveau que lorsqu’aucun paquet mis en cache n’est disponible."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Pubblica nuovo” passa a nuovo materiale crittografico. “Ripubblica” invia nuovamente l’ultimo KeyPackage memorizzato nella cache quando possibile e ne crea uno nuovo solo se non è disponibile alcun pacchetto nella cache."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Publicar novo” alterna para um novo material de chave. “Republicar” reenvia o KeyPackage em cache mais recente quando possível e cria um novo apenas quando não há nenhum pacote em cache disponível."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "«Опубликовать новый» выполняет ротацию на новый ключевой материал. «Опубликовать повторно» по возможности снова отправляет последний сохранённый в кеше KeyPackage и создаёт новый только при отсутствии сохранённого пакета."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“Yeni Yayınla” yeni anahtar malzemesine geçer. “Yeniden Yayınla” mümkün olduğunda önbelleğe alınmış en son KeyPackage’ı tekrar gönderir ve yalnızca önbellekte paket bulunmadığında yenisini oluşturur."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“发布新密钥包”会轮换到新的密钥材料。“重新发布”会尽可能再次发送最新缓存的 KeyPackage，仅在没有可用的缓存包时才创建新的密钥包。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「發布新金鑰套件」會輪替至新的金鑰材料。「重新發布」會盡可能再次傳送最新快取的 KeyPackage，只有在沒有可用的快取套件時才建立新的金鑰套件。"
+          }
+        }
+      }
+    },
     "Published %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -48485,6 +51298,7 @@
     },
     "Publishes a fresh KeyPackage event to your account outbox relays." : {
       "comment" : "A description of the action of publishing a new key package.",
+      "extractionState" : "stale",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "de" : {
@@ -49020,6 +51834,65 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "品質是上限——較小的媒體不會被放大。照片中的識別性中繼資料（如位置資訊）在任何品質級別傳送前都會被移除。"
+          }
+        }
+      }
+    },
+    "Quarantined Groups" : {
+
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppen in Quarantäne"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupos en cuarentena"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groupes en quarantaine"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppi in quarantena"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grupos em quarentena"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Группы в карантине"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Karantinadaki Gruplar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隔离的群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隔離的群組"
           }
         }
       }
@@ -50104,6 +52977,126 @@
         }
       }
     },
+    "Recovery did not succeed. The group remains quarantined." : {
+      "comment" : "A message that appears when a quarantine group's recovery is not successful.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Wiederherstellung war nicht erfolgreich. Die Gruppe bleibt in Quarantäne."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La recuperación no se completó. El grupo permanece en cuarentena."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La récupération n’a pas abouti. Le groupe reste en quarantaine."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il ripristino non è riuscito. Il gruppo rimane in quarantena."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A recuperação não foi concluída. O grupo permanece em quarentena."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Восстановление не удалось. Группа остаётся в карантине."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurtarma başarılı olmadı. Grup karantinada kalıyor."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复未成功。群组仍处于隔离状态。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復原未成功。群組仍處於隔離狀態。"
+          }
+        }
+      }
+    },
+    "Recovery retry failed" : {
+      "comment" : "A label that indicates that a recovery retry failed.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneuter Wiederherstellungsversuch fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló el reintento de recuperación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de la nouvelle tentative de récupération"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuovo tentativo di ripristino non riuscito"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao tentar a recuperação novamente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторная попытка восстановления не удалась"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurtarma yeniden denenemedi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复重试失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復原重試失敗"
+          }
+        }
+      }
+    },
     "Refresh" : {
       "comment" : "A button that refreshes the audit logs.",
       "extractionState" : "stale",
@@ -50636,6 +53629,66 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Relay URL"
+          }
+        }
+      }
+    },
+    "Relay validation returned an incomplete result." : {
+      "comment" : "Error message when relay validation returns incomplete results.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Relay-Validierung hat ein unvollständiges Ergebnis zurückgegeben."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La validación del relé devolvió un resultado incompleto."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La validation du relais a renvoyé un résultat incomplet."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La convalida del relay ha restituito un risultato incompleto."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A validação do relé retornou um resultado incompleto."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Проверка релея вернула неполный результат."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Röle doğrulaması eksik bir sonuç döndürdü."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中继服务器验证返回了不完整的结果。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中繼伺服器驗證傳回了不完整的結果。"
           }
         }
       }
@@ -52154,6 +55207,186 @@
         }
       }
     },
+    "Republish Current Key Package" : {
+      "comment" : "A button that republishes the current key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelles Schlüsselpaket erneut veröffentlichen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volver a publicar el paquete de claves actual"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Republier le paquet de clés actuel"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripubblica il pacchetto chiavi attuale"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Republicar o pacote de chaves atual"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторно опубликовать текущий пакет ключей"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mevcut Anahtar Paketini Yeniden Yayınla"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发布当前密钥包"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新發布目前的金鑰套件"
+          }
+        }
+      }
+    },
+    "Republish failed" : {
+      "comment" : "Title of a toast when republishing a key package fails.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneute Veröffentlichung fehlgeschlagen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error al volver a publicar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de la republication"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripubblicazione non riuscita"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falha ao republicar"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось опубликовать повторно"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeniden yayınlama başarısız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发布失败"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新發布失敗"
+          }
+        }
+      }
+    },
+    "Republishing…" : {
+      "comment" : "A label displayed while republishing a key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird erneut veröffentlicht…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volviendo a publicar…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Republication…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripubblicazione…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Republicando…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторная публикация…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yeniden yayınlanıyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重新发布…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重新發布…"
+          }
+        }
+      }
+    },
     "Request APNS Token" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -52879,6 +56112,66 @@
         }
       }
     },
+    "Retained private material" : {
+      "comment" : "A label for the number of retained private material items.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beibehaltenes privates Material"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Material privado conservado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Matériel privé conservé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Materiale privato conservato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Material privado preservado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сохранённый приватный материал"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saklanan özel materyal"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留的私密材料"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保留的私密資料"
+          }
+        }
+      }
+    },
     "Retry" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -52938,6 +56231,126 @@
         }
       }
     },
+    "Retry Loading" : {
+      "comment" : "A button that reloads the quarantined groups.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden erneut versuchen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentar carga"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réessayer le chargement"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riprova caricamento"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentar carregar novamente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить загрузку"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yüklemeyi Yeniden Dene"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试加载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重試載入"
+          }
+        }
+      }
+    },
+    "Retry Recovery" : {
+      "comment" : "A button that retries the recovery of a quarantined group.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellung erneut versuchen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentar recuperación"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Réessayer la récupération"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riprova ripristino"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentar recuperação novamente"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторить восстановление"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurtarmayı Yeniden Dene"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试恢复"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重試復原"
+          }
+        }
+      }
+    },
     "Retry send" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -52993,6 +56406,126 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Retry send"
+          }
+        }
+      }
+    },
+    "Retrying Recovery…" : {
+      "comment" : "A label displayed when a quarantined group is retrying recovery.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellung wird erneut versucht…"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reintentando recuperación…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nouvelle tentative de récupération…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nuovo tentativo di ripristino…"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tentando a recuperação novamente…"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Повторная попытка восстановления…"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kurtarma yeniden deneniyor…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重试恢复…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在重試復原…"
+          }
+        }
+      }
+    },
+    "Running" : {
+      "comment" : "Text displayed in a maintenance section of the chat developer tools, indicating that the worker is running.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird ausgeführt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En ejecución"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En cours"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In esecuzione"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Em execução"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Выполняется"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çalışıyor"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "執行中"
           }
         }
       }
@@ -53415,6 +56948,65 @@
         }
       }
     },
+    "Saved; delivery confirmation is pending." : {
+
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeichert; Zustellbestätigung steht noch aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado; la confirmación de entrega está pendiente."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistré ; la confirmation de livraison est en attente."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvato; conferma di consegna in attesa."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvo; a confirmação de entrega está pendente."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сохранено; подтверждение доставки ожидается."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydedildi; teslimat onayı bekleniyor."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存；正在等待送达确认。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已儲存；正在等待送達確認。"
+          }
+        }
+      }
+    },
     "Saving" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -53707,6 +57299,66 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "Scan to connect."
+          }
+        }
+      }
+    },
+    "Scheduled refresh" : {
+      "comment" : "A label for the scheduled refresh of a key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geplante Aktualisierung"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización programada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualisation planifiée"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggiornamento pianificato"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atualização agendada"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Запланированное обновление"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planlanmış yenileme"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "计划刷新"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排定的重新整理"
           }
         }
       }
@@ -59898,6 +63550,66 @@
         }
       }
     },
+    "Stable slot" : {
+      "comment" : "A label for the stable slot ID of a key package.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stabiler Slot"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ranura estable"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Emplacement stable"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slot stabile"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slot estável"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Стабильный слот"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kararlı yuva"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稳定槽位"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "穩定槽位"
+          }
+        }
+      }
+    },
     "stale" : {
       "comment" : "A label for a stale token.",
       "isCommentAutoGenerated" : true,
@@ -62984,6 +66696,66 @@
         }
       }
     },
+    "That isn't a valid relay URL." : {
+      "comment" : "Error message when a relay URL is invalid.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ist keine gültige Relay-URL."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es una URL de relé válida."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce n’est pas une URL de relais valide."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non è un URL di relay valido."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essa não é uma URL de relé válida."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это недопустимый URL релея."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu geçerli bir röle URL’si değil."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是有效的中继服务器 URL。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這不是有效的中繼伺服器 URL。"
+          }
+        }
+      }
+    },
     "That member is already an admin." : {
       "extractionState" : "manual",
       "localizations" : {
@@ -63457,6 +67229,126 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 QR 程式碼不是 White Noise 設定檔。"
+          }
+        }
+      }
+    },
+    "That relay is retired." : {
+      "comment" : "Error message when a relay is retired.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Relais wurde außer Betrieb genommen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ese relé está retirado."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce relais est retiré."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quel relay è stato dismesso."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esse relé foi desativado."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Этот релей выведен из эксплуатации."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu röle kullanımdan kaldırıldı."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该中继服务器已停用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "該中繼伺服器已停用。"
+          }
+        }
+      }
+    },
+    "That relay isn't safe to connect to." : {
+      "comment" : "Error message when a relay is rejected as unsafe.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Verbindung mit diesem Relais ist nicht sicher."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No es seguro conectarse a ese relé."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion à ce relais n’est pas sûre."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connessione a quel relay non è sicura."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não é seguro se conectar a esse relé."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Подключаться к этому релею небезопасно."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu röleye bağlanmak güvenli değil."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接到该中继服务器不安全。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連線至該中繼伺服器不安全。"
           }
         }
       }
@@ -63999,6 +67891,125 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+          }
+        }
+      }
+    },
+    "The stored Marmot group record could not be read or refreshed. Retry may help after a transient storage failure." : {
+      "comment" : "Text displayed in a notification when a group record load fails.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der gespeicherte Marmot-Gruppeneintrag konnte nicht gelesen oder aktualisiert werden. Nach einem vorübergehenden Speicherfehler kann ein erneuter Versuch helfen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer ni actualizar el registro de grupo de Marmot almacenado. Reintentar puede ayudar después de un fallo temporal del almacenamiento."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’enregistrement de groupe Marmot stocké n’a pas pu être lu ni actualisé. Réessayer peut aider après une défaillance temporaire du stockage."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile leggere o aggiornare il record del gruppo Marmot memorizzato. Riprovare può essere utile dopo un errore temporaneo di archiviazione."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível ler nem atualizar o registro de grupo do Marmot armazenado. Tentar novamente pode ajudar após uma falha temporária de armazenamento."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось прочитать или обновить сохранённую запись группы Marmot. Повторная попытка может помочь после временного сбоя хранилища."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saklanan Marmot grup kaydı okunamadı veya yenilenemedi. Geçici bir depolama hatasından sonra yeniden denemek yardımcı olabilir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取或刷新已存储的 Marmot 群组记录。若存储暂时出现故障，重试可能会有所帮助。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取或重新整理已儲存的 Marmot 群組記錄。若儲存空間暫時發生故障，重試可能會有幫助。"
+          }
+        }
+      }
+    },
+    "The stored MLS session could not be opened. Retry may help if storage was temporarily unavailable." : {
+
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die gespeicherte MLS-Sitzung konnte nicht geöffnet werden. Ein erneuter Versuch kann helfen, wenn der Speicher vorübergehend nicht verfügbar war."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo abrir la sesión MLS almacenada. Reintentar puede ayudar si el almacenamiento no estaba disponible temporalmente."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La session MLS stockée n’a pas pu être ouverte. Réessayer peut aider si le stockage était temporairement indisponible."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossibile aprire la sessione MLS memorizzata. Riprovare può essere utile se l’archiviazione era temporaneamente non disponibile."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Não foi possível abrir a sessão MLS armazenada. Tentar novamente pode ajudar se o armazenamento estava temporariamente indisponível."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не удалось открыть сохранённую сессию MLS. Повторная попытка может помочь, если хранилище было временно недоступно."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saklanan MLS oturumu açılamadı. Depolama geçici olarak kullanılamıyorsa yeniden denemek yardımcı olabilir."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法打开已存储的 MLS 会话。如果存储空间暂时不可用，重试可能会有所帮助。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法開啟已儲存的 MLS 工作階段。如果儲存空間暫時無法使用，重試可能會有幫助。"
           }
         }
       }
@@ -65205,6 +69216,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法復原此未完成的身分設定。"
+          }
+        }
+      }
+    },
+    "This invitation is no longer available." : {
+      "comment" : "Warning message displayed when a group invitation is no longer available.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einladung ist nicht mehr verfügbar."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Esta invitación ya no está disponible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette invitation n’est plus disponible."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Questo invito non è più disponibile."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este convite não está mais disponível."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Это приглашение больше недоступно."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bu davet artık kullanılamıyor."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此邀请已不可用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此邀請已無法使用。"
           }
         }
       }
@@ -66490,6 +70561,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "代幣"
+          }
+        }
+      }
+    },
+    "Transport fanouts" : {
+      "comment" : "A label for a list of transport fanouts.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transport-Fanouts"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanouts de transporte"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanouts de transport"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanout di trasporto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fanouts de transporte"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Транспортные рассылки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktarım fanout’ları"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "传输扇出"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳輸扇出"
           }
         }
       }
@@ -69675,6 +73806,66 @@
         }
       }
     },
+    "Website" : {
+      "comment" : "A label for a user's website.",
+      "isCommentAutoGenerated" : true,
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitio web"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Site web"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sito web"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Site"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Веб-сайт"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Web sitesi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网站"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "網站"
+          }
+        }
+      }
+    },
     "Weeks" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -71066,6 +75257,124 @@
         }
       }
     },
+    "You are no longer an admin." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie sind kein Administrator mehr."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no eres administrador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous n’êtes plus administrateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non sei più un amministratore."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você não é mais administrador."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы больше не администратор."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Artık yönetici değilsiniz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您已不再是管理员。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您已不再是管理員。"
+          }
+        }
+      }
+    },
+    "You are now an admin." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie sind jetzt Administrator."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ahora eres administrador."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous êtes maintenant administrateur."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ora sei un amministratore."
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agora você é administrador."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Теперь вы администратор."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Artık yöneticisiniz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您现在是管理员。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "您現在是管理員。"
+          }
+        }
+      }
+    },
     "You can add members after creating the group." : {
       "comment" : "A description of how to add members to a group after it has been created.",
       "extractionState" : "manual",
@@ -71831,124 +76140,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你發了一條訊息"
-          }
-        }
-      }
-    },
-    "You are no longer an admin." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sie sind kein Administrator mehr."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ya no eres administrador."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vous n’êtes plus administrateur."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Non sei più un amministratore."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Você não é mais administrador."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Вы больше не администратор."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Artık yönetici değilsiniz."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "您已不再是管理员。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "您已不再是管理員。"
-          }
-        }
-      }
-    },
-    "You are now an admin." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sie sind jetzt Administrator."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ahora eres administrador."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vous êtes maintenant administrateur."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ora sei un amministratore."
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Agora você é administrador."
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Теперь вы администратор."
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Artık yöneticisiniz."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "您现在是管理员。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "您現在是管理員。"
           }
         }
       }

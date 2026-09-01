@@ -12,37 +12,81 @@ final class AddMembersSheetViewModel {
     let selection = RecipientSelection()
     var isInviting = false
     var error: String?
+    @ObservationIgnored private var keyPackagePrewarmTask: Task<Void, Never>?
 
-    func toggle(_ candidate: RecipientCandidate, excludedAccountIds: Set<String>) {
-        selection.toggle(
+    @discardableResult
+    func toggle(_ candidate: RecipientCandidate, excludedAccountIds: Set<String>) -> Bool {
+        let didChange = selection.toggle(
             RecipientSelection.member(for: candidate),
             excludedAccountIds: excludedAccountIds
         )
         if selection.isSelected(accountIdHex: candidate.accountIdHex) {
             query.clear()
         }
+        return didChange
+    }
+
+    @discardableResult
+    func remove(accountIdHex: String) -> Bool {
+        let previousCount = selection.count
+        selection.remove(accountIdHex: accountIdHex)
+        return selection.count != previousCount
+    }
+
+    /// Coalesces rapid multi-selection changes before warming the exact set the
+    /// invite mutation will resolve. Marmot can then reuse those KeyPackages
+    /// when the user taps Invite instead of starting every relay lookup then.
+    func scheduleMemberKeyPackagePrewarm(
+        debounce: Duration = .milliseconds(250),
+        prewarm: @escaping @MainActor ([String]) async -> Void
+    ) {
+        keyPackagePrewarmTask?.cancel()
+        let memberRefs = selection.memberRefs
+        guard !memberRefs.isEmpty else {
+            keyPackagePrewarmTask = nil
+            return
+        }
+        keyPackagePrewarmTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: debounce)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await prewarm(memberRefs)
+            guard !Task.isCancelled else { return }
+            self?.keyPackagePrewarmTask = nil
+        }
+    }
+
+    func cancelMemberKeyPackagePrewarm() {
+        keyPackagePrewarmTask?.cancel()
+        keyPackagePrewarmTask = nil
     }
 
     /// Normalizes a resolved identifier through Marmot before selecting it so
     /// the staged member carries the validated reference form.
+    @discardableResult
     func selectResolved(
         _ resolved: ResolvedRecipient,
         excludedAccountIds: Set<String>,
         normalize: (String) async throws -> MemberRefFfi
-    ) async {
-        guard !isInviting else { return }
+    ) async -> Bool {
+        guard !isInviting else { return false }
         let result = await AddMembersPresentation.normalizedMember(
             resolved.memberRef,
             normalize: normalize
         )
         // Re-check after the await: a selection resumed mid-submit would
         // stage a recipient the in-flight invite never sends.
-        guard !isInviting else { return }
-        guard case .normalized(let member) = result else { return }
+        guard !isInviting else { return false }
+        guard case .normalized(let member) = result else { return false }
         if selection.add(member, excludedAccountIds: excludedAccountIds) {
             Haptics.selection()
             query.clear()
+            return true
         }
+        return false
     }
 
     func invite(

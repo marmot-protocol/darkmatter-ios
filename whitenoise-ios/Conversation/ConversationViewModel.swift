@@ -2209,6 +2209,17 @@ final class ConversationViewModel {
                     error: error
                 ))
                 return nil
+            } catch MarmotKitError.GroupInviteNotPending {
+                // The invitation was removed or became terminal before this
+                // action reached the serialized account worker. Refresh the
+                // authoritative row instead of presenting a retryable failure.
+                _ = await refreshInviteState()
+                if !hasPendingInvite {
+                    return group
+                }
+                Haptics.error()
+                appState.present(.warning(L10n.string("This invitation is no longer available.")))
+                return nil
             } catch {
                 Haptics.error()
                 appState.present(UserFacingError.toast(title: L10n.string("Couldn't accept invitation"), error: error))

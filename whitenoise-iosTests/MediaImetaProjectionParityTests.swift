@@ -3,28 +3,9 @@ import Testing
 @testable import whitenoise_ios
 @testable import MarmotKit
 
-/// Phase 0 parity oracle for the thin-shell refactor (see
-/// `docs/thin-shell-refactor.md`, Phase 3).
-///
-/// The one binding change the refactor needs is a resolved
-/// `media: [MediaAttachmentReferenceFfi]` projected onto each timeline row by
-/// the Rust runtime, replacing the iOS-side `imeta`-tag parsing that
-/// `MessageSemantics.mediaAttachments(from:sourceEpoch:)` does today. Before we
-/// delete that Swift path we must be able to prove the Rust projection produces
-/// *byte-identical* references for the same input.
-///
-/// These tests pin the current Swift behavior exactly, so the future parity
-/// assertion (see PARITY HOOK at the bottom) is a one-line addition once the
-/// `media` field exists on `TimelineMessageRecordFfi`.
-///
-/// Two behaviors here are easy to get wrong on the Rust side and are pinned
-/// deliberately:
-///   1. `sourceEpoch` is NOT an `imeta` field — it is the message's own record
-///      epoch, threaded into every reference. The projection must carry it.
-///   2. The parser is tolerant at the media boundary: malformed required fields
-///      drop only that attachment, and malformed optional fields such as
-///      `thumbhash` / `dim` are ignored without hiding an otherwise valid
-///      attachment.
+/// Pins the generated MDK `imeta` parser plus the app's narrow display-safety
+/// projection. MDK owns the wire contract; iOS only bounds peer-controlled
+/// filename/media-type strings and drops malformed optional display hints.
 struct MediaImetaProjectionParityTests {
 
     // MARK: - Canonical corpus (input imeta -> reference the projection must emit)
@@ -65,10 +46,10 @@ struct MediaImetaProjectionParityTests {
             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 0, dim: nil)]
         ),
         Case(
-            name: "media type image/jpg canonicalizes to image/jpeg",
+            name: "legacy V1 media type spelling is preserved for AAD",
             imeta: [imetaValues(file: "a.jpg", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/jpg", dim: nil)],
             sourceEpoch: 1,
-            expected: [ref(file: "a.jpg", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/jpeg", sourceEpoch: 1, dim: nil)]
+            expected: [ref(file: "a.jpg", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/jpg", sourceEpoch: 1, dim: nil)]
         ),
         Case(
             name: "uppercase hashes/nonce are lowercased in output",
@@ -83,10 +64,10 @@ struct MediaImetaProjectionParityTests {
             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 9, dim: nil, thumbhash: "Abc123+/=_-")]
         ),
         Case(
-            name: "unknown blurhash field is ignored, not rejected",
+            name: "legacy blurhash field is rejected by MDK",
             imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, extra: ["blurhash LEHV6nWB2yk8pyo0adR*"])],
             sourceEpoch: 3,
-            expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", sourceEpoch: 3, dim: nil)]
+            expected: nil
         ),
         Case(
             name: "encrypted-media-v2 is accepted and remains typed v2",
@@ -131,9 +112,10 @@ struct MediaImetaProjectionParityTests {
         Case(name: "wrong version -> nil",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: nil, version: "mip04-v2")],
              sourceEpoch: 1, expected: nil),
-        Case(name: "invalid media type -> nil",
+        Case(name: "legacy V1 minimally structured media type is preserved",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/", dim: nil)],
-             sourceEpoch: 1, expected: nil),
+             sourceEpoch: 1,
+             expected: [ref(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/", sourceEpoch: 1, dim: nil)]),
         Case(name: "invalid dim is ignored",
              imeta: [imetaValues(file: "a.png", ciphertext: c, plaintext: p, nonce: n, mediaType: "image/png", dim: "640")],
              sourceEpoch: 1,
@@ -304,7 +286,7 @@ private func imetaValues(
 ) -> [String] {
     var values = [MessageSemantics.imetaTag, "v \(version)"]
     if !omitLocator {
-        values.append("locator blossom-v1 https://media.example/\(file)")
+        values.append("locator blossom-v1 https://media.example/\(ciphertext).bin")
     }
     values.append("ciphertext_sha256 \(ciphertext)")
     values.append("plaintext_sha256 \(plaintext)")
@@ -330,7 +312,7 @@ private func ref(
     version: EncryptedMediaVersionFfi = .v1
 ) -> MediaAttachmentReferenceFfi {
     MediaAttachmentReferenceFfi(
-        locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(file)")],
+        locators: [MediaLocatorFfi(kind: "blossom-v1", value: "https://media.example/\(ciphertext).bin")],
         ciphertextSha256: ciphertext.lowercased(),
         plaintextSha256: plaintext.lowercased(),
         nonceHex: nonce.lowercased(),

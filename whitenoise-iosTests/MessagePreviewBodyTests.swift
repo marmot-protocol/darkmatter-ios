@@ -241,7 +241,7 @@ private func encryptedMediaTag() -> MessageTagFfi {
     MessageTagFfi(values: [
         MessageSemantics.imetaTag,
         "v \(EncryptedMediaVersionFfi.v1.wireValue)",
-        "locator blossom-v1 https://media.example/a.jpg",
+        "locator blossom-v1 https://media.example/\(hex("44")).bin",
         "ciphertext_sha256 \(hex("44"))",
         "plaintext_sha256 \(hex("33"))",
         "nonce \(String(repeating: "22", count: 12))",

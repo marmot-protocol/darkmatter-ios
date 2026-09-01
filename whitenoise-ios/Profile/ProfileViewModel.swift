@@ -16,6 +16,7 @@ final class ProfileViewModel {
     private(set) var sharedGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var addableGroups: [SharedGroupsProjection.SharedGroup] = []
     private(set) var verifiedNip05: String?
+    private(set) var website: String?
     private(set) var isFollowing: Bool?
     private(set) var isLoadingFollow = false
     private(set) var isUpdatingFollow = false
@@ -48,6 +49,11 @@ final class ProfileViewModel {
             // Trigger enrichment (cached read + background relay fetch).
             _ = appState.profile(forAccountIdHex: resolvedHex)
         }
+        await refreshWebsite(using: appState)
+        guard !Task.isCancelled,
+              generation == resolutionGeneration,
+              hex == resolvedHex
+        else { return }
         await directory.load(using: appState, includeAdminMetadata: true)
         guard !Task.isCancelled,
               generation == resolutionGeneration,
@@ -65,6 +71,23 @@ final class ProfileViewModel {
         )
     }
 
+    func refreshWebsite(using appState: AppState) async {
+        guard let hex else {
+            website = nil
+            return
+        }
+        let loadingHex = hex
+        let loaded: String?
+        do {
+            let client = try appState.currentMarmotClient()
+            loaded = try await client.userProfileWebsite(accountIdHex: loadingHex)
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, hex == loadingHex else { return }
+        website = loaded
+    }
+
     /// The verified badge is earned per pubkey. A reused profile surface
     /// resolving to a different account must shed it — retaining it would
     /// paint another pubkey's verification, a fail-open trust signal.
@@ -72,6 +95,7 @@ final class ProfileViewModel {
         if hex != resolvedHex {
             verifiedNip05 = nil
             attemptedNip05Verification = nil
+            website = nil
             startPrompt = nil
             conversationChooser = nil
         }

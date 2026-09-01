@@ -188,8 +188,11 @@ nonisolated enum MessageSemantics {
         var attachments: [MediaAttachmentReferenceFfi] = []
         for tag in imetaTags {
             foundImeta = true
-            if let attachment = mediaAttachment(from: tag, sourceEpoch: sourceEpoch) {
-                attachments.append(attachment)
+            if let attachment = try? parseMediaImetaTag(
+                tag: tag,
+                sourceEpoch: sourceEpoch
+            ), let safeAttachment = displaySafeMediaAttachment(attachment) {
+                attachments.append(safeAttachment)
             }
         }
         guard foundImeta, !attachments.isEmpty else { return nil }
@@ -213,177 +216,61 @@ nonisolated enum MessageSemantics {
         return MessageTagFfi(values: values)
     }
 
-    private static func mediaAttachment(
-        from tag: MessageTagFfi,
-        sourceEpoch: UInt64
+    /// Keep UI-only bounds separate from MDK's protocol parser. The attachment
+    /// fields that feed media cryptography remain byte-for-byte unchanged.
+    private static func displaySafeMediaAttachment(
+        _ reference: MediaAttachmentReferenceFfi
     ) -> MediaAttachmentReferenceFfi? {
-        guard tag.values.first == imetaTag else { return nil }
-        let fields = tag.values.dropFirst()
-        guard fields.count <= maxImetaFieldsPerTag else { return nil }
-        var locators: [MediaLocatorFfi] = []
-        var ciphertextSha256 = ""
-        var plaintextSha256 = ""
-        var nonce = ""
-        var mediaType = ""
-        var version: EncryptedMediaVersionFfi?
-        var name = ""
-        var dim: String?
-        var thumbhash: String?
-
-        for field in fields {
-            if let value = field.dropPrefix("locator ") {
-                guard let locator = mediaLocator(from: value) else { return nil }
-                guard locators.count < maxImetaLocatorsPerTag else { return nil }
-                locators.append(locator)
-            } else if let value = field.dropPrefix("ciphertext_sha256 ") {
-                ciphertextSha256 = value
-            } else if let value = field.dropPrefix("plaintext_sha256 ") {
-                plaintextSha256 = value
-            } else if let value = field.dropPrefix("nonce ") {
-                nonce = value
-            } else if let value = field.dropPrefix("m ") {
-                mediaType = canonicalMediaType(value) ?? ""
-            } else if let value = field.dropPrefix("filename ") {
-                name = value
-            } else if let value = field.dropPrefix("v ") {
-                version = EncryptedMediaVersionFfi(wireValue: value)
-            } else if let value = field.dropPrefix("dim ") {
-                let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                if isValidMediaDim(candidate) {
-                    dim = candidate
-                }
-            } else if let value = field.dropPrefix("thumbhash ") {
-                let candidate = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                if isValidMediaThumbhash(candidate) {
-                    thumbhash = candidate
-                }
-            } else if field.hasPrefix("blurhash ") {
-                continue
-            }
-        }
-
-        let fileName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !locators.isEmpty,
-              ciphertextSha256.isHexByteString(byteCount: 32),
-              plaintextSha256.isHexByteString(byteCount: 32),
-              nonce.isHexByteString(byteCount: 12),
-              !fileName.isEmpty,
-              isWithinByteLimit(fileName, maxImetaFileNameBytes),
-              !mediaType.isEmpty,
-              isWithinByteLimit(mediaType, maxImetaMediaTypeBytes),
-              let version,
-              supportsEncryptedMediaVersion(version)
+        guard reference.fileName.utf8.count <= maxImetaFileNameBytes,
+              reference.mediaType.utf8.count <= maxImetaMediaTypeBytes
         else { return nil }
 
+        let dim = reference.dim?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let thumbhash = reference.thumbhash?.trimmingCharacters(in: .whitespacesAndNewlines)
         return MediaAttachmentReferenceFfi(
-            locators: locators,
-            ciphertextSha256: ciphertextSha256.lowercased(),
-            plaintextSha256: plaintextSha256.lowercased(),
-            nonceHex: nonce.lowercased(),
-            fileName: fileName,
-            mediaType: mediaType,
-            version: version,
-            sourceEpoch: sourceEpoch,
-            dim: dim,
-            thumbhash: thumbhash
+            locators: reference.locators,
+            ciphertextSha256: reference.ciphertextSha256,
+            plaintextSha256: reference.plaintextSha256,
+            nonceHex: reference.nonceHex,
+            fileName: reference.fileName,
+            mediaType: reference.mediaType,
+            version: reference.version,
+            sourceEpoch: reference.sourceEpoch,
+            dim: dim.flatMap { isValidMediaDim($0) ? $0 : nil },
+            thumbhash: thumbhash.flatMap { isValidMediaThumbhash($0) ? $0 : nil }
         )
-    }
-
-    private static func mediaLocator(from value: String) -> MediaLocatorFfi? {
-        let parts = value.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        guard parts.count == 2 else { return nil }
-        let kind = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-        let locatorValue = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !kind.isEmpty, !locatorValue.isEmpty else { return nil }
-        let locator = MediaLocatorFfi(kind: kind, value: locatorValue)
-        guard kind != EncryptedMediaLocatorValidation.blossomKind
-            || EncryptedMediaLocatorValidation.validatedURL(for: locator) != nil
-        else { return nil }
-        return locator
-    }
-
-    static func canonicalMediaType(_ raw: String) -> String? {
-        let type = raw
-            .split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)
-            .first
-            .map(String.init)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        guard let type,
-              isWithinByteLimit(type, maxImetaMediaTypeBytes),
-              isValidMediaType(type)
-        else { return nil }
-        return type == "image/jpg" ? "image/jpeg" : type
-    }
-
-    private static func isValidMediaType(_ raw: String) -> Bool {
-        let parts = raw.split(separator: "/", omittingEmptySubsequences: false)
-        guard parts.count == 2,
-              !parts[0].isEmpty,
-              !parts[1].isEmpty
-        else { return false }
-        return parts[0].utf8.allSatisfy(isMediaTypeTokenByte)
-            && parts[1].utf8.allSatisfy(isMediaTypeTokenByte)
-    }
-
-    private static func isMediaTypeTokenByte(_ byte: UInt8) -> Bool {
-        // 0-9, a-z, and the punctuation allowed by the previous regex.
-        switch byte {
-        case 0x30...0x39, 0x61...0x7A,
-             0x21, 0x23, 0x24, 0x26,
-             0x2B, 0x2D, 0x2E,
-             0x5E, 0x5F:
-            return true
-        default:
-            return false
-        }
     }
 
     private static func isValidMediaDim(_ raw: String) -> Bool {
         let parts = raw.split(separator: "x", omittingEmptySubsequences: false)
         guard parts.count == 2 else { return false }
-        return isValidMediaDimComponent(parts[0]) && isValidMediaDimComponent(parts[1])
-    }
-
-    private static func isValidMediaDimComponent(_ component: Substring) -> Bool {
-        let bytes = component.utf8
-        guard (1...6).contains(bytes.count),
-              let first = bytes.first,
-              (0x31...0x39).contains(first)
-        else { return false }
-        return bytes.dropFirst().allSatisfy(isAsciiDigit)
-    }
-
-    // UTF-8 byte caps for peer-controlled imeta strings, mirroring the
-    // thumbhash (1...128) / dim bounds. 255 ~ a generous filename; 127 a
-    // generous canonical "type/subtype".
-    static let maxImetaFileNameBytes = 255
-    static let maxImetaMediaTypeBytes = 127
-    static let maxImetaTags = MediaDraftProcessor.maxAttachmentCount + 2
-    // Keep optimistic parsing on the same per-tag budget as reply previews.
-    static let maxImetaFieldsPerTag = 16
-    static let maxImetaLocatorsPerTag = 8
-
-    private static func isWithinByteLimit(_ value: String, _ max: Int) -> Bool {
-        value.utf8.count <= max
+        return parts.allSatisfy { component in
+            let bytes = component.utf8
+            guard (1...6).contains(bytes.count),
+                  let first = bytes.first,
+                  (0x31...0x39).contains(first)
+            else { return false }
+            return bytes.dropFirst().allSatisfy(isAsciiDigit)
+        }
     }
 
     private static func isValidMediaThumbhash(_ raw: String) -> Bool {
         let bytes = raw.utf8
         guard (1...128).contains(bytes.count) else { return false }
-        return bytes.allSatisfy(isMediaThumbhashByte)
-    }
-
-    private static func isMediaThumbhashByte(_ byte: UInt8) -> Bool {
-        // 0-9, A-Z, a-z, and + - / = _.
-        switch byte {
-        case 0x30...0x39, 0x41...0x5A, 0x61...0x7A,
-             0x2B, 0x2D, 0x2F, 0x3D, 0x5F:
-            return true
-        default:
-            return false
+        return bytes.allSatisfy { byte in
+            switch byte {
+            case 0x30...0x39, 0x41...0x5A, 0x61...0x7A,
+                 0x2B, 0x2D, 0x2F, 0x3D, 0x5F:
+                return true
+            default:
+                return false
+            }
         }
     }
+
+    static let maxImetaFileNameBytes = 255
+    static let maxImetaMediaTypeBytes = 127
+    static let maxImetaTags = MediaDraftProcessor.maxAttachmentCount + 2
 
     private static func streamStart(from tags: [MessageTagFfi]) -> StreamStart? {
         guard let streamId = normalizedStreamId(firstValue(of: streamTag, in: tags)),
@@ -414,18 +301,5 @@ nonisolated enum MessageSemantics {
 
     private static func isAsciiDigit(_ byte: UInt8) -> Bool {
         (0x30...0x39).contains(byte)
-    }
-}
-
-nonisolated private extension String {
-    /// Returns the remainder after `prefix`, or nil if the string doesn't start with it.
-    func dropPrefix(_ prefix: String) -> String? {
-        guard hasPrefix(prefix) else { return nil }
-        return String(dropFirst(prefix.count))
-    }
-
-    func isHexByteString(byteCount: Int) -> Bool {
-        let bytes = utf8
-        return bytes.count == byteCount * 2 && Hex.isHex(self)
     }
 }

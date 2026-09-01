@@ -6,6 +6,7 @@ protocol RelaysViewModelDataSource: AnyObject {
     var activeAccountRef: String? { get }
 
     func loadAccountRelayLists(accountRef: String) async throws -> AccountRelayListsFfi
+    func classifyRelayEndpoints(_ endpoints: [String]) async throws -> [RelayEndpointClassificationFfi]
     func saveAccountRelayLists(
         accountRef: String,
         relays: [String],
@@ -17,6 +18,11 @@ protocol RelaysViewModelDataSource: AnyObject {
 extension AppState: RelaysViewModelDataSource {
     func loadAccountRelayLists(accountRef: String) async throws -> AccountRelayListsFfi {
         try await currentMarmotClient().accountRelayLists(accountRef: accountRef)
+    }
+
+    func classifyRelayEndpoints(_ endpoints: [String]) async throws -> [RelayEndpointClassificationFfi] {
+        let client = try currentMarmotClient()
+        return await client.classifyRelayEndpoints(endpoints)
     }
 
     func saveAccountRelayLists(
@@ -31,6 +37,62 @@ extension AppState: RelaysViewModelDataSource {
             currentLists: currentLists,
             manager: client
         )
+    }
+}
+
+nonisolated enum RelayEndpointPreflight {
+    struct Rejection: LocalizedError {
+        let policy: RelayEndpointPolicyFfi?
+        let endpoint: String?
+
+        var errorDescription: String? {
+            let display = endpoint.flatMap {
+                ContentSanitizer.relayDisplayLine($0, maxLength: 120)
+            }
+            switch policy {
+            case .retired:
+                return display.map { L10n.formatted("%@ is a retired relay.", $0) }
+                    ?? L10n.string("That relay is retired.")
+            case .unsafe:
+                return display.map { L10n.formatted("%@ isn't safe to connect to.", $0) }
+                    ?? L10n.string("That relay isn't safe to connect to.")
+            case .invalid:
+                return display.map { L10n.formatted("%@ isn't a valid relay URL.", $0) }
+                    ?? L10n.string("That isn't a valid relay URL.")
+            case .allowed, nil:
+                return L10n.string("Relay validation returned an incomplete result.")
+            }
+        }
+    }
+
+    static func validatedRelays(
+        inputs: [String],
+        classifications: [RelayEndpointClassificationFfi]
+    ) throws -> [String] {
+        guard classifications.count == inputs.count else {
+            throw Rejection(policy: nil, endpoint: nil)
+        }
+
+        var seen = Set<String>()
+        var relays: [String] = []
+        for (input, classification) in zip(inputs, classifications) {
+            guard classification.endpoint == input else {
+                throw Rejection(policy: nil, endpoint: nil)
+            }
+            guard classification.policy == .allowed else {
+                throw Rejection(policy: classification.policy, endpoint: input)
+            }
+            guard let normalized = classification.normalizedEndpoint,
+                  seen.insert(normalized).inserted
+            else {
+                if classification.normalizedEndpoint == nil {
+                    throw Rejection(policy: nil, endpoint: input)
+                }
+                continue
+            }
+            relays.append(normalized)
+        }
+        return relays
     }
 }
 
@@ -192,8 +254,8 @@ final class RelaysViewModel {
             await drainDeferredReload(using: dataSource)
             return false
         }
-        let normalized = RelaySettings.normalizedRelayURLs(relays)
-        guard !normalized.isEmpty else {
+        let locallyNormalized = RelaySettings.normalizedRelayURLs(relays)
+        guard !locallyNormalized.isEmpty else {
             actionGate.end()
             await drainDeferredReload(using: dataSource)
             saveError = L10n.string("Keep at least one relay.")
@@ -204,6 +266,20 @@ final class RelaysViewModel {
         saveError = nil
 
         do {
+            let classifications = try await dataSource.classifyRelayEndpoints(locallyNormalized)
+            let normalized = try RelayEndpointPreflight.validatedRelays(
+                inputs: locallyNormalized,
+                classifications: classifications
+            )
+            guard !normalized.isEmpty else {
+                throw RelayEndpointPreflight.Rejection(policy: nil, endpoint: nil)
+            }
+            guard dataSource.activeAccountRef == accountRef else {
+                requestReloadAfterSave()
+                actionGate.end()
+                await drainDeferredReload(using: dataSource)
+                return false
+            }
             let savedLists = try await dataSource.saveAccountRelayLists(
                 accountRef: accountRef,
                 relays: normalized,
