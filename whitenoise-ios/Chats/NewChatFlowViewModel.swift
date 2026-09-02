@@ -421,6 +421,14 @@ final class NewChatFlowViewModel {
             groupIdHex = created.groupIdHex
             createdRow = created.chatListRow
 #endif
+            if let image {
+                GroupAvatarImageLoader.seed(
+                    data: image.data,
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex,
+                    replacingImageHashHex: nil
+                )
+            }
             if let createdRow {
                 appState.noteCreatedChatListRow(accountRef: accountRef, row: createdRow)
             }

@@ -290,6 +290,7 @@ final class GroupDetailsViewModel {
     ) async throws {
         guard let conversation, let accountRef = appState.activeAccountRef else { throw GroupDetailsActionError.noActiveAccount }
         guard !membershipActionInFlight else { throw GroupDetailsActionError.operationInFlight }
+        let replacingImageHashHex = conversation.group.imageHashHex
         membershipActionInFlight = true
         onProgress(.updating)
         defer { membershipActionInFlight = false }
@@ -297,6 +298,7 @@ final class GroupDetailsViewModel {
         do {
             let client = try appState.currentMarmotClient()
             var summary: SendSummaryFfi?
+            var publishedEncryptedImage = false
 #if DEBUG
             if let draft {
                 if !pendingLegacyAvatarClearAfterImageMutation {
@@ -315,6 +317,7 @@ final class GroupDetailsViewModel {
                             mediaType: draft.mediaType
                         )
                     }
+                    publishedEncryptedImage = true
                 }
             } else if conversation.group.imageHashHex != nil,
                       !pendingLegacyAvatarClearAfterImageMutation {
@@ -339,6 +342,7 @@ final class GroupDetailsViewModel {
                         plaintext: draft.data,
                         mediaType: draft.mediaType
                     )
+                    publishedEncryptedImage = true
                 }
             } else if conversation.group.imageHashHex != nil,
                       !pendingLegacyAvatarClearAfterImageMutation {
@@ -387,6 +391,14 @@ final class GroupDetailsViewModel {
             }
 
             if let summary {
+                if let draft {
+                    GroupAvatarImageLoader.seed(
+                        data: draft.data,
+                        accountRef: accountRef,
+                        groupIdHex: conversation.group.groupIdHex,
+                        replacingImageHashHex: publishedEncryptedImage ? replacingImageHashHex : nil
+                    )
+                }
                 await refreshGroupManagementAndNotify()
                 await refreshVisibleDebugState(using: appState)
                 Haptics.success()

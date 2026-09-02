@@ -12626,7 +12626,7 @@ struct TimelineBottomTests {
     }
 
     @Test func semanticTargetPositioningRejectsAutomaticBottomScrolls() {
-        for reason in [TimelineBottomScrollReason.timelineChange] {
+        for reason in [TimelineBottomScrollReason.timelineChange, .layoutChange] {
             #expect(TimelineInitialTargetScrollPolicy.shouldSuppressBottomScroll(
                 hasPositionIntent: true,
                 didFinishPositioning: false,
@@ -12866,7 +12866,7 @@ struct TimelineBottomTests {
     }
 
     @Test func userScrollSuppressesAutomaticBottomRequestsButNotButtonTap() {
-        for reason in [TimelineBottomScrollReason.timelineChange] {
+        for reason in [TimelineBottomScrollReason.timelineChange, .layoutChange] {
             #expect(!TimelineBottomScrollCoordinator.shouldExecute(
                 reason: reason,
                 isUserScrolling: true
@@ -12879,6 +12879,29 @@ struct TimelineBottomTests {
 
         #expect(TimelineBottomScrollCoordinator.shouldExecute(
             reason: .buttonTap,
+            isUserScrolling: true
+        ))
+    }
+
+    @Test func layoutChangesFollowBottomOnlyBeforeTheUserMovesAway() {
+        #expect(TimelineBottomScrollCoordinator.shouldFollowLayoutChange(
+            didFinishInitialPositioning: true,
+            userMovedAwayFromBottom: false,
+            isUserScrolling: false
+        ))
+        #expect(!TimelineBottomScrollCoordinator.shouldFollowLayoutChange(
+            didFinishInitialPositioning: false,
+            userMovedAwayFromBottom: false,
+            isUserScrolling: false
+        ))
+        #expect(!TimelineBottomScrollCoordinator.shouldFollowLayoutChange(
+            didFinishInitialPositioning: true,
+            userMovedAwayFromBottom: true,
+            isUserScrolling: false
+        ))
+        #expect(!TimelineBottomScrollCoordinator.shouldFollowLayoutChange(
+            didFinishInitialPositioning: true,
+            userMovedAwayFromBottom: false,
             isUserScrolling: true
         ))
     }

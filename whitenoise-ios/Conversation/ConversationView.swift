@@ -80,6 +80,7 @@ struct TimelineBottomViewport: Equatable {
 
 enum TimelineBottomScrollReason: Equatable {
     case timelineChange
+    case layoutChange
     case buttonTap
 
     var isUserInitiated: Bool {
@@ -159,6 +160,16 @@ enum TimelineBottomScrollCoordinator {
         isUserScrolling: Bool
     ) -> Bool {
         reason.isUserInitiated || !isUserScrolling
+    }
+
+    static func shouldFollowLayoutChange(
+        didFinishInitialPositioning: Bool,
+        userMovedAwayFromBottom: Bool,
+        isUserScrolling: Bool
+    ) -> Bool {
+        didFinishInitialPositioning
+            && !userMovedAwayFromBottom
+            && !isUserScrolling
     }
 }
 
@@ -1560,8 +1571,20 @@ struct ConversationView: View {
                         .onScrollGeometryChange(for: CGFloat.self) { geometry in
                             geometry.contentSize.height
                         } action: { _, _ in
-                            guard isInitialTimelinePositioning else { return }
-                            maintainInitialTimelinePosition(viewModel: viewModel)
+                            if isInitialTimelinePositioning {
+                                maintainInitialTimelinePosition(viewModel: viewModel)
+                                return
+                            }
+                            guard TimelineBottomScrollCoordinator.shouldFollowLayoutChange(
+                                didFinishInitialPositioning: isInitialTimelinePositionSettled,
+                                userMovedAwayFromBottom: userMovedAwayFromTimelineBottom,
+                                isUserScrolling: isUserScrollingTimeline
+                            ) else { return }
+                            scheduleScrollToBottom(
+                                proxy: proxy,
+                                animated: false,
+                                reason: .layoutChange
+                            )
                         }
                         .onChange(of: viewModel.timeline.last?.id) { _, newId in
                             guard newId != nil else { return }

@@ -57,60 +57,6 @@
             "state" : "translated",
             "value" : ""
           }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%@; %u attempts; %u rearms"
-          }
         }
       }
     },
@@ -171,60 +117,6 @@
             "state" : "translated",
             "value" : "·"
           }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "accepted %u/%u required; %u unattempted; %u failed; %u prohibited"
-          }
         }
       }
     },
@@ -284,60 +176,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "「線上」表示該帳戶的執行時間工作人員現在在應用程式中處於活動狀態（訂閱了其中繼）。它不反映密鑰存取。"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "epoch %llu → %llu"
           }
         }
       }
@@ -36385,7 +36223,6 @@
       }
     },
     "Loading quarantined groups" : {
-
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -51839,7 +51676,6 @@
       }
     },
     "Quarantined Groups" : {
-
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -56949,7 +56785,6 @@
       }
     },
     "Saved; delivery confirmation is pending." : {
-
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -67956,7 +67791,6 @@
       }
     },
     "The stored MLS session could not be opened. Retry may help if storage was temporarily unavailable." : {
-
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -69399,6 +69233,10 @@
           }
         }
       }
+    },
+    "This MDK build reported a quarantine reason the app does not recognize." : {
+      "comment" : "Error message when a quarantine reason is not recognized by the app.",
+      "isCommentAutoGenerated" : true
     },
     "This message can only be removed from this device." : {
       "extractionState" : "manual",
@@ -71414,6 +71252,9 @@
           }
         }
       }
+    },
+    "Unknown quarantine reason" : {
+
     },
     "Unlock" : {
       "extractionState" : "manual",

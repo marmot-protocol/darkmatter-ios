@@ -6,16 +6,23 @@ import UIKit
 import UniformTypeIdentifiers
 
 actor CancellableLoadLimiter {
+    private struct Waiter {
+        let id: UUID
+        let priority: Int
+        let sequence: UInt64
+    }
+
     private let maximumConcurrentLoads: Int
     private var reservations: Set<UUID> = []
-    private var waiterOrder: [UUID] = []
+    private var waiterOrder: [Waiter] = []
     private var waiters: [UUID: CheckedContinuation<UUID?, Never>] = [:]
+    private var nextSequence: UInt64 = 0
 
     init(maximumConcurrentLoads: Int) {
         self.maximumConcurrentLoads = max(1, maximumConcurrentLoads)
     }
 
-    func acquire() async -> UUID? {
+    func acquire(priority: Int = 0) async -> UUID? {
         let waiterID = UUID()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -26,7 +33,12 @@ actor CancellableLoadLimiter {
                     reservations.insert(reservation)
                     continuation.resume(returning: reservation)
                 } else {
-                    waiterOrder.append(waiterID)
+                    waiterOrder.append(Waiter(
+                        id: waiterID,
+                        priority: priority,
+                        sequence: nextSequence
+                    ))
+                    nextSequence &+= 1
                     waiters[waiterID] = continuation
                 }
             }
@@ -46,14 +58,21 @@ actor CancellableLoadLimiter {
 
     private func cancelWaiter(_ waiterID: UUID) {
         guard let continuation = waiters.removeValue(forKey: waiterID) else { return }
-        waiterOrder.removeAll { $0 == waiterID }
+        waiterOrder.removeAll { $0.id == waiterID }
         continuation.resume(returning: nil)
     }
 
     private func resumeNextWaiter() {
-        while let waiterID = waiterOrder.first {
-            waiterOrder.removeFirst()
-            guard let continuation = waiters.removeValue(forKey: waiterID) else { continue }
+        while let index = waiterOrder.indices.max(by: { lhs, rhs in
+            let left = waiterOrder[lhs]
+            let right = waiterOrder[rhs]
+            if left.priority != right.priority {
+                return left.priority < right.priority
+            }
+            return left.sequence > right.sequence
+        }) {
+            let waiter = waiterOrder.remove(at: index)
+            guard let continuation = waiters.removeValue(forKey: waiter.id) else { continue }
             let reservation = UUID()
             reservations.insert(reservation)
             continuation.resume(returning: reservation)
@@ -181,7 +200,14 @@ actor RemoteAvatarDiskCache {
     static let groupShared = RemoteAvatarDiskCache(
         directoryName: "GroupAvatars",
         maximumBytes: 75 * 1024 * 1024,
-        maximumEntryBytes: 10 * 1024 * 1024
+        maximumEntryBytes: 10 * 1024 * 1024,
+        maximumAge: 30 * 24 * 60 * 60
+    )
+    static let groupThumbnailShared = RemoteAvatarDiskCache(
+        directoryName: "GroupAvatarThumbnails",
+        maximumBytes: 50 * 1024 * 1024,
+        maximumEntryBytes: 2 * 1024 * 1024,
+        maximumAge: 30 * 24 * 60 * 60
     )
 
     private let directoryURL: URL
