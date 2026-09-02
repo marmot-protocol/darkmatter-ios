@@ -43,7 +43,7 @@ struct SupportChatView: View {
                             )
                         }
                 }
-                .onboardingPrimaryButtonStyle()
+                .wnPrimaryButtonStyle()
                 .controlSize(.large)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
