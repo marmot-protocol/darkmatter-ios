@@ -81,32 +81,3 @@ struct OnboardingAvatarPreview: View {
             ?? "?"
     }
 }
-
-extension View {
-    @ViewBuilder
-    func onboardingPrimaryButtonStyle() -> some View {
-        if #available(iOS 26.0, *) {
-            buttonStyle(.glassProminent)
-        } else {
-            buttonStyle(.borderedProminent)
-        }
-    }
-
-    @ViewBuilder
-    func onboardingSecondaryButtonStyle() -> some View {
-        if #available(iOS 26.0, *) {
-            buttonStyle(.glass)
-        } else {
-            buttonStyle(.bordered)
-        }
-    }
-
-    @ViewBuilder
-    func onboardingFlexibleButtonSizing() -> some View {
-        if #available(iOS 26.0, *) {
-            buttonSizing(.flexible)
-        } else {
-            frame(maxWidth: .infinity)
-        }
-    }
-}

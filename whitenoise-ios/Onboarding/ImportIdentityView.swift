@@ -126,27 +126,12 @@ struct ImportIdentityView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Button {
+            WNButton(title: "Sign In", isLoading: model.isImporting) {
                 Task {
                     await model.runImport(using: appState, dismiss: { dismiss() })
                 }
-            } label: {
-                Text("Sign In")
-                    .hidden()
             }
-            .onboardingPrimaryButtonStyle()
-            .controlSize(.extraLarge)
-            .onboardingFlexibleButtonSizing()
             .disabled(!canSubmit && !model.isImporting)
-            .overlay {
-                OnboardingPrimaryActionLabel(
-                    title: "Sign In",
-                    isLoading: model.isImporting,
-                    isActionEnabled: keyState == .valid || model.isImporting
-                )
-                .allowsHitTesting(false)
-            }
-            .allowsHitTesting(!model.isImporting)
             .accessibilityLabel(model.isImporting ? "Signing In" : "Sign In")
             .accessibilityValue(model.isImporting ? "In progress" : "")
             .safeAreaPadding(.horizontal)

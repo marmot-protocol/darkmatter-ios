@@ -46,23 +46,16 @@ struct WelcomeView: View {
             Spacer()
 
             VStack {
-                Button("Sign In") {
+                WNButton(title: "Sign In", emphasis: .secondary) {
                     open(.signIn)
                 }
-                .onboardingSecondaryButtonStyle()
                 .accessibilityIdentifier("welcome.sign-in")
 
-                Button {
+                WNButton(title: "Sign Up") {
                     open(.signUp)
-                } label: {
-                    Text("Sign Up")
-                        .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
                 }
-                .onboardingPrimaryButtonStyle()
                 .accessibilityIdentifier("welcome.sign-up")
             }
-            .controlSize(.extraLarge)
-            .onboardingFlexibleButtonSizing()
         }
         .safeAreaPadding(.horizontal)
         .safeAreaPadding(.bottom)

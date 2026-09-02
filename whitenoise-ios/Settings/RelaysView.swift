@@ -177,7 +177,7 @@ private struct AddRelaySettingsSheet: View {
                         onAdd(url)
                         dismiss()
                     }
-                    .onboardingPrimaryButtonStyle()
+                    .wnPrimaryButtonStyle()
                     .disabled(!canAdd)
                 }
             }

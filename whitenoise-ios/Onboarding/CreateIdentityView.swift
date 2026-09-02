@@ -93,7 +93,10 @@ struct CreateIdentityView: View {
         .interactiveDismissDisabled(!model.allowsBackNavigation)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                Button {
+                WNButton(
+                    title: LocalizedStringKey(primaryActionTitle),
+                    isLoading: model.isSubmitting
+                ) {
                     focusedField = nil
                     Task {
                         if model.phase == .creationFailed {
@@ -102,22 +105,8 @@ struct CreateIdentityView: View {
                             await model.submit(using: appState, dismiss: { dismiss() })
                         }
                     }
-                } label: {
-                    Text(primaryActionTitle)
-                        .hidden()
                 }
-                .onboardingPrimaryButtonStyle()
-                .controlSize(.extraLarge)
-                .onboardingFlexibleButtonSizing()
                 .disabled(model.isBusy || !hasValidName)
-                .overlay {
-                    OnboardingPrimaryActionLabel(
-                        title: LocalizedStringKey(primaryActionTitle),
-                        isLoading: model.isSubmitting,
-                        isActionEnabled: hasValidName
-                    )
-                    .allowsHitTesting(false)
-                }
                 .accessibilityLabel(primaryActionTitle)
                 .accessibilityIdentifier("sign-up.create")
                 .accessibilityValue(model.isSubmitting ? "In progress" : "")
@@ -241,7 +230,7 @@ struct CreateIdentityView: View {
             } label: {
                 Text(model.avatarDraft == nil ? "Add Photo" : "Change Photo")
             }
-            .onboardingSecondaryButtonStyle()
+            .wnSecondaryButtonStyle()
             .padding(.top)
             .disabled(model.isPreparingAvatar)
 

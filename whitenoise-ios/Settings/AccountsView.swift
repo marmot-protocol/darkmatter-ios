@@ -40,7 +40,7 @@ struct AccountsView: View {
                 Label("Add Profile", systemImage: "person.crop.circle.badge.plus")
                     .frame(maxWidth: .infinity)
             }
-            .onboardingPrimaryButtonStyle()
+            .wnPrimaryButtonStyle()
             .controlSize(.extraLarge)
             .padding()
             .background(.bar)

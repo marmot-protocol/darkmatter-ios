@@ -124,7 +124,7 @@ struct ProfileEditView: View {
                             }
                         }
                     }
-                    .onboardingPrimaryButtonStyle()
+                    .wnPrimaryButtonStyle()
                     .disabled(saveDisabled)
                 } else {
                     Button("Edit", action: beginEditing)
@@ -168,7 +168,7 @@ struct ProfileEditView: View {
                         Button(model.picture.isEmpty ? "Add Photo" : "Change Photo") {
                             showImagePicker = true
                         }
-                        .onboardingSecondaryButtonStyle()
+                        .wnSecondaryButtonStyle()
                         .padding(.top)
                         .disabled(
                             model.isPublishing
