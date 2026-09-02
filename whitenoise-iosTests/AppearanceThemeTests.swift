@@ -1,5 +1,6 @@
 import Observation
 import SwiftUI
+import Synchronization
 import Testing
 import UIKit
 @testable import whitenoise_ios
@@ -109,15 +110,14 @@ struct AppearanceThemeTests {
     }
 }
 
-private final class AppearanceObservationProbe: @unchecked Sendable {
-    private let lock = NSLock()
-    private var changes = 0
+private final class AppearanceObservationProbe: Sendable {
+    private let changes = Mutex(0)
 
     var changeCount: Int {
-        lock.withLock { changes }
+        changes.withLock { $0 }
     }
 
     func recordChange() {
-        lock.withLock { changes += 1 }
+        changes.withLock { $0 += 1 }
     }
 }
