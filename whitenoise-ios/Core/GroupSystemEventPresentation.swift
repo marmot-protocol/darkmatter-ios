@@ -11,6 +11,11 @@ nonisolated enum GroupSystemEventPresentation {
 
     typealias DisplayNameResolver = (String) -> String
 
+    fileprivate enum Participant {
+        case current
+        case other(String)
+    }
+
     static func isDisplayable(_ record: AppMessageRecordFfi) -> Bool {
         isDisplayable(record, groupSystem: nil)
     }
@@ -183,64 +188,49 @@ nonisolated enum GroupSystemEventPresentation {
             currentAccountIdHex: String?,
             displayName: DisplayNameResolver
         ) -> String? {
-            let actorHex = normalizedHex(actor) ?? normalizedHex(sender.isEmpty ? nil : sender)
-            let subjectHex = normalizedHex(subject)
             let current = normalizedHex(currentAccountIdHex)
-            let actorName = actorHex.map { $0 == current ? L10n.string("You") : displayName($0) }
-            let subjectName = subjectHex.map { $0 == current ? L10n.string("you") : displayName($0) }
+            let resolvedActor = participant(
+                normalizedHex(actor) ?? normalizedHex(sender.isEmpty ? nil : sender),
+                current: current,
+                displayName: displayName
+            )
+            let resolvedSubject = participant(
+                normalizedHex(subject),
+                current: current,
+                displayName: displayName
+            )
             let groupName = ContentSanitizer.groupName(name)
 
             if let systemType = trimmed(systemType) {
                 switch systemType {
                 case "member_added":
-                    if let actorName, let subjectName {
-                        return L10n.formatted("%@ added %@", actorName, subjectName)
-                    }
-                    if let subjectName {
-                        return L10n.formatted("%@ was added", subjectName)
+                    if let text = memberAddedText(actor: resolvedActor, subject: resolvedSubject) {
+                        return text
                     }
                 case "member_removed":
-                    if let actorName, let subjectName {
-                        return L10n.formatted("%@ removed %@", actorName, subjectName)
-                    }
-                    if let subjectName {
-                        return L10n.formatted("%@ was removed", subjectName)
+                    if let text = memberRemovedText(actor: resolvedActor, subject: resolvedSubject) {
+                        return text
                     }
                 case "member_left":
-                    if let leavingName = actorName ?? subjectName {
-                        return L10n.formatted("%@ left", leavingName)
+                    if let text = memberLeftText(resolvedActor ?? resolvedSubject) {
+                        return text
                     }
                 case "admin_added":
-                    if let actorName, let subjectName {
-                        return L10n.formatted("%@ made %@ an admin", actorName, subjectName)
-                    }
-                    if let subjectName {
-                        return L10n.formatted("%@ was made an admin", subjectName)
+                    if let text = adminAddedText(actor: resolvedActor, subject: resolvedSubject) {
+                        return text
                     }
                 case "admin_removed":
-                    if let actorName, let subjectName {
-                        return L10n.formatted("%@ removed %@ as admin", actorName, subjectName)
-                    }
-                    if let subjectName {
-                        return L10n.formatted("%@ is no longer an admin", subjectName)
+                    if let text = adminRemovedText(actor: resolvedActor, subject: resolvedSubject) {
+                        return text
                     }
                 case "group_renamed":
-                    if let groupName {
-                        if let actorName {
-                            return L10n.formatted("%@ changed the group name to %@", actorName, groupName)
-                        }
-                        return L10n.formatted("Group renamed to %@", groupName)
-                    }
-                    return L10n.string("Group renamed")
+                    return groupRenamedText(actor: resolvedActor, groupName: groupName)
                 case "group_avatar_changed":
-                    if let actorName {
-                        return L10n.formatted("%@ changed the group photo", actorName)
-                    }
-                    return L10n.string("Group avatar changed")
+                    return groupAvatarChangedText(actor: resolvedActor)
                 case "disappearing_timer_changed":
                     if let newRetentionSeconds {
                         return disappearingTimerText(
-                            actorName: actorName,
+                            actor: resolvedActor,
                             oldRetentionSeconds: oldRetentionSeconds,
                             newRetentionSeconds: newRetentionSeconds
                         )
@@ -257,6 +247,117 @@ nonisolated enum GroupSystemEventPresentation {
                 return sanitized.prefix(1).uppercased() + sanitized.dropFirst()
             }
             return nil
+        }
+
+        private func participant(
+            _ accountIdHex: String?,
+            current: String?,
+            displayName: DisplayNameResolver
+        ) -> Participant? {
+            guard let accountIdHex else { return nil }
+            return accountIdHex == current ? .current : .other(displayName(accountIdHex))
+        }
+
+        private func memberAddedText(actor: Participant?, subject: Participant?) -> String? {
+            switch (actor, subject) {
+            case (.current?, .other(let subject)?):
+                L10n.formatted("You added %@", subject)
+            case (.other(let actor)?, .current?):
+                L10n.formatted("%@ added you", actor)
+            case (.other(let actor)?, .other(let subject)?):
+                L10n.formatted("%@ added %@", actor, subject)
+            case (_, .current?):
+                L10n.string("You were added")
+            case (_, .other(let subject)?):
+                L10n.formatted("%@ was added", subject)
+            case (_, nil):
+                nil
+            }
+        }
+
+        private func memberRemovedText(actor: Participant?, subject: Participant?) -> String? {
+            switch (actor, subject) {
+            case (.current?, .other(let subject)?):
+                L10n.formatted("You removed %@", subject)
+            case (.other(let actor)?, .current?):
+                L10n.formatted("%@ removed you", actor)
+            case (.other(let actor)?, .other(let subject)?):
+                L10n.formatted("%@ removed %@", actor, subject)
+            case (_, .current?):
+                L10n.string("You were removed")
+            case (_, .other(let subject)?):
+                L10n.formatted("%@ was removed", subject)
+            case (_, nil):
+                nil
+            }
+        }
+
+        private func memberLeftText(_ leaving: Participant?) -> String? {
+            switch leaving {
+            case .current?:
+                L10n.string("You left")
+            case .other(let name)?:
+                L10n.formatted("%@ left", name)
+            case nil:
+                nil
+            }
+        }
+
+        private func adminAddedText(actor: Participant?, subject: Participant?) -> String? {
+            switch (actor, subject) {
+            case (.current?, .other(let subject)?):
+                L10n.formatted("You made %@ an admin", subject)
+            case (.other(let actor)?, .current?):
+                L10n.formatted("%@ made you an admin", actor)
+            case (.other(let actor)?, .other(let subject)?):
+                L10n.formatted("%@ made %@ an admin", actor, subject)
+            case (_, .current?):
+                L10n.string("You were made an admin")
+            case (_, .other(let subject)?):
+                L10n.formatted("%@ was made an admin", subject)
+            case (_, nil):
+                nil
+            }
+        }
+
+        private func adminRemovedText(actor: Participant?, subject: Participant?) -> String? {
+            switch (actor, subject) {
+            case (.current?, .other(let subject)?):
+                L10n.formatted("You removed %@ as admin", subject)
+            case (.other(let actor)?, .current?):
+                L10n.formatted("%@ removed you as admin", actor)
+            case (.other(let actor)?, .other(let subject)?):
+                L10n.formatted("%@ removed %@ as admin", actor, subject)
+            case (_, .current?):
+                L10n.string("You are no longer an admin")
+            case (_, .other(let subject)?):
+                L10n.formatted("%@ is no longer an admin", subject)
+            case (_, nil):
+                nil
+            }
+        }
+
+        private func groupRenamedText(actor: Participant?, groupName: String?) -> String {
+            guard let groupName else { return L10n.string("Group renamed") }
+            switch actor {
+            case .current?:
+                return L10n.formatted("You changed the group name to %@", groupName)
+            case .other(let actor)?:
+                return L10n.formatted("%@ changed the group name to %@", actor, groupName)
+            case nil:
+                return L10n.formatted("Group renamed to %@", groupName)
+            }
+        }
+
+        private func groupAvatarChangedText(actor: Participant?) -> String {
+            switch actor {
+            case .current?:
+                L10n.string("You changed the group photo")
+            case .other(let actor)?:
+                L10n.formatted("%@ changed the group photo", actor)
+            case nil:
+                L10n.string("Group avatar changed")
+            }
         }
 
         private func trimmed(_ value: String?) -> String? {
@@ -276,15 +377,19 @@ nonisolated enum GroupSystemEventPresentation {
         }
 
         private func disappearingTimerText(
-            actorName: String?,
+            actor: Participant?,
             oldRetentionSeconds: UInt64?,
             newRetentionSeconds: UInt64
         ) -> String {
             if newRetentionSeconds == 0 {
-                if let actorName {
-                    return L10n.formatted("%@ turned off disappearing messages", actorName)
+                switch actor {
+                case .current?:
+                    return L10n.string("You turned off disappearing messages")
+                case .other(let actor)?:
+                    return L10n.formatted("%@ turned off disappearing messages", actor)
+                case nil:
+                    return L10n.string("Disappearing messages turned off")
                 }
-                return L10n.string("Disappearing messages turned off")
             }
 
             let newText = GroupSystemEventPresentation.retentionDurationText(seconds: newRetentionSeconds)
@@ -292,25 +397,37 @@ nonisolated enum GroupSystemEventPresentation {
                oldRetentionSeconds > 0,
                oldRetentionSeconds != newRetentionSeconds {
                 let oldText = GroupSystemEventPresentation.retentionDurationText(seconds: oldRetentionSeconds)
-                if let actorName {
+                switch actor {
+                case .current?:
+                    return L10n.formatted(
+                        "You changed disappearing messages from %@ to %@",
+                        oldText,
+                        newText
+                    )
+                case .other(let actor)?:
                     return L10n.formatted(
                         "%@ changed disappearing messages from %@ to %@",
-                        actorName,
+                        actor,
+                        oldText,
+                        newText
+                    )
+                case nil:
+                    return L10n.formatted(
+                        "Disappearing messages changed from %@ to %@",
                         oldText,
                         newText
                     )
                 }
-                return L10n.formatted(
-                    "Disappearing messages changed from %@ to %@",
-                    oldText,
-                    newText
-                )
             }
 
-            if let actorName {
-                return L10n.formatted("%@ set disappearing messages to %@", actorName, newText)
+            switch actor {
+            case .current?:
+                return L10n.formatted("You set disappearing messages to %@", newText)
+            case .other(let actor)?:
+                return L10n.formatted("%@ set disappearing messages to %@", actor, newText)
+            case nil:
+                return L10n.formatted("Disappearing messages set to %@", newText)
             }
-            return L10n.formatted("Disappearing messages set to %@", newText)
         }
     }
 }

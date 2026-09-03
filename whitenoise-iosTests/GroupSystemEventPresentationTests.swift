@@ -209,6 +209,192 @@ struct GroupSystemEventPresentationTests {
         }
     }
 
+    @Test func adminRowsUseDedicatedSentencesWhenTheSubjectIsTheSignedInAccount() {
+        let me = hex("cc")
+        withAppLanguage(.english) {
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
+                    == "You were made an admin"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_added",
+                    actor: hex("aa"),
+                    subject: me,
+                    currentAccountIdHex: me
+                ) == "Alice made you an admin"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_added",
+                    actor: me,
+                    subject: hex("bb"),
+                    currentAccountIdHex: me
+                ) == "You made Bob an admin"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_added",
+                    actor: hex("aa"),
+                    subject: hex("bb"),
+                    currentAccountIdHex: me
+                ) == "Alice made Bob an admin"
+            )
+            #expect(
+                systemDisplayText(systemType: "admin_removed", subject: me, currentAccountIdHex: me)
+                    == "You are no longer an admin"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_removed",
+                    actor: hex("aa"),
+                    subject: me,
+                    currentAccountIdHex: me
+                ) == "Alice removed you as admin"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_removed",
+                    actor: me,
+                    subject: hex("bb"),
+                    currentAccountIdHex: me
+                ) == "You removed Bob as admin"
+            )
+        }
+    }
+
+    @Test func membershipRowsUseDedicatedSentencesWhenTheSubjectIsTheSignedInAccount() {
+        let me = hex("cc")
+        withAppLanguage(.english) {
+            #expect(
+                systemDisplayText(systemType: "member_added", subject: me, currentAccountIdHex: me)
+                    == "You were added"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "member_added",
+                    actor: hex("aa"),
+                    subject: me,
+                    currentAccountIdHex: me
+                ) == "Alice added you"
+            )
+            #expect(
+                systemDisplayText(systemType: "member_removed", subject: me, currentAccountIdHex: me)
+                    == "You were removed"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "member_removed",
+                    actor: hex("aa"),
+                    subject: me,
+                    currentAccountIdHex: me
+                ) == "Alice removed you"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "member_removed",
+                    actor: me,
+                    subject: hex("bb"),
+                    currentAccountIdHex: me
+                ) == "You removed Bob"
+            )
+            #expect(
+                systemDisplayText(systemType: "member_left", actor: me, currentAccountIdHex: me)
+                    == "You left"
+            )
+            #expect(
+                systemDisplayText(systemType: "member_left", actor: hex("aa"), currentAccountIdHex: me)
+                    == "Alice left"
+            )
+        }
+    }
+
+    @Test func groupMetadataRowsUseDedicatedSentencesWhenTheActorIsTheSignedInAccount() {
+        let me = hex("cc")
+        withAppLanguage(.english) {
+            #expect(
+                systemDisplayText(
+                    systemType: "group_renamed",
+                    actor: me,
+                    name: "Weekend Walks",
+                    currentAccountIdHex: me
+                ) == "You changed the group name to Weekend Walks"
+            )
+            #expect(
+                systemDisplayText(systemType: "group_avatar_changed", actor: me, currentAccountIdHex: me)
+                    == "You changed the group photo"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "disappearing_timer_changed",
+                    actor: me,
+                    oldRetentionSeconds: 3_600,
+                    newRetentionSeconds: 0,
+                    currentAccountIdHex: me
+                ) == "You turned off disappearing messages"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "disappearing_timer_changed",
+                    actor: me,
+                    oldRetentionSeconds: 0,
+                    newRetentionSeconds: 60,
+                    currentAccountIdHex: me
+                ) == "You set disappearing messages to 1 minute"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "disappearing_timer_changed",
+                    actor: me,
+                    oldRetentionSeconds: 60,
+                    newRetentionSeconds: 120,
+                    currentAccountIdHex: me
+                ) == "You changed disappearing messages from 1 minute to 2 minutes"
+            )
+        }
+    }
+
+    @Test func selfAndOtherAdminRowsInflectSeparatelyPerLocale() {
+        let me = hex("cc")
+        let other = hex("bb")
+        withAppLanguage(.spanish) {
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
+                    == "Fuiste nombrado administrador"
+            )
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
+                    == "Bob fue nombrado administrador"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_added",
+                    actor: me,
+                    subject: other,
+                    currentAccountIdHex: me
+                ) == "Hiciste administrador a Bob"
+            )
+            #expect(
+                systemDisplayText(
+                    systemType: "admin_added",
+                    actor: other,
+                    subject: me,
+                    currentAccountIdHex: me
+                ) == "Bob te hizo administrador"
+            )
+        }
+        withAppLanguage(.german) {
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
+                    == "Du wurdest zum Administrator gemacht"
+            )
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
+                    == "Bob wurde zum Administrator gemacht"
+            )
+        }
+    }
+
     @MainActor
     @Test func groupSystemTimelineRowIsVisibleWithoutStreamingDebug() throws {
         let viewModel = ConversationViewModel(
@@ -278,6 +464,32 @@ struct GroupSystemEventPresentationTests {
         #expect(viewModel.groupSystemDisplayText(for: record) == "Member added")
         #expect(viewModel.groupSystemProjectionBuildCountForTesting == 2)
     }
+}
+
+private func systemDisplayText(
+    systemType: String,
+    actor: String? = nil,
+    subject: String? = nil,
+    name: String? = nil,
+    oldRetentionSeconds: UInt64? = nil,
+    newRetentionSeconds: UInt64? = nil,
+    currentAccountIdHex: String? = nil
+) -> String? {
+    GroupSystemEventPresentation.displayText(
+        for: groupSystemRecord(plaintext: "not json", sender: ""),
+        groupSystem: GroupSystemEventFfi(
+            systemType: systemType,
+            text: "System event",
+            actorAccountIdHex: actor,
+            subjectAccountIdHex: subject,
+            name: name,
+            oldName: nil,
+            oldRetentionSeconds: oldRetentionSeconds,
+            newRetentionSeconds: newRetentionSeconds
+        ),
+        currentAccountIdHex: currentAccountIdHex,
+        displayName: testDisplayName
+    )
 }
 
 private func testDisplayName(_ accountHex: String) -> String {
