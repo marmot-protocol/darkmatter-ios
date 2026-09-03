@@ -288,6 +288,18 @@ struct MessageFooterPresentation: Equatable {
     }
 }
 
+nonisolated enum MessageRetryPresentation {
+    static func isAvailable(status: MessageStatus, hasRetryableSend: Bool) -> Bool {
+        guard hasRetryableSend else { return false }
+        switch status {
+        case .sending, .failed:
+            return true
+        case .received, .sent, .streaming:
+            return false
+        }
+    }
+}
+
 enum MessageMediaUploadPresentation {
     static func showsIndicator(status: MessageStatus, items: [MessageMediaAttachment]) -> Bool {
         guard status == .sending else { return false }

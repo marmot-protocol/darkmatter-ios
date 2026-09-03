@@ -64,7 +64,7 @@ final class TimelineStore {
     @ObservationIgnored private var messageByRowFrameKey: [String: AppMessageRecordFfi] = [:]
     @ObservationIgnored private var messageStatusById: [String: MessageStatus] = [:]
     /// Own durable rows whose `sourceMessageIdHex` is still nil — committed
-    /// to the group locally but never delivered to any relay.
+    /// to the group locally and still awaiting a definitive delivery outcome.
     @ObservationIgnored private var undeliveredOwnMessageIds: Set<String> = []
     /// Successful send results whose delivered timeline upsert has not been
     /// consumed yet. Marmot publishes a nil-source local projection before
@@ -655,8 +655,8 @@ final class TimelineStore {
         groupSystemByMessageId[appRecord.messageIdHex] = record.groupSystem
         messageById[appRecord.messageIdHex] = appRecord
         // `sourceMessageIdHex` is the durable delivery marker. A nil-source
-        // projection normally means committed but undelivered, except while a
-        // successful send result is waiting for its sourced upsert to catch up.
+        // projection means committed but unresolved, except while a successful
+        // send result is waiting for its sourced upsert to catch up.
         if appRecord.direction == "sent", record.sourceMessageIdHex == nil {
             if publishedOutgoingMessageIdsAwaitingProjection.contains(appRecord.messageIdHex) {
                 undeliveredOwnMessageIds.remove(appRecord.messageIdHex)
@@ -702,7 +702,7 @@ final class TimelineStore {
         projectionChanged = (reconciledStatus != nil) || projectionChanged
         messageStatusById[appRecord.messageIdHex] = durableRowStatus(
             for: appRecord,
-            matchedInFlightSend: reconciledStatus == .sending
+            invalidated: record.invalidationStatus != nil
         )
 
         if let streamId = StreamWatcher.finalizedStreamId(from: record, appRecord: appRecord) {
@@ -1118,17 +1118,17 @@ final class TimelineStore {
         }
     }
 
-    /// Delivery-aware status for a durable row. An undelivered own row still
-    /// renders as sending while the composer's send is in flight (the FFI
-    /// settles it); outside that window it is a settled failure, retryable
-    /// via group convergence.
+    /// Delivery-aware status for a durable row. A nil source is a durable,
+    /// unresolved delivery state rather than a failure; Marmot invalidation is
+    /// the definitive failure signal.
     private func durableRowStatus(
         for record: AppMessageRecordFfi,
-        matchedInFlightSend: Bool
+        invalidated: Bool
     ) -> MessageStatus {
         guard record.direction == "sent" else { return .received }
+        guard !invalidated else { return .failed }
         guard undeliveredOwnMessageIds.contains(record.messageIdHex) else { return .sent }
-        return matchedInFlightSend ? .sending : .failed
+        return .sending
     }
 
     /// The mirrored record for a durable timeline row, if loaded.

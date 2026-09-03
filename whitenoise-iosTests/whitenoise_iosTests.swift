@@ -7624,29 +7624,47 @@ struct ConversationTimelineProjectionTests {
         #expect(messages.first?.2 == projected.timelineAt)
     }
 
-    @Test func undeliveredOwnRowRendersFailedUntilDeliveredUpsert() throws {
+    @Test func durablyPendingOwnRowStaysPendingUntilDeliveredUpsert() throws {
         let sender = hex("11")
         let groupIdHex = hex("aa")
         let viewModel = ConversationViewModel(
             appState: AppState(client: try MarmotClient.testClient()),
             group: group(name: "", id: groupIdHex)
         )
-        let undelivered = timelineRecord(
+        let pending = AppMessageRecordFfi(
+            messageIdHex: "",
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "stuck offline",
+            kind: MessageSemantics.kindChat,
+            tags: [],
+            recordedAt: 10,
+            receivedAt: 10
+        )
+        let durablyPending = timelineRecord(
             messageIdHex: hex("b7"),
             sourceMessageIdHex: .some(nil),
             direction: "sent",
             groupIdHex: groupIdHex,
             sender: sender,
-            plaintext: "stuck offline",
+            plaintext: pending.plaintext,
             timelineAt: 20
         )
 
+        viewModel.applyPendingOutgoingMessage(tempId: "pending-durable", record: pending)
+
+        #expect(viewModel.timeline.compactMap { item -> MessageStatus? in
+            guard item.id == "msg:pending-durable", case .message(_, let status) = item.kind else { return nil }
+            return status
+        }.first == .sending)
+
         viewModel.applyTimelinePage(
-            TimelinePageFfi(messages: [undelivered], hasMoreBefore: false, hasMoreAfter: false),
+            TimelinePageFfi(messages: [durablyPending], hasMoreBefore: false, hasMoreAfter: false),
             placement: .window
         )
 
-        let rowId = "msg:\(undelivered.messageIdHex)"
+        let rowId = "msg:\(durablyPending.messageIdHex)"
         func status() -> MessageStatus? {
             viewModel.timeline.compactMap { item -> MessageStatus? in
                 guard item.id == rowId, case .message(_, let status) = item.kind else { return nil }
@@ -7654,19 +7672,29 @@ struct ConversationTimelineProjectionTests {
             }.first
         }
 
-        // Committed but never delivered: renders failed, retries via
-        // convergence, and Delete is offered as a local hide.
-        #expect(status() == .failed)
+        // The first durable projection consumes the optimistic row but remains
+        // unresolved, so it keeps the clock and convergence-retry path.
+        #expect(status() == .sending)
+        #expect(MessageFooterPresentation.value(for: try #require(status()), isFromMe: true).systemImage == "clock")
         #expect(viewModel.canRetryFailedSend(rowId: rowId))
         #expect(viewModel.canDiscardFailedSend(rowId: rowId))
 
+        // Repeating the same nil-source projection must not reinterpret the
+        // durable unresolved state as failure after reconciliation is complete.
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [durablyPending], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(status() == .sending)
+        #expect(MessageFooterPresentation.value(for: try #require(status()), isFromMe: true).systemImage == "clock")
+
         // Delivery upsert (same row, source id now present) flips it to sent.
         let delivered = timelineRecord(
-            messageIdHex: undelivered.messageIdHex,
+            messageIdHex: durablyPending.messageIdHex,
             direction: "sent",
             groupIdHex: groupIdHex,
             sender: sender,
-            plaintext: undelivered.plaintext,
+            plaintext: durablyPending.plaintext,
             timelineAt: 20
         )
         viewModel.applyTimelinePage(
@@ -7674,7 +7702,41 @@ struct ConversationTimelineProjectionTests {
             placement: .window
         )
         #expect(status() == .sent)
+        #expect(MessageFooterPresentation.value(for: try #require(status()), isFromMe: true).systemImage == "checkmark")
         #expect(!viewModel.canRetryFailedSend(rowId: rowId))
+    }
+
+    @Test func definitivelyInvalidatedOwnRowRendersFailed() throws {
+        let sender = hex("11")
+        let groupIdHex = hex("aa")
+        let viewModel = ConversationViewModel(
+            appState: AppState(client: try MarmotClient.testClient()),
+            group: group(name: "", id: groupIdHex)
+        )
+        let invalidated = timelineRecord(
+            messageIdHex: hex("b9"),
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: sender,
+            plaintext: "rejected durably",
+            timelineAt: 20,
+            invalidationStatus: "local_publish_failed"
+        )
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [invalidated], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+
+        let status = viewModel.timeline.compactMap { item -> MessageStatus? in
+            guard item.id == "msg:\(invalidated.messageIdHex)", case .message(_, let status) = item.kind else {
+                return nil
+            }
+            return status
+        }.first
+        #expect(status == .failed)
+        #expect(MessageFooterPresentation.value(for: try #require(status), isFromMe: true).isFailure)
     }
 
     @Test func successfulSendAckDoesNotFlashFailedWhileDeliveredProjectionCatchesUp() throws {
@@ -7724,6 +7786,12 @@ struct ConversationTimelineProjectionTests {
 
         #expect(status() == .sent)
         #expect(!viewModel.canRetryFailedSend(rowId: rowId))
+
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [localProjection], hasMoreBefore: false, hasMoreAfter: false),
+            placement: .window
+        )
+        #expect(status() == .sent)
 
         let deliveredProjection = timelineRecord(
             messageIdHex: messageId,
@@ -10930,6 +10998,69 @@ struct MarmotKitMasterIntegrationTests {
         #expect(SendAcceptancePolicy.action(for: completionUnknown) == .awaitDurableProjection)
     }
 
+    @MainActor
+    @Test func durablyAcceptedComposerOutcomesKeepClockWithoutFailureUI() async throws {
+        for disposition in [SendAcceptDispositionFfi.acceptedPending, .completionUnknown] {
+            let appState = AppState(client: try MarmotClient.testClient())
+            appState.activeAccountRef = "account-ref"
+            let timelineStore = TimelineStore(appState: appState, groupIdHex: hex("aa"))
+            let composer = ComposerModel(
+                appState: appState,
+                groupIdHex: hex("aa"),
+                timelineStore: timelineStore
+            )
+            composer.canSendMessages = { true }
+            var surfacedErrors: [String] = []
+            composer.onError = { surfacedErrors.append($0) }
+            composer.sendTextForTesting = { _, _, _, _ in
+                SendSummaryFfi(
+                    published: 0,
+                    messageIds: [],
+                    acceptDisposition: disposition,
+                    maintenanceDisposition: .ready
+                )
+            }
+
+            await composer.send("durably retained")
+
+            let statuses = timelineStore.timeline.compactMap { item -> MessageStatus? in
+                guard case .message(_, let status) = item.kind else { return nil }
+                return status
+            }
+            #expect(statuses == [.sending])
+            #expect(surfacedErrors.isEmpty)
+            #expect(appState.activeToast == nil)
+        }
+    }
+
+    @MainActor
+    @Test func thrownTransientComposerSendRendersFailedAndSurfacesFailure() async throws {
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let timelineStore = TimelineStore(appState: appState, groupIdHex: hex("aa"))
+        let composer = ComposerModel(
+            appState: appState,
+            groupIdHex: hex("aa"),
+            timelineStore: timelineStore
+        )
+        composer.canSendMessages = { true }
+        var surfacedErrors: [String] = []
+        composer.onError = { surfacedErrors.append($0) }
+        composer.sendTextForTesting = { _, _, _, _ in
+            throw NSError(domain: "ComposerSendTests", code: 1)
+        }
+
+        await composer.send("not retained")
+
+        let statuses = timelineStore.timeline.compactMap { item -> MessageStatus? in
+            guard case .message(_, let status) = item.kind else { return nil }
+            return status
+        }
+        #expect(statuses == [.failed])
+        #expect(surfacedErrors.count == 1)
+        #expect(appState.activeToast != nil)
+    }
+
     @Test func accountWorkerErrorsExposeRetrySafetySemantics() {
         #expect(MarmotKitError.AccountWorkerBusy.isAccountWorkerBusy)
         #expect(!MarmotKitError.AccountWorkerBusy.isAccountWorkerResponseTimedOut)
@@ -13315,7 +13446,8 @@ private func timelineRecord(
     agentTextStreamJson: String? = nil,
     reactions: TimelineReactionSummaryFfi = TimelineReactionSummaryFfi(byEmoji: [], userReactions: []),
     deleted: Bool = false,
-    deletedByMessageIdHex: String? = nil
+    deletedByMessageIdHex: String? = nil,
+    invalidationStatus: String? = nil
 ) -> TimelineMessageRecordFfi {
     TimelineMessageRecordFfi(
         messageIdHex: messageIdHex,
@@ -13336,7 +13468,7 @@ private func timelineRecord(
         reactions: reactions,
         deleted: deleted,
         deletedByMessageIdHex: deletedByMessageIdHex,
-        invalidationStatus: nil
+        invalidationStatus: invalidationStatus
     )
 }
 

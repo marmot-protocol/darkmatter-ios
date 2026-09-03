@@ -13,6 +13,13 @@ struct ChatSurfacePresentationTests {
         #expect(MessageFooterPresentation.value(for: .received, isFromMe: false).systemImage == nil)
     }
 
+    @Test func durablePendingRowsKeepRetryActionAvailable() {
+        #expect(MessageRetryPresentation.isAvailable(status: .sending, hasRetryableSend: true))
+        #expect(MessageRetryPresentation.isAvailable(status: .failed, hasRetryableSend: true))
+        #expect(!MessageRetryPresentation.isAvailable(status: .sent, hasRetryableSend: true))
+        #expect(!MessageRetryPresentation.isAvailable(status: .sending, hasRetryableSend: false))
+    }
+
     @Test func mediaUploadIndicatorOnlyAppearsForPendingLocalMedia() {
         let pending = MessageMediaAttachment(
             id: "pending-image",
