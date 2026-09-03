@@ -1001,6 +1001,7 @@ final class ConversationViewModel {
                         // The worker may have completed. Pull authoritative
                         // state before another idempotent convergence attempt.
                         await durableRetryOperations.refresh(self)
+                        guard !Task.isCancelled else { return }
                         if timelineStore.undeliveredDurableMessageId(rowId: rowId) == nil {
                             delivered = true
                             break retryLoop
@@ -1015,6 +1016,7 @@ final class ConversationViewModel {
             // The subscription may not push the healed row; pull it so the
             // bubble flips without leaving the chat.
             await durableRetryOperations.refresh(self)
+            guard !Task.isCancelled else { return }
             if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil {
                 if delivered {
                     // The engine acked the publish but the healed row sits

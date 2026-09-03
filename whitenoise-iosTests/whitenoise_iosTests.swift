@@ -7913,6 +7913,27 @@ struct ConversationTimelineProjectionTests {
         #expect(fixture.viewModel.error == nil)
     }
 
+    @Test func cancelledDuringFinalRefreshRestoresPriorFailureWithoutError() async throws {
+        var enteredFinalRefresh = false
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, _ in unpublishedRetrySummary() },
+            refresh: { _ in
+                enteredFinalRefresh = true
+                withUnsafeCurrentTask { $0?.cancel() }
+            }
+        )
+        let retryTask = Task { @MainActor in
+            await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+        }
+
+        await retryTask.value
+
+        #expect(enteredFinalRefresh)
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .failed)
+        #expect(fixture.viewModel.error == nil)
+    }
+
     @Test func authoritativeDeliveryDuringRetryIsNotOverwrittenByCleanup() async throws {
         let groupIdHex = hex("aa")
         let messageIdHex = hex("d1")
