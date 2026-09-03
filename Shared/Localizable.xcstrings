@@ -621,13 +621,78 @@
         }
       }
     },
+    "%@ added you" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat dich hinzugefügt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ added you"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te añadió"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vous a ajouté"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ti ha aggiunto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te adicionou"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ добавил(а) вас"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sizi ekledi"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@添加了你"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@添加了你"
+          }
+        }
+      }
+    },
     "%@ changed disappearing messages from %@ to %@" : {
       "extractionState" : "manual",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ hat verschwindende Nachrichten von %@ auf %@ geändert"
           }
         },
         "en" : {
@@ -639,49 +704,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ cambió los mensajes temporales de %@ a %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ a changé les messages éphémères de %@ à %@"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ ha cambiato i messaggi effimeri da %@ a %@"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ mudou as mensagens temporárias de %@ para %@"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ изменил(а) исчезающие сообщения с %@ на %@"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@ kaybolan mesajları %@ değerinden %@ değerine değiştirdi"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@将阅后即焚消息从%@改为%@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ changed disappearing messages from %@ to %@"
+            "value" : "%@將限時訊息從%@改為%@"
           }
         }
       }
@@ -692,8 +757,8 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ hat den Gruppennamen zu %@ geändert"
           }
         },
         "en" : {
@@ -704,50 +769,50 @@
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ cambió el nombre del grupo a %@"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ a renommé le groupe en %@"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ ha cambiato il nome del gruppo in %@"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ mudou o nome do grupo para %@"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ изменил(а) название группы на %@"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@ grup adını %@ olarak değiştirdi"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@将群组名称改为%@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group name to %@"
+            "state" : "translated",
+            "value" : "%@將群組名稱改為%@"
           }
         }
       }
@@ -758,56 +823,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ hat das Gruppenbild geändert"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ cambió la foto del grupo"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ a changé la photo du groupe"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ ha cambiato la foto del gruppo"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ mudou a foto do grupo"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ изменил(а) фото группы"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@ grup fotoğrafını değiştirdi"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@更改了群组照片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%@ changed the group photo"
+            "state" : "translated",
+            "value" : "%@更改了群組照片"
           }
         }
       }
@@ -1611,6 +1676,71 @@
         }
       }
     },
+    "%@ made you an admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat dich zum Administrator gemacht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ made you an admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te hizo administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vous a nommé administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ti ha reso amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te tornou administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ назначил(а) вас администратором"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sizi yönetici yaptı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@将你设为管理员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@將你設為管理員"
+          }
+        }
+      }
+    },
     "%@ mentioned you" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1938,6 +2068,136 @@
         }
       }
     },
+    "%@ removed you" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat dich entfernt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ removed you"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te eliminó"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vous a retiré"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ti ha rimosso"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te removeu"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ удалил(а) вас"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sizi çıkardı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@移除了你"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@移除了你"
+          }
+        }
+      }
+    },
+    "%@ removed you as admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat dich als Administrator entfernt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ removed you as admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te quitó como administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ vous a retiré en tant qu'administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ti ha rimosso come amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ te removeu como administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ снял(а) с вас права администратора"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ sizi yönetici olmaktan çıkardı"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@取消了你的管理员身份"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@取消了你的管理員身份"
+          }
+        }
+      }
+    },
     "%@ sent a message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2003,7 +2263,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ hat verschwindende Nachrichten auf %@ gesetzt"
           }
         },
         "en" : {
@@ -2015,49 +2275,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ estableció los mensajes temporales en %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ a réglé les messages éphémères sur %@"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ ha impostato i messaggi effimeri su %@"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ definiu as mensagens temporárias para %@"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ установил(а) исчезающие сообщения на %@"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@ kaybolan mesajları %@ olarak ayarladı"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@将阅后即焚消息设为%@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ set disappearing messages to %@"
+            "value" : "%@將限時訊息設為%@"
           }
         }
       }
@@ -2068,7 +2328,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ hat verschwindende Nachrichten ausgeschaltet"
           }
         },
         "en" : {
@@ -2080,49 +2340,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ desactivó los mensajes temporales"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ a désactivé les messages éphémères"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ ha disattivato i messaggi effimeri"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ desativou as mensagens temporárias"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ отключил(а) исчезающие сообщения"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@ kaybolan mesajları kapattı"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@关闭了阅后即焚消息"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ turned off disappearing messages"
+            "value" : "%@關閉了限時訊息"
           }
         }
       }
@@ -21314,7 +21574,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Verschwindende Nachrichten von %@ auf %@ geändert"
           }
         },
         "en" : {
@@ -21326,49 +21586,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Mensajes temporales cambiados de %@ a %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Messages éphémères changés de %@ à %@"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Messaggi effimeri cambiati da %@ a %@"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Mensagens temporárias alteradas de %@ para %@"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Исчезающие сообщения изменены с %@ на %@"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "Kaybolan mesajlar %@ değerinden %@ değerine değiştirildi"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "阅后即焚消息已从%@改为%@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages changed from %@ to %@"
+            "value" : "限時訊息已從%@改為%@"
           }
         }
       }
@@ -21444,7 +21704,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Verschwindende Nachrichten auf %@ gesetzt"
           }
         },
         "en" : {
@@ -21456,49 +21716,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Mensajes temporales establecidos en %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Messages éphémères réglés sur %@"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Messaggi effimeri impostati su %@"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Mensagens temporárias definidas para %@"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Исчезающие сообщения установлены на %@"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "Kaybolan mesajlar %@ olarak ayarlandı"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "阅后即焚消息已设为%@"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages set to %@"
+            "value" : "限時訊息已設為%@"
           }
         }
       }
@@ -21509,7 +21769,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Verschwindende Nachrichten ausgeschaltet"
           }
         },
         "en" : {
@@ -21521,49 +21781,49 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Mensajes temporales desactivados"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Messages éphémères désactivés"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Messaggi effimeri disattivati"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Mensagens temporárias desativadas"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Исчезающие сообщения отключены"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "Kaybolan mesajlar kapatıldı"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "阅后即焚消息已关闭"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Disappearing messages turned off"
+            "value" : "限時訊息已關閉"
           }
         }
       }
@@ -29917,13 +30177,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集团更名"
+            "value" : "群组已重命名"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "集團更名"
+            "value" : "群組已重新命名"
           }
         }
       }
@@ -75149,66 +75409,6 @@
         }
       }
     },
-    "you" : {
-      "comment" : "Pronoun for the current user.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "pt" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "tr" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "you"
-          }
-        }
-      }
-    },
     "You" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -75264,6 +75464,136 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您"
+          }
+        }
+      }
+    },
+    "You added %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast %@ hinzugefügt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You added %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Añadiste a %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez ajouté %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai aggiunto %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você adicionou %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы добавили %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kullanıcısını eklediniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你添加了%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你添加了%@"
+          }
+        }
+      }
+    },
+    "You are no longer an admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du bist kein Administrator mehr"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You are no longer an admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya no eres administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous n’êtes plus administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non sei più amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você não é mais administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы больше не администратор"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Artık yönetici değilsiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你不再是管理员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你不再是管理員"
           }
         }
       }
@@ -75918,6 +76248,201 @@
         }
       }
     },
+    "You changed disappearing messages from %@ to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast verschwindende Nachrichten von %@ auf %@ geändert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You changed disappearing messages from %@ to %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiaste los mensajes temporales de %@ a %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez changé les messages éphémères de %@ à %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai cambiato i messaggi effimeri da %@ a %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você mudou as mensagens temporárias de %@ para %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы изменили исчезающие сообщения с %@ на %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaybolan mesajları %@ değerinden %@ değerine değiştirdiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将阅后即焚消息从%@改为%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將限時訊息從%@改為%@"
+          }
+        }
+      }
+    },
+    "You changed the group name to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast den Gruppennamen zu %@ geändert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You changed the group name to %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiaste el nombre del grupo a %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez renommé le groupe en %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai cambiato il nome del gruppo in %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você mudou o nome do grupo para %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы изменили название группы на %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup adını %@ olarak değiştirdiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将群组名称改为%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將群組名稱改為%@"
+          }
+        }
+      }
+    },
+    "You changed the group photo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast das Gruppenbild geändert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You changed the group photo"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiaste la foto del grupo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez changé la photo du groupe"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai cambiato la foto del gruppo"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você mudou a foto do grupo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы изменили фото группы"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grup fotoğrafını değiştirdiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你更改了群组照片"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你更改了群組照片"
+          }
+        }
+      }
+    },
     "You deleted this message." : {
       "comment" : "Text displayed in a message bubble when the message was deleted by the user.",
       "isCommentAutoGenerated" : true,
@@ -76033,6 +76558,71 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你已關注"
+          }
+        }
+      }
+    },
+    "You left" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast die Gruppe verlassen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You left"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saliste del grupo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez quitté le groupe"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai lasciato il gruppo"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você saiu do grupo"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы покинули группу"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruptan ayrıldınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你离开了群组"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你離開了群組"
           }
         }
       }
@@ -76155,6 +76745,201 @@
         }
       }
     },
+    "You made %@ an admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast %@ zum Administrator gemacht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You made %@ an admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hiciste administrador a %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez nommé %@ administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai reso %@ amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você tornou %@ administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы назначили %@ администратором"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kullanıcısını yönetici yaptınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将%@设为管理员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將%@設為管理員"
+          }
+        }
+      }
+    },
+    "You removed %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast %@ entfernt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You removed %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminaste a %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez retiré %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai rimosso %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você removeu %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы удалили %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kullanıcısını çıkardınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你移除了%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你移除了%@"
+          }
+        }
+      }
+    },
+    "You removed %@ as admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast %@ als Administrator entfernt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You removed %@ as admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitaste a %@ como administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez retiré %@ en tant qu'administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai rimosso %@ come amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você removeu %@ como administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы сняли права администратора с %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ kullanıcısını yönetici olmaktan çıkardınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你取消了%@的管理员身份"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你取消了%@的管理員身份"
+          }
+        }
+      }
+    },
     "You sent a message" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -76214,6 +76999,71 @@
         }
       }
     },
+    "You set disappearing messages to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast verschwindende Nachrichten auf %@ gesetzt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You set disappearing messages to %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estableciste los mensajes temporales en %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez réglé les messages éphémères sur %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai impostato i messaggi effimeri su %@"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você definiu as mensagens temporárias para %@"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы установили исчезающие сообщения на %@"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaybolan mesajları %@ olarak ayarladınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你将阅后即焚消息设为%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你將限時訊息設為%@"
+          }
+        }
+      }
+    },
     "You stepped down as admin" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -76269,6 +77119,266 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "您辭去管理者職務"
+          }
+        }
+      }
+    },
+    "You turned off disappearing messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast verschwindende Nachrichten ausgeschaltet"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You turned off disappearing messages"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Desactivaste los mensajes temporales"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez désactivé les messages éphémères"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hai disattivato i messaggi effimeri"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você desativou as mensagens temporárias"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вы отключили исчезающие сообщения"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaybolan mesajları kapattınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你关闭了阅后即焚消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你關閉了限時訊息"
+          }
+        }
+      }
+    },
+    "You were added" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du wurdest hinzugefügt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were added"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te añadieron"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez été ajouté"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sei stato aggiunto"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você foi adicionado"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вас добавили"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eklendiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被添加"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被加入"
+          }
+        }
+      }
+    },
+    "You were made an admin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du wurdest zum Administrator gemacht"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were made an admin"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fuiste nombrado administrador"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez été nommé administrateur"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sei stato reso amministratore"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você foi tornado administrador"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вас назначили администратором"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yönetici yapıldınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被设为管理员"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被設為管理員"
+          }
+        }
+      }
+    },
+    "You were removed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du wurdest entfernt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were removed"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Te eliminaron"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez été retiré"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sei stato rimosso"
+          }
+        },
+        "pt" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Você foi removido"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Вас удалили"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Çıkarıldınız"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被移除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你已被移除"
           }
         }
       }
