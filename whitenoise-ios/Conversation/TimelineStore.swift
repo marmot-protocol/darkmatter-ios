@@ -1144,6 +1144,25 @@ final class TimelineStore {
         setDurableRowStatus(.sent, messageIdHex: messageIdHex)
     }
 
+    /// Captures the current presentation state before a durable retry applies
+    /// its temporary sending status.
+    func durableRowStatusBeforeRetry(messageIdHex: String) -> MessageStatus? {
+        guard undeliveredOwnMessageIds.contains(messageIdHex) else { return nil }
+        return messageStatusById[messageIdHex]
+    }
+
+    /// Rolls back only the retry's temporary status. A newer authoritative
+    /// projection (including delivery) keeps precedence.
+    func restoreDurableRowStatusAfterRetry(
+        _ status: MessageStatus,
+        messageIdHex: String
+    ) {
+        guard undeliveredOwnMessageIds.contains(messageIdHex),
+              messageStatusById[messageIdHex] == .sending
+        else { return }
+        setDurableRowStatus(status, messageIdHex: messageIdHex)
+    }
+
     /// Temporary UI status for a durable row during a user-driven retry —
     /// delivery truth still comes from the next mirrored timeline record.
     func setDurableRowStatus(_ status: MessageStatus, messageIdHex: String) {
