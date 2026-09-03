@@ -3318,6 +3318,23 @@ struct LocalizationCatalogTests {
         }
     }
 
+    @Test func sharedCatalogHasNoUntranslatedNonEnglishUnits() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+
+        for (key, rawEntry) in strings {
+            _ = try #require(rawEntry as? [String: Any], "Invalid localization entry: \(key)")
+            for locale in expectedLocales {
+                for state in try localizedLeafStates(key, locale: locale, in: strings) {
+                    #expect(
+                        state == "translated",
+                        "Untranslated \(locale) value for \(key) (state: \(state))"
+                    )
+                }
+            }
+        }
+    }
+
     @Test func countLocalizationsUsePluralVariations() throws {
         let catalog = try readCatalog("Shared/Localizable.xcstrings")
         let strings = try #require(catalog["strings"] as? [String: Any])
@@ -3478,6 +3495,26 @@ struct LocalizationCatalogTests {
         let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
         let stringUnit = try #require(localeEntry["stringUnit"] as? [String: Any], "Missing string unit for \(key) in \(locale)")
         return try #require(stringUnit["state"] as? String, "Missing state for \(key) in \(locale)")
+    }
+
+    private func localizedLeafStates(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
+        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
+        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
+
+        var states = [try localizedState(key, locale: locale, in: strings)]
+        let substitutions = (localeEntry["substitutions"] as? [String: Any]) ?? [:]
+        for rawSubstitution in substitutions.values {
+            let substitution = try #require(rawSubstitution as? [String: Any])
+            let variations = try #require(substitution["variations"] as? [String: Any])
+            let plural = try #require(variations["plural"] as? [String: Any])
+            for rawForm in plural.values {
+                let form = try #require(rawForm as? [String: Any])
+                let stringUnit = try #require(form["stringUnit"] as? [String: Any])
+                states.append(try #require(stringUnit["state"] as? String))
+            }
+        }
+        return states
     }
 
     private func localizedLeafValues(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
