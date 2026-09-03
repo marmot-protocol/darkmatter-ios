@@ -230,7 +230,7 @@ struct CreateIdentityView: View {
             } label: {
                 Text(model.avatarDraft == nil ? "Add Photo" : "Change Photo")
             }
-            .wnSecondaryButtonStyle()
+            .wnAvatarActionButtonStyle()
             .padding(.top)
             .disabled(model.isPreparingAvatar)
 
