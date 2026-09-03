@@ -168,7 +168,7 @@ struct ProfileEditView: View {
                         Button(model.picture.isEmpty ? "Add Photo" : "Change Photo") {
                             showImagePicker = true
                         }
-                        .wnSecondaryButtonStyle()
+                        .wnAvatarActionButtonStyle()
                         .padding(.top)
                         .disabled(
                             model.isPublishing

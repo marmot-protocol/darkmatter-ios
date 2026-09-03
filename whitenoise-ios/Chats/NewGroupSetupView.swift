@@ -44,7 +44,7 @@ struct NewGroupSetupView: View {
                     Button(groupImage == nil ? "Add Photo" : "Change Photo") {
                         showGroupImagePicker = true
                     }
-                    .buttonStyle(.bordered)
+                    .wnAvatarActionButtonStyle()
                     .disabled(model.isCreatingGroup)
                 }
                 .frame(maxWidth: .infinity)

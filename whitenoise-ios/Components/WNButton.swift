@@ -62,10 +62,9 @@ struct WNButton: View {
             .wnButtonLabelSizing()
         }
         .wnButtonStyle(emphasis)
-        .buttonBorderShape(.capsule)
+        .wnButtonChrome()
         .controlSize(.extraLarge)
         .wnButtonSizing()
-        .tint(Metrics.accent(for: colorScheme))
         .allowsHitTesting(!isLoading)
     }
 }
@@ -83,7 +82,26 @@ private struct WNButtonTitle: View {
     }
 }
 
+private struct WNButtonChrome: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .buttonBorderShape(.capsule)
+            .tint(WNButton.Metrics.accent(for: colorScheme))
+    }
+}
+
 extension View {
+    func wnButtonChrome() -> some View {
+        modifier(WNButtonChrome())
+    }
+
+    func wnAvatarActionButtonStyle() -> some View {
+        wnSecondaryButtonStyle()
+            .wnButtonChrome()
+    }
+
     @ViewBuilder
     func wnButtonStyle(_ emphasis: WNButton.Emphasis) -> some View {
         switch emphasis {
@@ -150,5 +168,34 @@ extension View {
         WNButton(title: "Signing Up…", isLoading: true) {}
     }
     .safeAreaPadding(.horizontal)
+    .preferredColorScheme(.dark)
+}
+
+#Preview("WN avatar action — Light") {
+    VStack(spacing: 24) {
+        Button("Add Photo") {}
+            .wnAvatarActionButtonStyle()
+
+        Menu("Change Photo") {
+            Button("Choose from Photos") {}
+        }
+        .wnAvatarActionButtonStyle()
+
+        Button("Add Photo") {}
+            .wnAvatarActionButtonStyle()
+            .disabled(true)
+    }
+}
+
+#Preview("WN avatar action — Dark") {
+    VStack(spacing: 24) {
+        Button("Add Photo") {}
+            .wnAvatarActionButtonStyle()
+
+        Menu("Change Photo") {
+            Button("Choose from Photos") {}
+        }
+        .wnAvatarActionButtonStyle()
+    }
     .preferredColorScheme(.dark)
 }
