@@ -123,6 +123,25 @@ final class ConversationViewModel {
         _ messageIdHex: String
     ) async throws -> SendSummaryFfi
 
+    nonisolated struct DurableRetryOperations {
+        let catchUp: @MainActor (MarmotClient) async throws -> Void
+        let converge: @MainActor (MarmotClient, String, String) async throws -> SendSummaryFfi
+        let sleep: @MainActor (UInt64) async throws -> Void
+        let refresh: @MainActor (ConversationViewModel) async -> Void
+
+        static let live = DurableRetryOperations(
+            catchUp: { try await $0.catchUpAccounts() },
+            converge: { client, accountRef, groupIdHex in
+                try await client.retryGroupConvergence(
+                    accountRef: accountRef,
+                    groupIdHex: groupIdHex
+                )
+            },
+            sleep: { try await Task.sleep(nanoseconds: $0) },
+            refresh: { viewModel in await viewModel.refreshTimelineTail() }
+        )
+    }
+
     /// One emoji's tally on a target message.
     nonisolated struct ReactionTally: Identifiable, Hashable {
         let emoji: String
@@ -247,6 +266,7 @@ final class ConversationViewModel {
     @ObservationIgnored private let mediaDownloader = ConversationMediaDownloader()
     @ObservationIgnored private let daySectionProjections = ConversationDaySectionProjectionCache()
     @ObservationIgnored private let deleteMessageOperation: DeleteMessageOperation
+    @ObservationIgnored private let durableRetryOperations: DurableRetryOperations
     // Lazy so its `[weak self]` loaded-window closure can capture a fully
     // initialized self; first touched on the post-start apply/mark paths.
     @ObservationIgnored private lazy var readMarker = ConversationReadMarker(
@@ -702,7 +722,8 @@ final class ConversationViewModel {
                 groupIdHex: groupIdHex,
                 targetMessageId: messageIdHex
             )
-        }
+        },
+        durableRetryOperations: DurableRetryOperations = .live
     ) {
         self.appState = appState
         self.group = group
@@ -712,6 +733,7 @@ final class ConversationViewModel {
         self.initialMemberCount = initialMemberCount
         self.onChatListRowUpdated = onChatListRowUpdated
         self.deleteMessageOperation = deleteMessageOperation
+        self.durableRetryOperations = durableRetryOperations
         let hiddenMessageIds = appState.activeAccountRef.map {
             MessageHideStore.hiddenMessageIds(accountRef: $0, groupIdHex: group.groupIdHex)
         } ?? []
@@ -917,16 +939,29 @@ final class ConversationViewModel {
                 return
             }
             guard let appState, let accountRef = appState.activeAccountRef else { return }
-            guard let client = try? appState.currentMarmotClient() else { return }
+            guard let client = try? appState.currentMarmotClient() else {
+                composer.onError(L10n.string("Send failed"))
+                return
+            }
+            guard let retryState = timelineStore.durableRowStatusBeforeRetry(
+                messageIdHex: messageIdHex
+            ) else { return }
             // Immediate feedback: the retry can legitimately take several
             // seconds while relays finish reconnecting after the network
             // change that stranded the message in the first place.
             timelineStore.setDurableRowStatus(.sending, messageIdHex: messageIdHex)
+            defer {
+                timelineStore.restoreDurableRowStatusAfterRetry(
+                    retryState,
+                    messageIdHex: messageIdHex
+                )
+            }
             // Relay recovery is otherwise tied to app-foreground activation,
             // and a retry after a network change is exactly when the pool is
             // still down — pump the account workers first, like foregrounding
             // does.
-            try? await client.catchUpAccounts()
+            try? await durableRetryOperations.catchUp(client)
+            guard !Task.isCancelled else { return }
             // Re-drives the already-committed message to the relays —
             // re-sending the text would mint a duplicate bubble. A publish
             // into a still-reconnecting relay pool THROWS, so each attempt
@@ -936,15 +971,16 @@ final class ConversationViewModel {
             retryLoop: for attempt in 0..<6 {
                 if attempt > 0 {
                     do {
-                        try await Task.sleep(nanoseconds: 2_500_000_000)
+                        try await durableRetryOperations.sleep(2_500_000_000)
                     } catch {
                         return
                     }
                 }
                 do {
-                    let summary = try await client.retryGroupConvergence(
-                        accountRef: accountRef,
-                        groupIdHex: group.groupIdHex
+                    let summary = try await durableRetryOperations.converge(
+                        client,
+                        accountRef,
+                        group.groupIdHex
                     )
                     if summary.published > 0 {
                         delivered = true
@@ -964,7 +1000,8 @@ final class ConversationViewModel {
                     case .refreshBeforeRetry:
                         // The worker may have completed. Pull authoritative
                         // state before another idempotent convergence attempt.
-                        await refreshTimelineTail()
+                        await durableRetryOperations.refresh(self)
+                        guard !Task.isCancelled else { return }
                         if timelineStore.undeliveredDurableMessageId(rowId: rowId) == nil {
                             delivered = true
                             break retryLoop
@@ -978,7 +1015,8 @@ final class ConversationViewModel {
             }
             // The subscription may not push the healed row; pull it so the
             // bubble flips without leaving the chat.
-            await refreshTimelineTail()
+            await durableRetryOperations.refresh(self)
+            guard !Task.isCancelled else { return }
             if timelineStore.undeliveredDurableMessageId(rowId: rowId) != nil {
                 if delivered {
                     // The engine acked the publish but the healed row sits

@@ -7075,6 +7075,67 @@ struct ChatsListProjectionTests {
 @MainActor
 struct ConversationTimelineProjectionTests {
 
+    private func durableRetryFixture(
+        invalidationStatus: String? = nil,
+        catchUp: @escaping @MainActor (MarmotClient) async throws -> Void = { _ in },
+        converge: @escaping @MainActor (MarmotClient, String, String) async throws -> SendSummaryFfi,
+        sleep: @escaping @MainActor (UInt64) async throws -> Void = { _ in },
+        refresh: @escaping @MainActor (ConversationViewModel) async -> Void = { _ in }
+    ) throws -> (
+        appState: AppState,
+        viewModel: ConversationViewModel,
+        record: TimelineMessageRecordFfi,
+        rowId: String
+    ) {
+        let groupIdHex = hex("aa")
+        let appState = AppState(client: try MarmotClient.testClient())
+        appState.activeAccountRef = "account-ref"
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group(name: "", id: groupIdHex),
+            durableRetryOperations: ConversationViewModel.DurableRetryOperations(
+                catchUp: catchUp,
+                converge: converge,
+                sleep: sleep,
+                refresh: refresh
+            )
+        )
+        let record = timelineRecord(
+            messageIdHex: hex("d1"),
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: hex("11"),
+            plaintext: "durable retry",
+            timelineAt: 20,
+            invalidationStatus: invalidationStatus
+        )
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: true, hasMoreAfter: false),
+            placement: .window
+        )
+        return (appState, viewModel, record, "msg:\(record.messageIdHex)")
+    }
+
+    private func status(
+        of rowId: String,
+        in viewModel: ConversationViewModel
+    ) -> MessageStatus? {
+        viewModel.timeline.compactMap { item -> MessageStatus? in
+            guard item.id == rowId, case .message(_, let status) = item.kind else { return nil }
+            return status
+        }.first
+    }
+
+    private func unpublishedRetrySummary() -> SendSummaryFfi {
+        SendSummaryFfi(
+            published: 0,
+            messageIds: [],
+            acceptDisposition: .acceptedPending,
+            maintenanceDisposition: .ready
+        )
+    }
+
     @Test func readMarkersApplyOnlyToVisibleKindNineMessagesOnce() throws {
         let chatRecord = message(id: hex("11"), kind: MessageSemantics.kindChat)
         let reactionRecord = message(id: hex("22"), kind: MessageSemantics.kindReaction)
@@ -7737,6 +7798,203 @@ struct ConversationTimelineProjectionTests {
         }.first
         #expect(status == .failed)
         #expect(MessageFooterPresentation.value(for: try #require(status), isFromMe: true).isFailure)
+    }
+
+    @Test func unsuccessfulDurableRetryRestoresInvalidatedFailureOutsideRefreshedTail() async throws {
+        var attempts = 0
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, groupIdHex in
+                attempts += 1
+                throw MarmotKitError.GroupUnrecoverableRepairRequired(groupIdHex: groupIdHex)
+            }
+        )
+
+        await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+
+        #expect(attempts == 1)
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .failed)
+        #expect(fixture.viewModel.error != nil)
+    }
+
+    @Test func durableRetryReportsUnavailableRuntime() async throws {
+        let groupIdHex = hex("aa")
+        let appState = AppState()
+        appState.activeAccountRef = "account-ref"
+        let viewModel = ConversationViewModel(
+            appState: appState,
+            group: group(name: "", id: groupIdHex)
+        )
+        let record = timelineRecord(
+            messageIdHex: hex("d1"),
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: hex("11"),
+            plaintext: "durable retry",
+            timelineAt: 20,
+            invalidationStatus: "local_publish_failed"
+        )
+        let rowId = "msg:\(record.messageIdHex)"
+        viewModel.applyTimelinePage(
+            TimelinePageFfi(messages: [record], hasMoreBefore: true, hasMoreAfter: false),
+            placement: .window
+        )
+
+        await viewModel.retryFailedSend(rowId: rowId)
+
+        #expect(status(of: rowId, in: viewModel) == .failed)
+        #expect(viewModel.error == L10n.string("Send failed"))
+    }
+
+    @Test func exhaustedDurableRetryKeepsNonInvalidatedRowSending() async throws {
+        var attempts = 0
+        var sleeps = 0
+        let fixture = try durableRetryFixture(
+            converge: { _, _, _ in
+                attempts += 1
+                return unpublishedRetrySummary()
+            },
+            sleep: { _ in sleeps += 1 }
+        )
+
+        await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+
+        #expect(attempts == 6)
+        #expect(sleeps == 5)
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .sending)
+        #expect(fixture.viewModel.error != nil)
+    }
+
+    @Test func publishedDurableRetryMarksRowSentWhenRefreshedTailOmitsIt() async throws {
+        let messageIdHex = hex("d1")
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, _ in
+                SendSummaryFfi(
+                    published: 1,
+                    messageIds: [messageIdHex],
+                    acceptDisposition: .published,
+                    maintenanceDisposition: .ready
+                )
+            }
+        )
+
+        await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .sent)
+        #expect(!fixture.viewModel.canRetryFailedSend(rowId: fixture.rowId))
+        #expect(fixture.viewModel.error == nil)
+    }
+
+    @Test func cancelledDurableRetryRestoresPriorFailure() async throws {
+        var enteredRetrySleep = false
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, _ in
+                return unpublishedRetrySummary()
+            },
+            sleep: { _ in
+                enteredRetrySleep = true
+                try await Task.sleep(nanoseconds: 60_000_000_000)
+            }
+        )
+        let retryTask = Task { @MainActor in
+            await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+        }
+        try await waitForExpectation {
+            enteredRetrySleep
+        }
+
+        retryTask.cancel()
+        await retryTask.value
+
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .failed)
+        #expect(fixture.viewModel.error == nil)
+    }
+
+    @Test func cancelledDuringFinalRefreshRestoresPriorFailureWithoutError() async throws {
+        var enteredFinalRefresh = false
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, _ in unpublishedRetrySummary() },
+            refresh: { _ in
+                enteredFinalRefresh = true
+                withUnsafeCurrentTask { $0?.cancel() }
+            }
+        )
+        let retryTask = Task { @MainActor in
+            await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+        }
+
+        await retryTask.value
+
+        #expect(enteredFinalRefresh)
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .failed)
+        #expect(fixture.viewModel.error == nil)
+    }
+
+    @Test func authoritativeDeliveryDuringRetryIsNotOverwrittenByCleanup() async throws {
+        let groupIdHex = hex("aa")
+        let messageIdHex = hex("d1")
+        let delivered = timelineRecord(
+            messageIdHex: messageIdHex,
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: hex("11"),
+            plaintext: "durable retry",
+            timelineAt: 20
+        )
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, groupIdHex in
+                throw MarmotKitError.GroupUnrecoverableRepairRequired(groupIdHex: groupIdHex)
+            },
+            refresh: { viewModel in
+                viewModel.applyTimelinePage(
+                    TimelinePageFfi(messages: [delivered], hasMoreBefore: true, hasMoreAfter: false),
+                    placement: .tailRefresh
+                )
+            }
+        )
+
+        await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .sent)
+        #expect(!fixture.viewModel.canRetryFailedSend(rowId: fixture.rowId))
+        #expect(fixture.viewModel.error == nil)
+    }
+
+    @Test func authoritativePendingRefreshDuringRetryIsNotOverwrittenByCleanup() async throws {
+        let groupIdHex = hex("aa")
+        let messageIdHex = hex("d1")
+        let revalidatedPending = timelineRecord(
+            messageIdHex: messageIdHex,
+            sourceMessageIdHex: .some(nil),
+            direction: "sent",
+            groupIdHex: groupIdHex,
+            sender: hex("11"),
+            plaintext: "durable retry",
+            timelineAt: 20
+        )
+        let fixture = try durableRetryFixture(
+            invalidationStatus: "local_publish_failed",
+            converge: { _, _, groupIdHex in
+                throw MarmotKitError.GroupUnrecoverableRepairRequired(groupIdHex: groupIdHex)
+            },
+            refresh: { viewModel in
+                viewModel.applyTimelinePage(
+                    TimelinePageFfi(messages: [revalidatedPending], hasMoreBefore: true, hasMoreAfter: false),
+                    placement: .tailRefresh
+                )
+            }
+        )
+
+        await fixture.viewModel.retryFailedSend(rowId: fixture.rowId)
+
+        #expect(status(of: fixture.rowId, in: fixture.viewModel) == .sending)
+        #expect(fixture.viewModel.canRetryFailedSend(rowId: fixture.rowId))
+        #expect(fixture.viewModel.error != nil)
     }
 
     @Test func successfulSendAckDoesNotFlashFailedWhileDeliveredProjectionCatchesUp() throws {

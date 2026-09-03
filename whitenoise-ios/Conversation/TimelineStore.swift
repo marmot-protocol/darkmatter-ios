@@ -47,6 +47,11 @@ nonisolated struct ConversationReplyPreview: Equatable {
 @Observable
 @MainActor
 final class TimelineStore {
+    struct DurableRowRetryState {
+        let status: MessageStatus
+        fileprivate let projectionRevision: UInt64
+    }
+
     private static let performanceSignposter = OSSignposter(
         subsystem: "dev.ipf.whitenoise.ios",
         category: "Performance"
@@ -63,6 +68,8 @@ final class TimelineStore {
     @ObservationIgnored private var messageById: [String: AppMessageRecordFfi] = [:]
     @ObservationIgnored private var messageByRowFrameKey: [String: AppMessageRecordFfi] = [:]
     @ObservationIgnored private var messageStatusById: [String: MessageStatus] = [:]
+    @ObservationIgnored private var durableRowProjectionRevisionById: [String: UInt64] = [:]
+    @ObservationIgnored private var nextDurableRowProjectionRevision: UInt64 = 0
     /// Own durable rows whose `sourceMessageIdHex` is still nil — committed
     /// to the group locally and still awaiting a definitive delivery outcome.
     @ObservationIgnored private var undeliveredOwnMessageIds: Set<String> = []
@@ -642,6 +649,10 @@ final class TimelineStore {
         var projectionChanged = false
         let appRecord = ConversationViewModel.appMessageRecord(from: record)
         guard !appRecord.messageIdHex.isEmpty else { return false }
+        if appRecord.direction == "sent" {
+            nextDurableRowProjectionRevision &+= 1
+            durableRowProjectionRevisionById[appRecord.messageIdHex] = nextDurableRowProjectionRevision
+        }
         let semantics = MessageSemantics.classify(appRecord)
         let affectedEditTargets = editProjections.setRecord(
             appRecord,
@@ -734,6 +745,7 @@ final class TimelineStore {
         let affectedEditTargets = editProjections.removeRecord(messageIdHex: messageIdHex)
         messageById[messageIdHex] = nil
         messageStatusById[messageIdHex] = nil
+        durableRowProjectionRevisionById[messageIdHex] = nil
         undeliveredOwnMessageIds.remove(messageIdHex)
         publishedOutgoingMessageIdsAwaitingProjection.remove(messageIdHex)
         confirmedPendingTimelineRecordIds.remove(messageIdHex)
@@ -1142,6 +1154,31 @@ final class TimelineStore {
     func markDurableRowDelivered(messageIdHex: String) {
         undeliveredOwnMessageIds.remove(messageIdHex)
         setDurableRowStatus(.sent, messageIdHex: messageIdHex)
+    }
+
+    /// Captures the current presentation state before a durable retry applies
+    /// its temporary sending status.
+    func durableRowStatusBeforeRetry(messageIdHex: String) -> DurableRowRetryState? {
+        guard undeliveredOwnMessageIds.contains(messageIdHex),
+              let status = messageStatusById[messageIdHex]
+        else { return nil }
+        return DurableRowRetryState(
+            status: status,
+            projectionRevision: durableRowProjectionRevisionById[messageIdHex] ?? 0
+        )
+    }
+
+    /// Rolls back only the retry's temporary status. A newer authoritative
+    /// projection (including delivery) keeps precedence.
+    func restoreDurableRowStatusAfterRetry(
+        _ retryState: DurableRowRetryState,
+        messageIdHex: String
+    ) {
+        guard undeliveredOwnMessageIds.contains(messageIdHex),
+              durableRowProjectionRevisionById[messageIdHex] == retryState.projectionRevision,
+              messageStatusById[messageIdHex] == .sending
+        else { return }
+        setDurableRowStatus(retryState.status, messageIdHex: messageIdHex)
     }
 
     /// Temporary UI status for a durable row during a user-driven retry —
