@@ -1,5 +1,6 @@
 import Foundation
 import MarmotKit
+import Synchronization
 import Testing
 @testable import whitenoise_ios
 
@@ -250,6 +251,52 @@ struct RecipientSearchTests {
         #expect(results.map(\.accountIdHex) == [bob, alice])
     }
 
+    @MainActor
+    @Test func streamedResultsDoNotWaitForFollowEnrichment() async {
+        let model = RecipientUserSearch()
+        let follows = RecipientSearchFollowsGate()
+        let result = searchResult(alice, radius: 1, field: .name, quality: .exact)
+        let subscription = RecipientSearchSubscriptionStub(updates: [
+            UserSearchUpdateFfi(
+                trigger: .resultsFound(radius: 1),
+                newResults: [result],
+                totalResultCount: 1
+            ),
+            UserSearchUpdateFfi(
+                trigger: .searchCompleted,
+                newResults: [],
+                totalResultCount: 1
+            ),
+        ])
+
+        model.updateForTesting(query: "alice") {
+            RecipientUserSearchOperations(
+                searchUsers: { subscription },
+                accountFollows: {
+                    await follows.suspendUntilReleased()
+                    return [self.alice]
+                }
+            )
+        }
+
+        await follows.waitUntilStarted()
+        await waitForRecipientSearch {
+            model.results == [result] && !model.isSearching
+        }
+
+        #expect(model.results == [result])
+        #expect(!model.isSearching)
+
+        await follows.release()
+        await waitForRecipientSearch {
+            model.followedAccountIds == [self.alice]
+                && model.candidates.first?.isFollowedBySearcher == true
+        }
+        #expect(model.followedAccountIds == [alice])
+        #expect(model.candidates.first?.isFollowedBySearcher == true)
+        model.cancel()
+    }
+
     @Test func followedRecipientsSortFirstAndKnownChatContextSurvivesMerge() {
         let knownAlice = candidate(alice)
         let discoveredAlice = RecipientCandidate(
@@ -327,6 +374,66 @@ struct RecipientSearchTests {
             providerRank: providerRank,
             profile: nil
         )
+    }
+}
+
+private final class RecipientSearchSubscriptionStub: UserSearchSubscriptionProtocol, @unchecked Sendable {
+    private let updates: Mutex<[UserSearchUpdateFfi]>
+
+    init(updates: [UserSearchUpdateFfi]) {
+        self.updates = Mutex(updates)
+    }
+
+    func nextUpdate() async -> UserSearchUpdateFfi? {
+        updates.withLock { updates in
+            guard !updates.isEmpty else { return nil }
+            return updates.removeFirst()
+        }
+    }
+}
+
+private actor RecipientSearchFollowsGate {
+    private var started = false
+    private var released = false
+    private var startedWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func suspendUntilReleased() async {
+        started = true
+        for waiter in startedWaiters {
+            waiter.resume()
+        }
+        startedWaiters.removeAll()
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            releaseWaiter = continuation
+        }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { continuation in
+            startedWaiters.append(continuation)
+        }
+    }
+
+    func release() {
+        released = true
+        releaseWaiter?.resume()
+        releaseWaiter = nil
+    }
+}
+
+@MainActor
+private func waitForRecipientSearch(
+    timeout: Duration = .milliseconds(250),
+    condition: () -> Bool
+) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: timeout)
+    while clock.now < deadline {
+        if condition() { return }
+        try? await Task.sleep(for: .milliseconds(5))
     }
 }
 
