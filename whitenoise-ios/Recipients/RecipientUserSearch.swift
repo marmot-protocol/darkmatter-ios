@@ -1,6 +1,15 @@
 import Foundation
 import MarmotKit
 
+struct RecipientUserSearchOperations {
+    let searchUsers: @MainActor () async throws -> any UserSearchSubscriptionProtocol
+    let accountFollows: @MainActor () async throws -> Set<String>
+}
+
+private enum RecipientUserSearchError: Error {
+    case appStateUnavailable
+}
+
 /// Screen-lifetime live search over the active account's Marmot web of trust.
 ///
 /// Results and their profiles deliberately remain ephemeral. MDK does not
@@ -16,8 +25,10 @@ final class RecipientUserSearch {
     private(set) var didFail = false
 
     private var task: Task<Void, Never>?
+    private var followsTask: Task<Void, Never>?
     private var requestID: UUID?
     private var activeQuery = ""
+    private var followStatusOverrides: [String: Bool] = [:]
 
     private static let radiusStart: UInt8 = 1
     private static let radiusEnd: UInt8 = 2
@@ -43,42 +54,78 @@ final class RecipientUserSearch {
         using appState: AppState
     ) {
         let query = Self.normalizedQuery(rawQuery)
-        task?.cancel()
-        task = nil
-        requestID = nil
-        activeQuery = query
-        results = []
-        followedAccountIds = []
-        isSearching = false
-        isIncomplete = false
-        didFail = false
+        resetForUpdate(query: query)
 
         guard Self.shouldSearch(query: query, isIdentifierQuery: isIdentifierQuery),
               let accountIdHex = appState.activeAccount?.accountIdHex,
               let accountRef = appState.activeAccountRef
         else { return }
 
+        startRequest(query: query, debounce: .milliseconds(300)) { [weak appState] in
+            guard let appState else { throw RecipientUserSearchError.appStateUnavailable }
+            let client = try appState.currentMarmotClient()
+            return RecipientUserSearchOperations(
+                searchUsers: {
+                    try await client.marmot.searchUsers(
+                        accountIdHex: accountIdHex,
+                        query: query,
+                        radiusStart: Self.radiusStart,
+                        radiusEnd: Self.radiusEnd
+                    )
+                },
+                accountFollows: {
+                    try await client.accountFollows(accountRef: accountRef)
+                }
+            )
+        }
+    }
+
+    func updateForTesting(
+        query rawQuery: String,
+        debounce: Duration = .zero,
+        makeOperations: @escaping @MainActor () throws -> RecipientUserSearchOperations
+    ) {
+        let query = Self.normalizedQuery(rawQuery)
+        resetForUpdate(query: query)
+        guard Self.shouldSearch(query: query, isIdentifierQuery: false) else { return }
+        startRequest(query: query, debounce: debounce, makeOperations: makeOperations)
+    }
+
+    private func startRequest(
+        query: String,
+        debounce: Duration,
+        makeOperations: @escaping @MainActor () throws -> RecipientUserSearchOperations
+    ) {
         let id = UUID()
         requestID = id
         isSearching = true
-        task = Task { [weak self, weak appState] in
+        task = Task { [weak self] in
             do {
-                try await Task.sleep(for: .milliseconds(300))
+                try await Task.sleep(for: debounce)
                 try Task.checkCancellation()
-                guard let self, let appState else { return }
-                let client = try appState.currentMarmotClient()
-                async let follows = client.accountFollows(accountRef: accountRef)
-                let subscription = try await client.marmot.searchUsers(
-                    accountIdHex: accountIdHex,
-                    query: query,
-                    radiusStart: Self.radiusStart,
-                    radiusEnd: Self.radiusEnd
-                )
-                let followedAccountIds = (try? await follows) ?? []
+                guard let self else { return }
+                let operations = try makeOperations()
+                // Follow metadata only reorders rows; it must never gate streamed matches.
+                let followsTask = Task { [weak self] in
+                    let followedAccountIds = (try? await operations.accountFollows()) ?? []
+                    guard let self,
+                          self.requestIsCurrent(id: id, query: query),
+                          !Task.isCancelled
+                    else { return }
+                    self.followedAccountIds = self.applyingFollowStatusOverrides(
+                        to: followedAccountIds
+                    )
+                    self.results = Self.sortedUniqueResults(
+                        self.results,
+                        followedAccountIds: self.followedAccountIds
+                    )
+                    self.finishFollowsRequest(id: id, query: query)
+                }
+                self.followsTask = followsTask
+                let subscription = try await operations.searchUsers()
                 guard self.requestIsCurrent(id: id, query: query), !Task.isCancelled else {
                     return
                 }
-                self.followedAccountIds = followedAccountIds
                 await self.consume(
                     subscription,
                     requestID: id,
@@ -93,14 +140,32 @@ final class RecipientUserSearch {
         }
     }
 
+    private func resetForUpdate(query: String) {
+        task?.cancel()
+        followsTask?.cancel()
+        task = nil
+        followsTask = nil
+        requestID = nil
+        activeQuery = query
+        followStatusOverrides = [:]
+        results = []
+        followedAccountIds = []
+        isSearching = false
+        isIncomplete = false
+        didFail = false
+    }
+
     func retry(using appState: AppState) {
         update(query: activeQuery, isIdentifierQuery: false, using: appState)
     }
 
     func cancel() {
         task?.cancel()
+        followsTask?.cancel()
         task = nil
+        followsTask = nil
         requestID = nil
+        followStatusOverrides = [:]
         results = []
         followedAccountIds = []
         isSearching = false
@@ -109,7 +174,7 @@ final class RecipientUserSearch {
     }
 
     private func consume(
-        _ subscription: UserSearchSubscription,
+        _ subscription: any UserSearchSubscriptionProtocol,
         requestID id: UUID,
         query: String
     ) async {
@@ -139,6 +204,8 @@ final class RecipientUserSearch {
 
     private func finishFailedRequest(id: UUID, query: String) {
         guard requestIsCurrent(id: id, query: query) else { return }
+        followsTask?.cancel()
+        followsTask = nil
         didFail = true
         finishRequest(id: id, query: query)
     }
@@ -147,7 +214,17 @@ final class RecipientUserSearch {
         guard requestIsCurrent(id: id, query: query) else { return }
         isSearching = false
         task = nil
-        requestID = nil
+        if followsTask == nil {
+            requestID = nil
+        }
+    }
+
+    private func finishFollowsRequest(id: UUID, query: String) {
+        guard requestIsCurrent(id: id, query: query) else { return }
+        followsTask = nil
+        if task == nil {
+            requestID = nil
+        }
     }
 
     private func requestIsCurrent(id: UUID, query: String) -> Bool {
@@ -156,6 +233,7 @@ final class RecipientUserSearch {
 
     func setFollowStatus(accountIdHex: String, isFollowing: Bool) {
         let accountIdHex = accountIdHex.lowercased()
+        followStatusOverrides[accountIdHex] = isFollowing
         if isFollowing {
             followedAccountIds.insert(accountIdHex)
         } else {
@@ -165,6 +243,18 @@ final class RecipientUserSearch {
             results,
             followedAccountIds: followedAccountIds
         )
+    }
+
+    private func applyingFollowStatusOverrides(to followedAccountIds: Set<String>) -> Set<String> {
+        var followedAccountIds = followedAccountIds
+        for (accountIdHex, isFollowing) in followStatusOverrides {
+            if isFollowing {
+                followedAccountIds.insert(accountIdHex)
+            } else {
+                followedAccountIds.remove(accountIdHex)
+            }
+        }
+        return followedAccountIds
     }
 
     nonisolated static func shouldSearch(query: String, isIdentifierQuery: Bool) -> Bool {

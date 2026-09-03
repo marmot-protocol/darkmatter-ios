@@ -3,30 +3,28 @@ import UIKit
 import MarmotKit
 
 /// One person in a recipient list: avatar, resolved name, and identity
-/// context. Search results always show the npub, and direct follows carry an
-/// explicit badge. The trailing slot carries selection or progress state.
+/// context. Search rows identify whether the user follows the result, while
+/// non-search rows stay focused on identity. The trailing slot carries
+/// selection or progress state.
 struct RecipientRow<Trailing: View>: View {
     @Environment(AppState.self) private var appState
     let accountIdHex: String
     let npub: String
     let profileOverride: UserProfileMetadataFfi?
-    let socialRadius: UInt8?
-    let isFollowedBySearcher: Bool
+    let searchContext: RecipientSearch.ResultContext?
     let trailing: Trailing
 
     init(
         accountIdHex: String,
         npub: String,
         profileOverride: UserProfileMetadataFfi? = nil,
-        socialRadius: UInt8? = nil,
-        isFollowedBySearcher: Bool = false,
+        searchContext: RecipientSearch.ResultContext? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.accountIdHex = accountIdHex
         self.npub = npub
         self.profileOverride = profileOverride
-        self.socialRadius = socialRadius
-        self.isFollowedBySearcher = isFollowedBySearcher
+        self.searchContext = searchContext
         self.trailing = trailing()
     }
 
@@ -41,29 +39,20 @@ struct RecipientRow<Trailing: View>: View {
             .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(displayName)
-                        .font(.body)
+                Text(displayName)
+                    .font(.body)
+                    .lineLimit(1)
+                if let searchContextLabel {
+                    Text(searchContextLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                         .lineLimit(1)
-                    if isFollowedBySearcher {
-                        Label("Following", systemImage: "person.badge.checkmark")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tint)
-                            .labelStyle(.titleAndIcon)
-                            .fixedSize()
-                    }
                 }
                 Text(npub)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if let socialContext {
-                    Text(socialContext)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
             }
             Spacer(minLength: 8)
             trailing
@@ -82,19 +71,14 @@ struct RecipientRow<Trailing: View>: View {
             ?? IdentityFormatter.short(npub)
     }
 
-    private var socialContext: String? {
-        guard !isFollowedBySearcher, let socialRadius else { return nil }
-        switch socialRadius {
-        case 0:
-            return L10n.string("You")
-        case 1:
-            return L10n.string("In your network")
-        case 2:
-            return L10n.string("Via your network")
-        case .max:
-            return L10n.string("Discovery")
-        default:
-            return nil
+    private var searchContextLabel: String? {
+        switch searchContext {
+        case .youFollow:
+            L10n.string("You follow")
+        case .searchResult:
+            L10n.string("Search result")
+        case nil:
+            nil
         }
     }
 }

@@ -384,8 +384,6 @@ struct NewMessageScreen: View {
             } header: {
                 if model.messageQuery.isBlank {
                     Text("Recent")
-                } else {
-                    Text("Search results")
                 }
             }
         }
@@ -407,8 +405,10 @@ struct NewMessageScreen: View {
                 accountIdHex: candidate.accountIdHex,
                 npub: candidate.npub,
                 profileOverride: candidate.searchProfile,
-                socialRadius: candidate.searchRadius,
-                isFollowedBySearcher: candidate.isFollowedBySearcher
+                searchContext: RecipientSearch.resultContext(
+                    for: candidate,
+                    query: model.messageQuery.text
+                )
             ) {
                 if model.choosingAccountIdHex == candidate.accountIdHex
                     || model.starter.creatingAccountIdHex == candidate.accountIdHex {

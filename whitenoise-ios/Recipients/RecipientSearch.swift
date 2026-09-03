@@ -5,6 +5,11 @@ import Foundation
 /// the resolved name), NIP-05 addresses, and npub/hex prefixes; name-prefix
 /// matches rank before contained matches, identity matches last.
 nonisolated enum RecipientSearch {
+    enum ResultContext: Equatable {
+        case youFollow
+        case searchResult
+    }
+
     struct MatchFields: Equatable {
         let displayName: String?
         let nickname: String?
@@ -93,6 +98,14 @@ nonisolated enum RecipientSearch {
             }
             return lhs.offset < rhs.offset
         }.map(\.element)
+    }
+
+    static func resultContext(
+        for candidate: RecipientCandidate,
+        query: String
+    ) -> ResultContext? {
+        guard !folded(query).isEmpty else { return nil }
+        return candidate.isFollowedBySearcher ? .youFollow : .searchResult
     }
 
     private static func matchesIdentity(
