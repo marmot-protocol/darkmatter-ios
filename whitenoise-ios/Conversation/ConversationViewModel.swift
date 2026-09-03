@@ -917,14 +917,11 @@ final class ConversationViewModel {
                 return
             }
             guard let appState, let accountRef = appState.activeAccountRef else { return }
+            guard let client = try? appState.currentMarmotClient() else { return }
             // Immediate feedback: the retry can legitimately take several
             // seconds while relays finish reconnecting after the network
             // change that stranded the message in the first place.
             timelineStore.setDurableRowStatus(.sending, messageIdHex: messageIdHex)
-            guard let client = try? appState.currentMarmotClient() else {
-                timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
-                return
-            }
             // Relay recovery is otherwise tied to app-foreground activation,
             // and a retry after a network change is exactly when the pool is
             // still down — pump the account workers first, like foregrounding
@@ -988,7 +985,6 @@ final class ConversationViewModel {
                     // outside the refreshed tail page — trust the ack.
                     timelineStore.markDurableRowDelivered(messageIdHex: messageIdHex)
                 } else {
-                    timelineStore.setDurableRowStatus(.failed, messageIdHex: messageIdHex)
                     composer.onError(lastFailure ?? L10n.string("Send failed"))
                 }
             }

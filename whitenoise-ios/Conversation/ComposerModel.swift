@@ -72,6 +72,10 @@ final class ComposerModel {
     @ObservationIgnored var canSendMediaAttachments: () -> Bool = { false }
     /// Surfaces a send failure to the view model (sets its observable `error`).
     @ObservationIgnored var onError: (String) -> Void = { _ in }
+#if DEBUG
+    @ObservationIgnored var sendTextForTesting:
+        ((String, String, String?, String) async throws -> SendSummaryFfi)?
+#endif
 
     init(appState: AppState?, groupIdHex: String, timelineStore: TimelineStore) {
         self.appState = appState
@@ -185,22 +189,12 @@ final class ComposerModel {
         replyingTo = nil
 
         do {
-            let client = try appState.currentMarmotClient()
-            let summary: SendSummaryFfi
-            if let replyTargetId {
-                summary = try await client.replyToMessage(
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex,
-                    targetMessageId: replyTargetId,
-                    text: outgoing
-                )
-            } else {
-                summary = try await client.sendText(
-                    accountRef: accountRef,
-                    groupIdHex: groupIdHex,
-                    text: outgoing
-                )
-            }
+            let summary = try await sendText(
+                appState: appState,
+                accountRef: accountRef,
+                replyTargetId: replyTargetId,
+                text: outgoing
+            )
             switch SendAcceptancePolicy.action(for: summary) {
             case .confirmPublished(let messageId):
                 timelineStore.confirmSent(tempId: tempId, record: optimistic, messageId: messageId)
@@ -218,6 +212,33 @@ final class ComposerModel {
                 appState.present(UserFacingError.toast(title: L10n.string("Send failed"), error: error))
             }
         }
+    }
+
+    private func sendText(
+        appState: AppState,
+        accountRef: String,
+        replyTargetId: String?,
+        text: String
+    ) async throws -> SendSummaryFfi {
+#if DEBUG
+        if let sendTextForTesting {
+            return try await sendTextForTesting(accountRef, groupIdHex, replyTargetId, text)
+        }
+#endif
+        let client = try appState.currentMarmotClient()
+        if let replyTargetId {
+            return try await client.replyToMessage(
+                accountRef: accountRef,
+                groupIdHex: groupIdHex,
+                targetMessageId: replyTargetId,
+                text: text
+            )
+        }
+        return try await client.sendText(
+            accountRef: accountRef,
+            groupIdHex: groupIdHex,
+            text: text
+        )
     }
 
     func sendMedia(_ attachments: [MediaDraftAttachment], caption: String) async {

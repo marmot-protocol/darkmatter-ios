@@ -3099,7 +3099,10 @@ struct ConversationView: View {
         viewModel: ConversationViewModel
     ) -> Int {
         MessageActionsPresentation.actionCount(
-            canRetry: status == .failed && viewModel.canRetryFailedSend(rowId: rowId),
+            canRetry: MessageRetryPresentation.isAvailable(
+                status: status,
+                hasRetryableSend: viewModel.canRetryFailedSend(rowId: rowId)
+            ),
             canInteract: viewModel.canSendMessages,
             canForward: MessageForwardingPolicy.forwardableText(for: record) != nil,
             canEdit: MessageEditingPolicy.canEdit(
@@ -3127,7 +3130,12 @@ struct ConversationView: View {
         viewModel: ConversationViewModel
     ) -> some View {
         MessageActionsMenu(
-            canRetry: rowId.map { viewModel.canRetryFailedSend(rowId: $0) } ?? false,
+            canRetry: rowId.map {
+                MessageRetryPresentation.isAvailable(
+                    status: status,
+                    hasRetryableSend: viewModel.canRetryFailedSend(rowId: $0)
+                )
+            } ?? false,
             canInteract: viewModel.canSendMessages,
             canForward: MessageForwardingPolicy.forwardableText(for: record) != nil,
             canEdit: MessageEditingPolicy.canEdit(
