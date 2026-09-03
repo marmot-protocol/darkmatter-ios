@@ -126,7 +126,7 @@ extension View {
         if #available(iOS 26.0, *) {
             buttonStyle(.glass)
         } else {
-            buttonStyle(.bordered)
+            buttonStyle(.wnSecondary)
         }
     }
 
