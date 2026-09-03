@@ -12,23 +12,30 @@ import MarmotKit
 final class AccountStore {
     static let activeAccountKey = "marmot.activeAccountRef"
 
+    @ObservationIgnored private let defaults: UserDefaults
+
     /// All accounts known to marmot-app, refreshed after every account-changing call.
     var accounts: [AccountSummaryFfi] = []
 
     /// The account whose chats / messages are currently displayed.
     /// `nil` only between bootstrap and onboarding completion. Restored from and
     /// persisted to UserDefaults so the selection survives relaunch.
-    var activeAccountRef: String? = UserDefaults.standard.string(forKey: AccountStore.activeAccountKey) {
+    var activeAccountRef: String? {
         didSet {
             if let ref = activeAccountRef {
-                UserDefaults.standard.set(ref, forKey: Self.activeAccountKey)
+                defaults.set(ref, forKey: Self.activeAccountKey)
             } else {
                 // Clearing the ref (e.g. signing out of the only account) must
                 // remove the persisted value, otherwise the next launch
                 // resurrects the signed-out account from UserDefaults.
-                UserDefaults.standard.removeObject(forKey: Self.activeAccountKey)
+                defaults.removeObject(forKey: Self.activeAccountKey)
             }
         }
+    }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.activeAccountRef = defaults.string(forKey: Self.activeAccountKey)
     }
 
     /// The active account summary resolved from the list, or nil.

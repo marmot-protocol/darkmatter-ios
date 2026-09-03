@@ -7,15 +7,17 @@ import UserNotifications
 
 @MainActor
 struct IdentityImportRuntimeTests {
+    private let accountDefaults = IsolatedAccountDefaults.make()
+
     @Test func userInitiatedMutationJoinsForegroundRuntimeRebuild() async throws {
-        UserDefaults.standard.removeObject(forKey: "marmot.activeAccountRef")
         let appState = AppState(
             client: try MarmotClient.testClient(),
             notifications: AppNotifications(
                 requestAuthorizationHandler: { false },
                 authorizationStatusProvider: { .denied },
                 remoteNotificationRegistrar: {}
-            )
+            ),
+            accountDefaults: accountDefaults
         )
         await appState.bootstrap()
         _ = try await appState.createIdentity()
@@ -32,6 +34,5 @@ struct IdentityImportRuntimeTests {
         appState.runtimeLifecycle.endForegroundRuntimeMutation(lease)
 
         await appState.startRuntimeSuspension().value
-        UserDefaults.standard.removeObject(forKey: "marmot.activeAccountRef")
     }
 }
