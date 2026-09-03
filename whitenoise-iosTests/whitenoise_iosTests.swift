@@ -3263,7 +3263,11 @@ struct LocalizationCatalogTests {
         ]
 
         for (key, translations) in expectedTranslations {
-            for (locale, expected) in translations {
+            for locale in expectedLocales {
+                let expected = try #require(
+                    translations[locale],
+                    "No expected \(locale) translation declared for \(key)"
+                )
                 #expect(try localizedValue(key, locale: locale, in: strings) == expected)
                 #expect(
                     try localizedState(key, locale: locale, in: strings) == "translated",
