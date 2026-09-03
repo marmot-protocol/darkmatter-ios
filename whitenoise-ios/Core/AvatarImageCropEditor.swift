@@ -172,31 +172,40 @@ struct AvatarImageCropEditor: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-
-                Spacer(minLength: 0)
             }
-            .padding(.top, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
             .navigationTitle("Crop image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Use Image") {
-                        guard let image,
-                              let data = AvatarImageCropper.croppedJPEG(
-                                image: image,
-                                cropSide: cropSide,
-                                zoom: zoom,
-                                offset: offset
-                              )
-                        else { return }
-                        onCrop(source, data)
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "chevron.backward")
+                            .imageScale(.large)
                     }
-                    .disabled(image == nil)
+                    .accessibilityLabel(L10n.string("Back"))
                 }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                WNButton(title: "Done") {
+                    guard let image,
+                          let data = AvatarImageCropper.croppedJPEG(
+                            image: image,
+                            cropSide: cropSide,
+                            zoom: zoom,
+                            offset: offset
+                          )
+                    else { return }
+                    onCrop(source, data)
+                    dismiss()
+                }
+                .disabled(image == nil)
+                .safeAreaPadding(.horizontal)
+                .padding(.vertical)
+                .safeAreaPadding(.bottom)
+                .background(.bar)
             }
         }
         .interactiveDismissDisabled()
@@ -223,9 +232,9 @@ struct AvatarImageCropEditor: View {
                 .offset(offset)
         }
         .frame(width: cropSide, height: cropSide)
-        .clipShape(.rect(cornerRadius: 18))
+        .clipShape(.circle)
         .overlay {
-            RoundedRectangle(cornerRadius: 18)
+            Circle()
                 .strokeBorder(.white.opacity(0.55), lineWidth: 1)
         }
         .gesture(dragGesture(imageSize: imageSize).simultaneously(with: magnificationGesture(imageSize: imageSize)))
