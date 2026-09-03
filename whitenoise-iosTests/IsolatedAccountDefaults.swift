@@ -20,7 +20,12 @@ enum IsolatedAccountDefaults {
             UUID().uuidString
         ].joined(separator: ".")
 
-        guard let defaults = UserDefaults(suiteName: suiteName) else { return .standard }
+        // Falling back to `.standard` here would silently restore the cross-suite
+        // race this type exists to prevent. Unreachable: `initWithSuiteName:`
+        // only fails for the host bundle id or NSGlobalDomain.
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            preconditionFailure("could not create isolated defaults suite \(suiteName)")
+        }
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
     }
