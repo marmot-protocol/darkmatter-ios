@@ -345,6 +345,9 @@ struct RecipientSearchTests {
         )
 
         #expect(merged.map(\.accountIdHex) == [bob, alice])
+        #expect(RecipientSearch.resultContext(for: merged[0], query: "bo") == .youFollow)
+        #expect(RecipientSearch.resultContext(for: merged[1], query: "bo") == .searchResult)
+        #expect(RecipientSearch.resultContext(for: merged[0], query: "  ") == nil)
     }
 
     private func candidate(_ hex: String) -> RecipientCandidate {

@@ -204,8 +204,10 @@ struct AddMembersSheet: View {
                 accountIdHex: candidate.accountIdHex,
                 npub: candidate.npub,
                 profileOverride: candidate.searchProfile,
-                socialRadius: candidate.searchRadius,
-                isFollowedBySearcher: candidate.isFollowedBySearcher
+                searchContext: RecipientSearch.resultContext(
+                    for: candidate,
+                    query: model.query.text
+                )
             ) {
                 RecipientSelectionIndicator(isSelected: isSelected)
             }
