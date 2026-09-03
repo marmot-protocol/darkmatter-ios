@@ -20,6 +20,7 @@ struct CreateIdentityView: View {
     @State private var showFileImporter = false
     @State private var showWebImagePicker = false
     @State private var cropSource: AvatarImageCropSource?
+    @State private var isKeyboardVisible = false
     @FocusState private var nameFocused: Bool
     @FocusState private var aboutFocused: Bool
 
@@ -77,6 +78,7 @@ struct CreateIdentityView: View {
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .dismissesKeyboardOnTap()
         .navigationTitle("Sign Up")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(!model.allowsBackNavigation)
@@ -93,43 +95,48 @@ struct CreateIdentityView: View {
             }
         }
         .interactiveDismissDisabled(!model.allowsBackNavigation)
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                WNButton(
-                    title: LocalizedStringKey(primaryActionTitle),
-                    isLoading: model.isSubmitting
-                ) {
-                    nameFocused = false
-                    aboutFocused = false
-                    Task {
-                        if model.phase == .creationFailed {
-                            await model.prepare(using: appState)
-                        } else {
-                            await model.submit(using: appState, dismiss: { dismiss() })
-                        }
-                    }
-                }
-                .disabled(model.isBusy || !hasValidName)
-                .accessibilityLabel(primaryActionTitle)
-                .accessibilityIdentifier("sign-up.create")
-                .accessibilityValue(model.isSubmitting ? "In progress" : "")
-
-                if model.phase == .profileSaveFailed {
-                    Button("Continue") {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !isKeyboardVisible {
+                VStack(spacing: 8) {
+                    WNButton(
+                        title: LocalizedStringKey(primaryActionTitle),
+                        isLoading: model.isSubmitting
+                    ) {
+                        nameFocused = false
+                        aboutFocused = false
                         Task {
-                            await model.continueWithoutSaving(
-                                using: appState,
-                                dismiss: { dismiss() }
-                            )
+                            if model.phase == .creationFailed {
+                                await model.prepare(using: appState)
+                            } else {
+                                await model.submit(using: appState, dismiss: { dismiss() })
+                            }
                         }
                     }
-                    .controlSize(.large)
-                    .disabled(model.isBusy)
+                    .disabled(model.isBusy || !hasValidName)
+                    .accessibilityLabel(primaryActionTitle)
+                    .accessibilityIdentifier("sign-up.create")
+                    .accessibilityValue(model.isSubmitting ? "In progress" : "")
+
+                    if model.phase == .profileSaveFailed {
+                        Button("Continue") {
+                            Task {
+                                await model.continueWithoutSaving(
+                                    using: appState,
+                                    dismiss: { dismiss() }
+                                )
+                            }
+                        }
+                        .controlSize(.large)
+                        .disabled(model.isBusy)
+                    }
                 }
+                .safeAreaPadding(.horizontal)
+                .padding(.vertical)
+                .safeAreaPadding(.bottom)
+                .background(.bar)
             }
-            .safeAreaPadding(.horizontal)
-            .safeAreaPadding(.bottom)
         }
+        .trackKeyboardVisibility($isKeyboardVisible)
         .task {
             await model.prepare(using: appState)
         }
