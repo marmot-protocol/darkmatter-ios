@@ -5,11 +5,6 @@ import UniformTypeIdentifiers
 /// Creates the real Marmot identity while presenting the designer-approved
 /// Sign Up hierarchy from the onboarding prototype.
 struct CreateIdentityView: View {
-    private enum Field {
-        case name
-        case about
-    }
-
     private enum PendingPhotoSource {
         case photos
         case files
@@ -25,7 +20,8 @@ struct CreateIdentityView: View {
     @State private var showFileImporter = false
     @State private var showWebImagePicker = false
     @State private var cropSource: AvatarImageCropSource?
-    @FocusState private var focusedField: Field?
+    @FocusState private var nameFocused: Bool
+    @FocusState private var aboutFocused: Bool
 
     let showsCloseButton: Bool
 
@@ -43,24 +39,30 @@ struct CreateIdentityView: View {
                 .listRowSeparator(.hidden)
 
             Section("Name") {
-                TextField("Name", text: $model.displayName)
-                    .textContentType(.name)
-                    .submitLabel(.next)
-                    .focused($focusedField, equals: .name)
-                    .onSubmit { focusedField = .about }
-                    .listRowBackground(Color(uiColor: .secondarySystemFill))
+                WNInput(
+                    placeholder: L10n.string("Name"),
+                    text: $model.displayName,
+                    submitLabel: .next,
+                    autocapitalization: .words,
+                    disablesAutocorrection: false,
+                    focus: $nameFocused,
+                    onSubmit: { aboutFocused = true }
+                )
+                .textContentType(.name)
+                .wnInputRow()
             }
 
             Section("About") {
-                TextField(
-                    "A little about you",
+                WNInput(
+                    placeholder: L10n.string("A little about you"),
                     text: $model.about,
-                    axis: .vertical
+                    kind: .multiline(3 ... 6),
+                    autocapitalization: .sentences,
+                    disablesAutocorrection: false,
+                    focus: $aboutFocused
                 )
-                .lineLimit(3...6)
-                .focused($focusedField, equals: .about)
                 .accessibilityLabel("About")
-                .listRowBackground(Color(uiColor: .secondarySystemFill))
+                .wnInputRow()
             }
 
             if let failureMessage = model.failureMessage {
@@ -97,7 +99,8 @@ struct CreateIdentityView: View {
                     title: LocalizedStringKey(primaryActionTitle),
                     isLoading: model.isSubmitting
                 ) {
-                    focusedField = nil
+                    nameFocused = false
+                    aboutFocused = false
                     Task {
                         if model.phase == .creationFailed {
                             await model.prepare(using: appState)
