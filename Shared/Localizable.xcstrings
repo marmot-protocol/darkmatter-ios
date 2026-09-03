@@ -5378,56 +5378,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Ein paar Worte über dich"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Algo sobre ti"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Quelques mots sur vous"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Qualcosa su di te"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Um pouco sobre você"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Немного о себе"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "Kendiniz hakkında kısaca"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "简单介绍一下你自己"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "A little about you"
+            "state" : "translated",
+            "value" : "簡單介紹一下你自己"
           }
         }
       }
@@ -6657,56 +6657,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Foto hinzufügen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Añadir foto"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Ajouter une photo"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Aggiungi foto"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Adicionar foto"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Добавить фото"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "Fotoğraf ekle"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "添加照片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Add Photo"
+            "state" : "translated",
+            "value" : "加入照片"
           }
         }
       }
@@ -11244,56 +11244,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Foto ändern"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Cambiar foto"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Changer de photo"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Cambia foto"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Alterar foto"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Изменить фото"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "Fotoğrafı değiştir"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "更换照片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Change Photo"
+            "state" : "translated",
+            "value" : "更換照片"
           }
         }
       }
@@ -12390,56 +12390,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Aus Dateien auswählen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Elegir desde Archivos"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Choisir dans Fichiers"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Scegli da File"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Escolher em Arquivos"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Выбрать из Файлов"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "Dosyalar’dan seç"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "从“文件”中选择"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Files"
+            "state" : "translated",
+            "value" : "從「檔案」選擇"
           }
         }
       }
@@ -12450,56 +12450,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Aus Fotos auswählen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Elegir desde Fotos"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Choisir dans Photos"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Scegli da Foto"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Escolher em Fotos"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Выбрать из Фото"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "Fotoğraflar’dan seç"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "从“照片”中选择"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Choose from Photos"
+            "state" : "translated",
+            "value" : "從「照片」選擇"
           }
         }
       }
@@ -21948,56 +21948,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Tastatur ausblenden"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Ocultar el teclado"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Masquer le clavier"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Nascondi la tastiera"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Ocultar o teclado"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Скрыть клавиатуру"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "Klavyeyi kapat"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "收起键盘"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Dismiss Keyboard"
+            "state" : "translated",
+            "value" : "收起鍵盤"
           }
         }
       }
@@ -24249,56 +24249,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Gib einen Suchbegriff ein, um ein Bild zu finden."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Escribe una búsqueda para encontrar una imagen."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Saisissez une recherche pour trouver une image."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Inserisci una ricerca per trovare un’immagine."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Digite uma busca para encontrar uma imagem."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Введите запрос, чтобы найти изображение."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "Bir görsel bulmak için arama yapın."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "输入搜索词以查找图片。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a search to find an image."
+            "state" : "translated",
+            "value" : "輸入搜尋字詞以尋找圖片。"
           }
         }
       }
@@ -24551,56 +24551,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Gib eine gültige Webadresse ein."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Introduce una dirección web válida."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Saisissez une adresse web valide."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Inserisci un indirizzo web valido."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Digite um endereço web válido."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Введите действительный веб-адрес."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "Geçerli bir web adresi girin."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "请输入有效的网址。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter a valid web address."
+            "state" : "translated",
+            "value" : "請輸入有效的網址。"
           }
         }
       }
@@ -24671,56 +24671,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Gib eine Bild-URL ein, um das Bild unten in der Vorschau zu sehen."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Introduce la URL de una imagen para verla abajo."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Saisissez l’URL d’une image pour l’afficher ci-dessous."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Inserisci l’URL di un’immagine per vederne l’anteprima qui sotto."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Digite a URL de uma imagem para vê-la abaixo."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Введите URL изображения, чтобы увидеть предпросмотр ниже."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "Aşağıda önizlemek için bir görsel URL’si girin."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "输入图片 URL 以在下方预览。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter an image URL to preview it below."
+            "state" : "translated",
+            "value" : "輸入圖片 URL 以在下方預覽。"
           }
         }
       }
@@ -24731,56 +24731,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Privaten Schlüssel eingeben"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Introduce la clave privada"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Saisissez la clé privée"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Inserisci la chiave privata"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Digite a chave privada"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Введите приватный ключ"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "Özel anahtarı girin"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "输入私钥"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Enter private key"
+            "state" : "translated",
+            "value" : "輸入私鑰"
           }
         }
       }
@@ -26543,56 +26543,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Bild im Web suchen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Buscar imagen en la web"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Rechercher une image sur le web"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Cerca un’immagine sul web"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Buscar imagem na web"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Найти изображение в интернете"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "Web’de görsel ara"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "在网络上查找图片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Find Image on Web"
+            "state" : "translated",
+            "value" : "在網路上尋找圖片"
           }
         }
       }
@@ -31271,56 +31271,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Bild-Datenschutz"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Privacidad de las imágenes"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Confidentialité des images"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Privacy delle immagini"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Privacidade das imagens"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Конфиденциальность изображений"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "Görsel gizliliği"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "图片隐私"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image privacy"
+            "state" : "translated",
+            "value" : "圖片隱私"
           }
         }
       }
@@ -31514,56 +31514,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Bildquelle"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Origen de la imagen"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Source de l’image"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Origine dell’immagine"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Origem da imagem"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Источник изображения"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "Görsel kaynağı"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "图片来源"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Image Source"
+            "state" : "translated",
+            "value" : "圖片來源"
           }
         }
       }
@@ -31989,56 +31989,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "Läuft"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "En curso"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "En cours"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "In corso"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "Em andamento"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "Выполняется"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "Sürüyor"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "进行中"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "In progress"
+            "state" : "translated",
+            "value" : "進行中"
           }
         }
       }
@@ -33289,56 +33289,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Er beginnt mit nsec."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Empieza por nsec."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Elle commence par nsec."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Inizia con nsec."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Ela começa com nsec."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "Он начинается с nsec."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "nsec ile başlar."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "它以 nsec 开头。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "It starts with nsec."
+            "state" : "translated",
+            "value" : "它以 nsec 開頭。"
           }
         }
       }
@@ -49065,56 +49065,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Foto wird vorbereitet"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Preparando la foto"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Préparation de la photo"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Preparazione della foto"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Preparando a foto"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Подготовка фото"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "Fotoğraf hazırlanıyor"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "正在准备照片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Preparing Photo"
+            "state" : "translated",
+            "value" : "正在準備照片"
           }
         }
       }
@@ -49489,56 +49489,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Privater Schlüssel"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Clave privada"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Clé privée"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Chiave privata"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Chave privada"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Приватный ключ"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "Özel anahtar"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "私钥"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Private Key"
+            "state" : "translated",
+            "value" : "私鑰"
           }
         }
       }
@@ -51556,56 +51556,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "QR-Scan nicht verfügbar"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "Escaneo de QR no disponible"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "Scan de QR indisponible"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "Scansione QR non disponibile"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "Leitura de QR indisponível"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "Сканирование QR недоступно"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "QR tarama kullanılamıyor"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "无法扫码"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "QR Scanning Unavailable"
+            "state" : "translated",
+            "value" : "無法掃描 QR 碼"
           }
         }
       }
@@ -54206,56 +54206,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Foto entfernen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Eliminar foto"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Supprimer la photo"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Rimuovi foto"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Remover foto"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Удалить фото"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "Fotoğrafı kaldır"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "移除照片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Remove Photo"
+            "state" : "translated",
+            "value" : "移除照片"
           }
         }
       }
@@ -57804,56 +57804,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Bilder suchen"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Buscar imágenes"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Rechercher des images"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Cerca immagini"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Pesquisar imagens"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Поиск изображений"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "Görsel ara"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "搜索图片"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search Images"
+            "state" : "translated",
+            "value" : "搜尋圖片"
           }
         }
       }
@@ -58177,56 +58177,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Such-Datenschutz"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Privacidad de la búsqueda"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Confidentialité de la recherche"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Privacy della ricerca"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Privacidade da busca"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Конфиденциальность поиска"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "Arama gizliliği"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "搜索隐私"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Search privacy"
+            "state" : "translated",
+            "value" : "搜尋隱私"
           }
         }
       }
@@ -62660,56 +62660,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Anmeldung läuft"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Iniciando sesión"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Connexion en cours"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Accesso in corso"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Entrando"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Выполняется вход"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "Oturum açılıyor"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "正在登录"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Signing In"
+            "state" : "translated",
+            "value" : "正在登入"
           }
         }
       }
@@ -66890,56 +66890,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Dieser private Schlüssel ist ungültig. Überprüfe ihn und versuche es erneut."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Esa clave privada no es válida. Revísala e inténtalo de nuevo."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Cette clé privée n’est pas valide. Vérifiez-la et réessayez."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Questa chiave privata non è valida. Controllala e riprova."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Essa chave privada não é válida. Verifique-a e tente novamente."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Этот приватный ключ недействителен. Проверьте его и повторите попытку."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "Bu özel anahtar geçerli değil. Kontrol edip tekrar deneyin."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "该私钥无效。请检查后重试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "That private key isn't valid. Check it and try again."
+            "state" : "translated",
+            "value" : "此私鑰無效。請檢查後再試一次。"
           }
         }
       }
@@ -67435,56 +67435,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "Der Bildanbieter kann deine IP-Adresse sehen, wenn die Vorschau geladen wird."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "El proveedor de la imagen puede ver tu dirección IP cuando se carga la vista previa."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "Le fournisseur de l’image peut voir votre adresse IP lors du chargement de l’aperçu."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "Il fornitore dell’immagine può vedere il tuo indirizzo IP quando viene caricata l’anteprima."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "O provedor da imagem pode ver seu endereço IP quando a prévia é carregada."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "Поставщик изображения может увидеть ваш IP-адрес при загрузке предпросмотра."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "Önizleme yüklenirken görsel sağlayıcısı IP adresinizi görebilir."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "加载预览时，图片提供方可以看到你的 IP 地址。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The image provider can see your IP address when the preview loads."
+            "state" : "translated",
+            "value" : "載入預覽時，圖片提供方可以看到你的 IP 位址。"
           }
         }
       }
@@ -67676,56 +67676,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "Das Foto wird zu einem öffentlichen Dienst hochgeladen. Wenn du es aus deinem Profil entfernst, wird die hochgeladene Kopie möglicherweise nicht gelöscht."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "La foto se sube a un servicio público y, si la quitas de tu perfil, puede que la copia subida no se elimine."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "La photo est envoyée vers un service public, et la retirer de votre profil ne supprime pas nécessairement la copie envoyée."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "La foto viene caricata su un servizio pubblico e, se la rimuovi dal tuo profilo, la copia caricata potrebbe non essere eliminata."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "A foto é enviada para um serviço público e, se você a remover do seu perfil, a cópia enviada pode não ser excluída."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "Фото загружается в публичный сервис, и его удаление из профиля может не удалить загруженную копию."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "Fotoğraf herkese açık bir hizmete yüklenir ve profilinizden kaldırmanız yüklenen kopyayı silmeyebilir."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "照片会上传到公开服务；将它从个人资料中移除，可能不会删除已上传的副本。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "The photo is uploaded to a public service, and removing it from your profile may not delete the uploaded copy."
+            "state" : "translated",
+            "value" : "照片會上傳到公開服務；將它從個人檔案中移除，可能不會刪除已上傳的副本。"
           }
         }
       }
@@ -72229,55 +72229,55 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
+            "state" : "translated",
             "value" : "URL"
           }
         }
@@ -76763,56 +76763,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Dein Avatar ist öffentlich"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Tu avatar es público"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Votre avatar est public"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Il tuo avatar è pubblico"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Seu avatar é público"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Ваш аватар общедоступен"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "Avatarınız herkese açık"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "你的头像是公开的"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your avatar is public"
+            "state" : "translated",
+            "value" : "你的頭像是公開的"
           }
         }
       }
@@ -77459,56 +77459,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Deine Suche wird an DuckDuckGo gesendet. Bildanbieter können deine IP-Adresse sehen, wenn Ergebnisse geladen werden."
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Tu búsqueda se envía a DuckDuckGo. Los proveedores de imágenes pueden ver tu dirección IP cuando se cargan los resultados."
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Votre recherche est envoyée à DuckDuckGo. Les fournisseurs d’images peuvent voir votre adresse IP lors du chargement des résultats."
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "La tua ricerca viene inviata a DuckDuckGo. I fornitori di immagini possono vedere il tuo indirizzo IP quando i risultati vengono caricati."
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Sua busca é enviada ao DuckDuckGo. Os provedores de imagens podem ver seu endereço IP quando os resultados são carregados."
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Ваш запрос отправляется в DuckDuckGo. Поставщики изображений могут увидеть ваш IP-адрес при загрузке результатов."
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "Aramanız DuckDuckGo’ya gönderilir. Sonuçlar yüklenirken görsel sağlayıcıları IP adresinizi görebilir."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "你的搜索会发送给 DuckDuckGo。加载结果时，图片提供方可以看到你的 IP 地址。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Your search is sent to DuckDuckGo. Image providers can see your IP address when results load."
+            "state" : "translated",
+            "value" : "你的搜尋會傳送給 DuckDuckGo。載入結果時，圖片提供方可以看到你的 IP 位址。"
           }
         }
       }
