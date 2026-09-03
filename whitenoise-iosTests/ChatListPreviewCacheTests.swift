@@ -107,6 +107,118 @@ struct ChatListPreviewCacheTests {
         ) == ChatRowPreviewPresentation(prefix: nil, body: "Member added"))
     }
 
+    @Test func groupSystemPreviewNamesActorAndSubjectFromTheProfileProjection() {
+        let actor = hex("aa")
+        let subject = hex("bb")
+        withAppLanguage(.english) {
+            let item = ChatsListViewModel.Item(
+                row: row(lastMessage: preview(
+                    sender: actor,
+                    plaintext: """
+                    {"v":1,"system_type":"member_added","text":"Member added",\
+                    "data":{"actor":"\(actor)","subject":"\(subject)"}}
+                    """,
+                    kind: MessageSemantics.kindGroupSystem
+                )),
+                avatarURL: nil,
+                title: "Room",
+                isDirectMessage: false,
+                systemEventNaming: GroupSystemEventNaming(
+                    currentAccountIdHex: hex("cc"),
+                    displayName: names
+                )
+            )
+
+            #expect(item.previewText == "Alice added Bob")
+            #expect(ChatRow.previewPresentation(
+                for: item,
+                activeAccountIdHex: hex("cc"),
+                senderName: { _ in "Wrong sender" }
+            ) == ChatRowPreviewPresentation(prefix: nil, body: "Alice added Bob"))
+        }
+    }
+
+    @Test func groupSystemPreviewNamesTheLocalAccountAsYou() {
+        let alice = hex("aa")
+        let me = hex("cc")
+        withAppLanguage(.english) {
+            let iAdded = ChatsListViewModel.Item(
+                row: row(lastMessage: preview(
+                    sender: me,
+                    plaintext: """
+                    {"v":1,"system_type":"member_added","text":"Member added",\
+                    "data":{"actor":"\(me)","subject":"\(alice)"}}
+                    """,
+                    kind: MessageSemantics.kindGroupSystem
+                )),
+                avatarURL: nil,
+                title: "Room",
+                systemEventNaming: GroupSystemEventNaming(currentAccountIdHex: me, displayName: names)
+            )
+            let iWasAdded = ChatsListViewModel.Item(
+                row: row(lastMessage: preview(
+                    sender: alice,
+                    plaintext: """
+                    {"v":1,"system_type":"member_added","text":"Member added",\
+                    "data":{"actor":"\(alice)","subject":"\(me)"}}
+                    """,
+                    kind: MessageSemantics.kindGroupSystem
+                )),
+                avatarURL: nil,
+                title: "Room",
+                systemEventNaming: GroupSystemEventNaming(currentAccountIdHex: me, displayName: names)
+            )
+
+            #expect(iAdded.previewText == "You added Alice")
+            #expect(iWasAdded.previewText == "Alice added you")
+        }
+    }
+
+    @Test func groupSystemPreviewFallsBackToShortIdentitiesWithoutAProjection() {
+        let actor = hex("aa")
+        let subject = hex("bb")
+        withAppLanguage(.english) {
+            let item = ChatsListViewModel.Item(
+                row: row(lastMessage: preview(
+                    sender: actor,
+                    plaintext: """
+                    {"v":1,"system_type":"member_added","text":"Member added",\
+                    "data":{"actor":"\(actor)","subject":"\(subject)"}}
+                    """,
+                    kind: MessageSemantics.kindGroupSystem
+                )),
+                avatarURL: nil,
+                title: "Room"
+            )
+
+            #expect(item.previewText == "\(IdentityFormatter.short(actor)) added \(IdentityFormatter.short(subject))")
+        }
+    }
+
+    @Test func groupSystemPreviewUsesTheSenderWhenThePayloadOmitsTheActor() {
+        let subject = hex("bb")
+        withAppLanguage(.english) {
+            let item = ChatsListViewModel.Item(
+                row: row(lastMessage: preview(
+                    sender: hex("aa"),
+                    plaintext: """
+                    {"v":1,"system_type":"member_added","text":"Member added",\
+                    "data":{"subject":"\(subject)"}}
+                    """,
+                    kind: MessageSemantics.kindGroupSystem
+                )),
+                avatarURL: nil,
+                title: "Room",
+                systemEventNaming: GroupSystemEventNaming(
+                    currentAccountIdHex: hex("cc"),
+                    displayName: names
+                )
+            )
+
+            #expect(item.previewText == "Alice added Bob")
+        }
+    }
+
     @Test func terminalMembershipReplacesStaleMessagePreview() {
         let leftItem = ChatsListViewModel.Item(
             row: row(lastMessage: preview(), selfMembership: .left),
@@ -140,19 +252,154 @@ struct ChatListPreviewCacheTests {
         #expect(!pendingItem.isActiveMember)
     }
 
+    @Test func unansweredInvitePreviewNamesTheInviter() {
+        let item = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(), pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: "self",
+            senderName: { $0 == self.inviterIdHex ? "Alice" : "Wrong account" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.formatted("%@ has invited you to a secure chat", "Alice")
+        ))
+    }
+
+    @Test func unansweredInvitePreviewFallsBackWhenTheInviterIsUnresolved() {
+        let item = ChatsListViewModel.Item(
+            row: row(lastMessage: nil, pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room"
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong account" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.formatted(
+                "%@ has invited you to a secure chat",
+                L10n.string("Someone")
+            )
+        ))
+    }
+
+    @Test func answeredChatKeepsItsMessagePreview() {
+        let item = ChatsListViewModel.Item(
+            row: row(lastMessage: preview(), pendingConfirmation: false),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Alice" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: "hello"))
+    }
+
+    @Test func terminalMembershipOutranksAPendingInvite() {
+        let removed = ChatsListViewModel.Item(
+            row: row(selfMembership: .removed, pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex
+        )
+        let left = ChatsListViewModel.Item(
+            row: row(selfMembership: .left, pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex
+        )
+        let leaving = ChatsListViewModel.Item(
+            row: row(leaveRequestPending: true, pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex,
+            leaveRequestPending: true
+        )
+
+        #expect(ChatRow.previewPresentation(
+            for: removed,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Alice" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.string("You were removed from this chat.")
+        ))
+        #expect(ChatRow.previewPresentation(
+            for: left,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Alice" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.string("You left this chat.")
+        ))
+        #expect(ChatRow.previewPresentation(
+            for: leaving,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Alice" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("Leaving…")))
+    }
+
+    @Test func inviterResolutionPrefersTheWelcomerAndOnlyAppliesWhilePending() {
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: true,
+            welcomerAccountIdHex: " ABCD ",
+            directPeerAccountIdHex: "beef"
+        ) == "abcd")
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: true,
+            welcomerAccountIdHex: "   ",
+            directPeerAccountIdHex: "BEEF"
+        ) == "beef")
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: true,
+            welcomerAccountIdHex: nil,
+            directPeerAccountIdHex: nil
+        ) == nil)
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: false,
+            welcomerAccountIdHex: "abcd",
+            directPeerAccountIdHex: "beef"
+        ) == nil)
+    }
+
+    @Test func projectedGroupCarriesTheInviterIntoTheConversation() {
+        let item = ChatsListViewModel.Item(
+            row: row(pendingConfirmation: true),
+            avatarURL: nil,
+            title: "Room",
+            inviterAccountIdHex: inviterIdHex
+        )
+
+        #expect(item.projectedGroup.welcomerAccountIdHex == inviterIdHex)
+        #expect(item.projectedGroup.pendingConfirmation)
+    }
+
+    private let inviterIdHex = String(repeating: "a4", count: 32)
+
     private func row(
         groupIdHex: String = "0123456789abcdef",
         title: String = "Room",
         lastMessage: ChatListMessagePreviewFfi? = nil,
         selfMembership: SelfMembershipFfi = .member,
-        leaveRequestPending: Bool = false
+        leaveRequestPending: Bool = false,
+        pendingConfirmation: Bool = false
     ) -> ChatListRowFfi {
         ChatListRowFfi(
             groupIdHex: groupIdHex,
             pinned: false,
             pinnedPosition: nil,
             archived: false,
-            pendingConfirmation: false,
+            pendingConfirmation: pendingConfirmation,
             title: title,
             groupName: title,
             avatarUrl: nil,
@@ -198,5 +445,18 @@ struct ChatListPreviewCacheTests {
             timelineAt: timelineAt,
             deleted: deleted
         )
+    }
+}
+
+
+private func hex(_ byte: String) -> String {
+    String(repeating: byte, count: 32)
+}
+
+private func names(_ accountIdHex: String) -> String {
+    switch accountIdHex.prefix(2) {
+    case "aa": "Alice"
+    case "bb": "Bob"
+    default: IdentityFormatter.short(accountIdHex)
     }
 }

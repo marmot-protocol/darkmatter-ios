@@ -100,14 +100,20 @@ enum MessagePreview {
 
     static func body(
         _ preview: ChatListMessagePreviewFfi,
-        mentionDisplayName: MarkdownMentionResolver? = nil
+        mentionDisplayName: MarkdownMentionResolver? = nil,
+        systemEventNaming: GroupSystemEventNaming = .shortIdentities
     ) -> String {
         if preview.deleted {
             return L10n.string("This message was deleted")
         }
         if !preview.plaintext.isEmpty {
             if preview.kind == MessageSemantics.kindGroupSystem {
-                return GroupSystemEventPresentation.displayText(from: preview.plaintext) ?? ""
+                return GroupSystemEventPresentation.displayText(
+                    from: preview.plaintext,
+                    sender: preview.sender,
+                    currentAccountIdHex: systemEventNaming.currentAccountIdHex,
+                    displayName: systemEventNaming.displayName
+                ) ?? ""
             }
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""

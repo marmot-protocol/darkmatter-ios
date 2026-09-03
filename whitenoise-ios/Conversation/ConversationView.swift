@@ -441,6 +441,13 @@ enum ConversationInvitePresentation {
             && !isLoading
             && !hasMessage(in: timeline)
     }
+
+    /// Shared by the conversation invite prompt and the chat-list invite
+    /// preview so both name the inviter the same way.
+    static func invitationText(inviterName: String?) -> String {
+        let name = ContentSanitizer.displayName(inviterName) ?? L10n.string("Someone")
+        return L10n.formatted("%@ has invited you to a secure chat", name)
+    }
 }
 
 struct ConversationView: View {
@@ -1414,10 +1421,11 @@ struct ConversationView: View {
     }
 
     private func invitationText(viewModel: ConversationViewModel) -> String {
-        let inviterName = viewModel.inviterAccountIdHex.map {
-            appState.displayName(forAccountIdHex: $0)
-        } ?? L10n.string("Someone")
-        return L10n.formatted("%@ has invited you to a secure chat", inviterName)
+        ConversationInvitePresentation.invitationText(
+            inviterName: viewModel.inviterAccountIdHex.map {
+                appState.displayName(forAccountIdHex: $0)
+            }
+        )
     }
 
     // MARK: - Timeline

@@ -11064,6 +11064,17 @@ struct ConversationInvitePresentationTests {
         ))
     }
 
+    @Test func invitationTextNamesTheInviterAndFallsBackWhenUnknown() {
+        #expect(ConversationInvitePresentation.invitationText(inviterName: "Alice")
+            == L10n.formatted("%@ has invited you to a secure chat", "Alice"))
+        #expect(ConversationInvitePresentation.invitationText(inviterName: " Alice\n")
+            == L10n.formatted("%@ has invited you to a secure chat", "Alice"))
+        #expect(ConversationInvitePresentation.invitationText(inviterName: nil)
+            == L10n.formatted("%@ has invited you to a secure chat", L10n.string("Someone")))
+        #expect(ConversationInvitePresentation.invitationText(inviterName: "   ")
+            == L10n.formatted("%@ has invited you to a secure chat", L10n.string("Someone")))
+    }
+
     @Test func centeredPromptDoesNotHideLoadingErrorsOrAcceptedChats() {
         #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
             isPending: true,

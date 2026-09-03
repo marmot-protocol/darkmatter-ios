@@ -82,6 +82,9 @@ final class ChatsListViewModel {
         let title: String
         let isDirectMessage: Bool?
         let directPeerAccountIdHex: String?
+        /// Who invited this account, for rows still awaiting a reply. Marmot's
+        /// chat-list row carries no welcomer, so this is enriched separately.
+        let inviterAccountIdHex: String?
         let isMuted: Bool
         let previewText: String?
         let draftPreview: String?
@@ -95,14 +98,17 @@ final class ChatsListViewModel {
             title: String,
             isDirectMessage: Bool? = nil,
             directPeerAccountIdHex: String? = nil,
+            inviterAccountIdHex: String? = nil,
             isMuted: Bool = false,
             leaveRequestPending: Bool = false,
             draftSummary: MessageDraftSummaryFfi? = nil,
-            mentionDisplayName: MarkdownMentionResolver? = nil
+            mentionDisplayName: MarkdownMentionResolver? = nil,
+            systemEventNaming: GroupSystemEventNaming = .shortIdentities
         ) {
             let previewText = Self.sanitizedPreview(
                 from: row.lastMessage,
-                mentionDisplayName: mentionDisplayName
+                mentionDisplayName: mentionDisplayName,
+                systemEventNaming: systemEventNaming
             )
             self.row = row
             self.avatarURL = avatarURL
@@ -110,6 +116,7 @@ final class ChatsListViewModel {
             self.title = title
             self.isDirectMessage = isDirectMessage
             self.directPeerAccountIdHex = directPeerAccountIdHex
+            self.inviterAccountIdHex = inviterAccountIdHex
             self.isMuted = isMuted
             self.leaveRequestPending = leaveRequestPending
             self.previewText = previewText
@@ -170,7 +177,7 @@ final class ChatsListViewModel {
                 disbanding: row.disbanding,
                 disbandRequest: row.disbandRequest,
                 disbanded: row.lifecycleState == .disbanded,
-                welcomerAccountIdHex: nil,
+                welcomerAccountIdHex: inviterAccountIdHex,
                 viaWelcomeMessageIdHex: nil
             )
         }
@@ -183,11 +190,16 @@ final class ChatsListViewModel {
 
         private static func sanitizedPreview(
             from preview: ChatListMessagePreviewFfi?,
-            mentionDisplayName: MarkdownMentionResolver?
+            mentionDisplayName: MarkdownMentionResolver?,
+            systemEventNaming: GroupSystemEventNaming
         ) -> String? {
             preview.flatMap {
                 ContentSanitizer.compactSingleLine(
-                    MessagePreview.body($0, mentionDisplayName: mentionDisplayName),
+                    MessagePreview.body(
+                        $0,
+                        mentionDisplayName: mentionDisplayName,
+                        systemEventNaming: systemEventNaming
+                    ),
                     maxLength: 140
                 )
             }
@@ -227,6 +239,8 @@ final class ChatsListViewModel {
     private var pendingChatListRowsByGroupId: [String: ChatListRowFfi] = [:]
     private var avatarURLByGroupId: [String: String] = [:]
     private var directPeerAccountIdByGroupId: [String: String] = [:]
+    private var inviterAccountIdByGroupId: [String: String] = [:]
+    private var inviterLookupCompletedGroupIds: Set<String> = []
     private var retainedDirectPeerCache = ChatListDirectPeerCache()
     private var groupDetailsCache: [String: GroupDetailsFfi] = [:]
     private var directPeerLookupCompletedGroupIds: Set<String> = []
@@ -239,6 +253,7 @@ final class ChatsListViewModel {
     private static let liveSubscriptionInitialRetryDelayNanoseconds: UInt64 = 500_000_000
     private static let liveSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 8_000_000_000
     private static let rowEnrichmentRetryDelayNanoseconds: UInt64 = 1_000_000_000
+    private static let inviterEnrichmentBatchLimit = 8
 
     #if DEBUG
     @ObservationIgnored var mentionDisplayNameForTesting: MarkdownMentionResolver?
@@ -293,6 +308,8 @@ final class ChatsListViewModel {
                 retainedDirectPeerCache.restore(accountRef: $0)
             } ?? [:]
             groupDetailsCache = [:]
+            inviterAccountIdByGroupId = [:]
+            inviterLookupCompletedGroupIds = []
             directPeerLookupCompletedGroupIds = []
             pendingDirectPeerRefreshGroupIds = []
         }
@@ -541,6 +558,11 @@ final class ChatsListViewModel {
         groupDetailsCache = Self.intersecting(groupDetailsCache, with: surviving)
         avatarURLByGroupId = Self.intersecting(avatarURLByGroupId, with: surviving)
         directPeerAccountIdByGroupId = Self.intersecting(directPeerAccountIdByGroupId, with: surviving)
+        inviterAccountIdByGroupId = Self.intersecting(inviterAccountIdByGroupId, with: surviving)
+        inviterLookupCompletedGroupIds = Self.intersecting(
+            inviterLookupCompletedGroupIds,
+            with: surviving
+        )
         directPeerLookupCompletedGroupIds = Self.intersecting(
             directPeerLookupCompletedGroupIds,
             with: surviving
@@ -634,6 +656,8 @@ final class ChatsListViewModel {
         itemByGroupId[groupIdHex] = nil
         avatarURLByGroupId[groupIdHex] = nil
         directPeerAccountIdByGroupId[groupIdHex] = nil
+        inviterAccountIdByGroupId[groupIdHex] = nil
+        inviterLookupCompletedGroupIds.remove(groupIdHex)
         groupDetailsCache[groupIdHex] = nil
         directPeerLookupCompletedGroupIds.remove(groupIdHex)
         pendingDirectPeerRefreshGroupIds.remove(groupIdHex)
@@ -759,6 +783,12 @@ final class ChatsListViewModel {
             title: display.title,
             isDirectMessage: display.isDirectMessage,
             directPeerAccountIdHex: display.directPeerAccountIdHex,
+            inviterAccountIdHex: Self.inviterAccountIdHex(
+                pendingConfirmation: row.pendingConfirmation,
+                welcomerAccountIdHex: inviterAccountIdByGroupId[row.groupIdHex],
+                directPeerAccountIdHex: display.directPeerAccountIdHex
+                    ?? directPeerAccountIdByGroupId[row.groupIdHex]
+            ),
             isMuted: muteLookup.accountIdHex.map {
                 ChatMuteStore.isMuted(accountIdHex: $0, groupIdHex: row.groupIdHex, in: muteLookup.mutedChatKeys)
             } ?? false,
@@ -773,7 +803,14 @@ final class ChatsListViewModel {
                 }
                 #endif
                 return appState?.mentionDisplayName(for: entity)
-            }
+            },
+            systemEventNaming: GroupSystemEventNaming(
+                currentAccountIdHex: muteLookup.accountIdHex,
+                displayName: { [weak appState] accountIdHex in
+                    appState?.displayName(forAccountIdHex: accountIdHex)
+                        ?? IdentityFormatter.short(accountIdHex)
+                }
+            )
         )
     }
 
@@ -948,6 +985,42 @@ final class ChatsListViewModel {
         ContentSanitizer.groupName(row.groupName) == nil
     }
 
+    private func rowNeedsDirectPeerEnrichment(_ row: ChatListRowFfi) -> Bool {
+        row.conversationKind != .group
+            && Self.rowNeedsDisplayEnrichment(row)
+            && directPeerAccountIdByGroupId[row.groupIdHex] == nil
+            && !directPeerLookupCompletedGroupIds.contains(row.groupIdHex)
+    }
+
+    /// A known direct peer already names a two-member invite's inviter, so
+    /// only invites without one need the welcomer read.
+    private func rowNeedsInviterEnrichment(_ row: ChatListRowFfi) -> Bool {
+        row.pendingConfirmation
+            && inviterAccountIdByGroupId[row.groupIdHex] == nil
+            && directPeerAccountIdByGroupId[row.groupIdHex] == nil
+            && !inviterLookupCompletedGroupIds.contains(row.groupIdHex)
+    }
+
+    /// A pending invite's inviter: Marmot's welcomer once the group read has
+    /// resolved it, else the direct peer, who is the only other member a DM
+    /// invite can have come from. Nil once the invite has been answered.
+    nonisolated static func inviterAccountIdHex(
+        pendingConfirmation: Bool,
+        welcomerAccountIdHex: String?,
+        directPeerAccountIdHex: String?
+    ) -> String? {
+        guard pendingConfirmation else { return nil }
+        return normalizedInviterAccountId(welcomerAccountIdHex)
+            ?? normalizedInviterAccountId(directPeerAccountIdHex)
+    }
+
+    private nonisolated static func normalizedInviterAccountId(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !value.isEmpty
+        else { return nil }
+        return value
+    }
+
     nonisolated static func directPeerAccountId(
         memberIdsHex: [String],
         myAccountIdHex: String
@@ -996,11 +1069,9 @@ final class ChatsListViewModel {
               let myAccountIdHex = appState.activeAccount?.accountIdHex
         else { return }
         let groupIds = rows.compactMap { row -> String? in
-            guard row.conversationKind != .group,
-                  Self.rowNeedsDisplayEnrichment(row),
-                  directPeerAccountIdByGroupId[row.groupIdHex] == nil,
-                  !directPeerLookupCompletedGroupIds.contains(row.groupIdHex)
-            else { return nil }
+            guard rowNeedsDirectPeerEnrichment(row) || rowNeedsInviterEnrichment(row) else {
+                return nil
+            }
             return row.groupIdHex
         }
         guard !groupIds.isEmpty else { return }
@@ -1060,22 +1131,83 @@ final class ChatsListViewModel {
                       self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef)
                 else { return }
 
+                var peersByGroupId: [String: String] = [:]
                 for groupId in groupIds {
-                    guard let row = self.rowByGroupId[groupId] else { continue }
-                    guard let memberIds = membership.memberIdsByGroupId[groupId] else {
-                        unresolvedGroupIds.insert(groupId)
-                        continue
-                    }
-                    self.directPeerLookupCompletedGroupIds.insert(groupId)
+                    guard let memberIds = membership.memberIdsByGroupId[groupId] else { continue }
                     if let other = Self.directPeerAccountId(
                         memberIdsHex: memberIds,
                         myAccountIdHex: myAccountIdHex
                     ) {
-                        self.directPeerAccountIdByGroupId[groupId] = other
-                        appState.warmProfileProjection(
-                            forAccountIdHex: other,
-                            refreshAfterLoad: true
+                        peersByGroupId[groupId] = other
+                    }
+                }
+
+                // A two-member invite's peer is already its inviter.
+                let inviteGroupIdsNeedingRead = groupIds.filter {
+                    self.rowByGroupId[$0]?.pendingConfirmation == true
+                        && self.inviterAccountIdByGroupId[$0] == nil
+                        && peersByGroupId[$0] == nil
+                }
+                let inviteGroupIds = inviteGroupIdsNeedingRead
+                    .prefix(Self.inviterEnrichmentBatchLimit)
+                var welcomersByGroupId: [String: String] = [:]
+                var unresolvedInviteGroupIds = Set(
+                    inviteGroupIdsNeedingRead.dropFirst(inviteGroupIds.count)
+                )
+                unresolvedGroupIds.formUnion(unresolvedInviteGroupIds)
+                for groupId in inviteGroupIds {
+                    do {
+                        let client = try appState.currentMarmotClient()
+                        let details = try await client.groupDetails(
+                            accountRef: accountRef,
+                            groupIdHex: groupId
                         )
+                        if let welcomer = Self.normalizedInviterAccountId(
+                            details.group.welcomerAccountIdHex
+                        ) {
+                            welcomersByGroupId[groupId] = welcomer
+                        }
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        unresolvedInviteGroupIds.insert(groupId)
+                        unresolvedGroupIds.insert(groupId)
+                    }
+                }
+                guard appState.canUseRuntimeForForegroundWork,
+                      self.ownsAvatarEnrichmentTask(taskID: taskID, accountRef: accountRef)
+                else { return }
+
+                for groupId in groupIds {
+                    guard let row = self.rowByGroupId[groupId] else { continue }
+                    if membership.memberIdsByGroupId[groupId] != nil {
+                        self.directPeerLookupCompletedGroupIds.insert(groupId)
+                        if let other = peersByGroupId[groupId],
+                           row.conversationKind != .group {
+                            self.directPeerAccountIdByGroupId[groupId] = other
+                            appState.warmProfileProjection(
+                                forAccountIdHex: other,
+                                refreshAfterLoad: true
+                            )
+                        }
+                    } else if self.rowNeedsDirectPeerEnrichment(row) {
+                        unresolvedGroupIds.insert(groupId)
+                    }
+                    if row.pendingConfirmation, !unresolvedInviteGroupIds.contains(groupId) {
+                        self.inviterLookupCompletedGroupIds.insert(groupId)
+                        // `storeRow` clears the peer cache for group rows, so the
+                        // resolved inviter has to live in this store to survive.
+                        if let inviter = Self.inviterAccountIdHex(
+                            pendingConfirmation: true,
+                            welcomerAccountIdHex: welcomersByGroupId[groupId],
+                            directPeerAccountIdHex: peersByGroupId[groupId]
+                        ) {
+                            self.inviterAccountIdByGroupId[groupId] = inviter
+                            appState.warmProfileProjection(
+                                forAccountIdHex: inviter,
+                                refreshAfterLoad: true
+                            )
+                        }
                     }
                     let item = self.makeItem(for: row, muteLookup: muteLookup)
                     if self.itemByGroupId[groupId] != item {
