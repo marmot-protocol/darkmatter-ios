@@ -151,6 +151,14 @@ struct ChatRow: View {
         if item.selfMembership == .removed {
             return ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You were removed from this chat."))
         }
+        if item.row.pendingConfirmation {
+            return ChatRowPreviewPresentation(
+                prefix: nil,
+                body: ConversationInvitePresentation.invitationText(
+                    inviterName: item.inviterAccountIdHex.map(senderName)
+                )
+            )
+        }
         if let draftPreview = item.draftPreview {
             return ChatRowPreviewPresentation(prefix: nil, body: L10n.formatted("Draft: %@", draftPreview))
         }

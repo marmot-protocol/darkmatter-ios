@@ -46,10 +46,15 @@ nonisolated enum GroupSystemEventPresentation {
     static func displayText(
         from plaintext: String,
         sender: String = "",
+        currentAccountIdHex: String? = nil,
         displayName: DisplayNameResolver = { IdentityFormatter.short($0) }
     ) -> String? {
         guard let payload = parsePayload(plaintext) else { return nil }
-        return payload.resolvedText(sender: sender, currentAccountIdHex: nil, displayName: displayName)
+        return payload.resolvedText(
+            sender: sender,
+            currentAccountIdHex: currentAccountIdHex,
+            displayName: displayName
+        )
     }
 
     private static func parsePayload(_ plaintext: String) -> Payload? {
@@ -430,4 +435,17 @@ nonisolated enum GroupSystemEventPresentation {
             }
         }
     }
+}
+
+/// How a kind-1210 preview names people outside the conversation store. The
+/// resolver and the local account travel together because a row names both an
+/// actor and a subject, either of which can be the reader.
+nonisolated struct GroupSystemEventNaming {
+    static let shortIdentities = GroupSystemEventNaming(
+        currentAccountIdHex: nil,
+        displayName: { IdentityFormatter.short($0) }
+    )
+
+    let currentAccountIdHex: String?
+    let displayName: GroupSystemEventPresentation.DisplayNameResolver
 }
