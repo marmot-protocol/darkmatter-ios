@@ -150,7 +150,7 @@ final class AppState {
     /// keep the `appState.accounts` / `activeAccountRef` / `activeAccount` call
     /// sites and SwiftUI observation unchanged. AppState still drives the Marmot
     /// account refresh and the identity lifecycle (create / import / sign-out).
-    @ObservationIgnored let accountStore = AccountStore()
+    @ObservationIgnored let accountStore: AccountStore
     var accounts: [AccountSummaryFfi] { accountStore.accounts }
 
     /// Per-account unread totals (account-switcher badges). Owned by
@@ -353,6 +353,7 @@ final class AppState {
         client: MarmotClient?,
         notifications: AppNotifications,
         conversationDraftStore: ConversationDraftStore? = nil,
+        accountDefaults: UserDefaults = .standard,
         suspendedRuntimeTelemetryBuildConfig: TelemetryBuildConfig = AppState.defaultSuspendedRuntimeTelemetryBuildConfig,
         runtimeClientFactory: @escaping RuntimeLifecycle.RuntimeClientFactory =
             RuntimeLifecycle.defaultRuntimeClientFactory,
@@ -368,6 +369,7 @@ final class AppState {
             retrySleeper: runtimeRetrySleeper,
             constructionRetryPolicy: runtimeConstructionRetryPolicy
         )
+        self.accountStore = AccountStore(defaults: accountDefaults)
         self.notifications = notifications
         self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
         self.developerMode = UserDefaults.standard.bool(forKey: Self.developerModeKey)

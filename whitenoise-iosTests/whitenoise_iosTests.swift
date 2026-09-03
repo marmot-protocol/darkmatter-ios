@@ -18,6 +18,8 @@ private let notificationDefaultsTestGate = AsyncTestGate()
 @Suite(.serialized)
 struct AppStateBootstrapTests {
 
+    private let accountDefaults = IsolatedAccountDefaults.make()
+
     @Test func freshAppStateStartsBootstrapping() async throws {
         let appState = try testAppState()
         #expect(appState.phase == .bootstrapping)
@@ -35,15 +37,19 @@ struct AppStateBootstrapTests {
     }
 
     @Test func bootstrapWithoutAccountsClearsPersistedActiveAccountRef() async throws {
-        UserDefaults.standard.set("legacy-darkmatter-account", forKey: AccountStore.activeAccountKey)
-        let appState = AppState(client: try MarmotClient.testClient(), notifications: deniedNotifications())
+        accountDefaults.set("legacy-darkmatter-account", forKey: AccountStore.activeAccountKey)
+        let appState = AppState(
+            client: try MarmotClient.testClient(),
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
+        )
 
         await appState.bootstrap()
 
         #expect(appState.phase == .onboarding)
         #expect(appState.accounts.isEmpty)
         #expect(appState.activeAccountRef == nil)
-        #expect(UserDefaults.standard.string(forKey: AccountStore.activeAccountKey) == nil)
+        #expect(accountDefaults.string(forKey: AccountStore.activeAccountKey) == nil)
     }
 
     @Test func concurrentBootstrapCallsShareOneInFlightRun() async throws {
@@ -65,7 +71,8 @@ struct AppStateBootstrapTests {
         let originalRelayUrls = originalClient!.relayUrls
         let original = AppState(
             client: originalClient!,
-            notifications: deniedNotifications()
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
         )
         await original.bootstrap()
         _ = try await original.createIdentity()
@@ -77,7 +84,8 @@ struct AppStateBootstrapTests {
                 rootPath: originalRootPath,
                 relayUrls: originalRelayUrls
             ),
-            notifications: deniedNotifications()
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
         )
         relaunched.setAppSceneActive(true)
         let checkpoint = AsyncTestCheckpoint()
@@ -1127,7 +1135,8 @@ struct AppStateBootstrapTests {
         await stopReadyRuntime(seeded.appState)
         let appState = AppState(
             client: try MarmotClient(rootPath: seedRootPath, relayUrls: seedRelayUrls),
-            notifications: deniedNotifications()
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
         )
 
         let suspension = appState.startRuntimeSuspension()
@@ -2163,27 +2172,29 @@ struct AppStateBootstrapTests {
         // Without this, the next launch reads the stale label from
         // UserDefaults and bootstrap points at an account that was removed
         // from local Marmot storage.
-        UserDefaults.standard.removeObject(forKey: "marmot.activeAccountRef")
+        resetPersistedActiveAccountRef()
         var client: MarmotClient? = try MarmotClient.testClient()
         let rootPath = client!.rootPath
         let relayUrls = client!.relayUrls
         let appState = AppState(
             client: client!,
-            notifications: deniedNotifications()
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
         )
         await appState.bootstrap()
         let only = try await appState.createIdentity()
         appState.activeAccountRef = only.label
-        #expect(UserDefaults.standard.string(forKey: "marmot.activeAccountRef") == only.label)
+        #expect(accountDefaults.string(forKey: AccountStore.activeAccountKey) == only.label)
 
         await appState.signOut()
 
-        #expect(UserDefaults.standard.string(forKey: "marmot.activeAccountRef") == nil)
+        #expect(accountDefaults.string(forKey: AccountStore.activeAccountKey) == nil)
         await appState.startRuntimeSuspension().value
         client = nil
         let reborn = AppState(
             client: try MarmotClient(rootPath: rootPath, relayUrls: relayUrls),
-            notifications: deniedNotifications()
+            notifications: deniedNotifications(),
+            accountDefaults: accountDefaults
         )
         #expect(reborn.activeAccountRef == nil)
     }
@@ -2198,10 +2209,15 @@ struct AppStateBootstrapTests {
             return AppState(
                 client: client,
                 notifications: notifications ?? deniedNotifications(),
+                accountDefaults: accountDefaults,
                 suspendedRuntimeTelemetryBuildConfig: suspendedRuntimeTelemetryBuildConfig
             )
         }
-        return AppState(client: client, notifications: notifications ?? deniedNotifications())
+        return AppState(
+            client: client,
+            notifications: notifications ?? deniedNotifications(),
+            accountDefaults: accountDefaults
+        )
     }
 
     private func readyAppStateWithCreatedIdentities(
@@ -2280,7 +2296,7 @@ struct AppStateBootstrapTests {
     }
 
     private func resetPersistedActiveAccountRef() {
-        UserDefaults.standard.removeObject(forKey: "marmot.activeAccountRef")
+        accountDefaults.removeObject(forKey: AccountStore.activeAccountKey)
     }
 }
 
