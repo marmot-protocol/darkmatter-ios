@@ -1,6 +1,5 @@
 import Foundation
 import MarmotKit
-import Synchronization
 import Testing
 @testable import whitenoise_ios
 
@@ -377,18 +376,16 @@ struct RecipientSearchTests {
     }
 }
 
-private final class RecipientSearchSubscriptionStub: UserSearchSubscriptionProtocol, @unchecked Sendable {
-    private let updates: Mutex<[UserSearchUpdateFfi]>
+private actor RecipientSearchSubscriptionStub: UserSearchSubscriptionProtocol {
+    private var updates: [UserSearchUpdateFfi]
 
     init(updates: [UserSearchUpdateFfi]) {
-        self.updates = Mutex(updates)
+        self.updates = updates
     }
 
     func nextUpdate() async -> UserSearchUpdateFfi? {
-        updates.withLock { updates in
-            guard !updates.isEmpty else { return nil }
-            return updates.removeFirst()
-        }
+        guard !updates.isEmpty else { return nil }
+        return updates.removeFirst()
     }
 }
 
