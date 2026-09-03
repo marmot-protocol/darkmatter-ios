@@ -61888,56 +61888,56 @@
       "localizations" : {
         "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Anmelden"
           }
         },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Iniciar sesión"
           }
         },
         "fr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Se connecter"
           }
         },
         "it" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Accedi"
           }
         },
         "pt" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Entrar"
           }
         },
         "ru" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Войти"
           }
         },
         "tr" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "Oturum Aç"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "登录"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Sign In"
+            "state" : "translated",
+            "value" : "登入"
           }
         }
       }

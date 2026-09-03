@@ -3234,6 +3234,45 @@ struct LocalizationCatalogTests {
         }
     }
 
+    @Test func welcomeEntryPointButtonsAreTranslatedInEveryShippedLocale() throws {
+        let catalog = try readCatalog("Shared/Localizable.xcstrings")
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        let expectedTranslations: [String: [String: String]] = [
+            "Sign In": [
+                "de": "Anmelden",
+                "es": "Iniciar sesión",
+                "fr": "Se connecter",
+                "it": "Accedi",
+                "pt": "Entrar",
+                "ru": "Войти",
+                "tr": "Oturum Aç",
+                "zh-Hans": "登录",
+                "zh-Hant": "登入"
+            ],
+            "Sign Up": [
+                "de": "Registrieren",
+                "es": "Registrarse",
+                "fr": "S’inscrire",
+                "it": "Registrati",
+                "pt": "Cadastrar-se",
+                "ru": "Зарегистрироваться",
+                "tr": "Kaydol",
+                "zh-Hans": "注册",
+                "zh-Hant": "註冊"
+            ]
+        ]
+
+        for (key, translations) in expectedTranslations {
+            for (locale, expected) in translations {
+                #expect(try localizedValue(key, locale: locale, in: strings) == expected)
+                #expect(
+                    try localizedState(key, locale: locale, in: strings) == "translated",
+                    "\(key) is not marked translated in \(locale)"
+                )
+            }
+        }
+    }
+
     @Test func sharedCatalogHasNoMissingLocalizedValuesAndKeepsPlaceholders() throws {
         let catalog = try readCatalog("Shared/Localizable.xcstrings")
         let strings = try #require(catalog["strings"] as? [String: Any])
@@ -3411,6 +3450,14 @@ struct LocalizationCatalogTests {
         let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
         let stringUnit = try #require(localeEntry["stringUnit"] as? [String: Any], "Missing string unit for \(key) in \(locale)")
         return try #require(stringUnit["value"] as? String, "Missing value for \(key) in \(locale)")
+    }
+
+    private func localizedState(_ key: String, locale: String, in strings: [String: Any]) throws -> String {
+        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
+        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
+        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
+        let stringUnit = try #require(localeEntry["stringUnit"] as? [String: Any], "Missing string unit for \(key) in \(locale)")
+        return try #require(stringUnit["state"] as? String, "Missing state for \(key) in \(locale)")
     }
 
     private func localizedLeafValues(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
