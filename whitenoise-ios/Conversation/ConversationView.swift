@@ -444,7 +444,7 @@ enum ConversationInvitePresentation {
 
     /// Shared by the conversation invite prompt and the chat-list invite
     /// preview so both resolve and name the inviter the same way.
-    static func normalizedInviterAccountId(_ value: String?) -> String? {
+    nonisolated static func normalizedInviterAccountId(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
               !value.isEmpty
         else { return nil }

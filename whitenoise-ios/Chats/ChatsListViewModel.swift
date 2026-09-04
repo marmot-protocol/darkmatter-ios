@@ -255,7 +255,7 @@ final class ChatsListViewModel {
     private static let liveSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 8_000_000_000
     private static let rowEnrichmentRetryDelayNanoseconds: UInt64 = 1_000_000_000
     private static let inviterEnrichmentBatchLimit = 8
-    private static let inviterLookupFailureLimit = 3
+    private nonisolated static let inviterLookupFailureLimit = 3
 
     #if DEBUG
     @ObservationIgnored var mentionDisplayNameForTesting: MarkdownMentionResolver?
