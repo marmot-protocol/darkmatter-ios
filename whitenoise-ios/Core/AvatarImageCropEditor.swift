@@ -208,7 +208,6 @@ struct AvatarImageCropEditor: View {
                     .padding(.horizontal)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.background)
             .navigationTitle("Crop image")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -239,7 +238,10 @@ struct AvatarImageCropEditor: View {
                 .safeAreaPadding(.horizontal)
                 .padding(.vertical)
                 .safeAreaPadding(.bottom)
-                .background(.bar)
+            }
+            .background {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
             }
         }
         .interactiveDismissDisabled()
