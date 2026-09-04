@@ -3301,7 +3301,9 @@ struct LocalizationCatalogTests {
             _ = try #require(rawEntry as? [String: Any], "Invalid localization entry: \(key)")
             let expectedPlaceholders = placeholders(in: key)
             for locale in expectedLocales {
-                let values = try localizedLeafValues(key, locale: locale, in: strings)
+                let values = try localizedLeaves(key, locale: locale, in: strings)
+                    .filter { !$0.isSubstitutionShell }
+                    .map(\.value)
                 for value in values {
                     if !key.isEmpty {
                         #expect(!value.isEmpty, "Missing \(locale) value for \(key)")
@@ -3318,17 +3320,17 @@ struct LocalizationCatalogTests {
         }
     }
 
-    @Test func sharedCatalogHasNoUntranslatedNonEnglishUnits() throws {
+    @Test func sharedCatalogMarksEveryLocaleTranslated() throws {
         let catalog = try readCatalog("Shared/Localizable.xcstrings")
         let strings = try #require(catalog["strings"] as? [String: Any])
 
         for (key, rawEntry) in strings {
             _ = try #require(rawEntry as? [String: Any], "Invalid localization entry: \(key)")
             for locale in expectedLocales {
-                for state in try localizedLeafStates(key, locale: locale, in: strings) {
+                for leaf in try localizedLeaves(key, locale: locale, in: strings) {
                     #expect(
-                        state == "translated",
-                        "Untranslated \(locale) value for \(key) (state: \(state))"
+                        leaf.state == "translated",
+                        "Untranslated \(locale) value for \(key) (state: \(leaf.state))"
                     )
                 }
             }
@@ -3497,13 +3499,29 @@ struct LocalizationCatalogTests {
         return try #require(stringUnit["state"] as? String, "Missing state for \(key) in \(locale)")
     }
 
-    private func localizedLeafStates(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
+    private struct LocalizedLeaf {
+        let state: String
+        let value: String
+        let isSubstitutionShell: Bool
+    }
+
+    private func localizedLeaves(_ key: String, locale: String, in strings: [String: Any]) throws -> [LocalizedLeaf] {
         let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
         let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
         let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
-
-        var states = [try localizedState(key, locale: locale, in: strings)]
         let substitutions = (localeEntry["substitutions"] as? [String: Any]) ?? [:]
+
+        var leaves: [LocalizedLeaf] = []
+        if let stringUnit = localeEntry["stringUnit"] as? [String: Any] {
+            leaves.append(
+                LocalizedLeaf(
+                    state: try #require(stringUnit["state"] as? String, "Missing state for \(key) in \(locale)"),
+                    value: try #require(stringUnit["value"] as? String, "Missing value for \(key) in \(locale)"),
+                    isSubstitutionShell: !substitutions.isEmpty
+                )
+            )
+        }
+
         for rawSubstitution in substitutions.values {
             let substitution = try #require(rawSubstitution as? [String: Any])
             let variations = try #require(substitution["variations"] as? [String: Any])
@@ -3511,31 +3529,17 @@ struct LocalizationCatalogTests {
             for rawForm in plural.values {
                 let form = try #require(rawForm as? [String: Any])
                 let stringUnit = try #require(form["stringUnit"] as? [String: Any])
-                states.append(try #require(stringUnit["state"] as? String))
-            }
-        }
-        return states
-    }
-
-    private func localizedLeafValues(_ key: String, locale: String, in strings: [String: Any]) throws -> [String] {
-        let entry = try #require(strings[key] as? [String: Any], "Missing localization key: \(key)")
-        let localizations = try #require(entry["localizations"] as? [String: Any], "Missing localizations for \(key)")
-        let localeEntry = try #require(localizations[locale] as? [String: Any], "Missing \(locale) localization for \(key)")
-
-        if let substitutions = localeEntry["substitutions"] as? [String: Any] {
-            return try substitutions.values.flatMap { rawSubstitution in
-                let substitution = try #require(rawSubstitution as? [String: Any])
-                let variations = try #require(substitution["variations"] as? [String: Any])
-                let plural = try #require(variations["plural"] as? [String: Any])
-                return try plural.values.map { rawForm in
-                    let form = try #require(rawForm as? [String: Any])
-                    let stringUnit = try #require(form["stringUnit"] as? [String: Any])
-                    return try #require(stringUnit["value"] as? String)
-                }
+                leaves.append(
+                    LocalizedLeaf(
+                        state: try #require(stringUnit["state"] as? String, "Missing state for \(key) in \(locale)"),
+                        value: try #require(stringUnit["value"] as? String, "Missing value for \(key) in \(locale)"),
+                        isSubstitutionShell: false
+                    )
+                )
             }
         }
 
-        return [try localizedValue(key, locale: locale, in: strings)]
+        return leaves
     }
 
     private func pluralCategories(_ key: String, locale: String, in strings: [String: Any]) throws -> Set<String> {

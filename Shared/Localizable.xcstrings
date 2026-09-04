@@ -12477,7 +12477,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Elija una conversación para continuar o inicie una nueva."
+            "value" : "Elige una conversación para continuar o inicia una nueva."
           }
         },
         "fr" : {
@@ -21450,7 +21450,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verschwindend"
+            "value" : "Selbstlöschend"
           }
         },
         "es" : {
@@ -21492,7 +21492,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "阅后即焚"
+            "value" : "限时"
           }
         },
         "zh-Hant" : {
@@ -24758,7 +24758,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ingrese un URI npub, nprofile, Nostr válido, un enlace de perfil o una llave pública hexadecimal."
+            "value" : "Ingresa un URI npub, nprofile, Nostr válido, un enlace de perfil o una llave pública hexadecimal."
           }
         },
         "fr" : {
@@ -33674,7 +33674,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantenga al menos un relevo."
+            "value" : "Mantén al menos un relé."
           }
         },
         "fr" : {
@@ -33710,13 +33710,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "至少保留一个继电器。"
+            "value" : "至少保留一个中继。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "至少保留一個繼電器。"
+            "value" : "至少保留一個中繼。"
           }
         }
       }
@@ -33735,7 +33735,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantenga las llaves, los mensajes, los medios y la configuración de este perfil en este dispositivo."
+            "value" : "Guarda las llaves, los mensajes, los medios y la configuración de este perfil en este dispositivo."
           }
         },
         "fr" : {
@@ -34443,43 +34443,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Blatt %@"
+            "value" : "Blattknoten %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "hoja %@"
+            "value" : "nodo hoja %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "feuille %@"
+            "value" : "nœud feuille %@"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "foglia %@"
+            "value" : "nodo foglia %@"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "folha %@"
+            "value" : "nó folha %@"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "лист %@"
+            "value" : "листовой узел %@"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "yaprak %@"
+            "value" : "yaprak düğümü %@"
           }
         },
         "zh-Hans" : {
@@ -36901,43 +36901,43 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lokales Blatt"
+            "value" : "Lokaler Blattknoten"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hoja local"
+            "value" : "Nodo hoja local"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Feuille locale"
+            "value" : "Nœud feuille local"
           }
         },
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Foglia locale"
+            "value" : "Nodo foglia locale"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Folha local"
+            "value" : "Nó folha local"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Локальный лист"
+            "value" : "Локальный листовой узел"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Yerel yaprak"
+            "value" : "Yerel yaprak düğümü"
           }
         },
         "zh-Hans" : {
@@ -61133,7 +61133,7 @@
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Paylaş ve Bağlan"
+            "value" : "Paylaş ve bağlan"
           }
         },
         "zh-Hans" : {
@@ -66049,7 +66049,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Toque el mapa para elegir una ubicación."
+            "value" : "Toca el mapa para elegir una ubicación."
           }
         },
         "fr" : {
@@ -75730,7 +75730,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Puede agregar miembros después de crear el grupo."
+            "value" : "Puedes agregar miembros después de crear el grupo."
           }
         },
         "fr" : {
@@ -76136,7 +76136,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Puede volver a iniciar sesión sin importar sus llaves nuevamente."
+            "value" : "Puedes volver a iniciar sesión sin importar tus llaves de nuevo."
           }
         },
         "fr" : {
