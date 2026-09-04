@@ -6569,9 +6569,13 @@ struct ChatsListProjectionTests {
 
         #expect(item.draftPreview == "Follow up with Alice")
         #expect(item.searchHaystack.contains("follow up with alice"))
-        #expect(ChatRow.subtitleText(for: item, activeAccountIdHex: nil) == L10n.formatted(
-            "Draft: %@",
-            "Follow up with Alice"
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: nil,
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.formatted("Draft: %@", "Follow up with Alice")
         ))
     }
 

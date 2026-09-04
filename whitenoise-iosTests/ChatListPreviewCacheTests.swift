@@ -47,7 +47,11 @@ struct ChatListPreviewCacheTests {
             avatarURL: nil,
             title: "Room"
         )
-        #expect(ChatRow.subtitleText(for: sentItem, activeAccountIdHex: "self") == "You: hello there")
+        #expect(ChatRow.previewPresentation(
+            for: sentItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: L10n.string("You"), body: "hello there"))
 
         let emptySentItem = ChatsListViewModel.Item(
             row: row(
@@ -56,10 +60,18 @@ struct ChatListPreviewCacheTests {
             avatarURL: nil,
             title: "Room"
         )
-        #expect(ChatRow.subtitleText(for: emptySentItem, activeAccountIdHex: "self") == "You sent a message")
+        #expect(ChatRow.previewPresentation(
+            for: emptySentItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You sent a message")))
 
         let emptyItem = ChatsListViewModel.Item(row: row(lastMessage: nil), avatarURL: nil, title: "Room")
-        #expect(ChatRow.subtitleText(for: emptyItem, activeAccountIdHex: "self") == "No messages yet")
+        #expect(ChatRow.previewPresentation(
+            for: emptyItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("No messages yet")))
     }
 
     @Test func groupPreviewUsesProjectedSenderNameWhileDirectMessageDoesNot() {
@@ -231,8 +243,19 @@ struct ChatListPreviewCacheTests {
             title: "Room"
         )
 
-        #expect(ChatRow.subtitleText(for: leftItem, activeAccountIdHex: "self") == "You left this chat.")
-        #expect(ChatRow.subtitleText(for: removedItem, activeAccountIdHex: "self") == "You were removed from this chat.")
+        #expect(ChatRow.previewPresentation(
+            for: leftItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You left this chat.")))
+        #expect(ChatRow.previewPresentation(
+            for: removedItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.string("You were removed from this chat.")
+        ))
     }
 
     @Test func durablePendingLeaveHasDistinctPreviewFromResolvedLeave() {
@@ -247,7 +270,11 @@ struct ChatListPreviewCacheTests {
             leaveRequestPending: true
         )
 
-        #expect(ChatRow.subtitleText(for: pendingItem, activeAccountIdHex: "self") == "Leaving…")
+        #expect(ChatRow.previewPresentation(
+            for: pendingItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("Leaving…")))
         #expect(pendingItem.selfMembership == .left)
         #expect(!pendingItem.isActiveMember)
     }
