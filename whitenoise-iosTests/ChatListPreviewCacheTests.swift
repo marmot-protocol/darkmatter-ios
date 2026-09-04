@@ -47,7 +47,11 @@ struct ChatListPreviewCacheTests {
             avatarURL: nil,
             title: "Room"
         )
-        #expect(ChatRow.subtitleText(for: sentItem, activeAccountIdHex: "self") == "You: hello there")
+        #expect(ChatRow.previewPresentation(
+            for: sentItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: L10n.string("You"), body: "hello there"))
 
         let emptySentItem = ChatsListViewModel.Item(
             row: row(
@@ -56,10 +60,18 @@ struct ChatListPreviewCacheTests {
             avatarURL: nil,
             title: "Room"
         )
-        #expect(ChatRow.subtitleText(for: emptySentItem, activeAccountIdHex: "self") == "You sent a message")
+        #expect(ChatRow.previewPresentation(
+            for: emptySentItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You sent a message")))
 
         let emptyItem = ChatsListViewModel.Item(row: row(lastMessage: nil), avatarURL: nil, title: "Room")
-        #expect(ChatRow.subtitleText(for: emptyItem, activeAccountIdHex: "self") == "No messages yet")
+        #expect(ChatRow.previewPresentation(
+            for: emptyItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("No messages yet")))
     }
 
     @Test func groupPreviewUsesProjectedSenderNameWhileDirectMessageDoesNot() {
@@ -231,8 +243,19 @@ struct ChatListPreviewCacheTests {
             title: "Room"
         )
 
-        #expect(ChatRow.subtitleText(for: leftItem, activeAccountIdHex: "self") == "You left this chat.")
-        #expect(ChatRow.subtitleText(for: removedItem, activeAccountIdHex: "self") == "You were removed from this chat.")
+        #expect(ChatRow.previewPresentation(
+            for: leftItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("You left this chat.")))
+        #expect(ChatRow.previewPresentation(
+            for: removedItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.string("You were removed from this chat.")
+        ))
     }
 
     @Test func durablePendingLeaveHasDistinctPreviewFromResolvedLeave() {
@@ -247,7 +270,11 @@ struct ChatListPreviewCacheTests {
             leaveRequestPending: true
         )
 
-        #expect(ChatRow.subtitleText(for: pendingItem, activeAccountIdHex: "self") == "Leaving…")
+        #expect(ChatRow.previewPresentation(
+            for: pendingItem,
+            activeAccountIdHex: "self",
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(prefix: nil, body: L10n.string("Leaving…")))
         #expect(pendingItem.selfMembership == .left)
         #expect(!pendingItem.isActiveMember)
     }
@@ -386,6 +413,91 @@ struct ChatListPreviewCacheTests {
 
     private let inviterIdHex = String(repeating: "a4", count: 32)
 
+    @Test func inviterReadPlanSkipsGroupsWhoseLookupAlreadyCompleted() {
+        let groupIds = [hex("aa"), hex("bb")]
+        let pendingInviteGroupIds = Set(groupIds)
+
+        let firstPass = ChatsListViewModel.inviterReadPlan(
+            groupIds: groupIds,
+            pendingInviteGroupIds: pendingInviteGroupIds,
+            resolvedInviterGroupIds: [],
+            completedLookupGroupIds: [],
+            knownPeerGroupIds: [],
+            limit: 8
+        )
+
+        #expect(firstPass.read == groupIds)
+        #expect(firstPass.deferred.isEmpty)
+
+        let secondPass = ChatsListViewModel.inviterReadPlan(
+            groupIds: groupIds,
+            pendingInviteGroupIds: pendingInviteGroupIds,
+            resolvedInviterGroupIds: [],
+            completedLookupGroupIds: Set(groupIds),
+            knownPeerGroupIds: [],
+            limit: 8
+        )
+
+        #expect(secondPass.read.isEmpty)
+        #expect(secondPass.deferred.isEmpty)
+    }
+
+    @Test func inviterReadPlanDefersInvitesPastTheBatchLimitAndDrainsThem() {
+        let groupIds = (0 ..< 20).map { String(format: "%064x", $0) }
+        let pendingInviteGroupIds = Set(groupIds)
+        var completedLookupGroupIds: Set<String> = []
+        var readCounts: [Int] = []
+        var deferredCounts: [Int] = []
+
+        while true {
+            let plan = ChatsListViewModel.inviterReadPlan(
+                groupIds: groupIds,
+                pendingInviteGroupIds: pendingInviteGroupIds,
+                resolvedInviterGroupIds: [],
+                completedLookupGroupIds: completedLookupGroupIds,
+                knownPeerGroupIds: [],
+                limit: 8
+            )
+            if plan.read.isEmpty {
+                #expect(plan.deferred.isEmpty)
+                break
+            }
+            readCounts.append(plan.read.count)
+            deferredCounts.append(plan.deferred.count)
+            completedLookupGroupIds.formUnion(plan.read)
+        }
+
+        #expect(readCounts == [8, 8, 4])
+        #expect(deferredCounts == [12, 4, 0])
+        #expect(completedLookupGroupIds == pendingInviteGroupIds)
+    }
+
+    @Test func inviterLookupStopsRetryingAfterRepeatedFailures() {
+        #expect(ChatsListViewModel.shouldRetryInviterLookup(failureCount: 1))
+        #expect(ChatsListViewModel.shouldRetryInviterLookup(failureCount: 2))
+        #expect(!ChatsListViewModel.shouldRetryInviterLookup(failureCount: 3))
+        #expect(!ChatsListViewModel.shouldRetryInviterLookup(failureCount: 4))
+    }
+
+    @Test func inviterReadPlanSkipsAnsweredResolvedAndAlreadyPeeredInvites() {
+        let peerKnown = hex("aa")
+        let needsRead = hex("bb")
+        let answered = hex("cc")
+        let alreadyResolved = hex("dd")
+
+        let plan = ChatsListViewModel.inviterReadPlan(
+            groupIds: [peerKnown, needsRead, answered, alreadyResolved],
+            pendingInviteGroupIds: [peerKnown, needsRead, alreadyResolved],
+            resolvedInviterGroupIds: [alreadyResolved],
+            completedLookupGroupIds: [],
+            knownPeerGroupIds: [peerKnown],
+            limit: 8
+        )
+
+        #expect(plan.read == [needsRead])
+        #expect(plan.deferred.isEmpty)
+    }
+
     private func row(
         groupIdHex: String = "0123456789abcdef",
         title: String = "Room",
@@ -446,17 +558,16 @@ struct ChatListPreviewCacheTests {
             deleted: deleted
         )
     }
-}
 
+    private func hex(_ byte: String) -> String {
+        String(repeating: byte, count: 32)
+    }
 
-private func hex(_ byte: String) -> String {
-    String(repeating: byte, count: 32)
-}
-
-private func names(_ accountIdHex: String) -> String {
-    switch accountIdHex.prefix(2) {
-    case "aa": "Alice"
-    case "bb": "Bob"
-    default: IdentityFormatter.short(accountIdHex)
+    private func names(_ accountIdHex: String) -> String {
+        switch accountIdHex.prefix(2) {
+        case "aa": "Alice"
+        case "bb": "Bob"
+        default: IdentityFormatter.short(accountIdHex)
+        }
     }
 }

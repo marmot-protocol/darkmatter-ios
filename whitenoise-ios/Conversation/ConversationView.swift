@@ -443,7 +443,14 @@ enum ConversationInvitePresentation {
     }
 
     /// Shared by the conversation invite prompt and the chat-list invite
-    /// preview so both name the inviter the same way.
+    /// preview so both resolve and name the inviter the same way.
+    nonisolated static func normalizedInviterAccountId(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !value.isEmpty
+        else { return nil }
+        return value
+    }
+
     static func invitationText(inviterName: String?) -> String {
         let name = ContentSanitizer.displayName(inviterName) ?? L10n.string("Someone")
         return L10n.formatted("%@ has invited you to a secure chat", name)

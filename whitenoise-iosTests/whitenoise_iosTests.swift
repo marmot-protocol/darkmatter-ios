@@ -6573,9 +6573,13 @@ struct ChatsListProjectionTests {
 
         #expect(item.draftPreview == "Follow up with Alice")
         #expect(item.searchHaystack.contains("follow up with alice"))
-        #expect(ChatRow.subtitleText(for: item, activeAccountIdHex: nil) == L10n.formatted(
-            "Draft: %@",
-            "Follow up with Alice"
+        #expect(ChatRow.previewPresentation(
+            for: item,
+            activeAccountIdHex: nil,
+            senderName: { _ in "Wrong sender" }
+        ) == ChatRowPreviewPresentation(
+            prefix: nil,
+            body: L10n.formatted("Draft: %@", "Follow up with Alice")
         ))
     }
 
@@ -11114,6 +11118,21 @@ struct ConversationInvitePresentationTests {
             == L10n.formatted("%@ has invited you to a secure chat", L10n.string("Someone")))
         #expect(ConversationInvitePresentation.invitationText(inviterName: "   ")
             == L10n.formatted("%@ has invited you to a secure chat", L10n.string("Someone")))
+    }
+
+    @Test func inviterAccountIdNormalizationTrimsAndLowercasesForBothSurfaces() {
+        let mixedCase = String(repeating: "AB", count: 32)
+        let lowercased = String(repeating: "ab", count: 32)
+
+        #expect(ConversationInvitePresentation
+            .normalizedInviterAccountId("  \(mixedCase)\n") == lowercased)
+        #expect(ConversationInvitePresentation.normalizedInviterAccountId(nil) == nil)
+        #expect(ConversationInvitePresentation.normalizedInviterAccountId("   ") == nil)
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: true,
+            welcomerAccountIdHex: mixedCase,
+            directPeerAccountIdHex: nil
+        ) == lowercased)
     }
 
     @Test func centeredPromptDoesNotHideLoadingErrorsOrAcceptedChats() {

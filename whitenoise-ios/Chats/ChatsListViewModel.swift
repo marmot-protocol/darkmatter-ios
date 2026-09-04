@@ -241,6 +241,7 @@ final class ChatsListViewModel {
     private var directPeerAccountIdByGroupId: [String: String] = [:]
     private var inviterAccountIdByGroupId: [String: String] = [:]
     private var inviterLookupCompletedGroupIds: Set<String> = []
+    private var inviterLookupFailureCountByGroupId: [String: Int] = [:]
     private var retainedDirectPeerCache = ChatListDirectPeerCache()
     private var groupDetailsCache: [String: GroupDetailsFfi] = [:]
     private var directPeerLookupCompletedGroupIds: Set<String> = []
@@ -254,6 +255,7 @@ final class ChatsListViewModel {
     private static let liveSubscriptionMaximumRetryDelayNanoseconds: UInt64 = 8_000_000_000
     private static let rowEnrichmentRetryDelayNanoseconds: UInt64 = 1_000_000_000
     private static let inviterEnrichmentBatchLimit = 8
+    private nonisolated static let inviterLookupFailureLimit = 3
 
     #if DEBUG
     @ObservationIgnored var mentionDisplayNameForTesting: MarkdownMentionResolver?
@@ -310,6 +312,7 @@ final class ChatsListViewModel {
             groupDetailsCache = [:]
             inviterAccountIdByGroupId = [:]
             inviterLookupCompletedGroupIds = []
+            inviterLookupFailureCountByGroupId = [:]
             directPeerLookupCompletedGroupIds = []
             pendingDirectPeerRefreshGroupIds = []
         }
@@ -563,6 +566,10 @@ final class ChatsListViewModel {
             inviterLookupCompletedGroupIds,
             with: surviving
         )
+        inviterLookupFailureCountByGroupId = Self.intersecting(
+            inviterLookupFailureCountByGroupId,
+            with: surviving
+        )
         directPeerLookupCompletedGroupIds = Self.intersecting(
             directPeerLookupCompletedGroupIds,
             with: surviving
@@ -658,6 +665,7 @@ final class ChatsListViewModel {
         directPeerAccountIdByGroupId[groupIdHex] = nil
         inviterAccountIdByGroupId[groupIdHex] = nil
         inviterLookupCompletedGroupIds.remove(groupIdHex)
+        inviterLookupFailureCountByGroupId[groupIdHex] = nil
         groupDetailsCache[groupIdHex] = nil
         directPeerLookupCompletedGroupIds.remove(groupIdHex)
         pendingDirectPeerRefreshGroupIds.remove(groupIdHex)
@@ -736,6 +744,11 @@ final class ChatsListViewModel {
         if row.conversationKind == .group {
             directPeerAccountIdByGroupId[row.groupIdHex] = nil
             directPeerLookupCompletedGroupIds.insert(row.groupIdHex)
+        }
+        if !row.pendingConfirmation {
+            inviterAccountIdByGroupId[row.groupIdHex] = nil
+            inviterLookupCompletedGroupIds.remove(row.groupIdHex)
+            inviterLookupFailureCountByGroupId[row.groupIdHex] = nil
         }
         updateCachedGroupDetails(with: row)
         let item = makeItem(for: row, muteLookup: muteLookup)
@@ -1001,6 +1014,28 @@ final class ChatsListViewModel {
             && !inviterLookupCompletedGroupIds.contains(row.groupIdHex)
     }
 
+    nonisolated static func inviterReadPlan(
+        groupIds: [String],
+        pendingInviteGroupIds: Set<String>,
+        resolvedInviterGroupIds: Set<String>,
+        completedLookupGroupIds: Set<String>,
+        knownPeerGroupIds: Set<String>,
+        limit: Int
+    ) -> (read: [String], deferred: Set<String>) {
+        let needsRead = groupIds.filter {
+            pendingInviteGroupIds.contains($0)
+                && !resolvedInviterGroupIds.contains($0)
+                && !completedLookupGroupIds.contains($0)
+                && !knownPeerGroupIds.contains($0)
+        }
+        let read = Array(needsRead.prefix(max(0, limit)))
+        return (read: read, deferred: Set(needsRead.dropFirst(read.count)))
+    }
+
+    nonisolated static func shouldRetryInviterLookup(failureCount: Int) -> Bool {
+        failureCount < inviterLookupFailureLimit
+    }
+
     /// A pending invite's inviter: Marmot's welcomer once the group read has
     /// resolved it, else the direct peer, who is the only other member a DM
     /// invite can have come from. Nil once the invite has been answered.
@@ -1015,10 +1050,7 @@ final class ChatsListViewModel {
     }
 
     private nonisolated static func normalizedInviterAccountId(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              !value.isEmpty
-        else { return nil }
-        return value
+        ConversationInvitePresentation.normalizedInviterAccountId(value)
     }
 
     nonisolated static func directPeerAccountId(
@@ -1143,19 +1175,20 @@ final class ChatsListViewModel {
                 }
 
                 // A two-member invite's peer is already its inviter.
-                let inviteGroupIdsNeedingRead = groupIds.filter {
-                    self.rowByGroupId[$0]?.pendingConfirmation == true
-                        && self.inviterAccountIdByGroupId[$0] == nil
-                        && peersByGroupId[$0] == nil
-                }
-                let inviteGroupIds = inviteGroupIdsNeedingRead
-                    .prefix(Self.inviterEnrichmentBatchLimit)
-                var welcomersByGroupId: [String: String] = [:]
-                var unresolvedInviteGroupIds = Set(
-                    inviteGroupIdsNeedingRead.dropFirst(inviteGroupIds.count)
+                let invitePlan = Self.inviterReadPlan(
+                    groupIds: groupIds,
+                    pendingInviteGroupIds: Set(
+                        groupIds.filter { self.rowByGroupId[$0]?.pendingConfirmation == true }
+                    ),
+                    resolvedInviterGroupIds: Set(self.inviterAccountIdByGroupId.keys),
+                    completedLookupGroupIds: self.inviterLookupCompletedGroupIds,
+                    knownPeerGroupIds: Set(peersByGroupId.keys),
+                    limit: Self.inviterEnrichmentBatchLimit
                 )
-                unresolvedGroupIds.formUnion(unresolvedInviteGroupIds)
-                for groupId in inviteGroupIds {
+                var welcomersByGroupId: [String: String] = [:]
+                var inviteGroupIdsToRetry = invitePlan.deferred
+                unresolvedGroupIds.formUnion(invitePlan.deferred)
+                for groupId in invitePlan.read {
                     do {
                         let client = try appState.currentMarmotClient()
                         let details = try await client.groupDetails(
@@ -1170,8 +1203,13 @@ final class ChatsListViewModel {
                     } catch is CancellationError {
                         return
                     } catch {
-                        unresolvedInviteGroupIds.insert(groupId)
-                        unresolvedGroupIds.insert(groupId)
+                        let failureCount =
+                            (self.inviterLookupFailureCountByGroupId[groupId] ?? 0) + 1
+                        self.inviterLookupFailureCountByGroupId[groupId] = failureCount
+                        if Self.shouldRetryInviterLookup(failureCount: failureCount) {
+                            inviteGroupIdsToRetry.insert(groupId)
+                            unresolvedGroupIds.insert(groupId)
+                        }
                     }
                 }
                 guard appState.canUseRuntimeForForegroundWork,
@@ -1193,7 +1231,7 @@ final class ChatsListViewModel {
                     } else if self.rowNeedsDirectPeerEnrichment(row) {
                         unresolvedGroupIds.insert(groupId)
                     }
-                    if row.pendingConfirmation, !unresolvedInviteGroupIds.contains(groupId) {
+                    if row.pendingConfirmation, !inviteGroupIdsToRetry.contains(groupId) {
                         self.inviterLookupCompletedGroupIds.insert(groupId)
                         // `storeRow` clears the peer cache for group rows, so the
                         // resolved inviter has to live in this store to survive.

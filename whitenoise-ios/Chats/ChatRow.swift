@@ -125,18 +125,6 @@ struct ChatRow: View {
         return Text(verbatim: preview.body)
     }
 
-    static func subtitleText(
-        for item: ChatsListViewModel.Item,
-        activeAccountIdHex: String?
-    ) -> String {
-        let presentation = previewPresentation(
-            for: item,
-            activeAccountIdHex: activeAccountIdHex,
-            senderName: { _ in "" }
-        )
-        return presentation.prefix.map { "\($0): \(presentation.body)" } ?? presentation.body
-    }
-
     static func previewPresentation(
         for item: ChatsListViewModel.Item,
         activeAccountIdHex: String?,

@@ -516,10 +516,7 @@ final class ConversationViewModel {
     }
 
     var inviterAccountIdHex: String? {
-        guard let value = group.welcomerAccountIdHex?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !value.isEmpty
-        else { return nil }
-        return value
+        ConversationInvitePresentation.normalizedInviterAccountId(group.welcomerAccountIdHex)
     }
 
     func isAdmin(_ member: AppGroupMemberRecordFfi) -> Bool {
