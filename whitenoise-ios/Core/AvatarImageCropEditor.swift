@@ -18,6 +18,8 @@ nonisolated enum AvatarImageCropper {
     static let maximumSourcePixelCount = 80_000_000
     static let maximumEditorPixelSize = 2_048
     static let outputPixelSize = 1_024
+    static let maximumCropSide: CGFloat = 300
+    static let minimumCropSide: CGFloat = 140
 
     static func encodedByteCountIsAllowed(_ count: Int) -> Bool {
         count > 0 && count <= maximumEncodedBytes
@@ -109,6 +111,29 @@ nonisolated enum AvatarImageCropper {
         )
     }
 
+    static func fittedCropSide(_ available: CGSize) -> CGFloat {
+        let side = min(available.width, available.height)
+        guard side.isFinite, side > 0 else { return minimumCropSide }
+        return min(max(side, minimumCropSide), maximumCropSide)
+    }
+
+    static func rescaledOffset(
+        _ offset: CGSize,
+        imageSize: CGSize,
+        previousCropSide: CGFloat,
+        cropSide: CGFloat,
+        zoom: CGFloat
+    ) -> CGSize {
+        guard previousCropSide > 0, cropSide > 0 else { return .zero }
+        let ratio = cropSide / previousCropSide
+        return clampedOffset(
+            CGSize(width: offset.width * ratio, height: offset.height * ratio),
+            imageSize: imageSize,
+            cropSide: cropSide,
+            zoom: zoom
+        )
+    }
+
     static func croppedJPEG(
         image: UIImage,
         cropSide: CGFloat,
@@ -156,15 +181,24 @@ struct AvatarImageCropEditor: View {
     @State private var offset: CGSize = .zero
     @State private var committedOffset: CGSize = .zero
 
-    private let cropSide: CGFloat = 300
+    @State private var cropSide: CGFloat = AvatarImageCropper.maximumCropSide
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
-                if let image {
-                    cropCanvas(image)
-                } else {
-                    ContentUnavailableView("Image", systemImage: "photo")
+                Group {
+                    if let image {
+                        cropCanvas(image)
+                    } else {
+                        ContentUnavailableView("Image", systemImage: "photo")
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxHeight: AvatarImageCropper.maximumCropSide)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    AvatarImageCropper.fittedCropSide(proxy.size)
+                } action: { side in
+                    resizeCrop(to: side)
                 }
 
                 Text("Pinch to zoom, then drag to position the image.")
@@ -239,6 +273,21 @@ struct AvatarImageCropEditor: View {
         }
         .gesture(dragGesture(imageSize: imageSize).simultaneously(with: magnificationGesture(imageSize: imageSize)))
         .accessibilityLabel("Crop image")
+    }
+
+    private func resizeCrop(to side: CGFloat) {
+        guard side > 0, side != cropSide else { return }
+        let previous = cropSide
+        cropSide = side
+        guard let imageSize = image?.size else { return }
+        offset = AvatarImageCropper.rescaledOffset(
+            offset,
+            imageSize: imageSize,
+            previousCropSide: previous,
+            cropSide: side,
+            zoom: zoom
+        )
+        committedOffset = offset
     }
 
     private func baseScale(for imageSize: CGSize) -> CGFloat {

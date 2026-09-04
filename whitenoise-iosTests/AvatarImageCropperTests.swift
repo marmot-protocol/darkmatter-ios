@@ -76,4 +76,77 @@ struct AvatarImageCropperTests {
 
         #expect(max(prepared.size.width, prepared.size.height) <= CGFloat(AvatarImageCropper.maximumEditorPixelSize))
     }
+
+    @Test func fittedCropSideShrinksForCompactHeightAndCapsElsewhere() {
+        #expect(AvatarImageCropper.fittedCropSide(CGSize(width: 393, height: 300))
+            == AvatarImageCropper.maximumCropSide)
+        #expect(AvatarImageCropper.fittedCropSide(CGSize(width: 874, height: 248)) == 248)
+        #expect(AvatarImageCropper.fittedCropSide(CGSize(width: 640, height: 60))
+            == AvatarImageCropper.minimumCropSide)
+        #expect(AvatarImageCropper.fittedCropSide(.zero) == AvatarImageCropper.minimumCropSide)
+    }
+
+    @Test func rescaledOffsetKeepsFramingAcrossCropSideChange() throws {
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(
+            size: CGSize(width: 400, height: 200),
+            format: format
+        ).image { context in
+            UIColor.systemBlue.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 400, height: 200))
+            UIColor.systemRed.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 120, height: 200))
+        }
+        let sourceData = try #require(image.jpegData(compressionQuality: 1))
+        let source = try #require(AvatarImageCropper.normalizedImage(from: sourceData))
+
+        let wideOffset = CGSize(width: 60, height: 0)
+        let compactOffset = AvatarImageCropper.rescaledOffset(
+            wideOffset,
+            imageSize: source.size,
+            previousCropSide: 300,
+            cropSide: 150,
+            zoom: 1
+        )
+
+        #expect(compactOffset.width == 30)
+        #expect(compactOffset.height == 0)
+
+        let wideCrop = try #require(AvatarImageCropper.croppedJPEG(
+            image: source,
+            cropSide: 300,
+            zoom: 1,
+            offset: wideOffset
+        ))
+        let compactCrop = try #require(AvatarImageCropper.croppedJPEG(
+            image: source,
+            cropSide: 150,
+            zoom: 1,
+            offset: compactOffset
+        ))
+
+        #expect(wideCrop == compactCrop)
+    }
+
+    @Test func rescaledOffsetClampsWhenSmallerCropExposesLessImage() {
+        let imageSize = CGSize(width: 800, height: 400)
+        let rescaled = AvatarImageCropper.rescaledOffset(
+            CGSize(width: 400, height: 400),
+            imageSize: imageSize,
+            previousCropSide: 300,
+            cropSide: 150,
+            zoom: 1
+        )
+
+        #expect(rescaled.width == 75)
+        #expect(rescaled.height == 0)
+        #expect(AvatarImageCropper.rescaledOffset(
+            CGSize(width: 40, height: 0),
+            imageSize: imageSize,
+            previousCropSide: 0,
+            cropSide: 150,
+            zoom: 1
+        ) == .zero)
+    }
 }
