@@ -1001,6 +1001,24 @@ final class ChatsListViewModel {
             && !inviterLookupCompletedGroupIds.contains(row.groupIdHex)
     }
 
+    nonisolated static func inviterReadPlan(
+        groupIds: [String],
+        pendingInviteGroupIds: Set<String>,
+        resolvedInviterGroupIds: Set<String>,
+        completedLookupGroupIds: Set<String>,
+        knownPeerGroupIds: Set<String>,
+        limit: Int
+    ) -> (read: [String], deferred: Set<String>) {
+        let needsRead = groupIds.filter {
+            pendingInviteGroupIds.contains($0)
+                && !resolvedInviterGroupIds.contains($0)
+                && !completedLookupGroupIds.contains($0)
+                && !knownPeerGroupIds.contains($0)
+        }
+        let read = Array(needsRead.prefix(max(0, limit)))
+        return (read: read, deferred: Set(needsRead.dropFirst(read.count)))
+    }
+
     /// A pending invite's inviter: Marmot's welcomer once the group read has
     /// resolved it, else the direct peer, who is the only other member a DM
     /// invite can have come from. Nil once the invite has been answered.
@@ -1143,19 +1161,20 @@ final class ChatsListViewModel {
                 }
 
                 // A two-member invite's peer is already its inviter.
-                let inviteGroupIdsNeedingRead = groupIds.filter {
-                    self.rowByGroupId[$0]?.pendingConfirmation == true
-                        && self.inviterAccountIdByGroupId[$0] == nil
-                        && peersByGroupId[$0] == nil
-                }
-                let inviteGroupIds = inviteGroupIdsNeedingRead
-                    .prefix(Self.inviterEnrichmentBatchLimit)
-                var welcomersByGroupId: [String: String] = [:]
-                var unresolvedInviteGroupIds = Set(
-                    inviteGroupIdsNeedingRead.dropFirst(inviteGroupIds.count)
+                let invitePlan = Self.inviterReadPlan(
+                    groupIds: groupIds,
+                    pendingInviteGroupIds: Set(
+                        groupIds.filter { self.rowByGroupId[$0]?.pendingConfirmation == true }
+                    ),
+                    resolvedInviterGroupIds: Set(self.inviterAccountIdByGroupId.keys),
+                    completedLookupGroupIds: self.inviterLookupCompletedGroupIds,
+                    knownPeerGroupIds: Set(peersByGroupId.keys),
+                    limit: Self.inviterEnrichmentBatchLimit
                 )
-                unresolvedGroupIds.formUnion(unresolvedInviteGroupIds)
-                for groupId in inviteGroupIds {
+                var welcomersByGroupId: [String: String] = [:]
+                var inviteGroupIdsToRetry = invitePlan.deferred
+                unresolvedGroupIds.formUnion(invitePlan.deferred)
+                for groupId in invitePlan.read {
                     do {
                         let client = try appState.currentMarmotClient()
                         let details = try await client.groupDetails(
@@ -1170,7 +1189,7 @@ final class ChatsListViewModel {
                     } catch is CancellationError {
                         return
                     } catch {
-                        unresolvedInviteGroupIds.insert(groupId)
+                        inviteGroupIdsToRetry.insert(groupId)
                         unresolvedGroupIds.insert(groupId)
                     }
                 }
@@ -1193,7 +1212,7 @@ final class ChatsListViewModel {
                     } else if self.rowNeedsDirectPeerEnrichment(row) {
                         unresolvedGroupIds.insert(groupId)
                     }
-                    if row.pendingConfirmation, !unresolvedInviteGroupIds.contains(groupId) {
+                    if row.pendingConfirmation, !inviteGroupIdsToRetry.contains(groupId) {
                         self.inviterLookupCompletedGroupIds.insert(groupId)
                         // `storeRow` clears the peer cache for group rows, so the
                         // resolved inviter has to live in this store to survive.

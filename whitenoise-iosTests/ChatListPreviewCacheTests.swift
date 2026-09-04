@@ -386,6 +386,84 @@ struct ChatListPreviewCacheTests {
 
     private let inviterIdHex = String(repeating: "a4", count: 32)
 
+    @Test func inviterReadPlanSkipsGroupsWhoseLookupAlreadyCompleted() {
+        let groupIds = [hex("aa"), hex("bb")]
+        let pendingInviteGroupIds = Set(groupIds)
+
+        let firstPass = ChatsListViewModel.inviterReadPlan(
+            groupIds: groupIds,
+            pendingInviteGroupIds: pendingInviteGroupIds,
+            resolvedInviterGroupIds: [],
+            completedLookupGroupIds: [],
+            knownPeerGroupIds: [],
+            limit: 8
+        )
+
+        #expect(firstPass.read == groupIds)
+        #expect(firstPass.deferred.isEmpty)
+
+        let secondPass = ChatsListViewModel.inviterReadPlan(
+            groupIds: groupIds,
+            pendingInviteGroupIds: pendingInviteGroupIds,
+            resolvedInviterGroupIds: [],
+            completedLookupGroupIds: Set(groupIds),
+            knownPeerGroupIds: [],
+            limit: 8
+        )
+
+        #expect(secondPass.read.isEmpty)
+        #expect(secondPass.deferred.isEmpty)
+    }
+
+    @Test func inviterReadPlanDefersInvitesPastTheBatchLimitAndDrainsThem() {
+        let groupIds = (0 ..< 20).map { String(format: "%064x", $0) }
+        let pendingInviteGroupIds = Set(groupIds)
+        var completedLookupGroupIds: Set<String> = []
+        var readCounts: [Int] = []
+        var deferredCounts: [Int] = []
+
+        while true {
+            let plan = ChatsListViewModel.inviterReadPlan(
+                groupIds: groupIds,
+                pendingInviteGroupIds: pendingInviteGroupIds,
+                resolvedInviterGroupIds: [],
+                completedLookupGroupIds: completedLookupGroupIds,
+                knownPeerGroupIds: [],
+                limit: 8
+            )
+            if plan.read.isEmpty {
+                #expect(plan.deferred.isEmpty)
+                break
+            }
+            readCounts.append(plan.read.count)
+            deferredCounts.append(plan.deferred.count)
+            completedLookupGroupIds.formUnion(plan.read)
+        }
+
+        #expect(readCounts == [8, 8, 4])
+        #expect(deferredCounts == [12, 4, 0])
+        #expect(completedLookupGroupIds == pendingInviteGroupIds)
+    }
+
+    @Test func inviterReadPlanSkipsAnsweredResolvedAndAlreadyPeeredInvites() {
+        let peerKnown = hex("aa")
+        let needsRead = hex("bb")
+        let answered = hex("cc")
+        let alreadyResolved = hex("dd")
+
+        let plan = ChatsListViewModel.inviterReadPlan(
+            groupIds: [peerKnown, needsRead, answered, alreadyResolved],
+            pendingInviteGroupIds: [peerKnown, needsRead, alreadyResolved],
+            resolvedInviterGroupIds: [alreadyResolved],
+            completedLookupGroupIds: [],
+            knownPeerGroupIds: [peerKnown],
+            limit: 8
+        )
+
+        #expect(plan.read == [needsRead])
+        #expect(plan.deferred.isEmpty)
+    }
+
     private func row(
         groupIdHex: String = "0123456789abcdef",
         title: String = "Room",
