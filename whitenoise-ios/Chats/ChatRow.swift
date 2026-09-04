@@ -388,7 +388,7 @@ struct GroupAvatarBubble: View {
     }
 }
 
-private struct AvatarRemoteImage: View {
+struct AvatarRemoteImage: View {
     let url: URL
 
     @Environment(AppState.self) private var appState: AppState?

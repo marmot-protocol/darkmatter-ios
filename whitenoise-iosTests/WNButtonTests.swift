@@ -59,4 +59,14 @@ struct WNButtonTests {
     @Test func fallbackLabelMinHeightClearsTheAppleMinimumTapTarget() {
         #expect(WNButton.Metrics.fallbackLabelMinHeight >= 44)
     }
+
+    @Test func onlyTheLargeSizeClaimsTheFullWidth() {
+        #expect(WNButton.Metrics.stretches(.large))
+        #expect(!WNButton.Metrics.stretches(.compact))
+    }
+
+    @Test func compactDropsBelowTheCallToActionControlSize() {
+        #expect(WNButton.Metrics.controlSize(for: .large) == .extraLarge)
+        #expect(WNButton.Metrics.controlSize(for: .compact) < .extraLarge)
+    }
 }

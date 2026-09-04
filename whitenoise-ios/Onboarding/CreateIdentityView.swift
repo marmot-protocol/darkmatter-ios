@@ -39,7 +39,7 @@ struct CreateIdentityView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-            Section("Name") {
+            Section {
                 WNInput(
                     placeholder: L10n.string("Name"),
                     text: $model.displayName,
@@ -51,9 +51,11 @@ struct CreateIdentityView: View {
                 )
                 .textContentType(.name)
                 .wnInputRow()
+            } header: {
+                Text("Name").wnSectionHeader()
             }
 
-            Section("About") {
+            Section {
                 WNInput(
                     placeholder: L10n.string("A little about you"),
                     text: $model.about,
@@ -64,6 +66,8 @@ struct CreateIdentityView: View {
                 )
                 .accessibilityLabel("About")
                 .wnInputRow()
+            } header: {
+                Text("About").wnSectionHeader()
             }
 
             if let failureMessage = model.failureMessage {
@@ -206,7 +210,7 @@ struct CreateIdentityView: View {
 
     private var avatarSection: some View {
         VStack(spacing: 0) {
-            OnboardingAvatarPreview(
+            WNAvatarPreview(
                 name: model.displayName,
                 image: model.avatarDraft?.thumbnail
             )

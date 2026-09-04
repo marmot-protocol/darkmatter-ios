@@ -8,81 +8,120 @@ import UIKit
 /// chooses the account relay lists; iOS only supplies the edited metadata.
 struct ProfileEditView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var model = ProfileEditViewModel()
     @State private var showImagePicker = false
     @State private var showMoreFields = false
     @State private var isEditing = false
     @State private var editSnapshot: ProfileEditDraftSnapshot?
+    @FocusState private var nameFocused: Bool
+    @FocusState private var nip05Focused: Bool
+    @FocusState private var aboutFocused: Bool
 
     var body: some View {
         @Bindable var model = model
         return Form {
             avatarSection
 
-            Section("Name") {
+            Section {
                 if isEditing {
-                    TextField("Name", text: $model.displayName)
+                    WNInput(
+                        placeholder: L10n.string("Name"),
+                        text: $model.displayName,
+                        submitLabel: .next,
+                        autocapitalization: .words,
+                        disablesAutocorrection: false,
+                        focus: $nameFocused,
+                        onSubmit: { nip05Focused = true }
+                    )
+                    .textContentType(.name)
+                    .wnInputRow()
                 } else {
-                    Text(model.displayName.isEmpty ? L10n.string("Not set") : model.displayName)
-                        .foregroundStyle(model.displayName.isEmpty ? .secondary : .primary)
+                    WNFieldValue(value: model.displayName, placeholder: L10n.string("Not set"))
+                        .wnInputRow()
                 }
+            } header: {
+                Text("Name").wnSectionHeader()
             }
 
             Section {
                 if isEditing {
-                    TextField("Verified Nostr Address", text: $model.nip05)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    WNInput(
+                        placeholder: L10n.string("Verified Nostr Address"),
+                        text: $model.nip05,
+                        submitLabel: .next,
+                        focus: $nip05Focused,
+                        onSubmit: { aboutFocused = true }
+                    )
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .wnInputRow()
                 } else {
-                    Text(model.nip05.isEmpty ? L10n.string("Not set") : model.nip05)
-                        .foregroundStyle(model.nip05.isEmpty ? .secondary : .primary)
-                }
-                if let invalidNip05Message = model.invalidNip05Message, isEditing {
-                    Label(invalidNip05Message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                    WNFieldValue(value: model.nip05, placeholder: L10n.string("Not set"))
+                        .wnInputRow()
                 }
             } header: {
-                Text("Verified Nostr Address")
+                Text("Verified Nostr Address").wnSectionHeader()
             } footer: {
                 if isEditing && model.invalidNip05Message != nil {
                     Text("Enter an address like name@example.com.")
                 }
             }
 
-            Section("About") {
+            Section {
                 if isEditing {
-                    TextField("A little about you", text: $model.about, axis: .vertical)
-                        .lineLimit(3...6)
+                    WNInput(
+                        placeholder: L10n.string("A little about you"),
+                        text: $model.about,
+                        kind: .multiline(3 ... 6),
+                        autocapitalization: .sentences,
+                        disablesAutocorrection: false,
+                        focus: $aboutFocused
+                    )
+                    .accessibilityLabel("About")
+                    .wnInputRow()
                 } else {
-                    Text(model.about.isEmpty ? L10n.string("A little about you") : model.about)
-                        .foregroundStyle(model.about.isEmpty ? .secondary : .primary)
+                    WNFieldValue(
+                        value: model.about,
+                        placeholder: L10n.string("A little about you"),
+                        kind: .multiline(3 ... 6)
+                    )
+                    .accessibilityLabel("About")
+                    .wnInputRow()
                 }
+            } header: {
+                Text("About").wnSectionHeader()
             }
 
             if isEditing {
                 Section {
                     DisclosureGroup(isExpanded: $showMoreFields) {
-                        TextField("Profile Image URL", text: $model.picture)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
+                        WNInput(
+                            placeholder: L10n.string("Profile Image URL"),
+                            text: $model.picture
+                        )
+                        .keyboardType(.URL)
+                        .wnInputRow()
+
                         if let invalidPictureMessage = model.invalidPictureMessage {
                             Label(invalidPictureMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
+                                .wnInputRow()
                         }
 
-                        TextField("Banner Image URL", text: $model.banner)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
+                        WNInput(
+                            placeholder: L10n.string("Banner Image URL"),
+                            text: $model.banner
+                        )
+                        .keyboardType(.URL)
+                        .wnInputRow()
+
                         if let invalidBannerMessage = model.invalidBannerMessage {
                             Label(invalidBannerMessage, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.red)
+                                .wnInputRow()
                         }
                     } label: {
                         Text("More")
@@ -102,20 +141,32 @@ struct ProfileEditView: View {
                 }
             }
         }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .localizedNavigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(isEditing)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
-            if isEditing {
-                ToolbarItem(placement: .cancellationAction) {
+            ToolbarItem(placement: .cancellationAction) {
+                if isEditing {
                     Button("Cancel", action: cancelEditing)
                         .disabled(model.isPublishing || model.isUploadingPicture)
+                } else {
+                    WNIconButton(title: "Back", systemImage: "chevron.backward") {
+                        dismiss()
+                    }
                 }
             }
 
             ToolbarItem(placement: .primaryAction) {
                 if isEditing {
-                    Button(model.isPublishing ? "Publishing…" : "Done") {
+                    WNButton(
+                        title: model.isPublishing ? "Publishing…" : "Done",
+                        size: .compact,
+                        isLoading: model.isPublishing
+                    ) {
+                        clearFocus()
                         Task {
                             await model.publish(using: appState)
                             if model.error == nil {
@@ -124,10 +175,9 @@ struct ProfileEditView: View {
                             }
                         }
                     }
-                    .wnPrimaryButtonStyle()
                     .disabled(saveDisabled)
                 } else {
-                    Button("Edit", action: beginEditing)
+                    WNButton(title: "Edit", emphasis: .secondary, size: .compact, action: beginEditing)
                         .disabled(model.loadedAccountIdHex == nil)
                 }
             }
@@ -148,6 +198,7 @@ struct ProfileEditView: View {
                 .appAppearance()
             }
         }
+        .background(.background)
     }
 
     @ViewBuilder
@@ -155,14 +206,13 @@ struct ProfileEditView: View {
         if let active = appState.activeAccount {
             Section {
                 VStack(spacing: 0) {
-                    AvatarBubble(
-                        seed: active.accountIdHex,
-                        title: model.displayName.isEmpty
+                    WNAvatarPreview(
+                        name: model.displayName.isEmpty
                             ? appState.shortNpub(forAccountIdHex: active.accountIdHex)
                             : model.displayName,
                         pictureURL: ContentSanitizer.imageURL(model.picture)
                     )
-                    .frame(width: 112, height: 112)
+                    .containerRelativeFrame(.horizontal, count: 3, span: 1, spacing: 0)
 
                     if isEditing {
                         Button(model.picture.isEmpty ? "Add Photo" : "Change Photo") {
@@ -190,11 +240,18 @@ struct ProfileEditView: View {
     }
 
     private func cancelEditing() {
+        clearFocus()
         editSnapshot?.restore(model)
         model.error = nil
         editSnapshot = nil
         showMoreFields = false
         isEditing = false
+    }
+
+    private func clearFocus() {
+        nameFocused = false
+        nip05Focused = false
+        aboutFocused = false
     }
 
     /// Stays in the view because it also reads `appState.activeAccountRef`; the
@@ -841,9 +898,7 @@ private struct ProfileImagePickerSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title {
                 Text(title)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+                    .wnSectionHeader()
                     .padding(.horizontal, 4)
             }
 
