@@ -151,6 +151,17 @@ final class TimelineStore {
     var streamingDebugEnabled: Bool { appState?.streamingDebugEnabled == true }
     private var mentionDisplayNameResolver: MarkdownMentionResolver { mentionResolver }
 
+    private func resolvedAccountDisplayName(_ accountIdHex: String) -> String {
+        appState?.displayName(forAccountIdHex: accountIdHex) ?? IdentityFormatter.short(accountIdHex)
+    }
+
+    private var systemEventNaming: GroupSystemEventNaming {
+        GroupSystemEventNaming(
+            currentAccountIdHex: myAccountId,
+            displayName: { self.resolvedAccountDisplayName($0) }
+        )
+    }
+
 #if DEBUG
     var markdownProjectionBuildCountForTesting: Int { markdownProjections.buildCountForTesting }
     var agentEventProjectionBuildCountForTesting: Int { agentEventProjections.buildCountForTesting }
@@ -342,7 +353,11 @@ final class TimelineStore {
             }
             let name = appState?.displayName(forAccountIdHex: preview.sender) ?? L10n.string("Unknown")
             let text = ContentSanitizer.compactSingleLine(
-                MessagePreview.body(preview, mentionDisplayName: mentionDisplayNameResolver),
+                MessagePreview.body(
+                    preview,
+                    mentionDisplayName: mentionDisplayNameResolver,
+                    systemEventNaming: systemEventNaming
+                ),
                 maxLength: 120
             ) ?? ""
             let media = preview.deleted
@@ -393,7 +408,11 @@ final class TimelineStore {
     /// The visible body for a message, projected from the decoded unsigned
     /// Nostr app event's kind/tags/content.
     func displayBody(of record: AppMessageRecordFfi) -> String {
-        MessagePreview.body(record, mentionDisplayName: mentionDisplayNameResolver)
+        MessagePreview.body(
+            record,
+            mentionDisplayName: mentionDisplayNameResolver,
+            systemEventNaming: systemEventNaming
+        )
     }
 
     func isDeleted(_ messageIdHex: String) -> Bool {
@@ -471,9 +490,7 @@ final class TimelineStore {
             for: record,
             groupSystem: groupSystemByMessageId[record.messageIdHex],
             currentAccountIdHex: myAccountId,
-            displayName: { accountIdHex in
-                appState?.displayName(forAccountIdHex: accountIdHex) ?? IdentityFormatter.short(accountIdHex)
-            }
+            displayName: { self.resolvedAccountDisplayName($0) }
         )
         groupSystemDisplayCache[record.messageIdHex] = GroupSystemDisplayCacheEntry(key: key, text: text)
         return text

@@ -306,6 +306,10 @@ struct GroupSystemEventPresentationTests {
                 systemDisplayText(systemType: "member_left", actor: hex("aa"), currentAccountIdHex: me)
                     == "Alice left"
             )
+            #expect(
+                systemDisplayText(systemType: "member_left", subject: me, currentAccountIdHex: me)
+                    == "You left"
+            )
         }
     }
 
@@ -319,6 +323,10 @@ struct GroupSystemEventPresentationTests {
                     name: "Weekend Walks",
                     currentAccountIdHex: me
                 ) == "You changed the group name to Weekend Walks"
+            )
+            #expect(
+                systemDisplayText(systemType: "group_renamed", actor: me, currentAccountIdHex: me)
+                    == "Group renamed"
             )
             #expect(
                 systemDisplayText(systemType: "group_avatar_changed", actor: me, currentAccountIdHex: me)
@@ -360,11 +368,11 @@ struct GroupSystemEventPresentationTests {
         withAppLanguage(.spanish) {
             #expect(
                 systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
-                    == "Fuiste nombrado administrador"
+                    == "Te nombraron administrador"
             )
             #expect(
                 systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
-                    == "Bob fue nombrado administrador"
+                    == "Nombraron administrador a Bob"
             )
             #expect(
                 systemDisplayText(
@@ -391,6 +399,92 @@ struct GroupSystemEventPresentationTests {
             #expect(
                 systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
                     == "Bob wurde zum Administrator gemacht"
+            )
+        }
+        withAppLanguage(.portuguese) {
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
+                    == "Você agora é administrador"
+            )
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
+                    == "Bob agora é administrador"
+            )
+        }
+        withAppLanguage(.italian) {
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: me, currentAccountIdHex: me)
+                    == "Ora sei amministratore"
+            )
+            #expect(
+                systemDisplayText(systemType: "admin_added", subject: other, currentAccountIdHex: me)
+                    == "Bob ora è amministratore"
+            )
+        }
+    }
+
+    @Test func recordPreviewsNameTheSignedInReaderAndFallBackToTheSender() {
+        let me = hex("cc")
+        let actor = hex("aa")
+        let naming = GroupSystemEventNaming(currentAccountIdHex: me, displayName: testDisplayName)
+
+        withAppLanguage(.english) {
+            #expect(
+                MessagePreview.body(
+                    groupSystemRecord(
+                        plaintext: """
+                        {"v":1,"system_type":"member_added","text":"Member added",\
+                        "data":{"actor":"\(actor)","subject":"\(me)"}}
+                        """,
+                        sender: actor
+                    ),
+                    systemEventNaming: naming
+                ) == "Alice added you"
+            )
+            #expect(
+                MessagePreview.body(
+                    groupSystemRecord(
+                        plaintext: """
+                        {"v":1,"system_type":"member_added","text":"Member added",\
+                        "data":{"subject":"\(me)"}}
+                        """,
+                        sender: actor
+                    ),
+                    systemEventNaming: naming
+                ) == "Alice added you"
+            )
+        }
+    }
+
+    @Test func replyPreviewsNameTheSignedInReader() {
+        let me = hex("cc")
+        let actor = hex("aa")
+        let preview = TimelineReplyPreviewFfi(
+            messageIdHex: hex("dd"),
+            sender: actor,
+            plaintext: """
+            {"v":1,"system_type":"member_added","text":"Member added",\
+            "data":{"actor":"\(actor)","subject":"\(me)"}}
+            """,
+            kind: MessageSemantics.kindGroupSystem,
+            mediaJson: nil,
+            agentTextStreamJson: nil,
+            deleted: false
+        )
+
+        withAppLanguage(.english) {
+            #expect(
+                MessagePreview.body(
+                    preview,
+                    systemEventNaming: GroupSystemEventNaming(
+                        currentAccountIdHex: me,
+                        displayName: testDisplayName
+                    )
+                ) == "Alice added you"
+            )
+            #expect(
+                MessagePreview.body(preview)
+                    == "\(IdentityFormatter.short(actor)) added \(IdentityFormatter.short(me))"
             )
         }
     }
