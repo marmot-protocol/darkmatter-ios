@@ -59,7 +59,10 @@ struct WelcomeView: View {
         }
         .safeAreaPadding(.horizontal)
         .safeAreaPadding(.bottom)
-        .background(.background)
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+        }
         .tint(accentColor)
         .navigationDestination(isPresented: $showSignIn) {
             ImportIdentityView(

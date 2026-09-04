@@ -133,7 +133,7 @@ struct CreateIdentityView: View {
                 .safeAreaPadding(.horizontal)
                 .padding(.vertical)
                 .safeAreaPadding(.bottom)
-                .background(.bar)
+                .background(Color(.systemBackground))
             }
         }
         .trackKeyboardVisibility($isKeyboardVisible)
@@ -201,7 +201,10 @@ struct CreateIdentityView: View {
                 }
             }
         }
-        .background(.background)
+        .background {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+        }
     }
 
     private var avatarSection: some View {
