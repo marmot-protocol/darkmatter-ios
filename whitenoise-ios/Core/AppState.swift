@@ -204,6 +204,20 @@ final class AppState {
         }
     }
 
+    /// Drives the one-time data-sharing sheet over the main shell. Cross-screen
+    /// presentation state, hosted by `RootView`.
+    var isDataSharingOptInPresented = false
+
+    /// Identity armed for the data-sharing offer by the identity lifecycle and
+    /// resolved by `RootView`, which reads the global switches that complete the
+    /// decision. See `armDataSharingOptInIfNeeded(for:)` for why it is two steps.
+    var pendingDataSharingOptInCandidate: DataSharingOptInCandidate?
+
+    /// Preference domain for account-scoped selections: the active-account ref
+    /// (through `AccountStore`) and the data-sharing offer record. Tests inject an
+    /// isolated suite so parallel suites cannot observe each other's writes.
+    @ObservationIgnored let accountDefaults: UserDefaults
+
     /// Recently-used reaction emojis, most-recent first. Drives the quick row
     /// in the message actions overlay.
     private(set) var recentReactions: [String]
@@ -369,6 +383,7 @@ final class AppState {
             retrySleeper: runtimeRetrySleeper,
             constructionRetryPolicy: runtimeConstructionRetryPolicy
         )
+        self.accountDefaults = accountDefaults
         self.accountStore = AccountStore(defaults: accountDefaults)
         self.notifications = notifications
         self.conversationDraftStore = conversationDraftStore ?? ConversationDraftStore()
@@ -715,6 +730,7 @@ final class AppState {
                 // live in the shared suite for the NSE; they must not outlive
                 // the account either.
                 ChatMuteStore.clearAll(accountIdHex: removedAccountIdHex)
+                forgetDataSharingOptIn(accountIdHex: removedAccountIdHex)
             }
             if await !NotificationCommunicationDecorator.deleteAllDonatedInteractions() {
                 localCleanupFailures.append(WipeFailureItem(
@@ -974,9 +990,10 @@ final class AppState {
     @discardableResult
     func setRelayTelemetryExportEnabled(_ enabled: Bool) async throws -> RelayTelemetrySettingsFfi {
         guard phase == .ready else { throw ForegroundRuntimeMutationError.runtimeUnavailable }
-        if enabled && !telemetryBuildConfig.telemetryCredentialsAvailable {
-            throw TelemetrySettingsActionError.telemetryNotConfigured
-        }
+        // Deliberately no credentials check. This records consent, which Marmot
+        // stores either way; whether a build can authenticate an export is an
+        // export-time concern. Refusing here turned a missing build secret into a
+        // switch the user could never say yes to.
         let lease = try runtimeLifecycle.beginForegroundRuntimeMutation()
         defer { runtimeLifecycle.endForegroundRuntimeMutation(lease) }
         let client = lease.client
@@ -1347,6 +1364,7 @@ final class AppState {
         // `activateAccount`.
         restartReadyForegroundMaintenanceIfStopped()
         scheduleNewIdentityMaintenance(summary)
+        armDataSharingOptInIfNeeded(for: summary)
     }
 
     @ObservationIgnored private var foregroundMutationFollowupTasks: [UUID: Task<Void, Never>] = [:]

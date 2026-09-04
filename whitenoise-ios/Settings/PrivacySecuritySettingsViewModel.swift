@@ -156,14 +156,25 @@ final class PrivacySecuritySettingsViewModel {
         defer { endFileLoad(fileLoadID) }
 
         do {
-            guard let projection = try await dataSource.privacySecuritySettingsProjection() else {
+            let loaded = try await dataSource.privacySecuritySettingsProjection()
+            // Cancelled work publishes nothing. `.task(id:)` cancels and restarts
+            // on every id change, and the replacement task performs its own read;
+            // letting this one apply would race it. Deliberately not folded into
+            // `canApplyReload`, whose failure path re-queues a reload — inside a
+            // cancelled task that would refuse and re-queue forever.
+            if Task.isCancelled { return }
+            guard let projection = loaded else {
                 guard canApplyReload(startedAt: reloadTicket, accountRef: accountRef, using: dataSource) else {
                     await deferOrReload(.full, using: dataSource)
                     return
                 }
-                // No active account / suspended runtime: clear so a previous
-                // account's telemetry toggle and audit rows can't linger,
-                // matching the sibling settings screens.
+                // A nil projection means the read was *refused* — cancelled task,
+                // suspended runtime, no live client — or that no account is
+                // active. Only the latter may clear. Blanking the projections on a
+                // refusal renders both switches from nil, which disables them with
+                // nothing left to re-arm them: the data-sharing sheet, presented
+                // while a fresh identity is still settling, showed exactly that.
+                guard dataSource.activeAccountRef == nil else { return }
                 telemetrySettings = nil
                 auditSettings = nil
                 auditFileRows = []
@@ -238,6 +249,10 @@ final class PrivacySecuritySettingsViewModel {
                 dataSource.present(.success(L10n.string("Done")))
             } catch {
                 telemetrySettings = current
+                // Also recorded inline: surfaces that present over the toast host
+                // (the data-sharing sheet) would otherwise spring the switch back
+                // with no explanation.
+                telemetryErrorMessage = error.localizedDescription
                 Haptics.error()
                 dataSource.present(UserFacingError.toast(
                     title: L10n.string("Save failed"),
@@ -292,6 +307,7 @@ final class PrivacySecuritySettingsViewModel {
                 await reloadAuditFiles(using: dataSource)
             } catch {
                 auditSettings = current
+                auditErrorMessage = error.localizedDescription
                 Haptics.error()
                 dataSource.present(UserFacingError.toast(
                     title: L10n.string("Save failed"),

@@ -49,7 +49,22 @@ struct RootView: View {
             }
         }
         .animation(.smooth(duration: 0.25), value: presentation)
+        // Resolved here, not on the identity path: reading the global switches
+        // that complete the decision is synchronous FFI, and running it inside
+        // the identity call's runtime mutation lease stalls a following sign-out.
+        .task(id: appState.pendingDataSharingOptInCandidate) {
+            await appState.resolveDataSharingOptIn()
+        }
         .toastHost()
+        // Hosted at the root so the one-time offer sits over the main shell —
+        // the account is already usable if it is dismissed without a decision.
+        .sheet(isPresented: Binding(
+            get: { appState.isDataSharingOptInPresented },
+            set: { if !$0 { appState.dismissDataSharingOptIn() } }
+        )) {
+            DataSharingOptInSheet()
+                .appAppearance()
+        }
         // Hosted at the root so a partial-failure wipe report survives the
         // account teardown (routing to onboarding / switching accounts pops the
         // Settings screen that started the wipe).

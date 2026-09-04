@@ -3,8 +3,8 @@ import SwiftUI
 
 struct PrivacySecuritySettingsView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.colorScheme) private var colorScheme
     @State private var appLockCapability = AppLockCapability(available: false, biometryType: .none)
+    @State private var dataSharing = PrivacySecuritySettingsViewModel()
 
     var body: some View {
         Form {
@@ -13,7 +13,7 @@ struct PrivacySecuritySettingsView: View {
                     get: { appState.blockScreenshots },
                     set: { appState.blockScreenshots = $0 }
                 ))
-                .tint(appSecurityToggleTint)
+                .wnToggleTint()
             } header: {
                 Text("App Security")
             } footer: {
@@ -25,7 +25,7 @@ struct PrivacySecuritySettingsView: View {
                     get: { appState.appLock.isEnabled },
                     set: { enabled in Task { await appState.appLock.setEnabled(enabled) } }
                 ))
-                .tint(appSecurityToggleTint)
+                .wnToggleTint()
                 .disabled(!appLockCapability.available)
 
                 if appState.appLock.isEnabled && appLockCapability.available {
@@ -41,14 +41,40 @@ struct PrivacySecuritySettingsView: View {
             } footer: {
                 Text(appLockFooter)
             }
+
+            // The one-time data-sharing offer promises both switches can be
+            // changed "in Settings at any time"; this is where it points.
+            Section {
+                AnonymousTelemetryToggleRow(model: dataSharing)
+            } header: {
+                Text("Data Sharing")
+            } footer: {
+                Text("Shares anonymous reliability and performance data. It doesn’t include messages or profile keys.")
+            }
+
+            Section {
+                AuditLoggingToggleRow(model: dataSharing)
+            } footer: {
+                Text("Stores technical activity locally for troubleshooting.")
+            }
+
+            // A refused save springs the switch back, and a failed settings read
+            // renders both switches from nil (so both disable). Without this,
+            // either looks like the screen is simply broken.
+            if let message = dataSharing.errorMessage
+                ?? dataSharing.telemetryErrorMessage
+                ?? dataSharing.auditErrorMessage {
+                Section {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                }
+            }
         }
         .localizedNavigationTitle("Privacy & Security")
         .navigationBarTitleDisplayMode(.inline)
         .task { appLockCapability = AppLockCapability.current() }
-    }
-
-    private var appSecurityToggleTint: Color {
-        colorScheme == .dark ? Color(uiColor: .systemGray) : .black
+        .task(id: appState.activeAccountRef) { await dataSharing.reload(using: appState) }
     }
 
     private var appLockToggleTitle: String {

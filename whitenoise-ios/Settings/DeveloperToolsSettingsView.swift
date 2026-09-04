@@ -79,17 +79,7 @@ struct DeveloperToolsSettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { model.telemetrySettings?.exportEnabled ?? false },
-                        set: { enabled in Task { await model.setTelemetryEnabled(enabled, using: appState) } }
-                    )) {
-                        HStack {
-                            Text("Anonymous Telemetry")
-                            Spacer()
-                            if model.telemetrySaving { ProgressView().controlSize(.small) }
-                        }
-                    }
-                    .disabled(model.telemetryToggleDisabled)
+                    AnonymousTelemetryToggleRow(model: model)
                 } header: {
                     Text("Telemetry")
                 } footer: {
@@ -97,17 +87,7 @@ struct DeveloperToolsSettingsView: View {
                 }
 
                 Section {
-                    Toggle(isOn: Binding(
-                        get: { model.auditSettings?.enabled ?? false },
-                        set: { enabled in Task { await model.setAuditEnabled(enabled, using: appState) } }
-                    )) {
-                        HStack {
-                            Text("Audit Logging")
-                            Spacer()
-                            if model.auditSaving { ProgressView().controlSize(.small) }
-                        }
-                    }
-                    .disabled(model.auditToggleDisabled)
+                    AuditLoggingToggleRow(model: model)
 
                     if model.auditSettings?.enabled == true {
                         if model.filesLoading && model.auditFileRows.isEmpty {
