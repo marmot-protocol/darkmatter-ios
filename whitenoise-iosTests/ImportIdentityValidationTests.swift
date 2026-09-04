@@ -6,27 +6,30 @@ import MarmotKit
 /// #40 — the Import button must only enable for a complete nsec, not any string
 /// that merely starts with "nsec".
 struct ImportIdentityValidationTests {
+    private let validNsec = "nsec1j4c6269y9w0q2er2xjw8sv2ehyrtfxq3jwgdlxj6qfn8z4gjsq5qfvfk99"
 
     @Test func rejectsIncompleteOrMalformedNsecInput() {
         #expect(!ImportIdentityView.isPlausibleNsec("nsec"))
         #expect(!ImportIdentityView.isPlausibleNsec("nsecfoo"))   // old hasPrefix("nsec") accepted this
         #expect(!ImportIdentityView.isPlausibleNsec("nsec1" + String(repeating: "a", count: 10)))
         #expect(!ImportIdentityView.isPlausibleNsec("npub1" + String(repeating: "a", count: 58)))
+        #expect(!ImportIdentityView.isPlausibleNsec("https://signer.example/connect"))
+        #expect(!ImportIdentityView.isPlausibleNsec("bunker://remote-signer.example"))
+        #expect(!ImportIdentityView.isPlausibleNsec("nsec1" + String(repeating: "a", count: 58)))
     }
 
-    @Test func acceptsCanonicalLengthNsec() {
-        let nsec = "nsec1" + String(repeating: "a", count: 58) // 63 chars total
-        #expect(ImportIdentityView.isPlausibleNsec(nsec))
-        #expect(ImportIdentityView.isPlausibleNsec("  \(nsec)\n"))
+    @Test func acceptsChecksumValidNsec() {
+        #expect(ImportIdentityView.isPlausibleNsec(validNsec))
+        #expect(ImportIdentityView.isPlausibleNsec("  \(validNsec)\n"))
+        #expect(ImportIdentityView.isPlausibleNsec(validNsec.uppercased()))
     }
 
     @Test func consumeIdentityForImportClearsVisibleSecretState() {
-        let nsec = "nsec1" + String(repeating: "a", count: 58)
-        var identity = "  \(nsec)\n"
+        var identity = "  \(validNsec.uppercased())\n"
 
         let consumed = ImportIdentityView.consumeIdentityForImport(&identity)
 
-        #expect(consumed == nsec)
+        #expect(consumed == validNsec)
         #expect(identity.isEmpty)
     }
 
@@ -36,7 +39,7 @@ struct ImportIdentityValidationTests {
     /// re-arming the flag or touching the field.
     @Test @MainActor func beginImportIfIdleRejectsReentrantImport() {
         let model = ImportIdentityViewModel()
-        model.identity = "nsec1" + String(repeating: "a", count: 58)
+        model.identity = validNsec
 
         #expect(model.beginImportIfIdle())
         #expect(model.isImporting)
@@ -77,11 +80,27 @@ struct ImportIdentityValidationTests {
         #expect(ImportIdentityView.redactedImportError("Relay unreachable") == "Relay unreachable")
     }
 
+    @Test @MainActor func invalidRuntimeIdentityUsesTheInlineValidationCopy() {
+        let message = ImportIdentityViewModel.importFallbackMessage(
+            for: MarmotKitError.InvalidIdentity(details: "bad key")
+        )
+
+        #expect(message == "That private key isn't valid. Check it and try again.")
+    }
+
+    @Test @MainActor func keyPackagePublishFailureExplainsThatImportCanResume() {
+        let message = ImportIdentityViewModel.importFallbackMessage(
+            for: MarmotKitError.Publish(details: "publish timed out")
+        )
+
+        #expect(message == "Identity setup can be resumed. Try importing again.")
+    }
+
     @Test @MainActor func dismissWithoutImportScrubsShadowCopyAndPasteboard() {
         let pasteboard = UIPasteboard.withUniqueName()
         defer { UIPasteboard.remove(withName: pasteboard.name) }
         let model = ImportIdentityViewModel()
-        let nsec = "nsec1" + String(repeating: "q", count: 58)
+        let nsec = validNsec
         pasteboard.string = nsec
         let token = SensitiveClipboard.capture(from: pasteboard)
         model.identity = nsec
@@ -103,7 +122,7 @@ struct ImportIdentityValidationTests {
         let pasteboard = UIPasteboard.withUniqueName()
         defer { UIPasteboard.remove(withName: pasteboard.name) }
         let model = ImportIdentityViewModel()
-        let nsec = "nsec1" + String(repeating: "q", count: 58)
+        let nsec = validNsec
         pasteboard.string = nsec
         let token = SensitiveClipboard.capture(from: pasteboard)
         model.recordPastedClipboardToken(token, resultingIdentity: nsec)

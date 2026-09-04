@@ -43,17 +43,15 @@ struct ImportIdentityView: View {
         !model.isImporting && keyState == .valid
     }
 
-    /// A bech32 `nsec` is a fixed-width encoding of a 32-byte key: the `nsec1`
-    /// human-readable prefix plus 58 data/checksum characters, 63 in total.
+    /// Accept only a checksum-valid NIP-19 encoding of a 32-byte private key.
     static func isPlausibleNsec(_ raw: String) -> Bool {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.hasPrefix("nsec1") && trimmed.count == 63
+        NostrProfileReference.normalizedNsec(raw) != nil
     }
 
     static func consumeIdentityForImport(_ raw: inout String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = NostrProfileReference.normalizedNsec(raw) ?? ""
         raw = ""
-        return trimmed
+        return normalized
     }
 
     static func redactedImportError(_ message: String) -> String {

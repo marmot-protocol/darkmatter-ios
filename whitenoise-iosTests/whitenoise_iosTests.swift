@@ -13700,7 +13700,18 @@ struct SensitiveClipboardTests {
     }
 
     private func validNsec(filledWith character: Character) -> String {
-        "nsec1" + String(repeating: String(character), count: 58)
+        switch character {
+        case "a":
+            "nsec1afh3nysthqh47awpdewcw59wvvp499f8dvlyclmnv4gvpxdk56dsa6eqsn"
+        case "b":
+            "nsec12kcgs78l06p30jz7z7h3n2x2cy99nw2z6zspjdp7qc206887mwvs95lnkx"
+        case "c":
+            "nsec1c9wh8xy5eqdzln7n5t0ctgxjcrdug73gp5yj0x03gntn67h83twssdfhel"
+        case "d":
+            "nsec18t096ty4lzm8k3d86rn0yszmwrcrntmaylkavjgwwvh6w90a9wus2u8rgf"
+        default:
+            preconditionFailure("Missing valid nsec fixture")
+        }
     }
 }
 

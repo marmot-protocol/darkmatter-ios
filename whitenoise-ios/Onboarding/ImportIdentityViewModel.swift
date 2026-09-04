@@ -38,7 +38,9 @@ final class ImportIdentityViewModel {
         // start two concurrent imports — the second would otherwise consume an
         // already-cleared field — while SwiftUI's `.disabled(!canSubmit)` render
         // still lags the tap (#439).
-        guard beginImportIfIdle() else { return }
+        guard ImportIdentityView.isPlausibleNsec(identity),
+              beginImportIfIdle()
+        else { return }
         let trimmed = ImportIdentityView.consumeIdentityForImport(&identity)
         let clipboardToken = consumeClipboardTokenForImportedIdentity(trimmed)
         defer {
@@ -88,13 +90,28 @@ final class ImportIdentityViewModel {
         Haptics.error()
         let presentation = UserFacingError.present(
             title: L10n.string("Import failed"),
-            error: error
+            error: error,
+            fallbackMessage: Self.importFallbackMessage(for: error)
         )
         appState.present(.error(
             presentation.title,
             message: presentation.message,
             diagnostic: presentation.diagnostic
         ))
+    }
+
+    static func importFallbackMessage(for error: Error) -> String {
+        if let marmotError = error as? MarmotKitError {
+            switch marmotError {
+            case .InvalidIdentity:
+                return L10n.string("That private key isn't valid. Check it and try again.")
+            case .Publish:
+                return L10n.string("Identity setup can be resumed. Try importing again.")
+            default:
+                break
+            }
+        }
+        return L10n.string("Retry")
     }
 
     /// Synchronous in-flight gate for `runImport`. Returns `true` and marks the
@@ -112,8 +129,7 @@ final class ImportIdentityViewModel {
             clearPastedClipboardToken()
             return
         }
-        let normalized = resultingIdentity.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard ImportIdentityView.isPlausibleNsec(normalized) else {
+        guard let normalized = NostrProfileReference.normalizedNsec(resultingIdentity) else {
             clearPastedClipboardToken()
             return
         }
@@ -122,7 +138,9 @@ final class ImportIdentityViewModel {
     }
 
     func clipboardTokenForImportedIdentity(_ importedIdentity: String) -> SensitiveClipboard.Token? {
-        let normalized = importedIdentity.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized = NostrProfileReference.normalizedNsec(importedIdentity) else {
+            return nil
+        }
         guard normalized == pastedClipboardIdentity else { return nil }
         return pastedClipboardToken
     }

@@ -92,6 +92,18 @@ nonisolated enum NostrProfileReference {
         return bech32Encode(hrp: "npub", data: data)
     }
 
+    /// Validates and canonicalizes a NIP-19 private key before it crosses the
+    /// Swift/Rust boundary. Shape checks alone accept mistyped checksums.
+    static func normalizedNsec(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let decoded = bech32Decode(trimmed),
+              decoded.hrp == "nsec",
+              let bytes = convertBits(decoded.data, from: 5, to: 8, pad: false),
+              bytes.count == 32
+        else { return nil }
+        return trimmed.lowercased()
+    }
+
     /// NIP-19 nprofile encoder used when a caller needs to preserve relay hints.
     /// Apply the same destination policy as the decoder so values are safe even
     /// before an optional later resolution pass.
