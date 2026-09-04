@@ -745,6 +745,11 @@ final class ChatsListViewModel {
             directPeerAccountIdByGroupId[row.groupIdHex] = nil
             directPeerLookupCompletedGroupIds.insert(row.groupIdHex)
         }
+        if !row.pendingConfirmation {
+            inviterAccountIdByGroupId[row.groupIdHex] = nil
+            inviterLookupCompletedGroupIds.remove(row.groupIdHex)
+            inviterLookupFailureCountByGroupId[row.groupIdHex] = nil
+        }
         updateCachedGroupDetails(with: row)
         let item = makeItem(for: row, muteLookup: muteLookup)
         let changed = itemByGroupId[row.groupIdHex] != item
