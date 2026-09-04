@@ -1045,10 +1045,7 @@ final class ChatsListViewModel {
     }
 
     private nonisolated static func normalizedInviterAccountId(_ value: String?) -> String? {
-        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-              !value.isEmpty
-        else { return nil }
-        return value
+        ConversationInvitePresentation.normalizedInviterAccountId(value)
     }
 
     nonisolated static func directPeerAccountId(

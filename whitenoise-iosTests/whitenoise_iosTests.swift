@@ -11112,6 +11112,21 @@ struct ConversationInvitePresentationTests {
             == L10n.formatted("%@ has invited you to a secure chat", L10n.string("Someone")))
     }
 
+    @Test func inviterAccountIdNormalizationTrimsAndLowercasesForBothSurfaces() {
+        let mixedCase = String(repeating: "AB", count: 32)
+        let lowercased = String(repeating: "ab", count: 32)
+
+        #expect(ConversationInvitePresentation
+            .normalizedInviterAccountId("  \(mixedCase)\n") == lowercased)
+        #expect(ConversationInvitePresentation.normalizedInviterAccountId(nil) == nil)
+        #expect(ConversationInvitePresentation.normalizedInviterAccountId("   ") == nil)
+        #expect(ChatsListViewModel.inviterAccountIdHex(
+            pendingConfirmation: true,
+            welcomerAccountIdHex: mixedCase,
+            directPeerAccountIdHex: nil
+        ) == lowercased)
+    }
+
     @Test func centeredPromptDoesNotHideLoadingErrorsOrAcceptedChats() {
         #expect(!ConversationInvitePresentation.shouldShowCenteredPrompt(
             isPending: true,
