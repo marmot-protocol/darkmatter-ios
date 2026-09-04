@@ -33,7 +33,8 @@ enum MessagePreview {
     /// filename, or the plaintext for a plain message.
     static func body(
         _ record: AppMessageRecordFfi,
-        mentionDisplayName: MarkdownMentionResolver? = nil
+        mentionDisplayName: MarkdownMentionResolver? = nil,
+        systemEventNaming: GroupSystemEventNaming = .shortIdentities
     ) -> String {
         switch MessageSemantics.classify(record) {
         case .media(let attachments):
@@ -48,7 +49,12 @@ enum MessagePreview {
         case .agentActivity, .agentOperation:
             return AgentEventPresentation.previewText(from: record.plaintext) ?? ""
         case .groupSystem:
-            return GroupSystemEventPresentation.displayText(from: record.plaintext) ?? ""
+            return GroupSystemEventPresentation.displayText(
+                from: record.plaintext,
+                sender: record.sender,
+                currentAccountIdHex: systemEventNaming.currentAccountIdHex,
+                displayName: systemEventNaming.displayName
+            ) ?? ""
         case .chat, .reply, .streamFinal:
             // Reply text, stream transcript, and plain chat all live in plaintext.
             if RemoteGiphyMedia.parse(wireText: record.plaintext) != nil {
@@ -71,14 +77,20 @@ enum MessagePreview {
 
     static func body(
         _ preview: TimelineReplyPreviewFfi,
-        mentionDisplayName: MarkdownMentionResolver? = nil
+        mentionDisplayName: MarkdownMentionResolver? = nil,
+        systemEventNaming: GroupSystemEventNaming = .shortIdentities
     ) -> String {
         if preview.deleted {
             return L10n.string("This message was deleted")
         }
         if !preview.plaintext.isEmpty {
             if preview.kind == MessageSemantics.kindGroupSystem {
-                return GroupSystemEventPresentation.displayText(from: preview.plaintext) ?? ""
+                return GroupSystemEventPresentation.displayText(
+                    from: preview.plaintext,
+                    sender: preview.sender,
+                    currentAccountIdHex: systemEventNaming.currentAccountIdHex,
+                    displayName: systemEventNaming.displayName
+                ) ?? ""
             }
             if MessageSemantics.isTypedAgentEventKind(preview.kind) {
                 return AgentEventPresentation.previewText(from: preview.plaintext) ?? ""

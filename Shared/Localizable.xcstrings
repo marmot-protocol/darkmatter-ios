@@ -2474,7 +2474,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ fue nombrado administrador"
+            "value" : "Nombraron administrador a %@"
           }
         },
         "fr" : {
@@ -2486,13 +2486,13 @@
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ è stato reso amministratore"
+            "value" : "%@ ora è amministratore"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ foi tornado administrador"
+            "value" : "%@ agora é administrador"
           }
         },
         "ru" : {
@@ -77271,7 +77271,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fuiste nombrado administrador"
+            "value" : "Te nombraron administrador"
           }
         },
         "fr" : {
@@ -77283,13 +77283,13 @@
         "it" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sei stato reso amministratore"
+            "value" : "Ora sei amministratore"
           }
         },
         "pt" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Você foi tornado administrador"
+            "value" : "Você agora é administrador"
           }
         },
         "ru" : {
