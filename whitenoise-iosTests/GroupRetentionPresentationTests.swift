@@ -113,4 +113,17 @@ struct GroupRetentionPresentationTests {
         #expect(GroupRetentionPresentation.label(seconds: 300) != offLabel)
         #expect(!GroupRetentionPresentation.label(seconds: 300).isEmpty)
     }
+
+    @Test func durationDoesNotGainAnHourWhenItCrossesDaylightSavingTime() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Rome")!
+
+        let label = GroupSystemEventPresentation.retentionDurationText(
+            seconds: 90 * 24 * 60 * 60,
+            locale: Locale(identifier: "en_US"),
+            calendar: calendar
+        )
+
+        #expect(label == "90 days")
+    }
 }

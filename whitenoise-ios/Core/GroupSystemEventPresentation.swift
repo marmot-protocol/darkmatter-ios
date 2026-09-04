@@ -93,18 +93,39 @@ nonisolated enum GroupSystemEventPresentation {
         seconds == 0 ? L10n.string("Off") : retentionDurationText(seconds: seconds)
     }
 
-    private static func retentionDurationText(seconds: UInt64) -> String {
-        let locale = AppLanguage.currentLocale
+    static func retentionDurationText(
+        seconds: UInt64,
+        locale: Locale = AppLanguage.currentLocale,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> String {
         let formatter = DateComponentsFormatter()
-        var calendar = Calendar.autoupdatingCurrent
-        calendar.locale = locale
-        formatter.calendar = calendar
+        var localizedCalendar = calendar
+        localizedCalendar.locale = locale
+        formatter.calendar = localizedCalendar
         formatter.allowedUnits = [.day, .hour, .minute, .second]
         formatter.unitsStyle = .full
         formatter.maximumUnitCount = 2
         let clamped = min(seconds, UInt64(Int.max))
-        return formatter.string(from: TimeInterval(clamped))
+        return formatter.string(from: elapsedDurationComponents(seconds: clamped))
             ?? fallbackRetentionDuration(seconds: clamped, locale: locale)
+    }
+
+    /// Retention is an exact elapsed duration, not a wall-clock interval.
+    /// Decompose it directly so crossing a daylight-saving boundary cannot add
+    /// or remove an hour from the label.
+    private static func elapsedDurationComponents(seconds: UInt64) -> DateComponents {
+        let days = seconds / 86_400
+        let afterDays = seconds % 86_400
+        let hours = afterDays / 3_600
+        let afterHours = afterDays % 3_600
+        let minutes = afterHours / 60
+
+        return DateComponents(
+            day: Int(days),
+            hour: Int(hours),
+            minute: Int(minutes),
+            second: Int(afterHours % 60)
+        )
     }
 
     private static func fallbackRetentionDuration(seconds: UInt64, locale: Locale) -> String {
