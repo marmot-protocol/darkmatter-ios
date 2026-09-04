@@ -6,6 +6,13 @@ struct WNButton: View {
         case secondary
     }
 
+    /// `large` is the full-width call to action at the bottom of a screen.
+    /// `compact` hugs its label so the same chrome fits a toolbar or a row.
+    nonisolated enum Size: Equatable {
+        case large
+        case compact
+    }
+
     nonisolated enum Metrics {
         static let fallbackLabelMinHeight: CGFloat = 44
 
@@ -27,6 +34,16 @@ struct WNButton: View {
                 return accent(for: colorScheme)
             }
         }
+
+        static func controlSize(for size: Size) -> ControlSize {
+            size == .large ? .extraLarge : .regular
+        }
+
+        /// Only the large size claims the full width; a compact button in a
+        /// toolbar has to stay as wide as its title.
+        static func stretches(_ size: Size) -> Bool {
+            size == .large
+        }
     }
 
     @Environment(\.colorScheme) private var colorScheme
@@ -35,6 +52,7 @@ struct WNButton: View {
     let title: LocalizedStringKey
     var systemImage: String?
     var emphasis = Emphasis.primary
+    var size = Size.large
     var isLoading = false
     let action: () -> Void
 
@@ -59,12 +77,12 @@ struct WNButton: View {
             }
             .foregroundStyle(contentColor)
             .animation(.default, value: isLoading)
-            .wnButtonLabelSizing()
+            .wnButtonLabelSizing(size)
         }
         .wnButtonStyle(emphasis)
         .wnButtonChrome()
-        .controlSize(.extraLarge)
-        .wnButtonSizing()
+        .controlSize(Metrics.controlSize(for: size))
+        .wnButtonSizing(size)
         .allowsHitTesting(!isLoading)
     }
 }
@@ -85,16 +103,18 @@ private struct WNButtonTitle: View {
 private struct WNButtonChrome: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
 
+    let borderShape: ButtonBorderShape
+
     func body(content: Content) -> some View {
         content
-            .buttonBorderShape(.capsule)
+            .buttonBorderShape(borderShape)
             .tint(WNButton.Metrics.accent(for: colorScheme))
     }
 }
 
 extension View {
-    func wnButtonChrome() -> some View {
-        modifier(WNButtonChrome())
+    func wnButtonChrome(_ borderShape: ButtonBorderShape = .capsule) -> some View {
+        modifier(WNButtonChrome(borderShape: borderShape))
     }
 
     func wnAvatarActionButtonStyle() -> some View {
@@ -122,17 +142,19 @@ extension View {
     }
 
     @ViewBuilder
-    func wnSecondaryButtonStyle() -> some View {
+    func wnSecondaryButtonStyle(
+        _ shape: WNSecondaryButtonStyle.Shape = .capsule
+    ) -> some View {
         if #available(iOS 26.0, *) {
             buttonStyle(.glass)
         } else {
-            buttonStyle(.wnSecondary)
+            buttonStyle(WNSecondaryButtonStyle(shape: shape))
         }
     }
 
     @ViewBuilder
-    func wnButtonSizing() -> some View {
-        if #available(iOS 26.0, *) {
+    func wnButtonSizing(_ size: WNButton.Size = .large) -> some View {
+        if #available(iOS 26.0, *), WNButton.Metrics.stretches(size) {
             buttonSizing(.flexible)
         } else {
             self
@@ -140,11 +162,13 @@ extension View {
     }
 
     @ViewBuilder
-    func wnButtonLabelSizing() -> some View {
+    func wnButtonLabelSizing(_ size: WNButton.Size = .large) -> some View {
         if #available(iOS 26.0, *) {
             self
-        } else {
+        } else if WNButton.Metrics.stretches(size) {
             frame(maxWidth: .infinity, minHeight: WNButton.Metrics.fallbackLabelMinHeight)
+        } else {
+            self
         }
     }
 }
@@ -169,6 +193,18 @@ extension View {
     }
     .safeAreaPadding(.horizontal)
     .preferredColorScheme(.dark)
+}
+
+#Preview("WNButton — Compact") {
+    VStack(spacing: 24) {
+        WNButton(title: "Edit", emphasis: .secondary, size: .compact) {}
+        WNButton(title: "Done", size: .compact) {}
+        WNButton(title: "Publishing…", size: .compact, isLoading: true) {}
+        WNButton(title: "Edit", emphasis: .secondary, size: .compact) {}
+            .disabled(true)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.background)
 }
 
 #Preview("WN avatar action — Light") {

@@ -40,6 +40,29 @@ struct WNSecondaryButtonStyleTests {
         }
     }
 
+    @Test func theCapsuleKeepsItsPaddingWhileTheCircleSizesFromItsDiameter() {
+        for controlSize in ControlSize.allCases {
+            let capsule = Metrics.insets(for: .capsule, controlSize: controlSize)
+            #expect(capsule.horizontal == Metrics.horizontalPadding)
+            #expect(capsule.vertical == Metrics.verticalPadding(for: controlSize))
+
+            // Padding would stretch a bare glyph off center, so the circle
+            // takes its size from the frame instead.
+            let circle = Metrics.insets(for: .circle, controlSize: controlSize)
+            #expect(circle.horizontal == 0)
+            #expect(circle.vertical == 0)
+        }
+    }
+
+    @Test func onlyTheCircleIsGivenAFixedDiameter() {
+        #expect(Metrics.diameter(for: .circle, scaled: 52) == 52)
+        #expect(Metrics.diameter(for: .capsule, scaled: 52) == nil)
+    }
+
+    @Test func circleDiameterClearsTheAppleMinimumTapTarget() {
+        #expect(Metrics.circleDiameter >= 44)
+    }
+
     @Test func extraLargeMatchesTheProminentCtaHeightAndHuggingPillsStaySmaller() {
         let cta = Metrics.verticalPadding(for: .extraLarge)
         #expect(cta == 15)
