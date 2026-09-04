@@ -445,6 +445,13 @@ struct ChatListPreviewCacheTests {
         #expect(completedLookupGroupIds == pendingInviteGroupIds)
     }
 
+    @Test func inviterLookupStopsRetryingAfterRepeatedFailures() {
+        #expect(ChatsListViewModel.shouldRetryInviterLookup(failureCount: 1))
+        #expect(ChatsListViewModel.shouldRetryInviterLookup(failureCount: 2))
+        #expect(!ChatsListViewModel.shouldRetryInviterLookup(failureCount: 3))
+        #expect(!ChatsListViewModel.shouldRetryInviterLookup(failureCount: 4))
+    }
+
     @Test func inviterReadPlanSkipsAnsweredResolvedAndAlreadyPeeredInvites() {
         let peerKnown = hex("aa")
         let needsRead = hex("bb")
