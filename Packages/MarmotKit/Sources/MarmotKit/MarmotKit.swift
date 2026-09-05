@@ -9518,6 +9518,16 @@ public struct AppPerformanceSnapshotFfi {
     public var groupAcceptInvite: AppPerformanceOperationSnapshotFfi
     public var mediaUpload: AppPerformanceOperationSnapshotFfi
     public var mediaDownload: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadQueueWait: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadPreparation: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadHostSetup: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadResponseHeaders: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadFirstByte: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadBodyTransfer: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadLocatorFailover: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadCiphertextVerify: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadDecrypt: AppPerformanceOperationSnapshotFfi
+    public var mediaDownloadPlaintextVerify: AppPerformanceOperationSnapshotFfi
     public var hostSplashReady: AppPerformanceOperationSnapshotFfi
     public var hostForegroundLocalReady: AppPerformanceOperationSnapshotFfi
 
@@ -9536,7 +9546,7 @@ public struct AppPerformanceSnapshotFfi {
         /**
          * Existing-database opens that skipped the recovery probe via a cached
          * verdict since process start.
-         */sqlcipherMigrationProbeSkips: UInt64, outboundMessageSend: AppPerformanceOperationSnapshotFfi, groupCreateQueueWait: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageLookup: AppPerformanceOperationSnapshotFfi, groupMemberKeyPackagePrewarm: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageCacheReuse: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageNetworkResolution: AppPerformanceOperationSnapshotFfi, groupCreateImagePreprocess: AppPerformanceOperationSnapshotFfi, groupCreateImageUpload: AppPerformanceOperationSnapshotFfi, groupCreateMlsPreparePersist: AppPerformanceOperationSnapshotFfi, groupCreatePendingWelcomeIndex: AppPerformanceOperationSnapshotFfi, groupCreateWelcomePublish: AppPerformanceOperationSnapshotFfi, groupCreateLocalProjectionSave: AppPerformanceOperationSnapshotFfi, groupCreateResponseHandoff: AppPerformanceOperationSnapshotFfi, groupCreateSubscriptionRefresh: AppPerformanceOperationSnapshotFfi, groupCreatePostMutationCatchUp: AppPerformanceOperationSnapshotFfi, groupCreateTotalCallerLatency: AppPerformanceOperationSnapshotFfi, groupInviteMembers: AppPerformanceOperationSnapshotFfi, groupInviteKeyPackageLookup: AppPerformanceOperationSnapshotFfi, groupInviteRoutingRefresh: AppPerformanceOperationSnapshotFfi, groupInvitePreSendSync: AppPerformanceOperationSnapshotFfi, groupInviteEnginePublish: AppPerformanceOperationSnapshotFfi, groupInviteLocalRefresh: AppPerformanceOperationSnapshotFfi, groupInviteNotificationTrigger: AppPerformanceOperationSnapshotFfi, groupInviteWelcomePublish: AppPerformanceOperationSnapshotFfi, groupInvitePostMutationCatchUp: AppPerformanceOperationSnapshotFfi, groupPromoteAdmin: AppPerformanceOperationSnapshotFfi, groupDetailsRead: AppPerformanceOperationSnapshotFfi, groupConversationSnapshotRead: AppPerformanceOperationSnapshotFfi, chatListRowRead: AppPerformanceOperationSnapshotFfi, existingDirectConversationRead: AppPerformanceOperationSnapshotFfi, groupMlsStateRead: AppPerformanceOperationSnapshotFfi, groupRosterRead: AppPerformanceOperationSnapshotFfi, groupAcceptInvite: AppPerformanceOperationSnapshotFfi, mediaUpload: AppPerformanceOperationSnapshotFfi, mediaDownload: AppPerformanceOperationSnapshotFfi, hostSplashReady: AppPerformanceOperationSnapshotFfi, hostForegroundLocalReady: AppPerformanceOperationSnapshotFfi) {
+         */sqlcipherMigrationProbeSkips: UInt64, outboundMessageSend: AppPerformanceOperationSnapshotFfi, groupCreateQueueWait: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageLookup: AppPerformanceOperationSnapshotFfi, groupMemberKeyPackagePrewarm: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageCacheReuse: AppPerformanceOperationSnapshotFfi, groupCreateKeyPackageNetworkResolution: AppPerformanceOperationSnapshotFfi, groupCreateImagePreprocess: AppPerformanceOperationSnapshotFfi, groupCreateImageUpload: AppPerformanceOperationSnapshotFfi, groupCreateMlsPreparePersist: AppPerformanceOperationSnapshotFfi, groupCreatePendingWelcomeIndex: AppPerformanceOperationSnapshotFfi, groupCreateWelcomePublish: AppPerformanceOperationSnapshotFfi, groupCreateLocalProjectionSave: AppPerformanceOperationSnapshotFfi, groupCreateResponseHandoff: AppPerformanceOperationSnapshotFfi, groupCreateSubscriptionRefresh: AppPerformanceOperationSnapshotFfi, groupCreatePostMutationCatchUp: AppPerformanceOperationSnapshotFfi, groupCreateTotalCallerLatency: AppPerformanceOperationSnapshotFfi, groupInviteMembers: AppPerformanceOperationSnapshotFfi, groupInviteKeyPackageLookup: AppPerformanceOperationSnapshotFfi, groupInviteRoutingRefresh: AppPerformanceOperationSnapshotFfi, groupInvitePreSendSync: AppPerformanceOperationSnapshotFfi, groupInviteEnginePublish: AppPerformanceOperationSnapshotFfi, groupInviteLocalRefresh: AppPerformanceOperationSnapshotFfi, groupInviteNotificationTrigger: AppPerformanceOperationSnapshotFfi, groupInviteWelcomePublish: AppPerformanceOperationSnapshotFfi, groupInvitePostMutationCatchUp: AppPerformanceOperationSnapshotFfi, groupPromoteAdmin: AppPerformanceOperationSnapshotFfi, groupDetailsRead: AppPerformanceOperationSnapshotFfi, groupConversationSnapshotRead: AppPerformanceOperationSnapshotFfi, chatListRowRead: AppPerformanceOperationSnapshotFfi, existingDirectConversationRead: AppPerformanceOperationSnapshotFfi, groupMlsStateRead: AppPerformanceOperationSnapshotFfi, groupRosterRead: AppPerformanceOperationSnapshotFfi, groupAcceptInvite: AppPerformanceOperationSnapshotFfi, mediaUpload: AppPerformanceOperationSnapshotFfi, mediaDownload: AppPerformanceOperationSnapshotFfi, mediaDownloadQueueWait: AppPerformanceOperationSnapshotFfi, mediaDownloadPreparation: AppPerformanceOperationSnapshotFfi, mediaDownloadHostSetup: AppPerformanceOperationSnapshotFfi, mediaDownloadResponseHeaders: AppPerformanceOperationSnapshotFfi, mediaDownloadFirstByte: AppPerformanceOperationSnapshotFfi, mediaDownloadBodyTransfer: AppPerformanceOperationSnapshotFfi, mediaDownloadLocatorFailover: AppPerformanceOperationSnapshotFfi, mediaDownloadCiphertextVerify: AppPerformanceOperationSnapshotFfi, mediaDownloadDecrypt: AppPerformanceOperationSnapshotFfi, mediaDownloadPlaintextVerify: AppPerformanceOperationSnapshotFfi, hostSplashReady: AppPerformanceOperationSnapshotFfi, hostForegroundLocalReady: AppPerformanceOperationSnapshotFfi) {
         self.appStart = appStart
         self.directorySubscriptionSync = directorySubscriptionSync
         self.accountReconcile = accountReconcile
@@ -9598,6 +9608,16 @@ public struct AppPerformanceSnapshotFfi {
         self.groupAcceptInvite = groupAcceptInvite
         self.mediaUpload = mediaUpload
         self.mediaDownload = mediaDownload
+        self.mediaDownloadQueueWait = mediaDownloadQueueWait
+        self.mediaDownloadPreparation = mediaDownloadPreparation
+        self.mediaDownloadHostSetup = mediaDownloadHostSetup
+        self.mediaDownloadResponseHeaders = mediaDownloadResponseHeaders
+        self.mediaDownloadFirstByte = mediaDownloadFirstByte
+        self.mediaDownloadBodyTransfer = mediaDownloadBodyTransfer
+        self.mediaDownloadLocatorFailover = mediaDownloadLocatorFailover
+        self.mediaDownloadCiphertextVerify = mediaDownloadCiphertextVerify
+        self.mediaDownloadDecrypt = mediaDownloadDecrypt
+        self.mediaDownloadPlaintextVerify = mediaDownloadPlaintextVerify
         self.hostSplashReady = hostSplashReady
         self.hostForegroundLocalReady = hostForegroundLocalReady
     }
@@ -9793,6 +9813,36 @@ extension AppPerformanceSnapshotFfi: Equatable, Hashable {
         if lhs.mediaDownload != rhs.mediaDownload {
             return false
         }
+        if lhs.mediaDownloadQueueWait != rhs.mediaDownloadQueueWait {
+            return false
+        }
+        if lhs.mediaDownloadPreparation != rhs.mediaDownloadPreparation {
+            return false
+        }
+        if lhs.mediaDownloadHostSetup != rhs.mediaDownloadHostSetup {
+            return false
+        }
+        if lhs.mediaDownloadResponseHeaders != rhs.mediaDownloadResponseHeaders {
+            return false
+        }
+        if lhs.mediaDownloadFirstByte != rhs.mediaDownloadFirstByte {
+            return false
+        }
+        if lhs.mediaDownloadBodyTransfer != rhs.mediaDownloadBodyTransfer {
+            return false
+        }
+        if lhs.mediaDownloadLocatorFailover != rhs.mediaDownloadLocatorFailover {
+            return false
+        }
+        if lhs.mediaDownloadCiphertextVerify != rhs.mediaDownloadCiphertextVerify {
+            return false
+        }
+        if lhs.mediaDownloadDecrypt != rhs.mediaDownloadDecrypt {
+            return false
+        }
+        if lhs.mediaDownloadPlaintextVerify != rhs.mediaDownloadPlaintextVerify {
+            return false
+        }
         if lhs.hostSplashReady != rhs.hostSplashReady {
             return false
         }
@@ -9864,6 +9914,16 @@ extension AppPerformanceSnapshotFfi: Equatable, Hashable {
         hasher.combine(groupAcceptInvite)
         hasher.combine(mediaUpload)
         hasher.combine(mediaDownload)
+        hasher.combine(mediaDownloadQueueWait)
+        hasher.combine(mediaDownloadPreparation)
+        hasher.combine(mediaDownloadHostSetup)
+        hasher.combine(mediaDownloadResponseHeaders)
+        hasher.combine(mediaDownloadFirstByte)
+        hasher.combine(mediaDownloadBodyTransfer)
+        hasher.combine(mediaDownloadLocatorFailover)
+        hasher.combine(mediaDownloadCiphertextVerify)
+        hasher.combine(mediaDownloadDecrypt)
+        hasher.combine(mediaDownloadPlaintextVerify)
         hasher.combine(hostSplashReady)
         hasher.combine(hostForegroundLocalReady)
     }
@@ -9939,6 +9999,16 @@ public struct FfiConverterTypeAppPerformanceSnapshotFfi: FfiConverterRustBuffer 
                 groupAcceptInvite: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
                 mediaUpload: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
                 mediaDownload: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadQueueWait: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadPreparation: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadHostSetup: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadResponseHeaders: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadFirstByte: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadBodyTransfer: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadLocatorFailover: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadCiphertextVerify: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadDecrypt: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
+                mediaDownloadPlaintextVerify: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
                 hostSplashReady: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf),
                 hostForegroundLocalReady: FfiConverterTypeAppPerformanceOperationSnapshotFfi.read(from: &buf)
         )
@@ -10006,6 +10076,16 @@ public struct FfiConverterTypeAppPerformanceSnapshotFfi: FfiConverterRustBuffer 
         FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.groupAcceptInvite, into: &buf)
         FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaUpload, into: &buf)
         FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownload, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadQueueWait, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadPreparation, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadHostSetup, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadResponseHeaders, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadFirstByte, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadBodyTransfer, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadLocatorFailover, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadCiphertextVerify, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadDecrypt, into: &buf)
+        FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.mediaDownloadPlaintextVerify, into: &buf)
         FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.hostSplashReady, into: &buf)
         FfiConverterTypeAppPerformanceOperationSnapshotFfi.write(value.hostForegroundLocalReady, into: &buf)
     }
@@ -21262,6 +21342,14 @@ public enum GroupEventKindFfi {
      */
     case groupStateInvalidated(epoch: UInt64, invalidatedCommitIdHex: String, reason: String
     )
+    /**
+     * The inverse of `GroupStateInvalidated`: a later convergence pass
+     * re-adopted `revalidated_commit_id_hex`, so every notification that
+     * commit's withdrawal retracted describes canonical history again. Only a
+     * `superseded_by_branch_selection` withdrawal is ever taken back.
+     */
+    case groupStateRevalidated(epoch: UInt64, revalidatedCommitIdHex: String
+    )
     case groupUnrecoverable
     case pendingCommitRecovered(recoveredEpoch: UInt64
     )
@@ -21313,12 +21401,15 @@ public struct FfiConverterTypeGroupEventKindFfi: FfiConverterRustBuffer {
         case 10: return .groupStateInvalidated(epoch: try FfiConverterUInt64.read(from: &buf), invalidatedCommitIdHex: try FfiConverterString.read(from: &buf), reason: try FfiConverterString.read(from: &buf)
         )
 
-        case 11: return .groupUnrecoverable
-
-        case 12: return .pendingCommitRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
+        case 11: return .groupStateRevalidated(epoch: try FfiConverterUInt64.read(from: &buf), revalidatedCommitIdHex: try FfiConverterString.read(from: &buf)
         )
 
-        case 13: return .groupHydrationRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
+        case 12: return .groupUnrecoverable
+
+        case 13: return .pendingCommitRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
+        )
+
+        case 14: return .groupHydrationRecovered(recoveredEpoch: try FfiConverterUInt64.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -21390,17 +21481,23 @@ public struct FfiConverterTypeGroupEventKindFfi: FfiConverterRustBuffer {
             FfiConverterString.write(reason, into: &buf)
 
 
-        case .groupUnrecoverable:
+        case let .groupStateRevalidated(epoch,revalidatedCommitIdHex):
             writeInt(&buf, Int32(11))
+            FfiConverterUInt64.write(epoch, into: &buf)
+            FfiConverterString.write(revalidatedCommitIdHex, into: &buf)
+
+
+        case .groupUnrecoverable:
+            writeInt(&buf, Int32(12))
 
 
         case let .pendingCommitRecovered(recoveredEpoch):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(13))
             FfiConverterUInt64.write(recoveredEpoch, into: &buf)
 
 
         case let .groupHydrationRecovered(recoveredEpoch):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(14))
             FfiConverterUInt64.write(recoveredEpoch, into: &buf)
 
         }
@@ -23102,6 +23199,13 @@ public enum MarmotKitError: Swift.Error {
     )
     case MissingKeyPackage(account: String
     )
+    /**
+     * The invite target has no kind-10050 inbox endpoint that this device can
+     * safely use. The account id lets hosts identify the affected selection
+     * without parsing display text.
+     */
+    case MissingMemberInboxRoute(account: String
+    )
     case Publish(details: String
     )
     /**
@@ -23345,90 +23449,93 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
         case 16: return .MissingKeyPackage(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 17: return .Publish(
+        case 17: return .MissingMemberInboxRoute(
+            account: try FfiConverterString.read(from: &buf)
+            )
+        case 18: return .Publish(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 18: return .FollowListUnavailable
-        case 19: return .TransportClosed
-        case 20: return .RuntimeBusy
-        case 21: return .AccountSessionBusy
-        case 22: return .AccountSetupRecoveryRequired
-        case 23: return .AccountSetupRetryRequired
-        case 24: return .AccountSetupResetNotApplicable
-        case 25: return .AccountSetupKeyPackageRecoveryAvailable
-        case 26: return .RuntimeStopping
-        case 27: return .AccountCatchUp(
+        case 19: return .FollowListUnavailable
+        case 20: return .TransportClosed
+        case 21: return .RuntimeBusy
+        case 22: return .AccountSessionBusy
+        case 23: return .AccountSetupRecoveryRequired
+        case 24: return .AccountSetupRetryRequired
+        case 25: return .AccountSetupResetNotApplicable
+        case 26: return .AccountSetupKeyPackageRecoveryAvailable
+        case 27: return .RuntimeStopping
+        case 28: return .AccountCatchUp(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 28: return .NotGroupAdmin(
+        case 29: return .NotGroupAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 29: return .AdminCannotSelfRemove(
+        case 30: return .AdminCannotSelfRemove(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 30: return .LeaveAlreadyRequested(
+        case 31: return .LeaveAlreadyRequested(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 31: return .WouldRemoveLastAdmin(
+        case 32: return .WouldRemoveLastAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 32: return .DisbandingUnsupportedMembers(
+        case 33: return .DisbandingUnsupportedMembers(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdsHex: try FfiConverterSequenceString.read(from: &buf)
             )
-        case 33: return .DisbandingNotEnabled(
+        case 34: return .DisbandingNotEnabled(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 34: return .GroupDisbanding(
+        case 35: return .GroupDisbanding(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 35: return .MemberNotInGroup(
+        case 36: return .MemberNotInGroup(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 36: return .AlreadyAdmin(
+        case 37: return .AlreadyAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 37: return .NotAdmin(
+        case 38: return .NotAdmin(
             groupIdHex: try FfiConverterString.read(from: &buf),
             memberIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 38: return .StorageBusy(
+        case 39: return .StorageBusy(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 39: return .StorageClosed(
+        case 40: return .StorageClosed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 40: return .SecretNotFound(
+        case 41: return .SecretNotFound(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 41: return .KeystoreUnavailable(
+        case 42: return .KeystoreUnavailable(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 42: return .EmptyPassphrase
-        case 43: return .EncryptionFailed(
+        case 43: return .EmptyPassphrase
+        case 44: return .EncryptionFailed(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 44: return .Io(
+        case 45: return .Io(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 45: return .ExternalSignerUnavailable(
+        case 46: return .ExternalSignerUnavailable(
             account: try FfiConverterString.read(from: &buf)
             )
-        case 46: return .ExternalSignerMismatch
-        case 47: return .ExternalSignerRejected
-        case 48: return .GroupSendQueueFull(
+        case 47: return .ExternalSignerMismatch
+        case 48: return .ExternalSignerRejected
+        case 49: return .GroupSendQueueFull(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 49: return .GroupUnrecoverableRepairRequired(
+        case 50: return .GroupUnrecoverableRepairRequired(
             groupIdHex: try FfiConverterString.read(from: &buf)
             )
-        case 50: return .Runtime(
+        case 51: return .Runtime(
             details: try FfiConverterString.read(from: &buf)
             )
-        case 51: return .AccountWorkerBusy
-        case 52: return .AccountWorkerResponseTimedOut
+        case 52: return .AccountWorkerBusy
+        case 53: return .AccountWorkerResponseTimedOut
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -23519,174 +23626,179 @@ public struct FfiConverterTypeMarmotKitError: FfiConverterRustBuffer {
             FfiConverterString.write(account, into: &buf)
 
 
-        case let .Publish(details):
+        case let .MissingMemberInboxRoute(account):
             writeInt(&buf, Int32(17))
+            FfiConverterString.write(account, into: &buf)
+
+
+        case let .Publish(details):
+            writeInt(&buf, Int32(18))
             FfiConverterString.write(details, into: &buf)
 
 
         case .FollowListUnavailable:
-            writeInt(&buf, Int32(18))
-
-
-        case .TransportClosed:
             writeInt(&buf, Int32(19))
 
 
-        case .RuntimeBusy:
+        case .TransportClosed:
             writeInt(&buf, Int32(20))
 
 
-        case .AccountSessionBusy:
+        case .RuntimeBusy:
             writeInt(&buf, Int32(21))
 
 
-        case .AccountSetupRecoveryRequired:
+        case .AccountSessionBusy:
             writeInt(&buf, Int32(22))
 
 
-        case .AccountSetupRetryRequired:
+        case .AccountSetupRecoveryRequired:
             writeInt(&buf, Int32(23))
 
 
-        case .AccountSetupResetNotApplicable:
+        case .AccountSetupRetryRequired:
             writeInt(&buf, Int32(24))
 
 
-        case .AccountSetupKeyPackageRecoveryAvailable:
+        case .AccountSetupResetNotApplicable:
             writeInt(&buf, Int32(25))
 
 
-        case .RuntimeStopping:
+        case .AccountSetupKeyPackageRecoveryAvailable:
             writeInt(&buf, Int32(26))
 
 
-        case let .AccountCatchUp(details):
+        case .RuntimeStopping:
             writeInt(&buf, Int32(27))
+
+
+        case let .AccountCatchUp(details):
+            writeInt(&buf, Int32(28))
             FfiConverterString.write(details, into: &buf)
 
 
         case let .NotGroupAdmin(groupIdHex):
-            writeInt(&buf, Int32(28))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(29))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .LeaveAlreadyRequested(groupIdHex):
+        case let .AdminCannotSelfRemove(groupIdHex):
             writeInt(&buf, Int32(30))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .WouldRemoveLastAdmin(groupIdHex):
+        case let .LeaveAlreadyRequested(groupIdHex):
             writeInt(&buf, Int32(31))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+        case let .WouldRemoveLastAdmin(groupIdHex):
             writeInt(&buf, Int32(32))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .DisbandingUnsupportedMembers(groupIdHex,memberIdsHex):
+            writeInt(&buf, Int32(33))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterSequenceString.write(memberIdsHex, into: &buf)
 
 
         case let .DisbandingNotEnabled(groupIdHex):
-            writeInt(&buf, Int32(33))
-            FfiConverterString.write(groupIdHex, into: &buf)
-
-
-        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(34))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .MemberNotInGroup(groupIdHex,memberIdHex):
+        case let .GroupDisbanding(groupIdHex):
             writeInt(&buf, Int32(35))
             FfiConverterString.write(groupIdHex, into: &buf)
-            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .AlreadyAdmin(groupIdHex,memberIdHex):
+        case let .MemberNotInGroup(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(36))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .NotAdmin(groupIdHex,memberIdHex):
+        case let .AlreadyAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(37))
             FfiConverterString.write(groupIdHex, into: &buf)
             FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageBusy(details):
+        case let .NotAdmin(groupIdHex,memberIdHex):
             writeInt(&buf, Int32(38))
-            FfiConverterString.write(details, into: &buf)
+            FfiConverterString.write(groupIdHex, into: &buf)
+            FfiConverterString.write(memberIdHex, into: &buf)
 
 
-        case let .StorageClosed(details):
+        case let .StorageBusy(details):
             writeInt(&buf, Int32(39))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .SecretNotFound(details):
+        case let .StorageClosed(details):
             writeInt(&buf, Int32(40))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .KeystoreUnavailable(details):
+        case let .SecretNotFound(details):
             writeInt(&buf, Int32(41))
             FfiConverterString.write(details, into: &buf)
 
 
-        case .EmptyPassphrase:
+        case let .KeystoreUnavailable(details):
             writeInt(&buf, Int32(42))
-
-
-        case let .EncryptionFailed(details):
-            writeInt(&buf, Int32(43))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .Io(details):
+        case .EmptyPassphrase:
+            writeInt(&buf, Int32(43))
+
+
+        case let .EncryptionFailed(details):
             writeInt(&buf, Int32(44))
             FfiConverterString.write(details, into: &buf)
 
 
-        case let .ExternalSignerUnavailable(account):
+        case let .Io(details):
             writeInt(&buf, Int32(45))
+            FfiConverterString.write(details, into: &buf)
+
+
+        case let .ExternalSignerUnavailable(account):
+            writeInt(&buf, Int32(46))
             FfiConverterString.write(account, into: &buf)
 
 
         case .ExternalSignerMismatch:
-            writeInt(&buf, Int32(46))
-
-
-        case .ExternalSignerRejected:
             writeInt(&buf, Int32(47))
 
 
-        case let .GroupSendQueueFull(groupIdHex):
+        case .ExternalSignerRejected:
             writeInt(&buf, Int32(48))
-            FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .GroupUnrecoverableRepairRequired(groupIdHex):
+        case let .GroupSendQueueFull(groupIdHex):
             writeInt(&buf, Int32(49))
             FfiConverterString.write(groupIdHex, into: &buf)
 
 
-        case let .Runtime(details):
+        case let .GroupUnrecoverableRepairRequired(groupIdHex):
             writeInt(&buf, Int32(50))
+            FfiConverterString.write(groupIdHex, into: &buf)
+
+
+        case let .Runtime(details):
+            writeInt(&buf, Int32(51))
             FfiConverterString.write(details, into: &buf)
 
 
         case .AccountWorkerBusy:
-            writeInt(&buf, Int32(51))
+            writeInt(&buf, Int32(52))
 
 
         case .AccountWorkerResponseTimedOut:
-            writeInt(&buf, Int32(52))
+            writeInt(&buf, Int32(53))
 
         }
     }

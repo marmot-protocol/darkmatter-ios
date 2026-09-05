@@ -264,6 +264,8 @@ struct DiagnosticsView: View {
             return "commit rolled back"
         case .groupStateInvalidated:
             return "state invalidated"
+        case .groupStateRevalidated:
+            return "state revalidated"
         case .groupUnrecoverable:
             return "unrecoverable"
         case .pendingCommitRecovered:

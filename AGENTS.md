@@ -204,3 +204,12 @@ For TestFlight-facing changes, also walk the relevant items in `docs/manual-test
 The worktree may contain user edits. Do not revert changes you did not make. If a generated file changes, confirm whether it came from a published MarmotKit release installed by `scripts/sync-bindings.sh` before touching it.
 
 Commit related work as one clear checkpoint when asked. Leave unrelated cleanup for a separate commit.
+
+## Release Versioning and Tags
+
+- Follow `docs/releases.md` for every release version/build bump.
+- Preserve the user's chosen marketing version. Keep app and notification extension versions/build numbers aligned in production and staging configurations, and increment the build number for each shipment.
+- Every release version/build bump committed to `master` must have an annotated Git tag on that exact commit, pushed to GitHub along with master. Do not leave a release bump published without its tag.
+- Use `v<MARKETING_VERSION>` for the first build of a version, or `v<MARKETING_VERSION>-build.<CURRENT_PROJECT_VERSION>` for a subsequent shipment with the same marketing version. Never move or overwrite a published tag.
+- Record the app version, build number, MarmotKit version, and validation results in the tag annotation. Distinguish automated checks from pending signed-device/manual checks; a tag alone does not establish App Store/TestFlight publication.
+- Keep `CLAUDE.md` as a symlink to this canonical file.

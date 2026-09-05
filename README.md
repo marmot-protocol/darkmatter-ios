@@ -42,6 +42,7 @@ The project is intentionally split along the platform boundary: Swift owns prese
 - `Packages/MarmotKit/` - generated UniFFI Swift bindings and the pinned remote XCFramework declaration.
 - `scripts/sync-bindings.sh` - verifies and installs a published immutable `MarmotKit` release.
 - `docs/manual-tests.md` - release-focused manual checks for flows that are expensive to automate.
+- `docs/releases.md` - version bumps, validation, and immutable release tags on master.
 - `AGENTS.md` - canonical coding-agent guidance for this repo.
 
 ## Requirements
