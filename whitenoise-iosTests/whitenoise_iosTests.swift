@@ -2564,6 +2564,30 @@ struct TelemetryBuildConfigTests {
         #expect(tracker.source.appVersion == "2.0+9")
     }
 
+    @Test func unresolvedBuildSettingsPickFlavorOtlpTokenFromDeploymentEnvironment() {
+        let production = TelemetryBuildConfig.current(infoDictionary: [
+            "WhiteNoiseTelemetryBearerToken": "$(WHITENOISE_OTLP_BEARER_TOKEN)",
+            "WhiteNoiseTelemetryEnvironment": "production"
+        ], environment: [
+            "PRODUCTION_OTLP_TOKEN_WHITENOISE_IOS": "production-otlp-token",
+            "STAGING_OTLP_TOKEN_WHITENOISE_IOS": "staging-otlp-token",
+            "AUDIT_LOG_TOKEN_WHITENOISE_IOS": "shared-audit-token"
+        ])
+        let staging = TelemetryBuildConfig.current(infoDictionary: [
+            "WhiteNoiseTelemetryBearerToken": "$(WHITENOISE_OTLP_BEARER_TOKEN)",
+            "WhiteNoiseTelemetryEnvironment": "staging"
+        ], environment: [
+            "PRODUCTION_OTLP_TOKEN_WHITENOISE_IOS": "production-otlp-token",
+            "STAGING_OTLP_TOKEN_WHITENOISE_IOS": "staging-otlp-token",
+            "AUDIT_LOG_TOKEN_WHITENOISE_IOS": "shared-audit-token"
+        ])
+
+        #expect(production.bearerToken == "production-otlp-token")
+        #expect(staging.bearerToken == "staging-otlp-token")
+        #expect(production.auditLogBearerToken == "shared-audit-token")
+        #expect(staging.auditLogBearerToken == "shared-audit-token")
+    }
+
     @Test func auditTokenIsReadFromDedicatedKeyAndDoesNotFallBackToOtlpToken() {
         let config = TelemetryBuildConfig.current(infoDictionary: [
             "WhiteNoiseTelemetryBearerToken": "$(WHITENOISE_OTLP_BEARER_TOKEN)",

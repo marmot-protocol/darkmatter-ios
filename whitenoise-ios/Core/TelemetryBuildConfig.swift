@@ -51,6 +51,14 @@ nonisolated struct TelemetryBuildConfig: Equatable, Sendable {
     ) -> TelemetryBuildConfig {
         let info = infoDictionary ?? [:]
         let environment = environment ?? processInfo.environment
+        let deploymentEnvironment = deploymentEnvironment(
+            from: stringValue(
+                for: "WhiteNoiseTelemetryEnvironment",
+                in: info,
+                environmentKeys: ["WHITENOISE_TELEMETRY_ENVIRONMENT"],
+                environment: environment
+            )
+        )
         return TelemetryBuildConfig(
             otlpEndpoint: stringValue(
                 for: "WhiteNoiseTelemetryOTLPEndpoint",
@@ -61,10 +69,9 @@ nonisolated struct TelemetryBuildConfig: Equatable, Sendable {
             bearerToken: stringValue(
                 for: "WhiteNoiseTelemetryBearerToken",
                 in: info,
-                environmentKeys: [
-                    "WHITENOISE_OTLP_BEARER_TOKEN",
-                    "OTLP_TOKEN_WHITENOISE_IOS"
-                ],
+                environmentKeys: otlpBearerEnvironmentKeys(
+                    deploymentEnvironment: deploymentEnvironment
+                ),
                 environment: environment
             ),
             auditLogBearerToken: stringValue(
@@ -76,14 +83,7 @@ nonisolated struct TelemetryBuildConfig: Equatable, Sendable {
                 ],
                 environment: environment
             ),
-            deploymentEnvironment: deploymentEnvironment(
-                from: stringValue(
-                    for: "WhiteNoiseTelemetryEnvironment",
-                    in: info,
-                    environmentKeys: ["WHITENOISE_TELEMETRY_ENVIRONMENT"],
-                    environment: environment
-                )
-            ),
+            deploymentEnvironment: deploymentEnvironment,
             serviceVersion: serviceVersion(from: info),
             osVersion: osVersion ?? currentOSVersion(processInfo: processInfo),
             deviceModelIdentifier: deviceModelIdentifier ?? Self.deviceModelIdentifier(environment: environment)
@@ -146,6 +146,17 @@ nonisolated struct TelemetryBuildConfig: Equatable, Sendable {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isUnresolvedBuildSetting(trimmed) else { return nil }
         return trimmed
+    }
+
+    nonisolated private static func otlpBearerEnvironmentKeys(deploymentEnvironment: String) -> [String] {
+        let flavorTokenKey = deploymentEnvironment == "production"
+            ? "PRODUCTION_OTLP_TOKEN_WHITENOISE_IOS"
+            : "STAGING_OTLP_TOKEN_WHITENOISE_IOS"
+        return [
+            "WHITENOISE_OTLP_BEARER_TOKEN",
+            flavorTokenKey,
+            "OTLP_TOKEN_WHITENOISE_IOS"
+        ]
     }
 
     nonisolated private static func deploymentEnvironment(from raw: String?) -> String {

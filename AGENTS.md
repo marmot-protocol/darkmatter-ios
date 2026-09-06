@@ -14,6 +14,7 @@ This repo is a SwiftUI iOS app around the Marmot Rust runtime. Read this before 
 - NSE projection policy: `Shared/NotificationServiceProjection.swift`
 - Transcript export: `whitenoise-ios/Core/ConversationTranscriptExport.swift`
 - Media cache and draft image processing: `whitenoise-ios/Conversation/MessageMediaAttachment.swift`
+- Flavor build settings (telemetry, audit, push): `Config/AGENTS.md`
 - Manual release checks: `docs/manual-tests.md`
 
 ## Architecture
@@ -92,6 +93,7 @@ Rules for notification work:
 - The Notification Service Extension should keep primary and additional local presentations alert-consistent, including `UNNotificationSound.default` when rendering visible message content.
 - Do not abandon additional NSE presentations after `collectNotificationsAfterWake`; those records have already been consumed from Marmot's background notification cursor.
 - Native push relay hints from configuration must be validated with the shared `RelayURL` normalizer; malformed hints should behave like an omitted hint.
+- Production and staging use different native-push server pubkeys (`WHITENOISE_PUSH_SERVER_PUBKEY_HEX`). The relay hint (`WHITENOISE_PUSH_RELAY_HINT`) is currently shared because both flavors use the same relays. See `Config/AGENTS.md`.
 - Sign-out must cancel and await any in-flight native-push registration sync before clearing the removed account's push registration.
 - Disabling native push must flip the local preference off before clearing the server registration, and roll the preference back on if registration cleanup fails.
 - Foreground resume must schedule native-push registration independently from relay catch-up success; catch-up failures are best-effort and must not skip push reconciliation.
@@ -137,6 +139,7 @@ Do not add a second storage path for data Marmot already owns.
 - Use `LocalNotificationSuppressionPolicy` for foreground suppression decisions.
 - Audit-log settings hot-swap against the running Marmot runtime; do not restart the runtime for a settings toggle.
 - Audit-log uploads and OTLP metrics use separate bearer-token settings. Do not reuse the OTLP token for Goggles audit-log uploads.
+- The audit-log endpoint and audit-log token are shared by every flavor. The OTLP endpoint is also shared. Production and staging OTLP tokens differ because the token itself encodes the tenant; do not pass a separate tenant name to distinguish them. Native-push pubkeys are flavor-specific; the push relay hint is currently shared. See `Config/AGENTS.md`.
 - Privacy/audit settings screens should load Marmot settings and audit-file details through off-main projection helpers, then render precomputed row strings from SwiftUI body.
 - Normalize optional group metadata before handing it to Marmot. Group names and descriptions go through `ContentSanitizer`; blank descriptions pass `nil`, unnamed group creates use MarmotKit's empty-string sentinel, and blank renames are rejected.
 - Sanitize peer-controlled group names with `ContentSanitizer.groupName` before storing or rendering timeline/system-event display strings, and use static `L10n.formatted` keys for dynamic text.
